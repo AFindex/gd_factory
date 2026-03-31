@@ -4,7 +4,12 @@ public enum BuildPrototypeKind
 {
     Producer,
     Belt,
-    Sink
+    Sink,
+    Splitter,
+    Merger,
+    Bridge,
+    Loader,
+    Unloader
 }
 
 public enum FacingDirection

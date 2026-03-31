@@ -9,6 +9,11 @@ public static class FactoryStructureFactory
             BuildPrototypeKind.Producer => new ProducerStructure(),
             BuildPrototypeKind.Belt => new BeltStructure(),
             BuildPrototypeKind.Sink => new SinkStructure(),
+            BuildPrototypeKind.Splitter => new SplitterStructure(),
+            BuildPrototypeKind.Merger => new MergerStructure(),
+            BuildPrototypeKind.Bridge => new BridgeStructure(),
+            BuildPrototypeKind.Loader => new LoaderStructure(),
+            BuildPrototypeKind.Unloader => new UnloaderStructure(),
             _ => new BeltStructure()
         };
 

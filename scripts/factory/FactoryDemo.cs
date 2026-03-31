@@ -7,7 +7,12 @@ public partial class FactoryDemo : Node3D
     {
         [BuildPrototypeKind.Producer] = new BuildPrototypeDefinition(BuildPrototypeKind.Producer, "生产器", new Color("9DC08B"), "持续向前方投放原料。"),
         [BuildPrototypeKind.Belt] = new BuildPrototypeDefinition(BuildPrototypeKind.Belt, "传送带", new Color("7DD3FC"), "将物品沿直线向前输送。"),
-        [BuildPrototypeKind.Sink] = new BuildPrototypeDefinition(BuildPrototypeKind.Sink, "回收站", new Color("FDE68A"), "接收物品并统计送达数量。")
+        [BuildPrototypeKind.Sink] = new BuildPrototypeDefinition(BuildPrototypeKind.Sink, "回收站", new Color("FDE68A"), "接收物品并统计送达数量。"),
+        [BuildPrototypeKind.Splitter] = new BuildPrototypeDefinition(BuildPrototypeKind.Splitter, "分流器", new Color("C4B5FD"), "将后方输入分到左右两路。"),
+        [BuildPrototypeKind.Merger] = new BuildPrototypeDefinition(BuildPrototypeKind.Merger, "合并器", new Color("99F6E4"), "把左右两路物流汇成前方一路。"),
+        [BuildPrototypeKind.Bridge] = new BuildPrototypeDefinition(BuildPrototypeKind.Bridge, "跨桥", new Color("F59E0B"), "让南北和东西两路物流跨越而不互连。"),
+        [BuildPrototypeKind.Loader] = new BuildPrototypeDefinition(BuildPrototypeKind.Loader, "装载器", new Color("93C5FD"), "把机器端输出接入前方传送网络。"),
+        [BuildPrototypeKind.Unloader] = new BuildPrototypeDefinition(BuildPrototypeKind.Unloader, "卸载器", new Color("FDBA74"), "把后方带上的物品卸到前方机器或回收端。")
     };
 
     private GridManager? _grid;
@@ -60,6 +65,31 @@ public partial class FactoryDemo : Node3D
         if (Input.IsActionJustPressed("select_sink"))
         {
             SelectKind(BuildPrototypeKind.Sink);
+        }
+
+        if (Input.IsActionJustPressed("select_splitter"))
+        {
+            SelectKind(BuildPrototypeKind.Splitter);
+        }
+
+        if (Input.IsActionJustPressed("select_merger"))
+        {
+            SelectKind(BuildPrototypeKind.Merger);
+        }
+
+        if (Input.IsActionJustPressed("select_bridge"))
+        {
+            SelectKind(BuildPrototypeKind.Bridge);
+        }
+
+        if (Input.IsActionJustPressed("select_loader"))
+        {
+            SelectKind(BuildPrototypeKind.Loader);
+        }
+
+        if (Input.IsActionJustPressed("select_unloader"))
+        {
+            SelectKind(BuildPrototypeKind.Unloader);
         }
 
         if (Input.IsActionJustPressed("camera_rotate_left"))
@@ -154,6 +184,33 @@ public partial class FactoryDemo : Node3D
         PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(2, 1), FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(3, 1), FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Sink, new Vector2I(4, 1), FacingDirection.East);
+
+        PlaceStructure(BuildPrototypeKind.Producer, new Vector2I(-5, 3), FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Splitter, new Vector2I(-4, 3), FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(-4, 2), FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(-4, 4), FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Sink, new Vector2I(-3, 2), FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Sink, new Vector2I(-3, 4), FacingDirection.East);
+
+        PlaceStructure(BuildPrototypeKind.Producer, new Vector2I(5, -5), FacingDirection.South);
+        PlaceStructure(BuildPrototypeKind.Producer, new Vector2I(5, -3), FacingDirection.North);
+        PlaceStructure(BuildPrototypeKind.Merger, new Vector2I(5, -4), FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(6, -4), FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Sink, new Vector2I(7, -4), FacingDirection.East);
+
+        PlaceStructure(BuildPrototypeKind.Producer, new Vector2I(-1, 6), FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Bridge, new Vector2I(0, 6), FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(1, 6), FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Sink, new Vector2I(2, 6), FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Producer, new Vector2I(0, 4), FacingDirection.South);
+        PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(0, 5), FacingDirection.South);
+        PlaceStructure(BuildPrototypeKind.Sink, new Vector2I(0, 7), FacingDirection.South);
+
+        PlaceStructure(BuildPrototypeKind.Producer, new Vector2I(6, 4), FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Loader, new Vector2I(7, 4), FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(8, 4), FacingDirection.South);
+        PlaceStructure(BuildPrototypeKind.Unloader, new Vector2I(8, 5), FacingDirection.South);
+        PlaceStructure(BuildPrototypeKind.Sink, new Vector2I(8, 6), FacingDirection.South);
 
         RefreshAllBelts();
     }
@@ -441,6 +498,11 @@ public partial class FactoryDemo : Node3D
         EnsureAction("select_producer", new InputEventKey { PhysicalKeycode = Key.Key1 });
         EnsureAction("select_belt", new InputEventKey { PhysicalKeycode = Key.Key2 });
         EnsureAction("select_sink", new InputEventKey { PhysicalKeycode = Key.Key3 });
+        EnsureAction("select_splitter", new InputEventKey { PhysicalKeycode = Key.Key4 });
+        EnsureAction("select_merger", new InputEventKey { PhysicalKeycode = Key.Key5 });
+        EnsureAction("select_bridge", new InputEventKey { PhysicalKeycode = Key.Key6 });
+        EnsureAction("select_loader", new InputEventKey { PhysicalKeycode = Key.Key7 });
+        EnsureAction("select_unloader", new InputEventKey { PhysicalKeycode = Key.Key8 });
     }
 
     private static void EnsureAction(string actionName, params InputEvent[] events)

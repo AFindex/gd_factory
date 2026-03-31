@@ -53,14 +53,21 @@ public partial class FactoryHud : CanvasLayer
         subtitle.Modulate = new Color("A8B8C6");
         body.AddChild(subtitle);
 
-        var buttonRow = new HBoxContainer();
-        buttonRow.MouseFilter = Control.MouseFilterEnum.Ignore;
-        buttonRow.AddThemeConstantOverride("separation", 8);
-        body.AddChild(buttonRow);
+        var buttonGrid = new GridContainer();
+        buttonGrid.Columns = 4;
+        buttonGrid.MouseFilter = Control.MouseFilterEnum.Ignore;
+        buttonGrid.AddThemeConstantOverride("h_separation", 8);
+        buttonGrid.AddThemeConstantOverride("v_separation", 8);
+        body.AddChild(buttonGrid);
 
-        CreateSelectionButton(buttonRow, BuildPrototypeKind.Producer, "1 生产器");
-        CreateSelectionButton(buttonRow, BuildPrototypeKind.Belt, "2 传送带");
-        CreateSelectionButton(buttonRow, BuildPrototypeKind.Sink, "3 回收站");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Producer, "1 生产器");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Belt, "2 传送带");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Sink, "3 回收站");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Splitter, "4 分流器");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Merger, "5 合并器");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Bridge, "6 跨桥");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Loader, "7 装载器");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Unloader, "8 卸载器");
 
         _selectedLabel = CreateInfoLabel(body);
         _hoverLabel = CreateInfoLabel(body);
@@ -77,7 +84,7 @@ public partial class FactoryHud : CanvasLayer
         SetPreviewStatus(false, "把鼠标移到地面网格上选择格子。");
         SetRotation(FacingDirection.East);
         SetSinkStats(0, 0);
-        SetLimitations("当前原型限制：仅支持 1x1 建筑、直线传送带，暂不包含存档、分流或更复杂生产逻辑。");
+        SetLimitations("当前原型限制：所有物流件暂时都是 1x1 简化模型，还没有完整双 lane、机械臂动画和更复杂配方逻辑。");
     }
 
     public void SetSelectedKind(BuildPrototypeKind kind, string details)
@@ -210,6 +217,11 @@ public partial class FactoryHud : CanvasLayer
             BuildPrototypeKind.Producer => "生产器",
             BuildPrototypeKind.Belt => "传送带",
             BuildPrototypeKind.Sink => "回收站",
+            BuildPrototypeKind.Splitter => "分流器",
+            BuildPrototypeKind.Merger => "合并器",
+            BuildPrototypeKind.Bridge => "跨桥",
+            BuildPrototypeKind.Loader => "装载器",
+            BuildPrototypeKind.Unloader => "卸载器",
             _ => kind.ToString()
         };
     }

@@ -11,6 +11,7 @@ public abstract partial class FactoryStructure : Node3D
 
     public abstract BuildPrototypeKind Kind { get; }
     public abstract string Description { get; }
+    public virtual bool IsTransportNode => false;
 
     public void Configure(Vector2I cell, FacingDirection facing, Vector3 worldPosition, float cellSize)
     {
@@ -56,6 +57,11 @@ public abstract partial class FactoryStructure : Node3D
     }
 
     public bool AcceptsFrom(Vector2I sourceCell)
+    {
+        return sourceCell == GetInputCell();
+    }
+
+    public virtual bool CanReceiveFrom(Vector2I sourceCell)
     {
         return sourceCell == GetInputCell();
     }
