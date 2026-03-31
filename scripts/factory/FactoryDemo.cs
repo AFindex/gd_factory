@@ -446,12 +446,6 @@ public partial class FactoryDemo : Node3D
         floor.MaterialOverride = floorMaterial;
         floorRoot.AddChild(floor);
 
-        var pad = new MeshInstance3D { Name = "CorePad" };
-        pad.Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 4.5f, 0.18f, FactoryConstants.CellSize * 3.0f) };
-        pad.Position = new Vector3(-4.0f, 0.09f, -4.0f);
-        pad.MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color("2D3748"), Roughness = 0.8f };
-        floorRoot.AddChild(pad);
-
         return floorRoot;
     }
 
