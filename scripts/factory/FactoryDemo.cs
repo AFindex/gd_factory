@@ -11,8 +11,8 @@ public partial class FactoryDemo : Node3D
         [BuildPrototypeKind.Splitter] = new BuildPrototypeDefinition(BuildPrototypeKind.Splitter, "分流器", new Color("C4B5FD"), "将后方输入分到左右两路。"),
         [BuildPrototypeKind.Merger] = new BuildPrototypeDefinition(BuildPrototypeKind.Merger, "合并器", new Color("99F6E4"), "把左右两路物流汇成前方一路。"),
         [BuildPrototypeKind.Bridge] = new BuildPrototypeDefinition(BuildPrototypeKind.Bridge, "跨桥", new Color("F59E0B"), "让南北和东西两路物流跨越而不互连。"),
-        [BuildPrototypeKind.Loader] = new BuildPrototypeDefinition(BuildPrototypeKind.Loader, "装载器", new Color("93C5FD"), "把机器端输出接入前方传送网络。"),
-        [BuildPrototypeKind.Unloader] = new BuildPrototypeDefinition(BuildPrototypeKind.Unloader, "卸载器", new Color("FDBA74"), "把后方带上的物品卸到前方机器或回收端。")
+[BuildPrototypeKind.Loader] = new BuildPrototypeDefinition(BuildPrototypeKind.Loader, "装载器", new Color("FDBA74"), "把后方带上的物品装入前方机器或回收端。"),
+[BuildPrototypeKind.Unloader] = new BuildPrototypeDefinition(BuildPrototypeKind.Unloader, "卸载器", new Color("93C5FD"), "把机器端输出卸到前方传送网络。")
     };
 
     private GridManager? _grid;
@@ -207,9 +207,9 @@ public partial class FactoryDemo : Node3D
         PlaceStructure(BuildPrototypeKind.Sink, new Vector2I(0, 7), FacingDirection.South);
 
         PlaceStructure(BuildPrototypeKind.Producer, new Vector2I(6, 4), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Loader, new Vector2I(7, 4), FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Unloader, new Vector2I(7, 4), FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(8, 4), FacingDirection.South);
-        PlaceStructure(BuildPrototypeKind.Unloader, new Vector2I(8, 5), FacingDirection.South);
+        PlaceStructure(BuildPrototypeKind.Loader, new Vector2I(8, 5), FacingDirection.South);
         PlaceStructure(BuildPrototypeKind.Sink, new Vector2I(8, 6), FacingDirection.South);
 
         RefreshAllBelts();
