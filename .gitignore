@@ -1,0 +1,23 @@
+# Godot 4 generated cache
+.godot/
+
+# .NET build outputs
+bin/
+obj/
+.vs/
+
+# IDE settings
+.idea/
+.vscode/
+*.suo
+*.user
+*.userprefs
+*.csproj.user
+*.DotSettings.user
+
+# OS clutter
+.DS_Store
+Thumbs.db
+
+# Export/build artifacts
+android/
