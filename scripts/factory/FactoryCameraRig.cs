@@ -10,6 +10,8 @@ public partial class FactoryCameraRig : Node3D
     private float _zoom = FactoryConstants.CameraDefaultZoom;
 
     public Camera3D Camera => _camera!;
+    public bool AllowPanInput { get; set; } = true;
+    public bool AllowZoomInput { get; set; } = true;
 
     public override void _Ready()
     {
@@ -35,22 +37,22 @@ public partial class FactoryCameraRig : Node3D
     {
         var input = Vector2.Zero;
 
-        if (Input.IsActionPressed("camera_pan_left"))
+        if (AllowPanInput && Input.IsActionPressed("camera_pan_left"))
         {
             input.X -= 1.0f;
         }
 
-        if (Input.IsActionPressed("camera_pan_right"))
+        if (AllowPanInput && Input.IsActionPressed("camera_pan_right"))
         {
             input.X += 1.0f;
         }
 
-        if (Input.IsActionPressed("camera_pan_up"))
+        if (AllowPanInput && Input.IsActionPressed("camera_pan_up"))
         {
             input.Y -= 1.0f;
         }
 
-        if (Input.IsActionPressed("camera_pan_down"))
+        if (AllowPanInput && Input.IsActionPressed("camera_pan_down"))
         {
             input.Y += 1.0f;
         }
@@ -62,12 +64,12 @@ public partial class FactoryCameraRig : Node3D
             _targetPosition = _targetPosition.Clamp(_minBounds, _maxBounds);
         }
 
-        if (Input.IsActionJustPressed("camera_zoom_in"))
+        if (AllowZoomInput && Input.IsActionJustPressed("camera_zoom_in"))
         {
             _zoom = Mathf.Clamp(_zoom - 2.0f, FactoryConstants.CameraMinZoom, FactoryConstants.CameraMaxZoom);
         }
 
-        if (Input.IsActionJustPressed("camera_zoom_out"))
+        if (AllowZoomInput && Input.IsActionJustPressed("camera_zoom_out"))
         {
             _zoom = Mathf.Clamp(_zoom + 2.0f, FactoryConstants.CameraMinZoom, FactoryConstants.CameraMaxZoom);
         }

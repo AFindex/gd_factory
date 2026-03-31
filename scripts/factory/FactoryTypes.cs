@@ -20,6 +20,12 @@ public enum FacingDirection
     North
 }
 
+public enum MobileFactoryLifecycleState
+{
+    InTransit,
+    Deployed
+}
+
 public sealed class FactoryItem
 {
     public FactoryItem(int id, BuildPrototypeKind sourceKind)

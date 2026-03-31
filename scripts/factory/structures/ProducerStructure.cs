@@ -19,7 +19,7 @@ public partial class ProducerStructure : FactoryStructure
         }
 
         var item = simulation.CreateItem(Kind);
-        if (simulation.TrySendItemToCell(Cell, GetOutputCell(), item))
+        if (simulation.TrySendItem(this, GetOutputCell(), item))
         {
             _cooldown = FactoryConstants.ProducerSpawnSeconds;
             if (_indicator is not null)

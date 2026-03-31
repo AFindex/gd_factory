@@ -67,8 +67,7 @@ public partial class SplitterStructure : FlowTransportStructure
 
     private bool CanConnectTo(Vector2I cell, SimulationController simulation)
     {
-        return simulation.Grid is not null
-            && simulation.Grid.TryGetStructure(cell, out var structure)
+        return Site.TryGetStructure(cell, out var structure)
             && structure is not null
             && structure.CanReceiveFrom(Cell);
     }

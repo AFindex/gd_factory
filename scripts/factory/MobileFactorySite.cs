@@ -1,0 +1,98 @@
+using Godot;
+using System.Collections.Generic;
+
+public sealed class MobileFactorySite : IFactorySite
+{
+    private readonly Dictionary<Vector2I, FactoryStructure> _structures = new();
+    private Vector3 _worldOrigin;
+
+    public MobileFactorySite(string siteId, Vector2I minCell, Vector2I maxCell, float cellSize)
+    {
+        SiteId = siteId;
+        MinCell = minCell;
+        MaxCell = maxCell;
+        CellSize = cellSize;
+        IsVisible = false;
+        IsSimulationActive = false;
+    }
+
+    public string SiteId { get; }
+    public Vector2I MinCell { get; }
+    public Vector2I MaxCell { get; }
+    public float CellSize { get; }
+    public bool IsVisible { get; private set; }
+    public bool IsSimulationActive { get; private set; }
+    public Vector3 WorldOrigin => _worldOrigin;
+
+    public bool IsInBounds(Vector2I cell)
+    {
+        return cell.X >= MinCell.X && cell.X <= MaxCell.X && cell.Y >= MinCell.Y && cell.Y <= MaxCell.Y;
+    }
+
+    public bool CanPlace(Vector2I cell)
+    {
+        return IsInBounds(cell) && !_structures.ContainsKey(cell);
+    }
+
+    public Vector3 CellToWorld(Vector2I cell)
+    {
+        return _worldOrigin + new Vector3(cell.X * CellSize, 0.0f, cell.Y * CellSize);
+    }
+
+    public Vector2I WorldToCell(Vector3 worldPosition)
+    {
+        var local = worldPosition - _worldOrigin;
+        return new Vector2I(
+            Mathf.RoundToInt(local.X / CellSize),
+            Mathf.RoundToInt(local.Z / CellSize));
+    }
+
+    public bool TryGetStructure(Vector2I cell, out FactoryStructure? structure)
+    {
+        return _structures.TryGetValue(cell, out structure);
+    }
+
+    public void AddStructure(FactoryStructure structure)
+    {
+        _structures[structure.Cell] = structure;
+    }
+
+    public void RemoveStructure(FactoryStructure structure)
+    {
+        if (_structures.TryGetValue(structure.Cell, out var existing) && existing == structure)
+        {
+            _structures.Remove(structure.Cell);
+        }
+    }
+
+    public bool TrySendItem(FactoryStructure source, Vector2I targetCell, FactoryItem item, SimulationController simulation)
+    {
+        if (!TryGetStructure(targetCell, out var structure) || structure is null)
+        {
+            return false;
+        }
+
+        return structure.TryAcceptItem(item, source.Cell, simulation);
+    }
+
+    public void SetWorldOrigin(Vector3 worldOrigin)
+    {
+        _worldOrigin = worldOrigin;
+        RefreshStructures();
+    }
+
+    public void SetRuntimeState(bool isVisible, bool isSimulationActive)
+    {
+        IsVisible = isVisible;
+        IsSimulationActive = isSimulationActive;
+        RefreshStructures();
+    }
+
+    private void RefreshStructures()
+    {
+        foreach (var structure in _structures.Values)
+        {
+            structure.RefreshPlacement();
+        }
+    }
+}

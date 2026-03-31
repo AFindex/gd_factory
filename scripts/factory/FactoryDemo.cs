@@ -212,7 +212,7 @@ public partial class FactoryDemo : Node3D
         PlaceStructure(BuildPrototypeKind.Loader, new Vector2I(8, 5), FacingDirection.South);
         PlaceStructure(BuildPrototypeKind.Sink, new Vector2I(8, 6), FacingDirection.South);
 
-        RefreshAllBelts();
+        RefreshAllTopology();
     }
 
     private void UpdateHoveredCell()
@@ -330,11 +330,11 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        var structure = FactoryStructureFactory.Create(kind, cell, facing, _grid);
+        var structure = FactoryStructureFactory.Create(kind, new FactoryStructurePlacement(_grid, cell, facing));
         _structureRoot.AddChild(structure);
         _grid.PlaceStructure(structure);
         _simulation.RegisterStructure(structure);
-        RefreshAllBelts();
+        RefreshAllTopology();
     }
 
     private void RemoveStructure(Vector2I cell)
@@ -347,23 +347,17 @@ public partial class FactoryDemo : Node3D
         _simulation.UnregisterStructure(structure);
         _grid.RemoveStructure(structure);
         structure.QueueFree();
-        RefreshAllBelts();
+        RefreshAllTopology();
     }
 
-    private void RefreshAllBelts()
+    private void RefreshAllTopology()
     {
-        if (_grid is null || _structureRoot is null)
+        if (_simulation is null)
         {
             return;
         }
 
-        foreach (var child in _structureRoot.GetChildren())
-        {
-            if (child is BeltStructure belt)
-            {
-                belt.RefreshTopology(_grid);
-            }
-        }
+        _simulation.RebuildTopology();
     }
 
     private bool IsPointerOverUi()

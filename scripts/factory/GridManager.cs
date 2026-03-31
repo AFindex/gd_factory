@@ -1,9 +1,9 @@
 using Godot;
 using System.Collections.Generic;
 
-public sealed class GridManager
+public sealed class GridManager : IFactorySite
 {
-    private readonly Dictionary<Vector2I, FactoryStructure> _occupiedCells = new();
+    private readonly Dictionary<Vector2I, GridReservation> _reservations = new();
 
     public GridManager(Vector2I minCell, Vector2I maxCell, float cellSize)
     {
@@ -12,9 +12,12 @@ public sealed class GridManager
         CellSize = cellSize;
     }
 
+    public string SiteId => "world";
     public Vector2I MinCell { get; }
     public Vector2I MaxCell { get; }
     public float CellSize { get; }
+    public bool IsVisible => true;
+    public bool IsSimulationActive => true;
 
     public bool IsInBounds(Vector2I cell)
     {
@@ -35,25 +38,93 @@ public sealed class GridManager
 
     public bool CanPlace(Vector2I cell)
     {
-        return IsInBounds(cell) && !_occupiedCells.ContainsKey(cell);
+        return CanReserve(cell);
+    }
+
+    public bool CanReserve(Vector2I cell, string? ownerId = null)
+    {
+        if (!IsInBounds(cell))
+        {
+            return false;
+        }
+
+        return !_reservations.TryGetValue(cell, out var reservation) || reservation.OwnerId == ownerId;
+    }
+
+    public bool CanReserveAll(IEnumerable<Vector2I> cells, string ownerId)
+    {
+        foreach (var cell in cells)
+        {
+            if (!CanReserve(cell, ownerId))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public bool TryGetStructure(Vector2I cell, out FactoryStructure? structure)
     {
-        return _occupiedCells.TryGetValue(cell, out structure);
+        structure = null;
+
+        if (!_reservations.TryGetValue(cell, out var reservation))
+        {
+            return false;
+        }
+
+        structure = reservation.Structure;
+        return structure is not null;
+    }
+
+    public bool TryGetReservation(Vector2I cell, out GridReservation? reservation)
+    {
+        return _reservations.TryGetValue(cell, out reservation);
     }
 
     public void PlaceStructure(FactoryStructure structure)
     {
-        _occupiedCells[structure.Cell] = structure;
+        ReserveCells(structure.GetOccupiedCells(), structure.ReservationOwnerId, GridReservationKind.StaticStructure, structure);
     }
 
     public void RemoveStructure(FactoryStructure structure)
     {
-        if (_occupiedCells.TryGetValue(structure.Cell, out var existing) && existing == structure)
+        ReleaseOwner(structure.ReservationOwnerId);
+    }
+
+    public void ReserveCells(IEnumerable<Vector2I> cells, string ownerId, GridReservationKind kind, FactoryStructure? structure = null)
+    {
+        foreach (var cell in cells)
         {
-            _occupiedCells.Remove(structure.Cell);
+            _reservations[cell] = new GridReservation(ownerId, kind, structure);
         }
+    }
+
+    public void ReleaseOwner(string ownerId)
+    {
+        var toRemove = new List<Vector2I>();
+        foreach (var pair in _reservations)
+        {
+            if (pair.Value.OwnerId == ownerId)
+            {
+                toRemove.Add(pair.Key);
+            }
+        }
+
+        foreach (var cell in toRemove)
+        {
+            _reservations.Remove(cell);
+        }
+    }
+
+    public bool TrySendItem(FactoryStructure source, Vector2I targetCell, FactoryItem item, SimulationController simulation)
+    {
+        if (!TryGetStructure(targetCell, out var structure) || structure is null)
+        {
+            return false;
+        }
+
+        return structure.TryAcceptItem(item, source.Cell, simulation);
     }
 
     public Vector2 GetWorldMin()

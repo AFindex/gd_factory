@@ -1,6 +1,6 @@
 using Godot;
 
-public partial class BeltStructure : FlowTransportStructure
+public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAware
 {
     private FacingDirection _inputFacing;
     private MeshInstance3D? _centerMesh;
@@ -12,9 +12,9 @@ public partial class BeltStructure : FlowTransportStructure
 
     public override string Description => "支持直线与拐弯的传送带，可连续堆积并逐段传递物品。";
 
-    public void RefreshTopology(GridManager grid)
+    public void RefreshTopology()
     {
-        _inputFacing = DetermineInputFacing(grid);
+        _inputFacing = DetermineInputFacing();
         Rotation = Vector3.Zero;
         RebuildTrackVisuals();
     }
@@ -60,7 +60,7 @@ public partial class BeltStructure : FlowTransportStructure
             new Color("7DD3FC"),
             new Vector3(0.26f * CellSize, 0.16f, 0.0f));
 
-        RebuildTrackVisuals();
+        RefreshTopology();
     }
 
     protected override bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell)
@@ -69,7 +69,7 @@ public partial class BeltStructure : FlowTransportStructure
         return true;
     }
 
-    private FacingDirection DetermineInputFacing(GridManager grid)
+    private FacingDirection DetermineInputFacing()
     {
         var preferred = GetOppositeFacing(Facing);
         var candidates = new FacingDirection[]
@@ -82,7 +82,7 @@ public partial class BeltStructure : FlowTransportStructure
         foreach (var direction in candidates)
         {
             var sourceCell = Cell + FactoryDirection.ToCellOffset(direction);
-            if (grid.TryGetStructure(sourceCell, out var structure) && structure is not null && structure.CanOutputTo(Cell))
+            if (Site.TryGetStructure(sourceCell, out var structure) && structure is not null && structure.CanOutputTo(Cell))
             {
                 return direction;
             }

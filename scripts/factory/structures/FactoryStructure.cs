@@ -1,4 +1,5 @@
 using Godot;
+using System.Collections.Generic;
 
 public abstract partial class FactoryStructure : Node3D
 {
@@ -6,20 +7,25 @@ public abstract partial class FactoryStructure : Node3D
 
     protected float CellSize { get; private set; } = FactoryConstants.CellSize;
 
+    public IFactorySite Site { get; private set; } = null!;
     public Vector2I Cell { get; private set; }
     public FacingDirection Facing { get; protected set; }
+    public string ReservationOwnerId { get; private set; } = string.Empty;
 
     public abstract BuildPrototypeKind Kind { get; }
     public abstract string Description { get; }
     public virtual bool IsTransportNode => false;
 
-    public void Configure(Vector2I cell, FacingDirection facing, Vector3 worldPosition, float cellSize)
+    public void Configure(IFactorySite site, Vector2I cell, FacingDirection facing, string? reservationOwnerId = null)
     {
+        Site = site;
         Cell = cell;
         Facing = facing;
-        CellSize = cellSize;
-        Position = worldPosition;
-        Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(facing), 0.0f);
+        CellSize = site.CellSize;
+        ReservationOwnerId = string.IsNullOrWhiteSpace(reservationOwnerId)
+            ? $"structure:{GetInstanceId()}"
+            : reservationOwnerId;
+        RefreshPlacement();
     }
 
     public override void _Ready()
@@ -44,6 +50,18 @@ public abstract partial class FactoryStructure : Node3D
     public virtual bool TryAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
         return false;
+    }
+
+    public virtual void RefreshPlacement()
+    {
+        Position = Site.CellToWorld(Cell);
+        Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(Facing), 0.0f);
+        Visible = Site.IsVisible;
+    }
+
+    public virtual IEnumerable<Vector2I> GetOccupiedCells()
+    {
+        yield return Cell;
     }
 
     public Vector2I GetOutputCell()

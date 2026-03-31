@@ -31,12 +31,12 @@ public partial class LoaderStructure : FlowTransportStructure
     {
         targetCell = GetOutputCell();
 
-        if (simulation.Grid is null || !simulation.Grid.TryGetStructure(sourceCell, out var source) || source is null || !source.IsTransportNode)
+        if (!Site.TryGetStructure(sourceCell, out var source) || source is null || !source.IsTransportNode)
         {
             return false;
         }
 
-        if (simulation.Grid.TryGetStructure(targetCell, out var target) && target is not null)
+        if (Site.TryGetStructure(targetCell, out var target) && target is not null)
         {
             return !target.IsTransportNode;
         }

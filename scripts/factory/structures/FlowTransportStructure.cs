@@ -80,7 +80,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure
             {
                 if (desired >= 1.0f)
                 {
-                    if (simulation.TrySendItemToCell(Cell, itemState.TargetCell, itemState.Item))
+                    if (TryDispatchItem(itemState, simulation))
                     {
                         itemState.Visual.QueueFree();
                         _items.RemoveAt(i);
@@ -158,6 +158,11 @@ public abstract partial class FlowTransportStructure : FactoryStructure
     protected static Vector2 ToDirectionVector(Vector2I offset)
     {
         return new Vector2(Mathf.Clamp(offset.X, -1, 1), Mathf.Clamp(offset.Y, -1, 1));
+    }
+
+    protected virtual bool TryDispatchItem(TransitItemState state, SimulationController simulation)
+    {
+        return simulation.TrySendItem(this, state.TargetCell, state.Item);
     }
 
     protected abstract bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell);
