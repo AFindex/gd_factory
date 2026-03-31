@@ -81,6 +81,7 @@ public sealed class MobileFactoryInstance
     public MobileFactoryPortBridge OutputBridge => _outputBridge;
     public Vector2I InteriorMinCell => InteriorSite.MinCell;
     public Vector2I InteriorMaxCell => InteriorSite.MaxCell;
+    public Vector3 WorldFocusPoint => _hullRoot.GlobalPosition;
 
     public IEnumerable<Vector2I> GetFootprintCells(Vector2I anchorCell)
     {

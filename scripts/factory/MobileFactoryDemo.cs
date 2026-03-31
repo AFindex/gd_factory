@@ -240,6 +240,7 @@ public partial class MobileFactoryDemo : Node3D
         {
             _editorOpen = !_editorOpen;
             _hud?.SetEditorOpen(_editorOpen);
+            FocusFactoryForCurrentMode();
         }
 
         if (CanUseWorldInput() && Input.IsActionJustPressed("recall_mobile_factory"))
@@ -259,6 +260,7 @@ public partial class MobileFactoryDemo : Node3D
         {
             _editorOpen = false;
             _hud?.SetEditorOpen(false);
+            FocusFactoryForCurrentMode();
             return true;
         }
 
@@ -629,6 +631,41 @@ public partial class MobileFactoryDemo : Node3D
         _selectedInteriorFacing = direction < 0
             ? FactoryDirection.RotateCounterClockwise(_selectedInteriorFacing)
             : FactoryDirection.RotateClockwise(_selectedInteriorFacing);
+    }
+
+    private void FocusWorldStripOnFactory()
+    {
+        if (_cameraRig is null || _mobileFactory is null)
+        {
+            return;
+        }
+
+        var viewportSize = GetViewport().GetVisibleRect().Size;
+        var targetScreenPosition = new Vector2(
+            viewportSize.X / 12.0f,
+            viewportSize.Y * 0.58f);
+        _cameraRig.FocusWorldPositionInViewport(_mobileFactory.WorldFocusPoint, targetScreenPosition);
+    }
+
+    private void FocusWorldCenterOnFactory()
+    {
+        if (_cameraRig is null || _mobileFactory is null)
+        {
+            return;
+        }
+
+        _cameraRig.FocusWorldPosition(_mobileFactory.WorldFocusPoint);
+    }
+
+    private void FocusFactoryForCurrentMode()
+    {
+        if (_editorOpen)
+        {
+            FocusWorldStripOnFactory();
+            return;
+        }
+
+        FocusWorldCenterOnFactory();
     }
 
     private int CountEditableInteriorStructures()
