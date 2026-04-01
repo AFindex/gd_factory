@@ -12,10 +12,18 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
 
     public override string Description => "支持直线与拐弯的传送带，可连续堆积并逐段传递物品。";
 
+    public override void RefreshPlacement()
+    {
+        Position = Site.CellToWorld(Cell);
+        Rotation = new Vector3(0.0f, Site.WorldRotationRadians, 0.0f);
+        Visible = Site.IsVisible;
+        RebuildTrackVisuals();
+    }
+
     public void RefreshTopology()
     {
         _inputFacing = DetermineInputFacing();
-        Rotation = Vector3.Zero;
+        Rotation = new Vector3(0.0f, Site.WorldRotationRadians, 0.0f);
         RebuildTrackVisuals();
     }
 
@@ -97,8 +105,6 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
         {
             return;
         }
-
-        Rotation = Vector3.Zero;
 
         var inputLocal = ToDirectionVector(FactoryDirection.ToCellOffset(_inputFacing));
         var outputLocal = ToDirectionVector(FactoryDirection.ToCellOffset(Facing));

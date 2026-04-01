@@ -9,7 +9,8 @@ public partial class MobileFactoryHud : CanvasLayer
         BuildPrototypeKind.Producer,
         BuildPrototypeKind.Belt,
         BuildPrototypeKind.Splitter,
-        BuildPrototypeKind.Merger
+        BuildPrototypeKind.Merger,
+        BuildPrototypeKind.Sink
     };
 
     private PanelContainer? _worldFocusFrame;
@@ -19,6 +20,7 @@ public partial class MobileFactoryHud : CanvasLayer
     private VBoxContainer? _editorBody;
     private TextureRect? _editorViewportRect;
     private SubViewport? _editorViewport;
+    private Label? _modeLabel;
     private Label? _stateLabel;
     private Label? _hoverLabel;
     private Label? _previewLabel;
@@ -29,6 +31,8 @@ public partial class MobileFactoryHud : CanvasLayer
     private Label? _editorPreviewLabel;
     private Label? _portStatusLabel;
     private Label? _focusLabel;
+    private Button? _observerButton;
+    private Button? _deployButton;
     private readonly Dictionary<BuildPrototypeKind, Button> _paletteButtons = new();
     private float _editorProgress;
     private bool _editorOpen;
@@ -42,6 +46,8 @@ public partial class MobileFactoryHud : CanvasLayer
     public string PortStatusText => _portStatusLabel?.Text ?? string.Empty;
     public event Action<BuildPrototypeKind>? EditorPaletteSelected;
     public event Action<int>? EditorRotateRequested;
+    public event Action? ObserverModeToggleRequested;
+    public event Action? DeployModeToggleRequested;
 
     public override void _Ready()
     {
@@ -116,6 +122,36 @@ public partial class MobileFactoryHud : CanvasLayer
         RefreshFocusVisuals();
     }
 
+    public void SetControlMode(MobileFactoryControlMode controlMode, MobileFactoryLifecycleState lifecycleState, FacingDirection transitFacing, FacingDirection deployFacing)
+    {
+        if (_modeLabel is not null)
+        {
+            var modeText = controlMode switch
+            {
+                MobileFactoryControlMode.FactoryCommand => "工厂控制",
+                MobileFactoryControlMode.DeployPreview => "部署预览",
+                MobileFactoryControlMode.Observer => "观察模式",
+                _ => "工厂控制"
+            };
+            _modeLabel.Text = $"当前模式：{modeText} | 行进朝向：{FactoryDirection.ToLabel(transitFacing)} | 部署朝向：{FactoryDirection.ToLabel(deployFacing)}";
+            _modeLabel.Modulate = controlMode == MobileFactoryControlMode.Observer ? new Color("7DD3FC") : new Color("FDE68A");
+        }
+
+        if (_observerButton is not null)
+        {
+            _observerButton.Text = controlMode == MobileFactoryControlMode.Observer ? "返回工厂控制 (Tab)" : "进入观察模式 (Tab)";
+            _observerButton.ButtonPressed = controlMode == MobileFactoryControlMode.Observer;
+            _observerButton.Disabled = lifecycleState == MobileFactoryLifecycleState.Recalling;
+        }
+
+        if (_deployButton is not null)
+        {
+            _deployButton.Text = controlMode == MobileFactoryControlMode.DeployPreview ? "取消部署 (G)" : "部署模式 (G)";
+            _deployButton.ButtonPressed = controlMode == MobileFactoryControlMode.DeployPreview;
+            _deployButton.Disabled = lifecycleState != MobileFactoryLifecycleState.InTransit;
+        }
+    }
+
     public void SetState(MobileFactoryLifecycleState state, Vector2I? anchorCell)
     {
         if (_stateLabel is null)
@@ -123,9 +159,13 @@ public partial class MobileFactoryHud : CanvasLayer
             return;
         }
 
-        _stateLabel.Text = state == MobileFactoryLifecycleState.Deployed && anchorCell is not null
-            ? $"工厂状态：已部署于 ({anchorCell.Value.X}, {anchorCell.Value.Y})"
-            : "工厂状态：运输中，可选择新的部署点";
+        _stateLabel.Text = state switch
+        {
+            MobileFactoryLifecycleState.Deployed when anchorCell is not null => $"工厂状态：已部署于 ({anchorCell.Value.X}, {anchorCell.Value.Y})",
+            MobileFactoryLifecycleState.AutoDeploying => "工厂状态：自动部署中，正在进场并对齐朝向",
+            MobileFactoryLifecycleState.Recalling => "工厂状态：回收中，部署机构正在收拢",
+            _ => "工厂状态：运输中，可自由移动或下达部署命令"
+        };
     }
 
     public void SetHoverAnchor(Vector2I anchorCell, bool hasHover)
@@ -137,7 +177,7 @@ public partial class MobileFactoryHud : CanvasLayer
 
         _hoverLabel.Text = hasHover
             ? $"当前锚点：({anchorCell.X}, {anchorCell.Y})"
-            : "当前锚点：超出可部署区域";
+            : "当前锚点：未选择";
     }
 
     public void SetPreviewStatus(bool isValid, string text)
@@ -147,7 +187,7 @@ public partial class MobileFactoryHud : CanvasLayer
             return;
         }
 
-        _previewLabel.Text = $"部署预览：{text}";
+        _previewLabel.Text = $"世界提示：{text}";
         _previewLabel.Modulate = isValid ? new Color("A7F3A0") : new Color("FFB4A2");
     }
 
@@ -211,9 +251,23 @@ public partial class MobileFactoryHud : CanvasLayer
             return;
         }
 
-        var stateText = lifecycleState == MobileFactoryLifecycleState.Deployed ? "已部署" : "运输中";
+        var stateText = lifecycleState switch
+        {
+            MobileFactoryLifecycleState.Deployed => "已部署",
+            MobileFactoryLifecycleState.AutoDeploying => "自动部署中",
+            MobileFactoryLifecycleState.Recalling => "回收中",
+            _ => "运输中"
+        };
         var paneText = isOpen ? "分屏编辑已展开" : "按 F 打开内部编辑";
         _editorModeLabel.Text = $"内部编辑：{paneText} | 生命周期：{stateText} | 当前内部件数：{structureCount}";
+    }
+
+    public void SetHintText(string text)
+    {
+        if (_hintLabel is not null)
+        {
+            _hintLabel.Text = text;
+        }
     }
 
     private void BuildInfoPanel()
@@ -226,12 +280,12 @@ public partial class MobileFactoryHud : CanvasLayer
 
         var panel = new PanelContainer();
         panel.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
-        panel.MouseFilter = Control.MouseFilterEnum.Ignore;
+        panel.MouseFilter = Control.MouseFilterEnum.Pass;
         AddChild(panel);
         _infoPanel = panel;
 
         var body = new VBoxContainer();
-        body.MouseFilter = Control.MouseFilterEnum.Ignore;
+        body.MouseFilter = Control.MouseFilterEnum.Pass;
         body.AddThemeConstantOverride("separation", 8);
         panel.AddChild(body);
         _infoBody = body;
@@ -241,17 +295,41 @@ public partial class MobileFactoryHud : CanvasLayer
         title.AddThemeFontSizeOverride("font_size", 22);
 
         var subtitle = CreateInfoLabel(body);
-        subtitle.Text = "大世界保留在左侧，右侧侧滑展开内部编辑区；移动工厂微缩布局与编辑视图共享同一套底层数据。";
+        subtitle.Text = "左侧保持世界观察，右侧管理内部编辑；移动工厂在世界里具备运输、自动部署和回收表现。";
         subtitle.Modulate = new Color("A8B8C6");
 
+        _modeLabel = CreateInfoLabel(body);
         _stateLabel = CreateInfoLabel(body);
         _hoverLabel = CreateInfoLabel(body);
         _previewLabel = CreateInfoLabel(body);
         _deliveryLabel = CreateInfoLabel(body);
-        _hintLabel = CreateInfoLabel(body);
         _focusLabel = CreateInfoLabel(body);
+        _hintLabel = CreateInfoLabel(body);
 
-        _hintLabel.Text = "操作：左键部署 | R 回收 | F 展开/收起内部编辑 | 1-4 选建筑 | Q/E 旋转 | 编辑区左键放置/右键拆除";
+        var actionsRow = new HBoxContainer();
+        actionsRow.MouseFilter = Control.MouseFilterEnum.Pass;
+        actionsRow.AddThemeConstantOverride("separation", 8);
+        body.AddChild(actionsRow);
+
+        _observerButton = new Button
+        {
+            Text = "进入观察模式 (Tab)",
+            ToggleMode = true,
+            CustomMinimumSize = new Vector2(146.0f, 34.0f)
+        };
+        _observerButton.Pressed += () => ObserverModeToggleRequested?.Invoke();
+        actionsRow.AddChild(_observerButton);
+
+        _deployButton = new Button
+        {
+            Text = "部署模式 (G)",
+            ToggleMode = true,
+            CustomMinimumSize = new Vector2(126.0f, 34.0f)
+        };
+        _deployButton.Pressed += () => DeployModeToggleRequested?.Invoke();
+        actionsRow.AddChild(_deployButton);
+
+        _hintLabel.Text = "默认操作：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 回收 | F 内部编辑";
         _hintLabel.Modulate = new Color("EED49F");
     }
 
@@ -259,12 +337,12 @@ public partial class MobileFactoryHud : CanvasLayer
     {
         var panel = new PanelContainer();
         panel.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
-        panel.MouseFilter = Control.MouseFilterEnum.Ignore;
+        panel.MouseFilter = Control.MouseFilterEnum.Pass;
         AddChild(panel);
         _editorPanel = panel;
 
         var body = new VBoxContainer();
-        body.MouseFilter = Control.MouseFilterEnum.Ignore;
+        body.MouseFilter = Control.MouseFilterEnum.Pass;
         body.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         body.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         body.AddThemeConstantOverride("separation", 8);
@@ -297,7 +375,7 @@ public partial class MobileFactoryHud : CanvasLayer
 
     private void UpdateLayout()
     {
-        if (_worldFocusFrame is null || _infoPanel is null || _infoBody is null || _editorPanel is null || _editorBody is null || _editorViewport is null || _editorViewportRect is null)
+        if (_worldFocusFrame is null || _infoPanel is null || _editorPanel is null || _editorViewport is null || _editorViewportRect is null)
         {
             return;
         }
@@ -305,8 +383,8 @@ public partial class MobileFactoryHud : CanvasLayer
         var viewportSize = GetViewport().GetVisibleRect().Size;
         var margin = new Vector2(18.0f, 18.0f);
         var worldWidth = viewportSize.X / 6.0f;
-        var infoWidth = Mathf.Max(250.0f, viewportSize.X / 6.0f - margin.X * 2.0f);
-        var infoHeight = Mathf.Max(190.0f, viewportSize.Y * 0.22f);
+        var infoWidth = Mathf.Max(300.0f, viewportSize.X / 6.0f - margin.X * 2.0f);
+        var infoHeight = Mathf.Max(280.0f, viewportSize.Y * 0.35f);
 
         _worldFocusFrame.Position = Vector2.Zero;
         _worldFocusFrame.Size = new Vector2(worldWidth, viewportSize.Y);
@@ -322,7 +400,7 @@ public partial class MobileFactoryHud : CanvasLayer
         _editorPanel.Size = new Vector2(editorWidth, viewportSize.Y);
         _editorViewportRect.CustomMinimumSize = new Vector2(
             320.0f,
-            Mathf.Max(240.0f, viewportSize.Y - 180.0f));
+            Mathf.Max(240.0f, viewportSize.Y - 220.0f));
 
         var viewportSize2D = new Vector2I(
             Mathf.Max(320, Mathf.RoundToInt(_editorViewportRect.Size.X)),
@@ -404,7 +482,7 @@ public partial class MobileFactoryHud : CanvasLayer
 
     private static StyleBoxFlat CreateOutlineOnlyStyle(Color borderColor)
     {
-        var style = new StyleBoxFlat
+        return new StyleBoxFlat
         {
             BgColor = Colors.Transparent,
             BorderColor = borderColor,
@@ -421,7 +499,6 @@ public partial class MobileFactoryHud : CanvasLayer
             ContentMarginRight = 12,
             ContentMarginBottom = 12
         };
-        return style;
     }
 
     private static StyleBoxFlat CreatePanelStyle(Color borderColor)
@@ -450,7 +527,7 @@ public partial class MobileFactoryHud : CanvasLayer
             BuildPrototypeKind.Bridge => "跨桥",
             BuildPrototypeKind.Loader => "装载器",
             BuildPrototypeKind.Unloader => "卸载器",
-            BuildPrototypeKind.Sink => "回收站",
+            BuildPrototypeKind.Sink => "回收器",
             _ => kind.ToString()
         };
     }

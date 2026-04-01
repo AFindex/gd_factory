@@ -55,7 +55,7 @@ public abstract partial class FactoryStructure : Node3D
     public virtual void RefreshPlacement()
     {
         Position = Site.CellToWorld(Cell);
-        Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(Facing), 0.0f);
+        Rotation = new Vector3(0.0f, Site.WorldRotationRadians + FactoryDirection.ToYRotationRadians(Facing), 0.0f);
         Visible = Site.IsVisible;
     }
 

@@ -28,7 +28,7 @@ public static class FactoryStructureFactory
     {
         [BuildPrototypeKind.Producer] = new FactoryStructureDefinition(BuildPrototypeKind.Producer, () => new ProducerStructure(), true, true),
         [BuildPrototypeKind.Belt] = new FactoryStructureDefinition(BuildPrototypeKind.Belt, () => new BeltStructure(), true, true),
-        [BuildPrototypeKind.Sink] = new FactoryStructureDefinition(BuildPrototypeKind.Sink, () => new SinkStructure(), true, false),
+        [BuildPrototypeKind.Sink] = new FactoryStructureDefinition(BuildPrototypeKind.Sink, () => new SinkStructure(), true, true),
         [BuildPrototypeKind.Splitter] = new FactoryStructureDefinition(BuildPrototypeKind.Splitter, () => new SplitterStructure(), true, true),
         [BuildPrototypeKind.Merger] = new FactoryStructureDefinition(BuildPrototypeKind.Merger, () => new MergerStructure(), true, true),
         [BuildPrototypeKind.Bridge] = new FactoryStructureDefinition(BuildPrototypeKind.Bridge, () => new BridgeStructure(), true, false),

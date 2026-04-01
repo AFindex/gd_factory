@@ -5,6 +5,7 @@ public sealed class MobileFactorySite : IFactorySite
 {
     private readonly Dictionary<Vector2I, FactoryStructure> _structures = new();
     private Vector3 _worldOrigin;
+    private float _worldRotationRadians;
 
     public MobileFactorySite(string siteId, Vector2I minCell, Vector2I maxCell, float cellSize)
     {
@@ -23,6 +24,7 @@ public sealed class MobileFactorySite : IFactorySite
     public bool IsVisible { get; private set; }
     public bool IsSimulationActive { get; private set; }
     public Vector3 WorldOrigin => _worldOrigin;
+    public float WorldRotationRadians => _worldRotationRadians;
 
     public bool IsInBounds(Vector2I cell)
     {
@@ -36,12 +38,13 @@ public sealed class MobileFactorySite : IFactorySite
 
     public Vector3 CellToWorld(Vector2I cell)
     {
-        return _worldOrigin + new Vector3(cell.X * CellSize, 0.0f, cell.Y * CellSize);
+        var local = new Vector3(cell.X * CellSize, 0.0f, cell.Y * CellSize);
+        return _worldOrigin + local.Rotated(Vector3.Up, _worldRotationRadians);
     }
 
     public Vector2I WorldToCell(Vector3 worldPosition)
     {
-        var local = worldPosition - _worldOrigin;
+        var local = (worldPosition - _worldOrigin).Rotated(Vector3.Up, -_worldRotationRadians);
         return new Vector2I(
             Mathf.RoundToInt(local.X / CellSize),
             Mathf.RoundToInt(local.Z / CellSize));
@@ -75,9 +78,10 @@ public sealed class MobileFactorySite : IFactorySite
         return structure.TryAcceptItem(item, source.Cell, simulation);
     }
 
-    public void SetWorldOrigin(Vector3 worldOrigin)
+    public void SetWorldTransform(Vector3 worldOrigin, float worldRotationRadians)
     {
         _worldOrigin = worldOrigin;
+        _worldRotationRadians = worldRotationRadians;
         RefreshStructures();
     }
 

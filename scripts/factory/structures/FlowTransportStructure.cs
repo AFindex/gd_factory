@@ -29,6 +29,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure
     protected virtual float ItemHeight => 0.34f;
 
     public override bool IsTransportNode => true;
+    public int TransitItemCount => _items.Count;
 
     public sealed override bool TryAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {

@@ -23,7 +23,16 @@ public enum FacingDirection
 public enum MobileFactoryLifecycleState
 {
     InTransit,
+    AutoDeploying,
+    Recalling,
     Deployed
+}
+
+public enum MobileFactoryControlMode
+{
+    FactoryCommand,
+    DeployPreview,
+    Observer
 }
 
 public sealed class FactoryItem
@@ -99,6 +108,36 @@ public static class FactoryDirection
             FacingDirection.West => Mathf.Pi,
             FacingDirection.North => Mathf.Pi * 0.5f,
             _ => 0.0f
+        };
+    }
+
+    public static FacingDirection FromAngleRadians(float angleRadians)
+    {
+        var x = Mathf.Cos(angleRadians);
+        var z = -Mathf.Sin(angleRadians);
+
+        if (Mathf.Abs(x) >= Mathf.Abs(z))
+        {
+            return x >= 0.0f ? FacingDirection.East : FacingDirection.West;
+        }
+
+        return z >= 0.0f ? FacingDirection.South : FacingDirection.North;
+    }
+
+    public static Vector3 ToWorldForward(float angleRadians)
+    {
+        return new Vector3(Mathf.Cos(angleRadians), 0.0f, -Mathf.Sin(angleRadians));
+    }
+
+    public static Vector2I RotateOffset(Vector2I offset, FacingDirection facing)
+    {
+        return facing switch
+        {
+            FacingDirection.East => offset,
+            FacingDirection.South => new Vector2I(-offset.Y, offset.X),
+            FacingDirection.West => new Vector2I(-offset.X, -offset.Y),
+            FacingDirection.North => new Vector2I(offset.Y, -offset.X),
+            _ => offset
         };
     }
 
