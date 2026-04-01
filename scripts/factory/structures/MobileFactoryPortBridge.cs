@@ -6,12 +6,14 @@ public partial class MobileFactoryPortBridge : FlowTransportStructure
     private Vector2I _worldSourceCell;
     private Vector2I _worldTargetCell;
     private bool _hasBinding;
+    private int _transitRecycleTotal;
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.Belt;
-    public override string Description => "移动工厂内部物流对外输出的部署端口。";
+    public override string Description => "移动工厂内部物流对外输出的部署端口；未部署时会自动转入内部回收，避免整条线堵死。";
     public bool IsConnectedToWorld => _hasBinding;
     public Vector2I WorldSourceCell => _worldSourceCell;
     public Vector2I WorldTargetCell => _worldTargetCell;
+    public int TransitRecycleTotal => _transitRecycleTotal;
 
     public void BindToWorld(GridManager worldSite, Vector2I worldSourceCell, FacingDirection facing)
     {
@@ -49,14 +51,18 @@ public partial class MobileFactoryPortBridge : FlowTransportStructure
     protected override bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell)
     {
         targetCell = GetOutputCell();
-        return _hasBinding;
+        return true;
     }
 
     protected override bool TryDispatchItem(TransitItemState state, SimulationController simulation)
     {
-        return _hasBinding
-            && _worldSite is not null
-            && simulation.TrySendItemToSite(this, _worldSourceCell, _worldSite, _worldTargetCell, state.Item);
+        if (_hasBinding && _worldSite is not null)
+        {
+            return simulation.TrySendItemToSite(this, _worldSourceCell, _worldSite, _worldTargetCell, state.Item);
+        }
+
+        _transitRecycleTotal++;
+        return true;
     }
 
     protected override Vector3 EvaluatePathPoint(TransitItemState state, float progress)

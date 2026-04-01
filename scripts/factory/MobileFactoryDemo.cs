@@ -493,7 +493,7 @@ public partial class MobileFactoryDemo : Node3D
 
         if (Input.IsActionJustPressed("recall_mobile_factory"))
         {
-            RecallFactory();
+            ReturnFactoryToTransitMode();
         }
     }
 
@@ -998,15 +998,15 @@ public partial class MobileFactoryDemo : Node3D
         }
     }
 
-    private void RecallFactory()
+    private void ReturnFactoryToTransitMode()
     {
-        if (_mobileFactory?.Recall() == true)
+        if (_mobileFactory?.ReturnToTransitMode() == true)
         {
             SetControlMode(MobileFactoryControlMode.FactoryCommand);
         }
         else if (_mobileFactory is not null && _mobileFactory.State != MobileFactoryLifecycleState.Deployed)
         {
-            ShowWorldEvent("当前未处于部署态，不能回收。", false);
+            ShowWorldEvent("当前未处于部署态，不能切回移动态。", false);
         }
     }
 
@@ -1422,8 +1422,11 @@ public partial class MobileFactoryDemo : Node3D
 
         _editorOpen = false;
         _hud.SetEditorOpen(false);
-        var recalled = _mobileFactory.Recall();
+        var transitRecycleBeforeRecall = _mobileFactory.OutputBridge.TransitRecycleTotal;
+        var recalled = _mobileFactory.ReturnToTransitMode();
         await WaitForCondition(() => _mobileFactory.State == MobileFactoryLifecycleState.InTransit, 1.2f);
+        await ToSignal(GetTree().CreateTimer(2.0f), SceneTreeTimer.SignalName.Timeout);
+        var transitRecycleActive = _mobileFactory.OutputBridge.TransitRecycleTotal > transitRecycleBeforeRecall;
         var reservationsReleased =
             _grid.CanReserveAll(_mobileFactory.GetFootprintCells(AnchorA, FacingDirection.East), _mobileFactory.ReservationOwnerId)
             && _grid.CanReserveAll(_mobileFactory.GetPortCells(AnchorA, FacingDirection.East), _mobileFactory.ReservationOwnerId);
@@ -1439,9 +1442,9 @@ public partial class MobileFactoryDemo : Node3D
         await ToSignal(GetTree().CreateTimer(3.5f), SceneTreeTimer.SignalName.Timeout);
         var secondDelivered = _sinkB.DeliveredTotal;
 
-        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !rightPaneHover || !leftPaneHover || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !blockedDeploy || !facingAwareCells || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !recalled || !reservationsReleased || !secondDeploy || secondDelivered <= 0)
+        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !rightPaneHover || !leftPaneHover || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !blockedDeploy || !facingAwareCells || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !recalled || !transitRecycleActive || !reservationsReleased || !secondDeploy || secondDelivered <= 0)
         {
-            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} rightHover={rightPaneHover} leftHover={leftPaneHover} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} blocked={blockedDeploy} facingAware={facingAwareCells} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} recalled={recalled} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered}");
+            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} rightHover={rightPaneHover} leftHover={leftPaneHover} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} blocked={blockedDeploy} facingAware={facingAwareCells} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} recalled={recalled} transitRecycleActive={transitRecycleActive} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered}");
             GetTree().Quit(1);
             return;
         }
@@ -1597,7 +1600,7 @@ public partial class MobileFactoryDemo : Node3D
         {
             MobileFactoryControlMode.Observer => "观察模式：WASD/方向键移动相机 | 滚轮缩放 | Tab 返回工厂控制 | F 内部编辑",
             MobileFactoryControlMode.DeployPreview => "部署预览：左键确认 | Q/E 旋转朝向 | G/Esc 取消 | F 内部编辑",
-            _ => "工厂控制：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 回收 | F 内部编辑；编辑器用 1-5 选建筑"
+            _ => "工厂控制：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器用 1-5 选建筑"
         };
     }
 

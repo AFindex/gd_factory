@@ -264,7 +264,7 @@ public sealed class MobileFactoryInstance
         return TryDeploy(worldGrid, anchorCell, DeploymentFacing);
     }
 
-    public bool Recall()
+    public bool ReturnToTransitMode()
     {
         if (State != MobileFactoryLifecycleState.Deployed || _deployedGrid is null)
         {
@@ -279,9 +279,14 @@ public sealed class MobileFactoryInstance
         InteriorSite.SetRuntimeState(true, true);
         State = MobileFactoryLifecycleState.Recalling;
         _recallTimer = RecallDurationSeconds;
-        PushStatus("移动工厂正在回收部署机构，即将返回运输位。");
+        PushStatus("移动工厂正在收拢部署机构，准备切回移动态；内部物流会继续通过内部回收保持运作。");
         _simulation.RebuildTopology();
         return true;
+    }
+
+    public bool Recall()
+    {
+        return ReturnToTransitMode();
     }
 
     public void UpdateRuntime(double delta)
@@ -376,7 +381,7 @@ public sealed class MobileFactoryInstance
             return $"输出端口：目标朝{FactoryDirection.ToLabel(target.Facing)}，准备连接 ({portCell.X}, {portCell.Y})";
         }
 
-        return $"输出端口：朝{FactoryDirection.ToLabel(DeploymentFacing)}，当前未连接世界线路";
+        return $"输出端口：朝{FactoryDirection.ToLabel(DeploymentFacing)}，当前未连接世界线路，已切到内部回收保持运转";
     }
 
     private void ApplyInteriorPreset(MobileFactoryInteriorPreset preset)
@@ -457,7 +462,7 @@ public sealed class MobileFactoryInstance
 
         MoveToTransitParking();
         State = MobileFactoryLifecycleState.InTransit;
-        PushStatus("移动工厂已回到运输位，可继续机动或重新部署。");
+        PushStatus("移动工厂已切回移动态，可继续机动或重新部署；内部物流仍在持续运作。");
     }
 
     private void FinalizeDeployment(GridManager worldGrid, Vector2I anchorCell, FacingDirection facing)

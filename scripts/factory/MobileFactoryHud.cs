@@ -163,7 +163,7 @@ public partial class MobileFactoryHud : CanvasLayer
         {
             MobileFactoryLifecycleState.Deployed when anchorCell is not null => $"工厂状态：已部署于 ({anchorCell.Value.X}, {anchorCell.Value.Y})",
             MobileFactoryLifecycleState.AutoDeploying => "工厂状态：自动部署中，正在进场并对齐朝向",
-            MobileFactoryLifecycleState.Recalling => "工厂状态：回收中，部署机构正在收拢",
+            MobileFactoryLifecycleState.Recalling => "工厂状态：切回移动态中，部署机构正在收拢",
             _ => "工厂状态：运输中，可自由移动或下达部署命令"
         };
     }
