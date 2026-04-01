@@ -33,7 +33,9 @@ public static class FactoryStructureFactory
         [BuildPrototypeKind.Merger] = new FactoryStructureDefinition(BuildPrototypeKind.Merger, () => new MergerStructure(), true, true),
         [BuildPrototypeKind.Bridge] = new FactoryStructureDefinition(BuildPrototypeKind.Bridge, () => new BridgeStructure(), true, true),
         [BuildPrototypeKind.Loader] = new FactoryStructureDefinition(BuildPrototypeKind.Loader, () => new LoaderStructure(), true, true),
-        [BuildPrototypeKind.Unloader] = new FactoryStructureDefinition(BuildPrototypeKind.Unloader, () => new UnloaderStructure(), true, true)
+        [BuildPrototypeKind.Unloader] = new FactoryStructureDefinition(BuildPrototypeKind.Unloader, () => new UnloaderStructure(), true, true),
+        [BuildPrototypeKind.OutputPort] = new FactoryStructureDefinition(BuildPrototypeKind.OutputPort, () => new MobileFactoryOutputPortStructure(), false, true),
+        [BuildPrototypeKind.InputPort] = new FactoryStructureDefinition(BuildPrototypeKind.InputPort, () => new MobileFactoryInputPortStructure(), false, true)
     };
 
     public static FactoryStructure Create(BuildPrototypeKind kind, FactoryStructurePlacement placement)

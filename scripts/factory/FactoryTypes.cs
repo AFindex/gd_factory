@@ -9,7 +9,9 @@ public enum BuildPrototypeKind
     Merger,
     Bridge,
     Loader,
-    Unloader
+    Unloader,
+    OutputPort,
+    InputPort
 }
 
 public enum FacingDirection
@@ -46,6 +48,12 @@ public enum MobileFactoryCommandSlot
     Confirm,
     Cancel,
     Auxiliary
+}
+
+public enum MobileFactoryAttachmentChannelType
+{
+    ItemOutput,
+    ItemInput
 }
 
 public sealed class FactoryItem
@@ -110,6 +118,23 @@ public static class FactoryDirection
             FacingDirection.West => FacingDirection.South,
             _ => FacingDirection.East
         };
+    }
+
+    public static FacingDirection RotateBy(FacingDirection facing, FacingDirection rotationFromEast)
+    {
+        return rotationFromEast switch
+        {
+            FacingDirection.East => facing,
+            FacingDirection.South => RotateClockwise(facing),
+            FacingDirection.West => RotateClockwise(RotateClockwise(facing)),
+            FacingDirection.North => RotateCounterClockwise(facing),
+            _ => facing
+        };
+    }
+
+    public static FacingDirection Opposite(FacingDirection facing)
+    {
+        return RotateClockwise(RotateClockwise(facing));
     }
 
     public static float ToYRotationRadians(FacingDirection facing)

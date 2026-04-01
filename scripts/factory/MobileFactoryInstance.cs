@@ -32,8 +32,8 @@ public sealed class MobileFactoryInstance
     private readonly SimulationController _simulation;
     private readonly Node3D _structureRoot;
     private readonly Node3D _hullRoot;
-    private readonly Node3D _worldPortRoot;
-    private readonly MobileFactoryPortBridge _outputBridge;
+    private readonly Node3D _worldAttachmentVisualRoot;
+    private readonly List<MobileFactoryBoundaryAttachmentStructure> _attachments = new();
     private readonly Vector3 _interiorFloorLocalOffset;
     private GridManager? _deployedGrid;
     private DeployTarget? _pendingDeployTarget;
@@ -65,16 +65,15 @@ public sealed class MobileFactoryInstance
 
         _hullRoot = CreateHullRoot(Profile, _interiorFloorLocalOffset);
         _structureRoot.AddChild(_hullRoot);
-        _worldPortRoot = CreateWorldPortRoot(Profile);
-        _structureRoot.AddChild(_worldPortRoot);
-
-        _outputBridge = new MobileFactoryPortBridge();
-        _outputBridge.Configure(InteriorSite, Profile.OutputBridgeCell, Profile.OutputBridgeFacing, $"{ReservationOwnerId}:bridge");
-        _structureRoot.AddChild(_outputBridge);
-        InteriorSite.AddStructure(_outputBridge);
-        _simulation.RegisterStructure(_outputBridge);
+        _worldAttachmentVisualRoot = new Node3D
+        {
+            Name = "MobileFactoryWorldAttachments",
+            Visible = false
+        };
+        _structureRoot.AddChild(_worldAttachmentVisualRoot);
 
         ApplyInteriorPreset(InteriorPreset);
+        EnsureDefaultAttachments();
 
         DeploymentFacing = FacingDirection.East;
         _currentHeadingRadians = FactoryDirection.ToYRotationRadians(FacingDirection.East);
@@ -92,13 +91,13 @@ public sealed class MobileFactoryInstance
     public Vector2I? AnchorCell { get; private set; }
     public FacingDirection DeploymentFacing { get; private set; }
     public FacingDirection TransitFacing => FactoryDirection.FromAngleRadians(_currentHeadingRadians);
-    public MobileFactoryPortBridge OutputBridge => _outputBridge;
     public Vector2I InteriorMinCell => InteriorSite.MinCell;
     public Vector2I InteriorMaxCell => InteriorSite.MaxCell;
     public Vector3 WorldFocusPoint => _hullRoot.GlobalPosition;
     public bool IsBusy => State == MobileFactoryLifecycleState.AutoDeploying || State == MobileFactoryLifecycleState.Recalling;
     public Vector2I? PendingDeployAnchor => _pendingDeployTarget?.AnchorCell;
     public FacingDirection? PendingDeployFacing => _pendingDeployTarget?.Facing;
+    public IEnumerable<MobileFactoryBoundaryAttachmentStructure> BoundaryAttachments => _attachments;
 
     public IEnumerable<Vector2I> GetFootprintCells(Vector2I anchorCell)
     {
@@ -120,9 +119,30 @@ public sealed class MobileFactoryInstance
 
     public IEnumerable<Vector2I> GetPortCells(Vector2I anchorCell, FacingDirection facing)
     {
-        foreach (var offset in Profile.PortOffsetsEast)
+        var seen = new HashSet<Vector2I>();
+        foreach (var projection in GetAttachmentProjections(anchorCell, facing))
         {
-            yield return anchorCell + FactoryDirection.RotateOffset(offset, facing);
+            for (var i = 0; i < projection.WorldCells.Count; i++)
+            {
+                if (seen.Add(projection.WorldCells[i]))
+                {
+                    yield return projection.WorldCells[i];
+                }
+            }
+        }
+    }
+
+    public IEnumerable<MobileFactoryAttachmentProjection> GetAttachmentProjections(Vector2I anchorCell, FacingDirection facing)
+    {
+        for (var i = 0; i < _attachments.Count; i++)
+        {
+            var attachment = _attachments[i];
+            if (!Profile.TryGetAttachmentMount(attachment.Cell, attachment.Facing, attachment.Kind, out var mount) || mount is null)
+            {
+                continue;
+            }
+
+            yield return MobileFactoryBoundaryAttachmentGeometry.CreateProjection(attachment, mount, anchorCell, facing);
         }
     }
 
@@ -133,8 +153,20 @@ public sealed class MobileFactoryInstance
             return false;
         }
 
-        return worldGrid.CanReserveAll(GetFootprintCells(anchorCell, facing), ReservationOwnerId)
-            && worldGrid.CanReserveAll(GetPortCells(anchorCell, facing), ReservationOwnerId);
+        if (!worldGrid.CanReserveAll(GetFootprintCells(anchorCell, facing), ReservationOwnerId))
+        {
+            return false;
+        }
+
+        foreach (var projection in GetAttachmentProjections(anchorCell, facing))
+        {
+            if (!worldGrid.CanReserveAll(projection.WorldCells, ReservationOwnerId))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public bool CanDeployAt(GridManager worldGrid, Vector2I anchorCell)
@@ -205,19 +237,14 @@ public sealed class MobileFactoryInstance
 
     public void SetTransitPose(Vector3 worldPosition, FacingDirection facing)
     {
-        if (State == MobileFactoryLifecycleState.Deployed && _deployedGrid is not null)
-        {
-            _deployedGrid.ReleaseOwner(ReservationOwnerId);
-            _deployedGrid = null;
-        }
+        ReleaseDeploymentReservations();
+        ClearAttachmentBindings();
 
         _pendingDeployTarget = null;
         AnchorCell = null;
         State = MobileFactoryLifecycleState.InTransit;
         DeploymentFacing = facing;
         _currentHeadingRadians = FactoryDirection.ToYRotationRadians(facing);
-        _outputBridge.ClearBinding();
-        _worldPortRoot.Visible = false;
         ApplyHullTransform(worldPosition, _currentHeadingRadians);
         InteriorSite.SetRuntimeState(true, true);
         _simulation.RebuildTopology();
@@ -273,17 +300,15 @@ public sealed class MobileFactoryInstance
             return false;
         }
 
-        _deployedGrid.ReleaseOwner(ReservationOwnerId);
-        _deployedGrid = null;
-        AnchorCell = null;
         _pendingTransitPosition = _hullRoot.Position;
         _pendingTransitHeadingRadians = _currentHeadingRadians;
-        _outputBridge.ClearBinding();
-        _worldPortRoot.Visible = false;
+        ReleaseDeploymentReservations();
+        ClearAttachmentBindings();
+        AnchorCell = null;
         InteriorSite.SetRuntimeState(true, true);
         State = MobileFactoryLifecycleState.Recalling;
         _recallTimer = RecallDurationSeconds;
-        PushStatus("移动工厂正在收拢部署机构，准备切回移动态；内部物流会继续通过内部回收保持运作。");
+        PushStatus("移动工厂正在收拢边界 attachment，准备切回移动态；未激活边界会阻塞等待重新部署。");
         _simulation.RebuildTopology();
         return true;
     }
@@ -313,8 +338,13 @@ public sealed class MobileFactoryInstance
         return message;
     }
 
-    public bool CanPlaceInterior(Vector2I cell)
+    public bool CanPlaceInterior(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
     {
+        if (MobileFactoryBoundaryAttachmentCatalog.IsAttachmentKind(kind))
+        {
+            return CanPlaceAttachment(kind, cell, facing);
+        }
+
         return InteriorSite.CanPlace(cell);
     }
 
@@ -323,35 +353,86 @@ public sealed class MobileFactoryInstance
         return InteriorSite.TryGetStructure(cell, out structure);
     }
 
-    public bool IsProtectedInteriorCell(Vector2I cell)
+    public bool IsAttachmentCell(Vector2I cell)
     {
-        return cell == _outputBridge.Cell;
+        return InteriorSite.TryGetStructure(cell, out var structure) && structure is MobileFactoryBoundaryAttachmentStructure;
+    }
+
+    public bool TryGetAttachmentPreview(
+        BuildPrototypeKind kind,
+        Vector2I cell,
+        FacingDirection facing,
+        out List<Vector2I> interiorCells,
+        out List<Vector2I> boundaryCells,
+        out List<Vector2I> exteriorCells,
+        out string message)
+    {
+        interiorCells = new List<Vector2I>();
+        boundaryCells = new List<Vector2I>();
+        exteriorCells = new List<Vector2I>();
+
+        if (!MobileFactoryBoundaryAttachmentCatalog.IsAttachmentKind(kind))
+        {
+            message = "当前选中的不是边界 attachment。";
+            return false;
+        }
+
+        var definition = MobileFactoryBoundaryAttachmentCatalog.Get(kind);
+        interiorCells = MobileFactoryBoundaryAttachmentGeometry.GetInteriorCells(definition, cell, facing);
+        boundaryCells = MobileFactoryBoundaryAttachmentGeometry.GetBoundaryCells(definition, cell, facing);
+        exteriorCells = MobileFactoryBoundaryAttachmentGeometry.GetExteriorStencilCells(definition, cell, facing);
+
+        if (!Profile.TryGetAttachmentMount(cell, facing, kind, out var mount) || mount is null)
+        {
+            message = $"格 ({cell.X}, {cell.Y}) 不是该 attachment 的合法边界挂点，或当前朝向与挂点不匹配。";
+            return false;
+        }
+
+        if (!CanPlaceAttachment(kind, cell, facing))
+        {
+            message = $"格 ({cell.X}, {cell.Y}) 的边界挂点已被占用，或当前部署状态下无法激活该 attachment。";
+            return false;
+        }
+
+        message = $"{MobileFactoryBoundaryAttachmentCatalog.Get(kind).DisplayName} 可挂接在 {mount.Id}，其外侧投影会随部署朝向旋转。";
+        return true;
     }
 
     public bool PlaceInteriorStructure(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
     {
-        if (!InteriorSite.CanPlace(cell))
+        if (!CanPlaceInterior(kind, cell, facing))
         {
             return false;
         }
 
         var structure = FactoryStructureFactory.Create(kind, new FactoryStructurePlacement(InteriorSite, cell, facing));
         RegisterInteriorStructure(structure);
-        _simulation.RebuildTopology();
+        if (structure is MobileFactoryBoundaryAttachmentStructure attachment)
+        {
+            _attachments.Add(attachment);
+        }
+
+        RefreshRuntimeAfterInteriorChange();
         return true;
     }
 
     public bool RemoveInteriorStructure(Vector2I cell)
     {
-        if (!InteriorSite.TryGetStructure(cell, out var structure) || structure is null || structure == _outputBridge)
+        if (!InteriorSite.TryGetStructure(cell, out var structure) || structure is null)
         {
             return false;
         }
 
         InteriorSite.RemoveStructure(structure);
         _simulation.UnregisterStructure(structure);
+        if (structure is MobileFactoryBoundaryAttachmentStructure attachment)
+        {
+            _attachments.Remove(attachment);
+            attachment.ClearBinding();
+        }
+
         structure.QueueFree();
-        _simulation.RebuildTopology();
+        RefreshRuntimeAfterInteriorChange();
         return true;
     }
 
@@ -373,30 +454,78 @@ public sealed class MobileFactoryInstance
 
     public string GetPortStatusLabel()
     {
-        if (State == MobileFactoryLifecycleState.Deployed && OutputBridge.IsConnectedToWorld && AnchorCell is not null)
+        if (_attachments.Count == 0)
         {
-            var portCell = GetPrimaryPortCell(AnchorCell.Value, DeploymentFacing);
-            return $"输出端口：朝{FactoryDirection.ToLabel(DeploymentFacing)}，已连接到世界线路 ({portCell.X}, {portCell.Y})";
+            return "边界 attachment：当前未安装。";
         }
 
-        if (State == MobileFactoryLifecycleState.AutoDeploying && _pendingDeployTarget is DeployTarget target)
+        var lines = new List<string>(_attachments.Count);
+        for (var i = 0; i < _attachments.Count; i++)
         {
-            var portCell = GetPrimaryPortCell(target.AnchorCell, target.Facing);
-            return $"输出端口：目标朝{FactoryDirection.ToLabel(target.Facing)}，准备连接 ({portCell.X}, {portCell.Y})";
+            var attachment = _attachments[i];
+            var channelLabel = attachment.ChannelType == MobileFactoryAttachmentChannelType.ItemOutput ? "输出" : "输入";
+            var stateLabel = attachment.ConnectionStateLabel;
+
+            if (attachment.IsConnectedToWorld)
+            {
+                var portCell = attachment.WorldPortCell;
+                lines.Add($"{channelLabel}端口 {i + 1}：朝{FactoryDirection.ToLabel(attachment.WorldFacing)}，{stateLabel} ({portCell.X}, {portCell.Y})");
+            }
+            else if (State == MobileFactoryLifecycleState.AutoDeploying && AnchorCell is null && _pendingDeployTarget is DeployTarget target)
+            {
+                var projection = TryGetAttachmentProjection(attachment, target.AnchorCell, target.Facing);
+                if (projection is not null)
+                {
+                    lines.Add($"{channelLabel}端口 {i + 1}：目标朝{FactoryDirection.ToLabel(projection.WorldFacing)}，准备连接 ({projection.WorldPortCell.X}, {projection.WorldPortCell.Y})");
+                }
+            }
+            else
+            {
+                lines.Add($"{channelLabel}端口 {i + 1}：朝{FactoryDirection.ToLabel(attachment.Facing)}，当前{stateLabel}");
+            }
         }
 
-        return $"输出端口：朝{FactoryDirection.ToLabel(DeploymentFacing)}，当前未连接世界线路，已切到内部回收保持运转";
+        return string.Join("\n", lines);
+    }
+
+    public bool HasConnectedAttachment(BuildPrototypeKind? kind = null)
+    {
+        for (var i = 0; i < _attachments.Count; i++)
+        {
+            if ((kind is null || _attachments[i].Kind == kind.Value) && _attachments[i].IsConnectedToWorld)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public int CountAttachmentTransitItems(BuildPrototypeKind kind, bool onlyDisconnected = false)
+    {
+        var total = 0;
+        for (var i = 0; i < _attachments.Count; i++)
+        {
+            if (_attachments[i].Kind != kind)
+            {
+                continue;
+            }
+
+            if (onlyDisconnected && _attachments[i].IsConnectedToWorld)
+            {
+                continue;
+            }
+
+            total += _attachments[i].TransitItemCount;
+        }
+
+        return total;
     }
 
     private void ApplyInteriorPreset(MobileFactoryInteriorPreset preset)
     {
         foreach (var placement in preset.Placements)
         {
-            if (placement.Cell == Profile.OutputBridgeCell)
-            {
-                continue;
-            }
-
             if (!InteriorSite.CanPlace(placement.Cell))
             {
                 continue;
@@ -405,6 +534,48 @@ public sealed class MobileFactoryInstance
             RegisterInteriorStructure(FactoryStructureFactory.Create(
                 placement.Kind,
                 new FactoryStructurePlacement(InteriorSite, placement.Cell, placement.Facing)));
+        }
+
+        foreach (var attachmentPlacement in preset.AttachmentPlacements)
+        {
+            if (CanPlaceAttachment(attachmentPlacement.Kind, attachmentPlacement.Cell, attachmentPlacement.Facing))
+            {
+                var structure = FactoryStructureFactory.Create(
+                    attachmentPlacement.Kind,
+                    new FactoryStructurePlacement(InteriorSite, attachmentPlacement.Cell, attachmentPlacement.Facing));
+                RegisterInteriorStructure(structure);
+                if (structure is MobileFactoryBoundaryAttachmentStructure attachment)
+                {
+                    _attachments.Add(attachment);
+                }
+            }
+        }
+    }
+
+    private void EnsureDefaultAttachments()
+    {
+        if (_attachments.Count > 0)
+        {
+            return;
+        }
+
+        for (var i = 0; i < Profile.AttachmentMounts.Count; i++)
+        {
+            var mount = Profile.AttachmentMounts[i];
+            if (!mount.Allows(BuildPrototypeKind.OutputPort) || !InteriorSite.CanPlace(mount.Cell))
+            {
+                continue;
+            }
+
+            var structure = FactoryStructureFactory.Create(
+                BuildPrototypeKind.OutputPort,
+                new FactoryStructurePlacement(InteriorSite, mount.Cell, mount.Facing));
+            RegisterInteriorStructure(structure);
+            if (structure is MobileFactoryBoundaryAttachmentStructure attachment)
+            {
+                _attachments.Add(attachment);
+            }
+            break;
         }
     }
 
@@ -465,10 +636,10 @@ public sealed class MobileFactoryInstance
         }
 
         ApplyHullTransform(_pendingTransitPosition, _pendingTransitHeadingRadians);
-        _worldPortRoot.Visible = false;
+        _worldAttachmentVisualRoot.Visible = false;
         InteriorSite.SetRuntimeState(true, true);
         State = MobileFactoryLifecycleState.InTransit;
-        PushStatus("移动工厂已切回移动态，可继续机动或重新部署；内部物流仍在持续运作。");
+        PushStatus("移动工厂已切回移动态，可继续机动或重新部署；未连接边界 attachment 会如实阻塞等待重连。");
     }
 
     private void FinalizeDeployment(GridManager worldGrid, Vector2I anchorCell, FacingDirection facing)
@@ -479,15 +650,31 @@ public sealed class MobileFactoryInstance
         State = MobileFactoryLifecycleState.Deployed;
 
         worldGrid.ReserveCells(GetFootprintCells(anchorCell, facing), ReservationOwnerId, GridReservationKind.MobileFootprint);
-        worldGrid.ReserveCells(GetPortCells(anchorCell, facing), ReservationOwnerId, GridReservationKind.MobilePort);
 
         var footprintCenter = GetFootprintCenterWorld(worldGrid, anchorCell, facing);
         _currentHeadingRadians = FactoryDirection.ToYRotationRadians(facing);
         ApplyHullTransform(footprintCenter, _currentHeadingRadians);
-        UpdateWorldPortVisual(worldGrid, anchorCell, facing, true);
+        ActivateAttachmentsForDeployment(worldGrid, anchorCell, facing);
         InteriorSite.SetRuntimeState(true, true);
-        _outputBridge.BindToWorld(worldGrid, GetPrimaryPortCell(anchorCell, facing), facing);
         _simulation.RebuildTopology();
+    }
+
+    private void ActivateAttachmentsForDeployment(GridManager worldGrid, Vector2I anchorCell, FacingDirection facing)
+    {
+        ClearAttachmentBindings();
+
+        foreach (var projection in GetAttachmentProjections(anchorCell, facing))
+        {
+            if (!worldGrid.CanReserveAll(projection.WorldCells, ReservationOwnerId))
+            {
+                continue;
+            }
+
+            worldGrid.ReserveCells(projection.WorldCells, ReservationOwnerId, GridReservationKind.MobilePort, projection.Attachment);
+            projection.Attachment.BindToWorld(worldGrid, projection);
+        }
+
+        RebuildWorldAttachmentVisuals(worldGrid, anchorCell, facing);
     }
 
     private void RegisterInteriorStructure(FactoryStructure structure)
@@ -497,10 +684,26 @@ public sealed class MobileFactoryInstance
         _simulation.RegisterStructure(structure);
     }
 
+    private void RefreshRuntimeAfterInteriorChange()
+    {
+        if (State == MobileFactoryLifecycleState.Deployed && _deployedGrid is not null && AnchorCell is Vector2I anchorCell)
+        {
+            ReleaseDeploymentReservations();
+            _deployedGrid.ReserveCells(GetFootprintCells(anchorCell, DeploymentFacing), ReservationOwnerId, GridReservationKind.MobileFootprint);
+            ActivateAttachmentsForDeployment(_deployedGrid, anchorCell, DeploymentFacing);
+        }
+        else
+        {
+            ClearAttachmentBindings();
+        }
+
+        _simulation.RebuildTopology();
+    }
+
     private void MoveToTransitParking()
     {
         ApplyHullTransform(Profile.TransitParkingCenter, _currentHeadingRadians);
-        _worldPortRoot.Visible = false;
+        _worldAttachmentVisualRoot.Visible = false;
         InteriorSite.SetRuntimeState(true, true);
     }
 
@@ -568,40 +771,12 @@ public sealed class MobileFactoryInstance
             new Vector3(platformSize.X * 0.69f, 0.34f, 0.0f),
             visibleInInterior: false,
             visibleInWorld: true));
-        root.AddChild(CreateHullMesh(
-            "InteriorPortMarker",
-            new Vector3(profile.InteriorCellSize * 0.36f, 0.08f, profile.InteriorCellSize * 0.36f),
-            profile.PortColor,
-            GetInteriorPortMarkerLocalPosition(profile, interiorFloorLocalOffset),
-            visibleInInterior: true,
-            visibleInWorld: false));
 
-        return root;
-    }
-
-    private static Node3D CreateWorldPortRoot(MobileFactoryProfile profile)
-    {
-        var root = new Node3D
+        for (var i = 0; i < profile.AttachmentMounts.Count; i++)
         {
-            Name = "MobileFactoryWorldPort",
-            Visible = false
-        };
-
-        root.AddChild(CreatePortVisual(
-            "PortBase",
-            new Vector3(0.72f, 0.14f, 0.72f),
-            profile.CabColor.Darkened(0.15f),
-            new Vector3(0.0f, 0.08f, 0.0f)));
-        root.AddChild(CreatePortVisual(
-            "PortGlow",
-            new Vector3(0.48f, 0.18f, 0.48f),
-            profile.PortColor,
-            new Vector3(0.0f, 0.18f, 0.0f)));
-        root.AddChild(CreatePortVisual(
-            "PortMouth",
-            new Vector3(0.26f, 0.14f, 0.38f),
-            profile.AccentColor.Lightened(0.2f),
-            new Vector3(0.34f, 0.18f, 0.0f)));
+            var mount = profile.AttachmentMounts[i];
+            root.AddChild(CreateAttachmentMountMarker(profile, interiorFloorLocalOffset, mount));
+        }
 
         return root;
     }
@@ -625,36 +800,109 @@ public sealed class MobileFactoryInstance
         return mesh;
     }
 
-    private static MeshInstance3D CreatePortVisual(string name, Vector3 size, Color color, Vector3 localPosition)
+    private static MeshInstance3D CreateAttachmentMountMarker(MobileFactoryProfile profile, Vector3 interiorFloorLocalOffset, MobileFactoryAttachmentMount mount)
     {
-        var mesh = new MeshInstance3D
+        var localPosition = new Vector3(
+            interiorFloorLocalOffset.X + mount.Cell.X * profile.InteriorCellSize,
+            0.40f,
+            interiorFloorLocalOffset.Z + mount.Cell.Y * profile.InteriorCellSize);
+
+        var marker = new MeshInstance3D
         {
-            Name = name,
-            Mesh = new BoxMesh { Size = size },
+            Name = $"AttachmentMount_{mount.Id}",
+            Mesh = new BoxMesh { Size = new Vector3(profile.InteriorCellSize * 0.32f, 0.05f, profile.InteriorCellSize * 0.32f) },
             Position = localPosition,
+            Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(mount.Facing), 0.0f),
             MaterialOverride = new StandardMaterial3D
             {
-                AlbedoColor = color,
-                Roughness = 0.75f
+                AlbedoColor = profile.PortColor.Lightened(0.08f),
+                Roughness = 0.70f
             }
         };
 
-        mesh.SetLayerMaskValue(InteriorRenderLayer, true);
-        mesh.SetLayerMaskValue(HullRenderLayer, true);
-        return mesh;
+        marker.SetLayerMaskValue(InteriorRenderLayer, true);
+        marker.SetLayerMaskValue(HullRenderLayer, false);
+        return marker;
     }
 
-    private void UpdateWorldPortVisual(GridManager worldGrid, Vector2I anchorCell, FacingDirection facing, bool visible)
+    private void RebuildWorldAttachmentVisuals(GridManager worldGrid, Vector2I anchorCell, FacingDirection facing)
     {
-        _worldPortRoot.Visible = visible;
-        if (!visible)
+        foreach (var child in _worldAttachmentVisualRoot.GetChildren())
         {
-            return;
+            if (child is Node node)
+            {
+                node.QueueFree();
+            }
         }
 
-        var portCell = GetPrimaryPortCell(anchorCell, facing);
-        _worldPortRoot.Position = worldGrid.CellToWorld(portCell);
-        _worldPortRoot.Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(facing), 0.0f);
+        foreach (var projection in GetAttachmentProjections(anchorCell, facing))
+        {
+            if (!projection.Attachment.IsConnectedToWorld)
+            {
+                continue;
+            }
+
+            _worldAttachmentVisualRoot.AddChild(CreateWorldAttachmentVisual(worldGrid, projection));
+        }
+
+        _worldAttachmentVisualRoot.Visible = _worldAttachmentVisualRoot.GetChildCount() > 0;
+    }
+
+    private Node3D CreateWorldAttachmentVisual(GridManager worldGrid, MobileFactoryAttachmentProjection projection)
+    {
+        var root = new Node3D
+        {
+            Name = $"{projection.Attachment.Name}_WorldConnector"
+        };
+
+        var start = projection.Attachment.GlobalPosition + FactoryDirection.ToWorldForward(projection.Attachment.GlobalRotation.Y) * (projection.Attachment.Site.CellSize * 0.34f);
+        var end = worldGrid.CellToWorld(projection.WorldPortCell);
+        var connectorVector = end - start;
+        var connectorLength = new Vector2(connectorVector.X, connectorVector.Z).Length();
+
+        var connector = new MeshInstance3D
+        {
+            Name = "ConnectorStem",
+            Mesh = new BoxMesh { Size = new Vector3(0.18f, 0.16f, Mathf.Max(0.24f, connectorLength)) },
+            Position = (start + end) * 0.5f + new Vector3(0.0f, 0.18f, 0.0f),
+            Rotation = new Vector3(0.0f, Mathf.Atan2(connectorVector.X, connectorVector.Z), 0.0f),
+            MaterialOverride = new StandardMaterial3D
+            {
+                AlbedoColor = projection.Attachment.AttachmentDefinition.ConnectorColor,
+                Roughness = 0.70f
+            }
+        };
+        root.AddChild(connector);
+
+        var endpoint = new MeshInstance3D
+        {
+            Name = "ConnectorEndpoint",
+            Mesh = new BoxMesh { Size = new Vector3(0.56f, 0.16f, 0.56f) },
+            Position = end + new Vector3(0.0f, 0.10f, 0.0f),
+            Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(projection.WorldFacing), 0.0f),
+            MaterialOverride = new StandardMaterial3D
+            {
+                AlbedoColor = projection.Attachment.AttachmentDefinition.Tint,
+                Roughness = 0.68f
+            }
+        };
+        root.AddChild(endpoint);
+
+        var mouth = new MeshInstance3D
+        {
+            Name = "ConnectorMouth",
+            Mesh = new BoxMesh { Size = new Vector3(0.18f, 0.10f, 0.28f) },
+            Position = end + FactoryDirection.ToWorldForward(FactoryDirection.ToYRotationRadians(projection.WorldFacing)) * 0.14f + new Vector3(0.0f, 0.20f, 0.0f),
+            Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(projection.WorldFacing), 0.0f),
+            MaterialOverride = new StandardMaterial3D
+            {
+                AlbedoColor = projection.Attachment.AttachmentDefinition.ConnectorColor.Lightened(0.12f),
+                Roughness = 0.55f
+            }
+        };
+        root.AddChild(mouth);
+
+        return root;
     }
 
     private static Vector3 GetInteriorPlatformSize(MobileFactoryProfile profile)
@@ -664,17 +912,79 @@ public sealed class MobileFactoryInstance
         return new Vector3(width, 0.35f, depth);
     }
 
-    private static Vector3 GetInteriorPortMarkerLocalPosition(MobileFactoryProfile profile, Vector3 interiorFloorLocalOffset)
+    private MobileFactoryAttachmentProjection? TryGetAttachmentProjection(MobileFactoryBoundaryAttachmentStructure attachment, Vector2I anchorCell, FacingDirection facing)
     {
-        return new Vector3(
-            interiorFloorLocalOffset.X + profile.OutputBridgeCell.X * profile.InteriorCellSize,
-            0.40f,
-            interiorFloorLocalOffset.Z + profile.OutputBridgeCell.Y * profile.InteriorCellSize);
+        foreach (var projection in GetAttachmentProjections(anchorCell, facing))
+        {
+            if (projection.Attachment == attachment)
+            {
+                return projection;
+            }
+        }
+
+        return null;
     }
 
-    private Vector2I GetPrimaryPortCell(Vector2I anchorCell, FacingDirection facing)
+    private void ReleaseDeploymentReservations()
     {
-        return anchorCell + FactoryDirection.RotateOffset(Profile.PortOffsetsEast[0], facing);
+        if (_deployedGrid is null)
+        {
+            return;
+        }
+
+        _deployedGrid.ReleaseOwner(ReservationOwnerId);
+        _deployedGrid = null;
+    }
+
+    private void ClearAttachmentBindings()
+    {
+        for (var i = 0; i < _attachments.Count; i++)
+        {
+            _attachments[i].ClearBinding();
+        }
+
+        foreach (var child in _worldAttachmentVisualRoot.GetChildren())
+        {
+            if (child is Node node)
+            {
+                node.QueueFree();
+            }
+        }
+
+        _worldAttachmentVisualRoot.Visible = false;
+    }
+
+    private bool CanPlaceAttachment(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
+    {
+        if (!Profile.TryGetAttachmentMount(cell, facing, kind, out var mount) || mount is null)
+        {
+            return false;
+        }
+
+        var definition = MobileFactoryBoundaryAttachmentCatalog.Get(kind);
+        var interiorCells = MobileFactoryBoundaryAttachmentGeometry.GetInteriorCells(definition, cell, facing);
+        for (var i = 0; i < interiorCells.Count; i++)
+        {
+            if (!InteriorSite.IsInBounds(interiorCells[i]) || !InteriorSite.CanPlace(interiorCells[i]))
+            {
+                return false;
+            }
+        }
+
+        if (State == MobileFactoryLifecycleState.Deployed && _deployedGrid is not null && AnchorCell is Vector2I anchorCell)
+        {
+            var previewStructure = FactoryStructureFactory.Create(kind, new FactoryStructurePlacement(InteriorSite, cell, facing)) as MobileFactoryBoundaryAttachmentStructure;
+            if (previewStructure is null)
+            {
+                return false;
+            }
+
+            var projection = MobileFactoryBoundaryAttachmentGeometry.CreateProjection(previewStructure, mount, anchorCell, DeploymentFacing);
+            previewStructure.QueueFree();
+            return _deployedGrid.CanReserveAll(projection.WorldCells, ReservationOwnerId);
+        }
+
+        return true;
     }
 
     private float GetHullRadiusPadding()

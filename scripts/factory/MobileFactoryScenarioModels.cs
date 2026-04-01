@@ -17,13 +17,20 @@ public readonly struct FactoryPlacementSpec
 
 public sealed class MobileFactoryInteriorPreset
 {
-    public MobileFactoryInteriorPreset(string id, string displayName, string description, string recoverySummary, IReadOnlyList<FactoryPlacementSpec> placements)
+    public MobileFactoryInteriorPreset(
+        string id,
+        string displayName,
+        string description,
+        string recoverySummary,
+        IReadOnlyList<FactoryPlacementSpec> placements,
+        IReadOnlyList<MobileFactoryAttachmentPlacementSpec>? attachmentPlacements = null)
     {
         Id = id;
         DisplayName = displayName;
         Description = description;
         RecoverySummary = recoverySummary;
         Placements = placements;
+        AttachmentPlacements = attachmentPlacements ?? new List<MobileFactoryAttachmentPlacementSpec>();
     }
 
     public string Id { get; }
@@ -31,6 +38,7 @@ public sealed class MobileFactoryInteriorPreset
     public string Description { get; }
     public string RecoverySummary { get; }
     public IReadOnlyList<FactoryPlacementSpec> Placements { get; }
+    public IReadOnlyList<MobileFactoryAttachmentPlacementSpec> AttachmentPlacements { get; }
 }
 
 public sealed class MobileFactoryProfile
@@ -51,7 +59,8 @@ public sealed class MobileFactoryProfile
         Color hullColor,
         Color cabColor,
         Color accentColor,
-        Color portColor)
+        Color portColor,
+        IReadOnlyList<MobileFactoryAttachmentMount>? attachmentMounts = null)
     {
         Id = id;
         DisplayName = displayName;
@@ -69,6 +78,7 @@ public sealed class MobileFactoryProfile
         CabColor = cabColor;
         AccentColor = accentColor;
         PortColor = portColor;
+        AttachmentMounts = attachmentMounts ?? new List<MobileFactoryAttachmentMount>();
     }
 
     public string Id { get; }
@@ -87,9 +97,42 @@ public sealed class MobileFactoryProfile
     public Color CabColor { get; }
     public Color AccentColor { get; }
     public Color PortColor { get; }
+    public IReadOnlyList<MobileFactoryAttachmentMount> AttachmentMounts { get; }
 
     public int InteriorWidth => InteriorMaxCell.X - InteriorMinCell.X + 1;
     public int InteriorHeight => InteriorMaxCell.Y - InteriorMinCell.Y + 1;
+
+    public bool TryGetAttachmentMount(Vector2I cell, FacingDirection facing, BuildPrototypeKind kind, out MobileFactoryAttachmentMount? mount)
+    {
+        for (var i = 0; i < AttachmentMounts.Count; i++)
+        {
+            var candidate = AttachmentMounts[i];
+            if (candidate.Cell == cell && candidate.Facing == facing && candidate.Allows(kind))
+            {
+                mount = candidate;
+                return true;
+            }
+        }
+
+        mount = null;
+        return false;
+    }
+
+    public bool TryGetAttachmentMount(Vector2I cell, out MobileFactoryAttachmentMount? mount)
+    {
+        for (var i = 0; i < AttachmentMounts.Count; i++)
+        {
+            var candidate = AttachmentMounts[i];
+            if (candidate.Cell == cell)
+            {
+                mount = candidate;
+                return true;
+            }
+        }
+
+        mount = null;
+        return false;
+    }
 }
 
 public sealed class MobileFactoryRoutePoint

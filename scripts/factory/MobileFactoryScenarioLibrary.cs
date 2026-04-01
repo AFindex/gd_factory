@@ -3,6 +3,16 @@ using System.Collections.Generic;
 
 public static class MobileFactoryScenarioLibrary
 {
+    private static MobileFactoryAttachmentMount CreateAttachmentMount(
+        string id,
+        Vector2I cell,
+        FacingDirection facing,
+        Vector2I worldPortOffsetEast,
+        params BuildPrototypeKind[] allowedKinds)
+    {
+        return new MobileFactoryAttachmentMount(id, cell, facing, worldPortOffsetEast, allowedKinds);
+    }
+
     public static MobileFactoryProfile CreateFocusedDemoProfile()
     {
         return new MobileFactoryProfile(
@@ -30,7 +40,13 @@ public static class MobileFactoryScenarioLibrary
             hullColor: new Color("1F2937"),
             cabColor: new Color("475569"),
             accentColor: new Color("F59E0B"),
-            portColor: new Color("FB923C"));
+            portColor: new Color("FB923C"),
+            attachmentMounts: new[]
+            {
+                CreateAttachmentMount("west-input-main", new Vector2I(0, 3), FacingDirection.West, new Vector2I(-1, 1), BuildPrototypeKind.InputPort),
+                CreateAttachmentMount("east-output-main", new Vector2I(4, 1), FacingDirection.East, new Vector2I(2, 0), BuildPrototypeKind.OutputPort),
+                CreateAttachmentMount("east-output-aux", new Vector2I(4, 3), FacingDirection.East, new Vector2I(2, 1), BuildPrototypeKind.OutputPort)
+            });
     }
 
     public static MobileFactoryProfile CreateCompactProfile()
@@ -60,7 +76,13 @@ public static class MobileFactoryScenarioLibrary
             hullColor: new Color("1E293B"),
             cabColor: new Color("0F766E"),
             accentColor: new Color("14B8A6"),
-            portColor: new Color("5EEAD4"));
+            portColor: new Color("5EEAD4"),
+            attachmentMounts: new[]
+            {
+                CreateAttachmentMount("west-input-main", new Vector2I(0, 3), FacingDirection.West, new Vector2I(-1, 1), BuildPrototypeKind.InputPort),
+                CreateAttachmentMount("east-output-main", new Vector2I(4, 2), FacingDirection.East, new Vector2I(2, 0), BuildPrototypeKind.OutputPort),
+                CreateAttachmentMount("east-output-aux", new Vector2I(4, 3), FacingDirection.East, new Vector2I(2, 1), BuildPrototypeKind.OutputPort)
+            });
     }
 
     public static MobileFactoryProfile CreateMediumProfile()
@@ -92,7 +114,13 @@ public static class MobileFactoryScenarioLibrary
             hullColor: new Color("1F2937"),
             cabColor: new Color("1D4ED8"),
             accentColor: new Color("60A5FA"),
-            portColor: new Color("BFDBFE"));
+            portColor: new Color("BFDBFE"),
+            attachmentMounts: new[]
+            {
+                CreateAttachmentMount("west-input-main", new Vector2I(0, 3), FacingDirection.West, new Vector2I(-1, 1), BuildPrototypeKind.InputPort),
+                CreateAttachmentMount("east-output-main", new Vector2I(5, 2), FacingDirection.East, new Vector2I(3, 0), BuildPrototypeKind.OutputPort),
+                CreateAttachmentMount("east-output-aux", new Vector2I(5, 3), FacingDirection.East, new Vector2I(3, 1), BuildPrototypeKind.OutputPort)
+            });
     }
 
     public static MobileFactoryProfile CreateHeavyProfile()
@@ -126,7 +154,13 @@ public static class MobileFactoryScenarioLibrary
             hullColor: new Color("292524"),
             cabColor: new Color("7C2D12"),
             accentColor: new Color("FB923C"),
-            portColor: new Color("FED7AA"));
+            portColor: new Color("FED7AA"),
+            attachmentMounts: new[]
+            {
+                CreateAttachmentMount("west-input-main", new Vector2I(0, 4), FacingDirection.West, new Vector2I(-1, 1), BuildPrototypeKind.InputPort),
+                CreateAttachmentMount("east-output-main", new Vector2I(6, 3), FacingDirection.East, new Vector2I(4, 0), BuildPrototypeKind.OutputPort),
+                CreateAttachmentMount("east-output-aux", new Vector2I(6, 4), FacingDirection.East, new Vector2I(4, 1), BuildPrototypeKind.OutputPort)
+            });
     }
 
     public static MobileFactoryInteriorPreset CreateFocusedDemoPreset()
@@ -134,14 +168,20 @@ public static class MobileFactoryScenarioLibrary
         return new MobileFactoryInteriorPreset(
             id: "focused-line",
             displayName: "基础直通线",
-            description: "保留原本的基础概念验证：一条直出外部世界的最小内部产线。",
-            recoverySummary: "通过世界侧演示回收站长期消化输出。",
+            description: "在厂内保留一条向外输出的主线，并增加一条从世界输入后进入内部回收的支线。",
+            recoverySummary: "输出通过世界侧回收站长期消化，输入通过内部回收器稳定消费。",
             placements: new[]
             {
-                new FactoryPlacementSpec(BuildPrototypeKind.Producer, new Vector2I(0, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(1, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(2, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 2), FacingDirection.East)
+                new FactoryPlacementSpec(BuildPrototypeKind.Producer, new Vector2I(0, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(1, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(2, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Sink, new Vector2I(1, 3), FacingDirection.East)
+            },
+            attachmentPlacements: new[]
+            {
+                new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.InputPort, new Vector2I(0, 3), FacingDirection.West),
+                new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.OutputPort, new Vector2I(4, 1), FacingDirection.East)
             });
     }
 

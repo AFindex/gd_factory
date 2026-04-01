@@ -10,7 +10,9 @@ public partial class MobileFactoryHud : CanvasLayer
         BuildPrototypeKind.Belt,
         BuildPrototypeKind.Splitter,
         BuildPrototypeKind.Merger,
-        BuildPrototypeKind.Sink
+        BuildPrototypeKind.Sink,
+        BuildPrototypeKind.OutputPort,
+        BuildPrototypeKind.InputPort
     };
 
     private PanelContainer? _worldFocusFrame;
@@ -329,7 +331,7 @@ public partial class MobileFactoryHud : CanvasLayer
         _deployButton.Pressed += () => DeployModeToggleRequested?.Invoke();
         actionsRow.AddChild(_deployButton);
 
-        _hintLabel.Text = "默认操作：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 上下文辅助 | F 内部编辑";
+        _hintLabel.Text = "默认操作：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 上下文辅助 | F 内部编辑 | 1-7 切换建造/端口";
         _hintLabel.Modulate = new Color("EED49F");
     }
 
@@ -528,6 +530,8 @@ public partial class MobileFactoryHud : CanvasLayer
             BuildPrototypeKind.Bridge => "跨桥",
             BuildPrototypeKind.Loader => "装载器",
             BuildPrototypeKind.Unloader => "卸载器",
+            BuildPrototypeKind.OutputPort => "输出端口",
+            BuildPrototypeKind.InputPort => "输入端口",
             BuildPrototypeKind.Sink => "回收器",
             _ => kind.ToString()
         };

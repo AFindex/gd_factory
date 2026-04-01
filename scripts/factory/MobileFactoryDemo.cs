@@ -15,7 +15,9 @@ public partial class MobileFactoryDemo : Node3D
         BuildPrototypeKind.Belt,
         BuildPrototypeKind.Splitter,
         BuildPrototypeKind.Merger,
-        BuildPrototypeKind.Sink
+        BuildPrototypeKind.Sink,
+        BuildPrototypeKind.OutputPort,
+        BuildPrototypeKind.InputPort
     };
 
     [Export]
@@ -27,7 +29,9 @@ public partial class MobileFactoryDemo : Node3D
         [BuildPrototypeKind.Belt] = new BuildPrototypeDefinition(BuildPrototypeKind.Belt, "传送带", new Color("7DD3FC"), "将物品沿直线向前输送。"),
         [BuildPrototypeKind.Splitter] = new BuildPrototypeDefinition(BuildPrototypeKind.Splitter, "分流器", new Color("C4B5FD"), "将后方输入分到左右两路。"),
         [BuildPrototypeKind.Merger] = new BuildPrototypeDefinition(BuildPrototypeKind.Merger, "合并器", new Color("99F6E4"), "把左右两路物流汇成前方一路。"),
-        [BuildPrototypeKind.Sink] = new BuildPrototypeDefinition(BuildPrototypeKind.Sink, "回收器", new Color("FDE68A"), "吞掉输入物品并作为内部消费端。")
+        [BuildPrototypeKind.Sink] = new BuildPrototypeDefinition(BuildPrototypeKind.Sink, "回收器", new Color("FDE68A"), "吞掉输入物品并作为内部消费端。"),
+        [BuildPrototypeKind.OutputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.OutputPort, "输出端口", new Color("FB923C"), "将移动工厂内部物流送往世界网格。"),
+        [BuildPrototypeKind.InputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.InputPort, "输入端口", new Color("60A5FA"), "把世界侧物流导入移动工厂内部。")
     };
 
     private GridManager? _grid;
@@ -43,6 +47,8 @@ public partial class MobileFactoryDemo : Node3D
     private MeshInstance3D? _worldPreviewFacingArrow;
     private MeshInstance3D? _interiorPreviewCell;
     private MeshInstance3D? _interiorPreviewArrow;
+    private readonly List<MeshInstance3D> _interiorPreviewBoundaryMeshes = new();
+    private readonly List<MeshInstance3D> _interiorPreviewExteriorMeshes = new();
 
     private MobileFactoryInstance? _mobileFactory;
     private readonly List<MobileFactoryInstance> _backgroundFactories = new();
@@ -257,15 +263,11 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        _sinkA = PlaceWorldStructure(BuildPrototypeKind.Sink, new Vector2I(-1, -3), FacingDirection.East) as SinkStructure;
-        PlaceWorldStructure(BuildPrototypeKind.Belt, new Vector2I(-3, -3), FacingDirection.East);
-        PlaceWorldStructure(BuildPrototypeKind.Belt, new Vector2I(-2, -3), FacingDirection.East);
-
-        _sinkB = PlaceWorldStructure(BuildPrototypeKind.Sink, new Vector2I(7, 3), FacingDirection.East) as SinkStructure;
-        PlaceWorldStructure(BuildPrototypeKind.Belt, new Vector2I(5, 3), FacingDirection.East);
-        PlaceWorldStructure(BuildPrototypeKind.Belt, new Vector2I(6, 3), FacingDirection.East);
-
-        PlaceWorldStructure(BuildPrototypeKind.Sink, new Vector2I(0, 1), FacingDirection.East);
+        var focusedProfile = MobileFactoryScenarioLibrary.CreateFocusedDemoProfile();
+        _sinkA = CreatePreparedOutputLine(focusedProfile, AnchorA, FacingDirection.East, 2);
+        _sinkB = CreatePreparedOutputLine(focusedProfile, AnchorB, FacingDirection.East, 2);
+        CreatePreparedInputLine(focusedProfile, AnchorA, FacingDirection.East, 1);
+        CreatePreparedInputLine(focusedProfile, AnchorB, FacingDirection.East, 3);
         _simulation!.RebuildTopology();
     }
 
@@ -292,7 +294,9 @@ public partial class MobileFactoryDemo : Node3D
         if (_mobileFactory is not null)
         {
             _selectedDeployFacing = _mobileFactory.TransitFacing;
-            CreateWorldPreviewVisuals(_mobileFactory.Profile.FootprintOffsetsEast.Count, _mobileFactory.Profile.PortOffsetsEast.Count);
+            CreateWorldPreviewVisuals(
+                _mobileFactory.Profile.FootprintOffsetsEast.Count,
+                Mathf.Max(1, _mobileFactory.Profile.AttachmentMounts.Count));
             UpdateInteriorPreviewSizing();
         }
     }
@@ -364,20 +368,49 @@ public partial class MobileFactoryDemo : Node3D
 
     private SinkStructure? CreatePreparedOutputLine(MobileFactoryProfile profile, Vector2I anchorCell, FacingDirection facing, int beltCount)
     {
-        var portCell = GetProfilePortCell(profile, anchorCell, facing);
-        for (var i = 1; i <= beltCount; i++)
+        var portCell = GetProfilePortCell(profile, anchorCell, facing, BuildPrototypeKind.OutputPort);
+        var outboundFacing = GetProfilePortFacing(profile, facing, BuildPrototypeKind.OutputPort);
+        var cursor = portCell;
+        for (var i = 0; i < beltCount; i++)
         {
-            PlaceWorldStructure(BuildPrototypeKind.Belt, new Vector2I(portCell.X + i, portCell.Y), FacingDirection.East);
+            cursor += FactoryDirection.ToCellOffset(outboundFacing);
+            PlaceWorldStructure(BuildPrototypeKind.Belt, cursor, outboundFacing);
         }
 
-        var sinkCell = new Vector2I(portCell.X + beltCount + 1, portCell.Y);
-        var sink = PlaceWorldStructure(BuildPrototypeKind.Sink, sinkCell, FacingDirection.East) as SinkStructure;
+        var sinkCell = cursor + FactoryDirection.ToCellOffset(outboundFacing);
+        var sink = PlaceWorldStructure(BuildPrototypeKind.Sink, sinkCell, outboundFacing) as SinkStructure;
         if (sink is not null)
         {
             _scenarioSinks.Add(sink);
         }
 
         return sink;
+    }
+
+    private void CreatePreparedInputLine(MobileFactoryProfile profile, Vector2I anchorCell, FacingDirection facing, int beltCount)
+    {
+        var portCell = GetProfilePortCell(profile, anchorCell, facing, BuildPrototypeKind.InputPort);
+        var outboundFacing = GetProfilePortFacing(profile, facing, BuildPrototypeKind.InputPort);
+        var inboundFacing = FactoryDirection.Opposite(outboundFacing);
+        var offset = FactoryDirection.ToCellOffset(outboundFacing);
+        var cells = new List<Vector2I>(beltCount + 1);
+        var cursor = portCell + offset;
+        for (var i = 0; i < beltCount; i++)
+        {
+            cells.Add(cursor);
+            cursor += offset;
+        }
+
+        if (cells.Count == 0)
+        {
+            return;
+        }
+
+        PlaceWorldStructure(BuildPrototypeKind.Producer, cells[^1], inboundFacing);
+        for (var i = 0; i < cells.Count - 1; i++)
+        {
+            PlaceWorldStructure(BuildPrototypeKind.Belt, cells[i], inboundFacing);
+        }
     }
 
     private void CreateAmbientWorldLine(Vector2I startCell, int beltCount, FacingDirection facing)
@@ -457,9 +490,32 @@ public partial class MobileFactoryDemo : Node3D
         };
     }
 
-    private static Vector2I GetProfilePortCell(MobileFactoryProfile profile, Vector2I anchorCell, FacingDirection facing)
+    private static Vector2I GetProfilePortCell(MobileFactoryProfile profile, Vector2I anchorCell, FacingDirection facing, BuildPrototypeKind kind)
     {
-        return anchorCell + FactoryDirection.RotateOffset(profile.PortOffsetsEast[0], facing);
+        for (var i = 0; i < profile.AttachmentMounts.Count; i++)
+        {
+            var mount = profile.AttachmentMounts[i];
+            if (mount.Allows(kind))
+            {
+                return anchorCell + FactoryDirection.RotateOffset(mount.WorldPortOffsetEast, facing);
+            }
+        }
+
+        return anchorCell;
+    }
+
+    private static FacingDirection GetProfilePortFacing(MobileFactoryProfile profile, FacingDirection deployFacing, BuildPrototypeKind kind)
+    {
+        for (var i = 0; i < profile.AttachmentMounts.Count; i++)
+        {
+            var mount = profile.AttachmentMounts[i];
+            if (mount.Allows(kind))
+            {
+                return FactoryDirection.RotateBy(mount.Facing, deployFacing);
+            }
+        }
+
+        return deployFacing;
     }
 
     private void HandleGlobalCommands()
@@ -600,6 +656,18 @@ public partial class MobileFactoryDemo : Node3D
             return true;
         }
 
+        if (keyEvent.Keycode == Key.Key6)
+        {
+            _selectedInteriorKind = InteriorPalette[5];
+            return true;
+        }
+
+        if (keyEvent.Keycode == Key.Key7)
+        {
+            _selectedInteriorKind = InteriorPalette[6];
+            return true;
+        }
+
         if (keyEvent.Keycode == Key.Q)
         {
             _selectedInteriorFacing = FactoryDirection.RotateCounterClockwise(_selectedInteriorFacing);
@@ -686,20 +754,29 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        if (_mobileFactory.CanPlaceInterior(cell))
+        if (_mobileFactory.CanPlaceInterior(_selectedInteriorKind, cell, _selectedInteriorFacing))
         {
             _canPlaceInteriorCell = true;
-            _interiorPreviewMessage = $"可在内部格 ({cell.X}, {cell.Y}) 放置{_definitions[_selectedInteriorKind].DisplayName}。";
+            if (MobileFactoryBoundaryAttachmentCatalog.IsAttachmentKind(_selectedInteriorKind)
+                && _mobileFactory.TryGetAttachmentPreview(_selectedInteriorKind, cell, _selectedInteriorFacing, out _, out _, out _, out var attachmentPreviewMessage))
+            {
+                _interiorPreviewMessage = attachmentPreviewMessage;
+            }
+            else
+            {
+                _interiorPreviewMessage = $"可在内部格 ({cell.X}, {cell.Y}) 放置{_definitions[_selectedInteriorKind].DisplayName}。";
+            }
             return;
         }
 
-        if (_mobileFactory.IsProtectedInteriorCell(cell))
+        if (MobileFactoryBoundaryAttachmentCatalog.IsAttachmentKind(_selectedInteriorKind)
+            && _mobileFactory.TryGetAttachmentPreview(_selectedInteriorKind, cell, _selectedInteriorFacing, out _, out _, out _, out var invalidAttachmentMessage))
         {
-            _interiorPreviewMessage = "这个格子是对外输出端口，不能拆除或覆盖。";
+            _interiorPreviewMessage = invalidAttachmentMessage;
             return;
         }
 
-        _interiorPreviewMessage = $"内部格 ({cell.X}, {cell.Y}) 已被占用，右键可拆除普通内部件。";
+        _interiorPreviewMessage = $"内部格 ({cell.X}, {cell.Y}) 已被占用，右键可拆除已安装的内部结构或边界 attachment。";
     }
 
     private void UpdateWorldPreview()
@@ -737,8 +814,12 @@ public partial class MobileFactoryDemo : Node3D
             ? new Color(0.98f, 0.72f, 0.34f, 0.55f)
             : new Color(1.0f, 0.55f, 0.35f, 0.55f);
 
+        var footprintCells = new List<Vector2I>(_mobileFactory.GetFootprintCells(_hoveredAnchor, _selectedDeployFacing));
+        var portCells = new List<Vector2I>(_mobileFactory.GetPortCells(_hoveredAnchor, _selectedDeployFacing));
+        EnsureWorldPreviewVisualCapacity(footprintCells.Count, portCells.Count);
+
         var index = 0;
-        foreach (var cell in _mobileFactory.GetFootprintCells(_hoveredAnchor, _selectedDeployFacing))
+        foreach (var cell in footprintCells)
         {
             var mesh = _worldPreviewFootprintMeshes[index++];
             mesh.Visible = true;
@@ -747,7 +828,7 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         index = 0;
-        foreach (var cell in _mobileFactory.GetPortCells(_hoveredAnchor, _selectedDeployFacing))
+        foreach (var cell in portCells)
         {
             var mesh = _worldPreviewPortMeshes[index++];
             mesh.Visible = true;
@@ -789,6 +870,52 @@ public partial class MobileFactoryDemo : Node3D
             : new Color(1.0f, 0.35f, 0.35f, 0.45f);
         ApplyPreviewColor(_interiorPreviewCell, tint);
         ApplyPreviewColor(_interiorPreviewArrow, tint.Lightened(0.1f));
+
+        for (var i = 0; i < _interiorPreviewBoundaryMeshes.Count; i++)
+        {
+            _interiorPreviewBoundaryMeshes[i].Visible = false;
+        }
+
+        for (var i = 0; i < _interiorPreviewExteriorMeshes.Count; i++)
+        {
+            _interiorPreviewExteriorMeshes[i].Visible = false;
+        }
+
+        if (!MobileFactoryBoundaryAttachmentCatalog.IsAttachmentKind(_selectedInteriorKind))
+        {
+            return;
+        }
+
+        if (!_mobileFactory.TryGetAttachmentPreview(_selectedInteriorKind, _hoveredInteriorCell, _selectedInteriorFacing, out _, out var boundaryCells, out var exteriorCells, out _))
+        {
+            boundaryCells = MobileFactoryBoundaryAttachmentGeometry.GetBoundaryCells(
+                MobileFactoryBoundaryAttachmentCatalog.Get(_selectedInteriorKind),
+                _hoveredInteriorCell,
+                _selectedInteriorFacing);
+            exteriorCells = MobileFactoryBoundaryAttachmentGeometry.GetExteriorStencilCells(
+                MobileFactoryBoundaryAttachmentCatalog.Get(_selectedInteriorKind),
+                _hoveredInteriorCell,
+                _selectedInteriorFacing);
+        }
+
+        EnsureInteriorAttachmentPreviewMeshCount(_interiorPreviewBoundaryMeshes, boundaryCells.Count, new Vector3(_mobileFactory.InteriorSite.CellSize * 0.72f, 0.05f, _mobileFactory.InteriorSite.CellSize * 0.72f));
+        EnsureInteriorAttachmentPreviewMeshCount(_interiorPreviewExteriorMeshes, exteriorCells.Count, new Vector3(_mobileFactory.InteriorSite.CellSize * 0.60f, 0.05f, _mobileFactory.InteriorSite.CellSize * 0.60f));
+
+        for (var i = 0; i < boundaryCells.Count; i++)
+        {
+            var mesh = _interiorPreviewBoundaryMeshes[i];
+            mesh.Visible = true;
+            mesh.GlobalPosition = _mobileFactory.InteriorSite.CellToWorld(boundaryCells[i]) + new Vector3(0.0f, 0.05f, 0.0f);
+            ApplyPreviewColor(mesh, tint.Darkened(0.08f));
+        }
+
+        for (var i = 0; i < exteriorCells.Count; i++)
+        {
+            var mesh = _interiorPreviewExteriorMeshes[i];
+            mesh.Visible = true;
+            mesh.GlobalPosition = _mobileFactory.InteriorSite.CellToWorld(exteriorCells[i]) + new Vector3(0.0f, 0.08f, 0.0f);
+            ApplyPreviewColor(mesh, tint.Lightened(0.1f));
+        }
     }
 
     private void UpdateWorldStatusMessage(double delta)
@@ -1225,7 +1352,7 @@ public partial class MobileFactoryDemo : Node3D
             for (var x = _mobileFactory.InteriorMinCell.X; x <= _mobileFactory.InteriorMaxCell.X; x++)
             {
                 var cell = new Vector2I(x, y);
-                if (_mobileFactory.TryGetInteriorStructure(cell, out var structure) && structure is not null && !_mobileFactory.IsProtectedInteriorCell(cell))
+                if (_mobileFactory.TryGetInteriorStructure(cell, out var structure) && structure is not null)
                 {
                     count++;
                 }
@@ -1316,6 +1443,36 @@ public partial class MobileFactoryDemo : Node3D
         _worldPreviewRoot.AddChild(_worldPreviewFacingArrow);
     }
 
+    private void EnsureWorldPreviewVisualCapacity(int footprintCount, int portCount)
+    {
+        if (_worldPreviewRoot is null)
+        {
+            return;
+        }
+
+        while (_worldPreviewFootprintMeshes.Count < footprintCount)
+        {
+            var footprint = new MeshInstance3D { Name = $"PreviewFootprint_{_worldPreviewFootprintMeshes.Count}", Visible = false };
+            footprint.Mesh = new BoxMesh
+            {
+                Size = new Vector3(FactoryConstants.CellSize * 0.92f, 0.08f, FactoryConstants.CellSize * 0.92f)
+            };
+            _worldPreviewRoot.AddChild(footprint);
+            _worldPreviewFootprintMeshes.Add(footprint);
+        }
+
+        while (_worldPreviewPortMeshes.Count < portCount)
+        {
+            var port = new MeshInstance3D { Name = $"PreviewPort_{_worldPreviewPortMeshes.Count}", Visible = false };
+            port.Mesh = new BoxMesh
+            {
+                Size = new Vector3(FactoryConstants.CellSize * 0.55f, 0.12f, FactoryConstants.CellSize * 0.55f)
+            };
+            _worldPreviewRoot.AddChild(port);
+            _worldPreviewPortMeshes.Add(port);
+        }
+    }
+
     private void CreateInteriorPreviewVisuals()
     {
         if (_interiorPreviewRoot is null)
@@ -1347,6 +1504,28 @@ public partial class MobileFactoryDemo : Node3D
 
         _interiorPreviewArrow.Mesh = new BoxMesh { Size = new Vector3(cellSize * 0.24f, 0.10f, cellSize * 0.30f) };
         _interiorPreviewArrow.Position = new Vector3(cellSize * 0.28f, 0.12f, 0.0f);
+    }
+
+    private void EnsureInteriorAttachmentPreviewMeshCount(List<MeshInstance3D> meshes, int count, Vector3 size)
+    {
+        if (_interiorPreviewRoot is null)
+        {
+            return;
+        }
+
+        while (meshes.Count < count)
+        {
+            var mesh = new MeshInstance3D();
+            mesh.Mesh = new BoxMesh { Size = size };
+            mesh.Visible = false;
+            _interiorPreviewRoot.AddChild(mesh);
+            meshes.Add(mesh);
+        }
+
+        for (var i = 0; i < meshes.Count; i++)
+        {
+            meshes[i].Mesh = new BoxMesh { Size = size };
+        }
     }
 
     private void EnsureInputActions()
@@ -1436,6 +1615,9 @@ public partial class MobileFactoryDemo : Node3D
 
         await ToSignal(GetTree().CreateTimer(0.6f), SceneTreeTimer.SignalName.Timeout);
         var interiorRunsInTransit = _mobileFactory.InteriorSite.IsSimulationActive;
+        _mobileFactory.TryGetInteriorStructure(new Vector2I(1, 3), out var presetInputSinkStructure);
+        var inputSinkInTransit = presetInputSinkStructure as SinkStructure;
+        var inputSinkTransitBaseline = inputSinkInTransit?.DeliveredTotal ?? 0;
 
         var initialPosition = _mobileFactory.WorldFocusPoint;
         _mobileFactory.ApplyTransitInput(_grid, 1.0f, -1.0f, 0.5);
@@ -1456,11 +1638,22 @@ public partial class MobileFactoryDemo : Node3D
         var interiorSinkExists = _mobileFactory.TryGetInteriorStructure(new Vector2I(1, 0), out var sinkStructure) && sinkStructure is SinkStructure;
         var miniatureSyncedInTransit = placedStructure is not null
             && placedStructure.GlobalPosition.DistanceTo(_mobileFactory.InteriorSite.CellToWorld(new Vector2I(2, 0))) < 0.05f;
-
-        var blockedDeploy = !_mobileFactory.CanDeployAt(_grid, BlockedAnchor, FacingDirection.East);
-        var southPortCell = FirstCell(_mobileFactory.GetPortCells(AnchorA, FacingDirection.South));
-        var westFootprintCell = FirstCell(_mobileFactory.GetFootprintCells(AnchorA, FacingDirection.West));
-        var facingAwareCells = southPortCell == new Vector2I(-6, -1) && westFootprintCell == new Vector2I(-6, -3);
+        var inputBlockedInTransit = (inputSinkInTransit?.DeliveredTotal ?? 0) == inputSinkTransitBaseline;
+        var projectionConflictAnchor = new Vector2I(-10, -8);
+        var placedConflictBlocker = false;
+        foreach (var projectionConflictCell in _mobileFactory.GetPortCells(projectionConflictAnchor, FacingDirection.East))
+        {
+            if (PlaceWorldStructure(BuildPrototypeKind.Sink, projectionConflictCell, FacingDirection.East) is not null)
+            {
+                placedConflictBlocker = true;
+                break;
+            }
+        }
+        var blockedDeploy = placedConflictBlocker && !_mobileFactory.CanDeployAt(_grid, projectionConflictAnchor, FacingDirection.East);
+        var edgeBlockedDeploy = !_mobileFactory.CanDeployAt(_grid, new Vector2I(GetWorldMaxCell(), GetWorldMaxCell()), FacingDirection.East);
+        var southPortCells = new HashSet<Vector2I>(_mobileFactory.GetPortCells(AnchorA, FacingDirection.South));
+        var westFootprintCells = new HashSet<Vector2I>(_mobileFactory.GetFootprintCells(AnchorA, FacingDirection.West));
+        var facingAwareCells = southPortCells.Contains(new Vector2I(-6, -1)) && westFootprintCells.Contains(new Vector2I(-6, -3));
         SetControlMode(MobileFactoryControlMode.DeployPreview);
         _selectedDeployFacing = FacingDirection.East;
         HandleCommandSlot(MobileFactoryCommandSlot.Auxiliary);
@@ -1485,20 +1678,24 @@ public partial class MobileFactoryDemo : Node3D
         _hud.SetEditorOpen(true);
         await ToSignal(GetTree().CreateTimer(0.35f), SceneTreeTimer.SignalName.Timeout);
         var openedWhileDeployed = _hud.IsEditorVisible;
-        var portConnected = _mobileFactory.OutputBridge.IsConnectedToWorld;
+        var portConnected = _mobileFactory.HasConnectedAttachment(BuildPrototypeKind.OutputPort);
         var portOverlayConnected = _hud.PortStatusText.Contains("已连接");
         var miniatureSyncedDeployed = placedStructure is not null
             && placedStructure.GlobalPosition.DistanceTo(_mobileFactory.InteriorSite.CellToWorld(new Vector2I(2, 0))) < 0.05f;
         var firstDelivered = _sinkA.DeliveredTotal;
+        await ToSignal(GetTree().CreateTimer(2.0f), SceneTreeTimer.SignalName.Timeout);
+        var inputAttachmentTransit = _mobileFactory.CountAttachmentTransitItems(BuildPrototypeKind.InputPort);
+        var inputDeliveredWhileDeployed = (inputSinkInTransit?.DeliveredTotal ?? 0) > inputSinkTransitBaseline;
 
         _editorOpen = false;
         _hud.SetEditorOpen(false);
-        var transitRecycleBeforeRecall = _mobileFactory.OutputBridge.TransitRecycleTotal;
+        var blockedOutputBeforeRecall = _mobileFactory.CountAttachmentTransitItems(BuildPrototypeKind.OutputPort, onlyDisconnected: true);
         var deployedPositionBeforeRecall = _mobileFactory.WorldFocusPoint;
         var recalled = _mobileFactory.ReturnToTransitMode();
         await WaitForCondition(() => _mobileFactory.State == MobileFactoryLifecycleState.InTransit, 1.2f);
         await ToSignal(GetTree().CreateTimer(2.0f), SceneTreeTimer.SignalName.Timeout);
-        var transitRecycleActive = _mobileFactory.OutputBridge.TransitRecycleTotal > transitRecycleBeforeRecall;
+        var blockedOutputAfterRecall = _mobileFactory.CountAttachmentTransitItems(BuildPrototypeKind.OutputPort, onlyDisconnected: true);
+        var blockedOutputActive = blockedOutputAfterRecall > blockedOutputBeforeRecall;
         var stayedInPlaceAfterReturn = _mobileFactory.WorldFocusPoint.DistanceTo(deployedPositionBeforeRecall) < 0.05f;
         var reservationsReleased =
             _grid.CanReserveAll(_mobileFactory.GetFootprintCells(AnchorA, FacingDirection.East), _mobileFactory.ReservationOwnerId)
@@ -1515,9 +1712,9 @@ public partial class MobileFactoryDemo : Node3D
         await ToSignal(GetTree().CreateTimer(3.5f), SceneTreeTimer.SignalName.Timeout);
         var secondDelivered = _sinkB.DeliveredTotal;
 
-        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !rightPaneHover || !leftPaneHover || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !blockedDeploy || !facingAwareCells || !contextualRotateWorks || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !recalled || !transitRecycleActive || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0)
+        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !rightPaneHover || !leftPaneHover || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !contextualRotateWorks || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !inputDeliveredWhileDeployed || !recalled || !blockedOutputActive || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0)
         {
-            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} rightHover={rightPaneHover} leftHover={leftPaneHover} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} blocked={blockedDeploy} facingAware={facingAwareCells} contextualRotateWorks={contextualRotateWorks} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} recalled={recalled} transitRecycleActive={transitRecycleActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered}");
+            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} rightHover={rightPaneHover} leftHover={leftPaneHover} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} contextualRotateWorks={contextualRotateWorks} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered}");
             GetTree().Quit(1);
             return;
         }
@@ -1603,7 +1800,7 @@ public partial class MobileFactoryDemo : Node3D
         var anyConnectedBridge = false;
         foreach (var factory in allFactories)
         {
-            if (factory.OutputBridge.IsConnectedToWorld)
+            if (factory.HasConnectedAttachment(BuildPrototypeKind.OutputPort))
             {
                 anyConnectedBridge = true;
                 break;
@@ -1673,7 +1870,7 @@ public partial class MobileFactoryDemo : Node3D
         {
             MobileFactoryControlMode.Observer => "观察模式：WASD/方向键移动相机 | 滚轮缩放 | Tab 返回工厂控制 | F 内部编辑",
             MobileFactoryControlMode.DeployPreview => "部署预览：左键确认 | Q/E/R 旋转朝向 | G/Esc 取消 | F 内部编辑",
-            _ => "工厂控制：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器用 1-5 选建筑"
+            _ => "工厂控制：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器用 1-7 选建筑/端口"
         };
     }
 
