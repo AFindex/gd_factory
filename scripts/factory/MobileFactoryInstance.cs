@@ -28,6 +28,8 @@ public sealed class MobileFactoryInstance
     private const float RecallDurationSeconds = 0.22f;
     private const float AutopilotArrivalDistance = 0.14f;
     private const float AutopilotArrivalAngle = 0.10f;
+    private const float AttachmentConnectorStartOffset = 0.45f;
+    private const float AttachmentConnectorWorldInset = 0.10f;
 
     private readonly SimulationController _simulation;
     private readonly Node3D _structureRoot;
@@ -40,6 +42,9 @@ public sealed class MobileFactoryInstance
     private Vector3 _pendingTransitPosition;
     private float _pendingTransitHeadingRadians;
     private float _currentHeadingRadians;
+    private float _attachmentVisualProgress;
+    private float _attachmentVisualTarget;
+    private bool _clearAttachmentVisualsWhenHidden;
     private float _recallTimer;
     private string? _pendingStatusMessage;
 
@@ -303,7 +308,8 @@ public sealed class MobileFactoryInstance
         _pendingTransitPosition = _hullRoot.Position;
         _pendingTransitHeadingRadians = _currentHeadingRadians;
         ReleaseDeploymentReservations();
-        ClearAttachmentBindings();
+        DisconnectAttachmentBindings();
+        BeginAttachmentRetraction();
         AnchorCell = null;
         InteriorSite.SetRuntimeState(true, true);
         State = MobileFactoryLifecycleState.Recalling;
@@ -320,6 +326,8 @@ public sealed class MobileFactoryInstance
 
     public void UpdateRuntime(double delta)
     {
+        UpdateAttachmentVisualAnimation((float)delta);
+
         switch (State)
         {
             case MobileFactoryLifecycleState.AutoDeploying:
@@ -636,7 +644,6 @@ public sealed class MobileFactoryInstance
         }
 
         ApplyHullTransform(_pendingTransitPosition, _pendingTransitHeadingRadians);
-        _worldAttachmentVisualRoot.Visible = false;
         InteriorSite.SetRuntimeState(true, true);
         State = MobileFactoryLifecycleState.InTransit;
         PushStatus("移动工厂已切回移动态，可继续机动或重新部署；未连接边界 attachment 会如实阻塞等待重连。");
@@ -694,6 +701,7 @@ public sealed class MobileFactoryInstance
         }
         else
         {
+            DisconnectAttachmentBindings();
             ClearAttachmentBindings();
         }
 
@@ -703,6 +711,9 @@ public sealed class MobileFactoryInstance
     private void MoveToTransitParking()
     {
         ApplyHullTransform(Profile.TransitParkingCenter, _currentHeadingRadians);
+        _attachmentVisualProgress = 0.0f;
+        _attachmentVisualTarget = 0.0f;
+        _clearAttachmentVisualsWhenHidden = false;
         _worldAttachmentVisualRoot.Visible = false;
         InteriorSite.SetRuntimeState(true, true);
     }
@@ -746,30 +757,12 @@ public sealed class MobileFactoryInstance
         };
 
         var platformSize = GetInteriorPlatformSize(profile);
-        var cabWidth = Mathf.Clamp(platformSize.X * 0.22f, 0.58f, 0.96f);
-        var cabDepth = Mathf.Clamp(platformSize.Z * 0.18f, 0.48f, 0.86f);
-        var noseWidth = cabWidth * 0.5f;
-
         root.AddChild(CreateHullMesh(
             "Platform",
             platformSize,
             profile.HullColor,
             new Vector3(0.0f, 0.18f, 0.0f),
             visibleInInterior: true,
-            visibleInWorld: true));
-        root.AddChild(CreateHullMesh(
-            "DriveCab",
-            new Vector3(cabWidth, 0.34f, cabDepth),
-            profile.CabColor,
-            new Vector3(platformSize.X * 0.50f, 0.42f, 0.0f),
-            visibleInInterior: false,
-            visibleInWorld: true));
-        root.AddChild(CreateHullMesh(
-            "DriveNose",
-            new Vector3(noseWidth, 0.18f, cabDepth * 0.55f),
-            profile.AccentColor,
-            new Vector3(platformSize.X * 0.69f, 0.34f, 0.0f),
-            visibleInInterior: false,
             visibleInWorld: true));
 
         for (var i = 0; i < profile.AttachmentMounts.Count; i++)
@@ -846,26 +839,33 @@ public sealed class MobileFactoryInstance
         }
 
         _worldAttachmentVisualRoot.Visible = _worldAttachmentVisualRoot.GetChildCount() > 0;
+        _attachmentVisualProgress = 0.0f;
+        _attachmentVisualTarget = _worldAttachmentVisualRoot.Visible ? 1.0f : 0.0f;
+        _clearAttachmentVisualsWhenHidden = false;
+        ApplyAttachmentVisualProgress();
     }
 
     private Node3D CreateWorldAttachmentVisual(GridManager worldGrid, MobileFactoryAttachmentProjection projection)
     {
-        var root = new Node3D
-        {
-            Name = $"{projection.Attachment.Name}_WorldConnector"
-        };
-
-        var start = projection.Attachment.GlobalPosition + FactoryDirection.ToWorldForward(projection.Attachment.GlobalRotation.Y) * (projection.Attachment.Site.CellSize * 0.34f);
-        var end = worldGrid.CellToWorld(projection.WorldPortCell);
+        var start = GetAttachmentConnectorStartWorld(projection.Attachment);
+        var end = GetAttachmentConnectorEndWorld(worldGrid, projection);
         var connectorVector = end - start;
         var connectorLength = new Vector2(connectorVector.X, connectorVector.Z).Length();
+        var connectorYaw = Mathf.Atan2(connectorVector.X, connectorVector.Z);
+        var root = new Node3D
+        {
+            Name = $"{projection.Attachment.Name}_WorldConnector",
+            Position = start,
+            Rotation = new Vector3(0.0f, connectorYaw, 0.0f)
+        };
+        root.SetMeta("full_length", connectorLength);
+        root.SetMeta("mouth_extension", 0.14f);
 
         var connector = new MeshInstance3D
         {
             Name = "ConnectorStem",
-            Mesh = new BoxMesh { Size = new Vector3(0.18f, 0.16f, Mathf.Max(0.24f, connectorLength)) },
-            Position = (start + end) * 0.5f + new Vector3(0.0f, 0.18f, 0.0f),
-            Rotation = new Vector3(0.0f, Mathf.Atan2(connectorVector.X, connectorVector.Z), 0.0f),
+            Mesh = new BoxMesh { Size = new Vector3(0.18f, 0.16f, 0.001f) },
+            Position = new Vector3(0.0f, 0.18f, 0.0005f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = projection.Attachment.AttachmentDefinition.ConnectorColor,
@@ -878,8 +878,8 @@ public sealed class MobileFactoryInstance
         {
             Name = "ConnectorEndpoint",
             Mesh = new BoxMesh { Size = new Vector3(0.56f, 0.16f, 0.56f) },
-            Position = end + new Vector3(0.0f, 0.10f, 0.0f),
-            Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(projection.WorldFacing), 0.0f),
+            Position = new Vector3(0.0f, 0.10f, 0.0f),
+            Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(projection.WorldFacing) - connectorYaw, 0.0f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = projection.Attachment.AttachmentDefinition.Tint,
@@ -892,8 +892,8 @@ public sealed class MobileFactoryInstance
         {
             Name = "ConnectorMouth",
             Mesh = new BoxMesh { Size = new Vector3(0.18f, 0.10f, 0.28f) },
-            Position = end + FactoryDirection.ToWorldForward(FactoryDirection.ToYRotationRadians(projection.WorldFacing)) * 0.14f + new Vector3(0.0f, 0.20f, 0.0f),
-            Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(projection.WorldFacing), 0.0f),
+            Position = new Vector3(0.0f, 0.20f, 0.0f),
+            Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(projection.WorldFacing) - connectorYaw, 0.0f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = projection.Attachment.AttachmentDefinition.ConnectorColor.Lightened(0.12f),
@@ -903,6 +903,18 @@ public sealed class MobileFactoryInstance
         root.AddChild(mouth);
 
         return root;
+    }
+
+    private static Vector3 GetAttachmentConnectorStartWorld(MobileFactoryBoundaryAttachmentStructure attachment)
+    {
+        return attachment.ToGlobal(new Vector3(attachment.Site.CellSize * AttachmentConnectorStartOffset, 0.0f, 0.0f));
+    }
+
+    private static Vector3 GetAttachmentConnectorEndWorld(GridManager worldGrid, MobileFactoryAttachmentProjection projection)
+    {
+        var cellCenter = worldGrid.CellToWorld(projection.WorldPortCell);
+        var facing = FactoryDirection.ToWorldForward(FactoryDirection.ToYRotationRadians(projection.WorldFacing));
+        return cellCenter - facing * (worldGrid.CellSize * AttachmentConnectorWorldInset);
     }
 
     private static Vector3 GetInteriorPlatformSize(MobileFactoryProfile profile)
@@ -936,12 +948,17 @@ public sealed class MobileFactoryInstance
         _deployedGrid = null;
     }
 
-    private void ClearAttachmentBindings()
+    private void DisconnectAttachmentBindings()
     {
         for (var i = 0; i < _attachments.Count; i++)
         {
             _attachments[i].ClearBinding();
         }
+    }
+
+    private void ClearAttachmentBindings()
+    {
+        DisconnectAttachmentBindings();
 
         foreach (var child in _worldAttachmentVisualRoot.GetChildren())
         {
@@ -952,6 +969,101 @@ public sealed class MobileFactoryInstance
         }
 
         _worldAttachmentVisualRoot.Visible = false;
+    }
+
+    private void BeginAttachmentRetraction()
+    {
+        if (_worldAttachmentVisualRoot.GetChildCount() == 0)
+        {
+            _attachmentVisualProgress = 0.0f;
+            _attachmentVisualTarget = 0.0f;
+            _clearAttachmentVisualsWhenHidden = false;
+            _worldAttachmentVisualRoot.Visible = false;
+            return;
+        }
+
+        _attachmentVisualTarget = 0.0f;
+        _clearAttachmentVisualsWhenHidden = true;
+        _worldAttachmentVisualRoot.Visible = true;
+        ApplyAttachmentVisualProgress();
+    }
+
+    private void UpdateAttachmentVisualAnimation(float delta)
+    {
+        if (Mathf.IsEqualApprox(_attachmentVisualProgress, _attachmentVisualTarget))
+        {
+            if (_clearAttachmentVisualsWhenHidden && _attachmentVisualProgress <= 0.001f)
+            {
+                ClearAttachmentBindings();
+                _clearAttachmentVisualsWhenHidden = false;
+            }
+
+            return;
+        }
+
+        _attachmentVisualProgress = Mathf.MoveToward(_attachmentVisualProgress, _attachmentVisualTarget, delta * 3.8f);
+        ApplyAttachmentVisualProgress();
+
+        if (_clearAttachmentVisualsWhenHidden && _attachmentVisualProgress <= 0.001f)
+        {
+            ClearAttachmentBindings();
+            _clearAttachmentVisualsWhenHidden = false;
+        }
+    }
+
+    private void ApplyAttachmentVisualProgress()
+    {
+        if (_worldAttachmentVisualRoot.GetChildCount() == 0 && _attachmentVisualProgress <= 0.001f && _attachmentVisualTarget <= 0.001f)
+        {
+            _worldAttachmentVisualRoot.Visible = false;
+            return;
+        }
+
+        var eased = EaseAttachmentVisual(_attachmentVisualProgress);
+        _worldAttachmentVisualRoot.Visible = eased > 0.001f || _attachmentVisualTarget > 0.001f;
+
+        foreach (var child in _worldAttachmentVisualRoot.GetChildren())
+        {
+            if (child is Node3D connectorRoot)
+            {
+                ApplySingleAttachmentVisualProgress(connectorRoot, eased);
+            }
+        }
+    }
+
+    private static float EaseAttachmentVisual(float t)
+    {
+        t = Mathf.Clamp(t, 0.0f, 1.0f);
+        return t * t * (3.0f - 2.0f * t);
+    }
+
+    private static void ApplySingleAttachmentVisualProgress(Node3D connectorRoot, float eased)
+    {
+        var fullLength = connectorRoot.GetMeta("full_length", 0.0f).AsSingle();
+        var mouthExtension = connectorRoot.GetMeta("mouth_extension", 0.14f).AsSingle();
+        var currentLength = Mathf.Max(0.001f, fullLength * eased);
+
+        var stem = connectorRoot.GetNodeOrNull<MeshInstance3D>("ConnectorStem");
+        if (stem is not null)
+        {
+            stem.Mesh = new BoxMesh { Size = new Vector3(0.18f, 0.16f, currentLength) };
+            stem.Position = new Vector3(0.0f, 0.18f, currentLength * 0.5f);
+            stem.Visible = eased > 0.001f;
+        }
+
+        var endpoint = connectorRoot.GetNodeOrNull<MeshInstance3D>("ConnectorEndpoint");
+        if (endpoint is not null)
+        {
+            endpoint.Position = new Vector3(0.0f, 0.10f, fullLength * eased);
+            endpoint.Visible = eased > 0.001f;
+        }
+
+        var mouth = connectorRoot.GetNodeOrNull<MeshInstance3D>("ConnectorMouth");
+        if (mouth is not null)
+        {
+            mouth.Position = new Vector3(0.0f, 0.20f, (fullLength + mouthExtension) * eased);
+            mouth.Visible = eased > 0.001f;
+        }
     }
 
     private bool CanPlaceAttachment(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
