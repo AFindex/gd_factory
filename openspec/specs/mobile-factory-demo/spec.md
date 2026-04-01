@@ -1,18 +1,23 @@
 # mobile-factory-demo Specification
 
 ## Purpose
-TBD - created by archiving change add-mobile-factory-support. Update Purpose after archive.
+TBD - updated by change add-complex-mobile-factory-test-scenario. Refine Purpose after archive.
+
 ## Requirements
-### Requirement: Mobile factory concept ships in a dedicated demo scene
-The game SHALL provide a dedicated demo scene for the mobile-factory concept without replacing the existing static factory demo scene.
+### Requirement: Mobile factory concept ships in dedicated demo scenes
+The game SHALL provide a focused dedicated mobile-factory demo scene and a separate large-scale mobile-factory test scenario without replacing the existing static factory demo scene.
 
 #### Scenario: Existing factory demo remains available
 - **WHEN** the project content is inspected after the change is implemented
 - **THEN** the original static factory demo scene still exists and remains available as a separate experience
 
-#### Scenario: Mobile demo can be opened independently
-- **WHEN** the player or developer opens the mobile-factory demo scene directly
-- **THEN** the scene loads the controls, world content, split-view editing UI, and overlays needed to demonstrate mobile-factory deployment behavior without requiring the static demo to be modified first
+#### Scenario: Focused mobile demo can be opened independently
+- **WHEN** the player or developer opens the focused mobile-factory demo scene directly
+- **THEN** the scene loads the controls, world content, split-view editing UI, and overlays needed to demonstrate core mobile-factory deployment behavior without requiring the static demo to be modified first
+
+#### Scenario: Large-scale mobile factory test scenario can be opened independently
+- **WHEN** the player or developer opens the large-scale mobile factory test scenario directly
+- **THEN** the project loads the larger world map, multi-factory activity, and observation content for regression-style testing without replacing the focused mobile-factory demo
 
 ### Requirement: Mobile demo demonstrates deploy-recall-redeploy gameplay
 The game SHALL use the dedicated mobile-factory demo scene to demonstrate the core mobile-factory loop of maneuvering in transit, issuing a placement-style deployment command, connecting to the world, recalling, and redeploying the same factory instance.
@@ -24,4 +29,3 @@ The game SHALL use the dedicated mobile-factory demo scene to demonstrate the co
 #### Scenario: Redeployment restores the concept loop after recall
 - **WHEN** the player recalls the deployed mobile factory, repositions it in transit, and confirms another valid deployment target
 - **THEN** the same mobile factory can deploy again and restore the world-side logistics loop without recreating its internal setup
-

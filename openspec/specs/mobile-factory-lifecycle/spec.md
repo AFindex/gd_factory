@@ -1,7 +1,8 @@
 # mobile-factory-lifecycle Specification
 
 ## Purpose
-TBD - created by archiving change add-mobile-factory-support. Update Purpose after archive.
+TBD - updated by change add-complex-mobile-factory-test-scenario. Refine Purpose after archive.
+
 ## Requirements
 ### Requirement: Mobile factories keep a persistent identity across relocation
 The game SHALL model each mobile factory as a persistent gameplay entity whose internal layout, buffered state, and identity survive deploy, recall, and redeploy transitions.
@@ -11,15 +12,15 @@ The game SHALL model each mobile factory as a persistent gameplay entity whose i
 - **THEN** the same mobile factory instance is reused and its internal structures, inventory, and configuration remain intact instead of being rebuilt from scratch
 
 ### Requirement: Mobile factories deploy only onto a valid footprint
-The game SHALL allow a mobile factory to enter the deployed state only when every cell in its footprint and every required world-facing port cell for the chosen deployment facing is inside bounds and unreserved.
+The game SHALL allow each mobile factory to enter the deployed state only when every cell in that factory's size-specific footprint and every required world-facing port cell for the chosen deployment facing is inside bounds and unreserved.
 
-#### Scenario: Valid deployment reserves footprint and facing-specific ports
-- **WHEN** the player confirms a deployment target whose footprint and world-facing port cells are valid for the chosen facing
-- **THEN** the game completes deployment, reserves the full footprint, activates the correctly oriented world-facing ports, and marks the factory as deployed
+#### Scenario: Valid deployment reserves size-specific footprint and facing-specific ports
+- **WHEN** the player or scripted scenario logic confirms a deployment target whose full factory-specific footprint and world-facing port cells are valid for the chosen facing
+- **THEN** the game completes deployment, reserves the entire size-specific footprint, activates the correctly oriented world-facing ports, and marks that factory as deployed
 
-#### Scenario: Invalid deployment is blocked
-- **WHEN** any required footprint or port cell for the chosen deployment facing would overlap an occupied, reserved, or out-of-bounds location
-- **THEN** the deployment does not occur and the game reports that the target location is invalid
+#### Scenario: Invalid deployment is blocked for size-specific conflicts
+- **WHEN** any required footprint or port cell for a factory's chosen facing would overlap an occupied, reserved, or out-of-bounds location
+- **THEN** that deployment does not occur and the game reports that the target location is invalid for that factory's current size and facing
 
 ### Requirement: Deployed mobile factories must be recalled before moving
 The game SHALL prevent direct movement, turning, or redeploy commands from relocating a mobile factory while it still owns an active deployed footprint in the world.
@@ -56,3 +57,9 @@ The game SHALL treat deployment confirmation as a command to move into place and
 - **WHEN** the player confirms a valid deployment target
 - **THEN** the mobile factory remains non-deployed while it travels toward that target and only becomes deployed after it reaches the target anchor and aligns to the selected facing
 
+### Requirement: Multiple mobile factories can hold independent lifecycle states
+The game SHALL allow multiple mobile factories to exist at the same time with independent lifecycle state, transform, and reservation ownership.
+
+#### Scenario: One factory changes state without disturbing another
+- **WHEN** one mobile factory deploys, recalls, or auto-deploys while another mobile factory remains deployed or in transit elsewhere in the world
+- **THEN** each factory keeps its own state, pose, reservations, and logistics connections without being reset or re-authored by the other factory's lifecycle transition
