@@ -1183,7 +1183,7 @@ public partial class MobileFactoryDemo : Node3D
         var targetScreenPosition = new Vector2(
             viewportSize.X / 12.0f,
             viewportSize.Y * 0.58f);
-        _cameraRig.FocusWorldPositionInViewport(_mobileFactory.WorldFocusPoint, targetScreenPosition);
+        _cameraRig.FocusWorldPositionInViewport(_mobileFactory.WorldFocusPoint, targetScreenPosition, 1.0f);
     }
 
     private void FocusWorldCenterOnFactory()

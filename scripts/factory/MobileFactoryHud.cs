@@ -390,6 +390,7 @@ public partial class MobileFactoryHud : CanvasLayer
         _worldFocusFrame.Size = new Vector2(worldWidth, viewportSize.Y);
         _infoPanel.Position = margin;
         _infoPanel.Size = new Vector2(infoWidth, infoHeight);
+        _infoPanel.Visible = _editorProgress < 0.01f;
 
         var editorWidth = viewportSize.X * 5.0f / 6.0f;
         var closedLeft = viewportSize.X + 12.0f;

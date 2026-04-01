@@ -52,18 +52,24 @@ public partial class FactoryCameraRig : Node3D
         ApplyTransformState();
     }
 
-    public void FocusWorldPositionInViewport(Vector3 worldPosition, Vector2 screenPosition)
+    public void FocusWorldPositionInViewport(Vector3 worldPosition, Vector2 screenPosition, float correctionStrength = 1.0f)
     {
-        if (!TryProjectScreenToPlane(screenPosition, worldPosition.Y, out var projectedWorldPosition))
+        var viewportRect = GetViewport().GetVisibleRect();
+        var centerScreenPosition = viewportRect.Size * 0.5f;
+
+        if (!TryProjectScreenToPlane(centerScreenPosition, worldPosition.Y, out var centeredWorldPosition)
+            || !TryProjectScreenToPlane(screenPosition, worldPosition.Y, out var projectedWorldPosition))
         {
             FocusWorldPosition(worldPosition);
             return;
         }
 
-        var delta = new Vector2(
-            worldPosition.X - projectedWorldPosition.X,
-            worldPosition.Z - projectedWorldPosition.Z);
-        _targetPosition = (_targetPosition + delta).Clamp(_minBounds, _maxBounds);
+        var desiredOffset = new Vector2(
+            centeredWorldPosition.X - projectedWorldPosition.X,
+            centeredWorldPosition.Z - projectedWorldPosition.Z);
+        var weight = Mathf.Clamp(correctionStrength, 0.0f, 1.0f);
+        var targetPosition = new Vector2(worldPosition.X, worldPosition.Z) + desiredOffset * weight;
+        _targetPosition = targetPosition.Clamp(_minBounds, _maxBounds);
         ApplyTransformState();
     }
 
