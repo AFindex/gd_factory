@@ -19,11 +19,6 @@ public sealed class MobileFactoryInstance
 
     private const int InteriorRenderLayer = 1;
     private const int HullRenderLayer = 2;
-    private static readonly Vector2I InteriorMinBounds = new(0, 0);
-    private static readonly Vector2I InteriorMaxBounds = new(4, 4);
-    private const float InteriorCellSize = 0.72f;
-    private const float InteriorFloorHeight = 0.36f;
-    private const float InteriorPlatformBorder = 0.18f;
     private const float TransitMoveSpeed = 5.4f;
     private const float TransitTurnSpeed = 2.5f;
     private const float AutoDeployMoveSpeed = 6.0f;
@@ -31,70 +26,56 @@ public sealed class MobileFactoryInstance
     private const float AutoDeployArrivalDistance = 0.08f;
     private const float AutoDeployArrivalAngle = 0.04f;
     private const float RecallDurationSeconds = 0.22f;
-    private static readonly Vector3 InteriorFloorLocalOffset = new(
-        -((InteriorMaxBounds.X - InteriorMinBounds.X) * InteriorCellSize) * 0.5f,
-        InteriorFloorHeight,
-        -((InteriorMaxBounds.Y - InteriorMinBounds.Y) * InteriorCellSize) * 0.5f);
-
-    private static readonly Vector2I[] FootprintOffsetsEast =
-    {
-        new(0, 0),
-        new(1, 0),
-        new(0, 1),
-        new(1, 1)
-    };
-
-    private static readonly Vector2I[] PortOffsetsEast =
-    {
-        new(2, 0)
-    };
-
-    private static readonly Vector3 TransitParkingCenter = new(-11.0f, 0.0f, 7.0f);
+    private const float AutopilotArrivalDistance = 0.14f;
+    private const float AutopilotArrivalAngle = 0.10f;
 
     private readonly SimulationController _simulation;
     private readonly Node3D _structureRoot;
     private readonly Node3D _hullRoot;
     private readonly Node3D _worldPortRoot;
     private readonly MobileFactoryPortBridge _outputBridge;
+    private readonly Vector3 _interiorFloorLocalOffset;
     private GridManager? _deployedGrid;
     private DeployTarget? _pendingDeployTarget;
     private float _currentHeadingRadians;
     private float _recallTimer;
     private string? _pendingStatusMessage;
 
-    public MobileFactoryInstance(string factoryId, Node3D structureRoot, SimulationController simulation)
+    public MobileFactoryInstance(
+        string factoryId,
+        Node3D structureRoot,
+        SimulationController simulation,
+        MobileFactoryProfile? profile = null,
+        MobileFactoryInteriorPreset? interiorPreset = null)
     {
         FactoryId = factoryId;
+        Profile = profile ?? MobileFactoryScenarioLibrary.CreateFocusedDemoProfile();
+        InteriorPreset = interiorPreset ?? MobileFactoryScenarioLibrary.CreateFocusedDemoPreset();
         _simulation = simulation;
         _structureRoot = structureRoot;
         ReservationOwnerId = $"mobile:{factoryId}";
-        InteriorSite = new MobileFactorySite($"mobile-site:{factoryId}", InteriorMinBounds, InteriorMaxBounds, InteriorCellSize);
+        InteriorSite = new MobileFactorySite(
+            $"mobile-site:{factoryId}",
+            Profile.InteriorMinCell,
+            Profile.InteriorMaxCell,
+            Profile.InteriorCellSize);
+        _interiorFloorLocalOffset = CalculateInteriorFloorLocalOffset(Profile);
 
-        _hullRoot = CreateHullRoot();
+        _hullRoot = CreateHullRoot(Profile, _interiorFloorLocalOffset);
         _structureRoot.AddChild(_hullRoot);
-        _worldPortRoot = CreateWorldPortRoot();
+        _worldPortRoot = CreateWorldPortRoot(Profile);
         _structureRoot.AddChild(_worldPortRoot);
 
-        RegisterInteriorStructure(FactoryStructureFactory.Create(
-            BuildPrototypeKind.Producer,
-            new FactoryStructurePlacement(InteriorSite, new Vector2I(0, 2), FacingDirection.East)));
-        RegisterInteriorStructure(FactoryStructureFactory.Create(
-            BuildPrototypeKind.Belt,
-            new FactoryStructurePlacement(InteriorSite, new Vector2I(1, 2), FacingDirection.East)));
-        RegisterInteriorStructure(FactoryStructureFactory.Create(
-            BuildPrototypeKind.Belt,
-            new FactoryStructurePlacement(InteriorSite, new Vector2I(2, 2), FacingDirection.East)));
-        RegisterInteriorStructure(FactoryStructureFactory.Create(
-            BuildPrototypeKind.Belt,
-            new FactoryStructurePlacement(InteriorSite, new Vector2I(3, 2), FacingDirection.East)));
-
         _outputBridge = new MobileFactoryPortBridge();
-        _outputBridge.Configure(InteriorSite, new Vector2I(4, 2), FacingDirection.East, $"{ReservationOwnerId}:bridge");
+        _outputBridge.Configure(InteriorSite, Profile.OutputBridgeCell, Profile.OutputBridgeFacing, $"{ReservationOwnerId}:bridge");
         _structureRoot.AddChild(_outputBridge);
         InteriorSite.AddStructure(_outputBridge);
         _simulation.RegisterStructure(_outputBridge);
 
+        ApplyInteriorPreset(InteriorPreset);
+
         DeploymentFacing = FacingDirection.East;
+        _currentHeadingRadians = FactoryDirection.ToYRotationRadians(FacingDirection.East);
         MoveToTransitParking();
         PushStatus("移动工厂待命中，使用 WASD 操作本体，按 G 进入部署模式。");
         _simulation.RebuildTopology();
@@ -102,6 +83,8 @@ public sealed class MobileFactoryInstance
 
     public string FactoryId { get; }
     public string ReservationOwnerId { get; }
+    public MobileFactoryProfile Profile { get; }
+    public MobileFactoryInteriorPreset InteriorPreset { get; }
     public MobileFactorySite InteriorSite { get; }
     public MobileFactoryLifecycleState State { get; private set; } = MobileFactoryLifecycleState.InTransit;
     public Vector2I? AnchorCell { get; private set; }
@@ -122,7 +105,7 @@ public sealed class MobileFactoryInstance
 
     public IEnumerable<Vector2I> GetFootprintCells(Vector2I anchorCell, FacingDirection facing)
     {
-        foreach (var offset in FootprintOffsetsEast)
+        foreach (var offset in Profile.FootprintOffsetsEast)
         {
             yield return anchorCell + FactoryDirection.RotateOffset(offset, facing);
         }
@@ -135,7 +118,7 @@ public sealed class MobileFactoryInstance
 
     public IEnumerable<Vector2I> GetPortCells(Vector2I anchorCell, FacingDirection facing)
     {
-        foreach (var offset in PortOffsetsEast)
+        foreach (var offset in Profile.PortOffsetsEast)
         {
             yield return anchorCell + FactoryDirection.RotateOffset(offset, facing);
         }
@@ -174,10 +157,68 @@ public sealed class MobileFactoryInstance
         {
             var forward = FactoryDirection.ToWorldForward(_currentHeadingRadians);
             hullCenter += forward * (throttle * TransitMoveSpeed * (float)delta);
-            hullCenter = ClampHullCenter(worldGrid, hullCenter);
+            hullCenter = ClampHullCenter(worldGrid, hullCenter, GetHullRadiusPadding());
         }
 
         ApplyHullTransform(hullCenter, _currentHeadingRadians);
+    }
+
+    public bool UpdateTransitAutopilot(GridManager? worldGrid, Vector3 targetPosition, FacingDirection targetFacing, double delta)
+    {
+        if (State != MobileFactoryLifecycleState.InTransit)
+        {
+            return false;
+        }
+
+        var hullCenter = _hullRoot.Position;
+        var toTarget = targetPosition - hullCenter;
+        var planarDelta = new Vector2(toTarget.X, toTarget.Z);
+        var planarDistance = planarDelta.Length();
+        var desiredHeading = planarDistance > 0.01f
+            ? Mathf.Atan2(-toTarget.Z, toTarget.X)
+            : FactoryDirection.ToYRotationRadians(targetFacing);
+
+        _currentHeadingRadians = MoveAngleTowards(_currentHeadingRadians, desiredHeading, TransitTurnSpeed * (float)delta);
+
+        if (planarDistance > AutopilotArrivalDistance)
+        {
+            var moveDistance = Mathf.Min(TransitMoveSpeed * 0.8f * (float)delta, planarDistance);
+            var moveDirection = new Vector3(toTarget.X / planarDistance, 0.0f, toTarget.Z / planarDistance);
+            hullCenter += moveDirection * moveDistance;
+            hullCenter = ClampHullCenter(worldGrid, hullCenter, GetHullRadiusPadding());
+        }
+        else
+        {
+            _currentHeadingRadians = MoveAngleTowards(
+                _currentHeadingRadians,
+                FactoryDirection.ToYRotationRadians(targetFacing),
+                TransitTurnSpeed * (float)delta);
+        }
+
+        ApplyHullTransform(hullCenter, _currentHeadingRadians);
+
+        return hullCenter.DistanceTo(targetPosition) <= AutopilotArrivalDistance
+            && Mathf.Abs(NormalizeAngle(FactoryDirection.ToYRotationRadians(targetFacing) - _currentHeadingRadians)) <= AutopilotArrivalAngle;
+    }
+
+    public void SetTransitPose(Vector3 worldPosition, FacingDirection facing)
+    {
+        if (State == MobileFactoryLifecycleState.Deployed && _deployedGrid is not null)
+        {
+            _deployedGrid.ReleaseOwner(ReservationOwnerId);
+            _deployedGrid = null;
+        }
+
+        _pendingDeployTarget = null;
+        AnchorCell = null;
+        State = MobileFactoryLifecycleState.InTransit;
+        DeploymentFacing = facing;
+        _currentHeadingRadians = FactoryDirection.ToYRotationRadians(facing);
+        _outputBridge.ClearBinding();
+        _worldPortRoot.Visible = false;
+        ApplyHullTransform(worldPosition, _currentHeadingRadians);
+        InteriorSite.SetRuntimeState(true, true);
+        _simulation.RebuildTopology();
     }
 
     public bool TryStartAutoDeploy(GridManager worldGrid, Vector2I anchorCell, FacingDirection facing)
@@ -315,6 +356,12 @@ public sealed class MobileFactoryInstance
             (minWorld.Z + maxWorld.Z) * 0.5f);
     }
 
+    public float GetSuggestedEditorCameraSize()
+    {
+        var maxDimension = Mathf.Max(Profile.InteriorWidth, Profile.InteriorHeight) * Profile.InteriorCellSize;
+        return Mathf.Max(3.9f, maxDimension * 0.95f);
+    }
+
     public string GetPortStatusLabel()
     {
         if (State == MobileFactoryLifecycleState.Deployed && OutputBridge.IsConnectedToWorld && AnchorCell is not null)
@@ -330,6 +377,26 @@ public sealed class MobileFactoryInstance
         }
 
         return $"输出端口：朝{FactoryDirection.ToLabel(DeploymentFacing)}，当前未连接世界线路";
+    }
+
+    private void ApplyInteriorPreset(MobileFactoryInteriorPreset preset)
+    {
+        foreach (var placement in preset.Placements)
+        {
+            if (placement.Cell == Profile.OutputBridgeCell)
+            {
+                continue;
+            }
+
+            if (!InteriorSite.CanPlace(placement.Cell))
+            {
+                continue;
+            }
+
+            RegisterInteriorStructure(FactoryStructureFactory.Create(
+                placement.Kind,
+                new FactoryStructurePlacement(InteriorSite, placement.Cell, placement.Facing)));
+        }
     }
 
     private void UpdateAutoDeploy(float delta)
@@ -352,6 +419,7 @@ public sealed class MobileFactoryInstance
             var move = Mathf.Min(maxMove, planarDistance);
             var moveDir = new Vector3(toTarget.X / planarDistance, 0.0f, toTarget.Z / planarDistance);
             currentCenter += moveDir * move;
+            currentCenter = ClampHullCenter(target.WorldGrid, currentCenter, GetHullRadiusPadding());
         }
         else
         {
@@ -420,7 +488,7 @@ public sealed class MobileFactoryInstance
 
     private void MoveToTransitParking()
     {
-        ApplyHullTransform(TransitParkingCenter, _currentHeadingRadians);
+        ApplyHullTransform(Profile.TransitParkingCenter, _currentHeadingRadians);
         _worldPortRoot.Visible = false;
         InteriorSite.SetRuntimeState(true, true);
     }
@@ -430,16 +498,16 @@ public sealed class MobileFactoryInstance
         _hullRoot.Visible = true;
         _hullRoot.Position = hullCenter;
         _hullRoot.Rotation = new Vector3(0.0f, headingRadians, 0.0f);
-        var rotatedFloorOffset = InteriorFloorLocalOffset.Rotated(Vector3.Up, headingRadians);
+        var rotatedFloorOffset = _interiorFloorLocalOffset.Rotated(Vector3.Up, headingRadians);
         InteriorSite.SetWorldTransform(hullCenter + rotatedFloorOffset, headingRadians);
     }
 
-    private static Vector3 GetFootprintCenterWorld(GridManager worldGrid, Vector2I anchorCell, FacingDirection facing)
+    private Vector3 GetFootprintCenterWorld(GridManager worldGrid, Vector2I anchorCell, FacingDirection facing)
     {
         var sum = Vector3.Zero;
         var count = 0;
 
-        foreach (var cell in GetRotatedCells(anchorCell, facing, FootprintOffsetsEast))
+        foreach (var cell in GetFootprintCells(anchorCell, facing))
         {
             sum += worldGrid.CellToWorld(cell);
             count++;
@@ -448,15 +516,14 @@ public sealed class MobileFactoryInstance
         return count > 0 ? sum / count : worldGrid.CellToWorld(anchorCell);
     }
 
-    private static IEnumerable<Vector2I> GetRotatedCells(Vector2I anchorCell, FacingDirection facing, IEnumerable<Vector2I> offsets)
+    private static Vector3 CalculateInteriorFloorLocalOffset(MobileFactoryProfile profile)
     {
-        foreach (var offset in offsets)
-        {
-            yield return anchorCell + FactoryDirection.RotateOffset(offset, facing);
-        }
+        var centerX = (profile.InteriorMinCell.X + profile.InteriorMaxCell.X) * 0.5f * profile.InteriorCellSize;
+        var centerZ = (profile.InteriorMinCell.Y + profile.InteriorMaxCell.Y) * 0.5f * profile.InteriorCellSize;
+        return new Vector3(-centerX, profile.InteriorFloorHeight, -centerZ);
     }
 
-    private static Node3D CreateHullRoot()
+    private static Node3D CreateHullRoot(MobileFactoryProfile profile, Vector3 interiorFloorLocalOffset)
     {
         var root = new Node3D
         {
@@ -464,39 +531,44 @@ public sealed class MobileFactoryInstance
             Visible = true
         };
 
+        var platformSize = GetInteriorPlatformSize(profile);
+        var cabWidth = Mathf.Clamp(platformSize.X * 0.22f, 0.58f, 0.96f);
+        var cabDepth = Mathf.Clamp(platformSize.Z * 0.18f, 0.48f, 0.86f);
+        var noseWidth = cabWidth * 0.5f;
+
         root.AddChild(CreateHullMesh(
             "Platform",
-            GetInteriorPlatformSize(),
-            new Color("1F2937"),
+            platformSize,
+            profile.HullColor,
             new Vector3(0.0f, 0.18f, 0.0f),
             visibleInInterior: true,
             visibleInWorld: true));
         root.AddChild(CreateHullMesh(
             "DriveCab",
-            new Vector3(0.62f, 0.32f, 0.52f),
-            new Color("475569"),
-            new Vector3(1.12f, 0.42f, 0.0f),
+            new Vector3(cabWidth, 0.34f, cabDepth),
+            profile.CabColor,
+            new Vector3(platformSize.X * 0.50f, 0.42f, 0.0f),
             visibleInInterior: false,
             visibleInWorld: true));
         root.AddChild(CreateHullMesh(
             "DriveNose",
-            new Vector3(0.30f, 0.18f, 0.26f),
-            new Color("F59E0B"),
-            new Vector3(1.56f, 0.34f, 0.0f),
+            new Vector3(noseWidth, 0.18f, cabDepth * 0.55f),
+            profile.AccentColor,
+            new Vector3(platformSize.X * 0.69f, 0.34f, 0.0f),
             visibleInInterior: false,
             visibleInWorld: true));
         root.AddChild(CreateHullMesh(
             "InteriorPortMarker",
-            new Vector3(0.36f, 0.08f, 0.36f),
-            new Color("FB923C"),
-            GetInteriorPortMarkerLocalPosition(),
+            new Vector3(profile.InteriorCellSize * 0.36f, 0.08f, profile.InteriorCellSize * 0.36f),
+            profile.PortColor,
+            GetInteriorPortMarkerLocalPosition(profile, interiorFloorLocalOffset),
             visibleInInterior: true,
             visibleInWorld: false));
 
         return root;
     }
 
-    private static Node3D CreateWorldPortRoot()
+    private static Node3D CreateWorldPortRoot(MobileFactoryProfile profile)
     {
         var root = new Node3D
         {
@@ -507,17 +579,17 @@ public sealed class MobileFactoryInstance
         root.AddChild(CreatePortVisual(
             "PortBase",
             new Vector3(0.72f, 0.14f, 0.72f),
-            new Color("7C2D12"),
+            profile.CabColor.Darkened(0.15f),
             new Vector3(0.0f, 0.08f, 0.0f)));
         root.AddChild(CreatePortVisual(
             "PortGlow",
             new Vector3(0.48f, 0.18f, 0.48f),
-            new Color("FB923C"),
+            profile.PortColor,
             new Vector3(0.0f, 0.18f, 0.0f)));
         root.AddChild(CreatePortVisual(
             "PortMouth",
             new Vector3(0.26f, 0.14f, 0.38f),
-            new Color("FED7AA"),
+            profile.AccentColor.Lightened(0.2f),
             new Vector3(0.34f, 0.18f, 0.0f)));
 
         return root;
@@ -574,35 +646,39 @@ public sealed class MobileFactoryInstance
         _worldPortRoot.Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(facing), 0.0f);
     }
 
-    private static Vector3 GetInteriorPlatformSize()
+    private static Vector3 GetInteriorPlatformSize(MobileFactoryProfile profile)
     {
-        var width = (InteriorMaxBounds.X - InteriorMinBounds.X + 1) * InteriorCellSize + InteriorPlatformBorder;
-        var depth = (InteriorMaxBounds.Y - InteriorMinBounds.Y + 1) * InteriorCellSize + InteriorPlatformBorder;
+        var width = profile.InteriorWidth * profile.InteriorCellSize + profile.InteriorPlatformBorder;
+        var depth = profile.InteriorHeight * profile.InteriorCellSize + profile.InteriorPlatformBorder;
         return new Vector3(width, 0.35f, depth);
     }
 
-    private static Vector3 GetInteriorPortMarkerLocalPosition()
+    private static Vector3 GetInteriorPortMarkerLocalPosition(MobileFactoryProfile profile, Vector3 interiorFloorLocalOffset)
     {
-        var portCell = new Vector2I(4, 2);
         return new Vector3(
-            InteriorFloorLocalOffset.X + portCell.X * InteriorCellSize,
+            interiorFloorLocalOffset.X + profile.OutputBridgeCell.X * profile.InteriorCellSize,
             0.40f,
-            InteriorFloorLocalOffset.Z + portCell.Y * InteriorCellSize);
+            interiorFloorLocalOffset.Z + profile.OutputBridgeCell.Y * profile.InteriorCellSize);
     }
 
-    private static Vector2I GetPrimaryPortCell(Vector2I anchorCell, FacingDirection facing)
+    private Vector2I GetPrimaryPortCell(Vector2I anchorCell, FacingDirection facing)
     {
-        return anchorCell + FactoryDirection.RotateOffset(PortOffsetsEast[0], facing);
+        return anchorCell + FactoryDirection.RotateOffset(Profile.PortOffsetsEast[0], facing);
     }
 
-    private static Vector3 ClampHullCenter(GridManager? worldGrid, Vector3 hullCenter)
+    private float GetHullRadiusPadding()
+    {
+        var platformSize = GetInteriorPlatformSize(Profile);
+        return Mathf.Max(platformSize.X, platformSize.Z) * 0.45f;
+    }
+
+    private static Vector3 ClampHullCenter(GridManager? worldGrid, Vector3 hullCenter, float padding)
     {
         if (worldGrid is null)
         {
             return hullCenter;
         }
 
-        var padding = worldGrid.CellSize;
         var worldMin = worldGrid.GetWorldMin();
         var worldMax = worldGrid.GetWorldMax();
         return new Vector3(

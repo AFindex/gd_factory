@@ -18,6 +18,9 @@ public partial class MobileFactoryDemo : Node3D
         BuildPrototypeKind.Sink
     };
 
+    [Export]
+    public bool UseLargeTestScenario { get; set; }
+
     private readonly Dictionary<BuildPrototypeKind, BuildPrototypeDefinition> _definitions = new()
     {
         [BuildPrototypeKind.Producer] = new BuildPrototypeDefinition(BuildPrototypeKind.Producer, "生产器", new Color("9DC08B"), "持续向前方投放原料。"),
@@ -42,6 +45,11 @@ public partial class MobileFactoryDemo : Node3D
     private MeshInstance3D? _interiorPreviewArrow;
 
     private MobileFactoryInstance? _mobileFactory;
+    private readonly List<MobileFactoryInstance> _backgroundFactories = new();
+    private readonly List<MobileFactoryScenarioActorController> _backgroundControllers = new();
+    private readonly List<Label3D> _factoryLabels = new();
+    private readonly Dictionary<MobileFactoryInstance, Label3D> _factoryLabelMap = new();
+    private readonly List<SinkStructure> _scenarioSinks = new();
     private SinkStructure? _sinkA;
     private SinkStructure? _sinkB;
     private MobileFactoryControlMode _controlMode = MobileFactoryControlMode.FactoryCommand;
@@ -77,9 +85,13 @@ public partial class MobileFactoryDemo : Node3D
         UpdateWorldStatusMessage(0.0);
         UpdateHud();
 
-        if (HasSmokeTestFlag())
+        if (HasFocusedSmokeTestFlag())
         {
             CallDeferred(nameof(RunSmokeChecks));
+        }
+        else if (HasLargeScenarioSmokeTestFlag() && UseLargeTestScenario)
+        {
+            CallDeferred(nameof(RunLargeScenarioSmokeChecks));
         }
     }
 
@@ -88,6 +100,16 @@ public partial class MobileFactoryDemo : Node3D
         _mousePosition = GetViewport().GetMousePosition();
         HandleGlobalCommands();
         _mobileFactory?.UpdateRuntime(delta);
+        foreach (var factory in _backgroundFactories)
+        {
+            factory.UpdateRuntime(delta);
+        }
+
+        foreach (var controller in _backgroundControllers)
+        {
+            controller.Update(delta);
+        }
+
         PullFactoryStatusMessage();
         UpdatePaneFocus();
         HandleWorldControlInput(delta);
@@ -97,6 +119,7 @@ public partial class MobileFactoryDemo : Node3D
         UpdateInteriorPreview();
         UpdateWorldStatusMessage(delta);
         UpdateStructureVisuals();
+        UpdateFactoryLabels();
         UpdateEditorCamera();
         UpdateCameraTracking();
         UpdateHud();
@@ -164,15 +187,20 @@ public partial class MobileFactoryDemo : Node3D
     {
         AddChild(CreateEnvironment());
         AddChild(CreateDirectionalLight());
-        AddChild(CreateFloor());
-        AddChild(CreateGridLines());
+        AddChild(CreateFloor(GetWorldMinCell(), GetWorldMaxCell()));
+        AddChild(CreateGridLines(GetWorldMinCell(), GetWorldMaxCell()));
+
+        if (UseLargeTestScenario)
+        {
+            AddChild(CreateScenarioLandmarks());
+        }
 
         _structureRoot = new Node3D { Name = "MobileDemoStructures" };
         AddChild(_structureRoot);
 
         _worldPreviewRoot = new Node3D { Name = "WorldPreviewRoot" };
         AddChild(_worldPreviewRoot);
-        CreateWorldPreviewVisuals();
+        CreateWorldPreviewVisuals(4, 1);
 
         _interiorPreviewRoot = new Node3D { Name = "InteriorPreviewRoot", Visible = false };
         AddChild(_interiorPreviewRoot);
@@ -195,12 +223,13 @@ public partial class MobileFactoryDemo : Node3D
     private void ConfigureGameplay()
     {
         _grid = new GridManager(
-            new Vector2I(FactoryConstants.GridMin, FactoryConstants.GridMin),
-            new Vector2I(FactoryConstants.GridMax, FactoryConstants.GridMax),
+            new Vector2I(GetWorldMinCell(), GetWorldMinCell()),
+            new Vector2I(GetWorldMaxCell(), GetWorldMaxCell()),
             FactoryConstants.CellSize);
 
         _simulation!.Configure(_grid);
-        _cameraRig!.ConfigureBounds(_grid.GetWorldMin() + Vector2.One * 4.0f, _grid.GetWorldMax() - Vector2.One * 4.0f);
+        var cameraPadding = UseLargeTestScenario ? 6.0f : 4.0f;
+        _cameraRig!.ConfigureBounds(_grid.GetWorldMin() + Vector2.One * cameraPadding, _grid.GetWorldMax() - Vector2.One * cameraPadding);
 
         _hud!.EditorViewport.World3D = GetWorld3D();
         _editorCamera = new Camera3D
@@ -220,6 +249,14 @@ public partial class MobileFactoryDemo : Node3D
 
     private void CreateWorldLoops()
     {
+        _scenarioSinks.Clear();
+
+        if (UseLargeTestScenario)
+        {
+            CreateLargeScenarioWorld();
+            return;
+        }
+
         _sinkA = PlaceWorldStructure(BuildPrototypeKind.Sink, new Vector2I(-1, -3), FacingDirection.East) as SinkStructure;
         PlaceWorldStructure(BuildPrototypeKind.Belt, new Vector2I(-3, -3), FacingDirection.East);
         PlaceWorldStructure(BuildPrototypeKind.Belt, new Vector2I(-2, -3), FacingDirection.East);
@@ -234,9 +271,30 @@ public partial class MobileFactoryDemo : Node3D
 
     private void SpawnMobileFactory()
     {
-        _mobileFactory = new MobileFactoryInstance("demo-mobile-factory", _structureRoot!, _simulation!);
-        _selectedDeployFacing = _mobileFactory.TransitFacing;
-        UpdateInteriorPreviewSizing();
+        _backgroundFactories.Clear();
+        _backgroundControllers.Clear();
+        ClearFactoryLabels();
+
+        if (UseLargeTestScenario)
+        {
+            SpawnLargeScenarioFactories();
+        }
+        else
+        {
+            _mobileFactory = new MobileFactoryInstance(
+                "demo-mobile-factory",
+                _structureRoot!,
+                _simulation!,
+                MobileFactoryScenarioLibrary.CreateFocusedDemoProfile(),
+                MobileFactoryScenarioLibrary.CreateFocusedDemoPreset());
+        }
+
+        if (_mobileFactory is not null)
+        {
+            _selectedDeployFacing = _mobileFactory.TransitFacing;
+            CreateWorldPreviewVisuals(_mobileFactory.Profile.FootprintOffsetsEast.Count, _mobileFactory.Profile.PortOffsetsEast.Count);
+            UpdateInteriorPreviewSizing();
+        }
     }
 
     private FactoryStructure? PlaceWorldStructure(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
@@ -251,6 +309,157 @@ public partial class MobileFactoryDemo : Node3D
         _grid.PlaceStructure(structure);
         _simulation.RegisterStructure(structure);
         return structure;
+    }
+
+    private void CreateLargeScenarioWorld()
+    {
+        var heavy = MobileFactoryScenarioLibrary.CreateHeavyProfile();
+        var medium = MobileFactoryScenarioLibrary.CreateMediumProfile();
+        var compact = MobileFactoryScenarioLibrary.CreateCompactProfile();
+
+        _sinkA = CreatePreparedOutputLine(heavy, new Vector2I(-15, -6), FacingDirection.East, 3);
+        CreatePreparedOutputLine(compact, new Vector2I(6, -6), FacingDirection.East, 2);
+        CreatePreparedOutputLine(compact, new Vector2I(10, 2), FacingDirection.East, 2);
+        _sinkB = CreatePreparedOutputLine(medium, new Vector2I(-4, 7), FacingDirection.East, 2);
+        CreatePreparedOutputLine(compact, new Vector2I(1, 9), FacingDirection.East, 2);
+        CreatePreparedOutputLine(compact, new Vector2I(-9, 10), FacingDirection.East, 2);
+        CreatePreparedOutputLine(medium, new Vector2I(-12, 3), FacingDirection.East, 2);
+        CreatePreparedOutputLine(medium, new Vector2I(4, 10), FacingDirection.East, 2);
+
+        CreateAmbientWorldLine(new Vector2I(-18, -1), 5, FacingDirection.East);
+        CreateAmbientWorldLine(new Vector2I(12, -12), 4, FacingDirection.North);
+        CreateAmbientWorldLine(new Vector2I(-3, -14), 6, FacingDirection.East);
+
+        _simulation!.RebuildTopology();
+    }
+
+    private void SpawnLargeScenarioFactories()
+    {
+        foreach (var actor in MobileFactoryScenarioLibrary.CreateLargeScenarioActors())
+        {
+            var instance = new MobileFactoryInstance(actor.ActorId, _structureRoot!, _simulation!, actor.Profile, actor.InteriorPreset);
+            instance.SetTransitPose(actor.TransitPosition, actor.TransitFacing);
+
+            if (actor.InitialDeployAnchor is Vector2I initialAnchor)
+            {
+                instance.TryDeploy(_grid!, initialAnchor, actor.InitialDeployFacing);
+            }
+
+            if (actor.IsPlayerControlled)
+            {
+                _mobileFactory = instance;
+            }
+            else
+            {
+                _backgroundFactories.Add(instance);
+                if (actor.RoutePoints.Count > 0)
+                {
+                    _backgroundControllers.Add(new MobileFactoryScenarioActorController(_grid!, instance, actor));
+                }
+            }
+
+            AddFactoryLabel(instance, actor.DisplayLabel, actor.LabelColor);
+        }
+    }
+
+    private SinkStructure? CreatePreparedOutputLine(MobileFactoryProfile profile, Vector2I anchorCell, FacingDirection facing, int beltCount)
+    {
+        var portCell = GetProfilePortCell(profile, anchorCell, facing);
+        for (var i = 1; i <= beltCount; i++)
+        {
+            PlaceWorldStructure(BuildPrototypeKind.Belt, new Vector2I(portCell.X + i, portCell.Y), FacingDirection.East);
+        }
+
+        var sinkCell = new Vector2I(portCell.X + beltCount + 1, portCell.Y);
+        var sink = PlaceWorldStructure(BuildPrototypeKind.Sink, sinkCell, FacingDirection.East) as SinkStructure;
+        if (sink is not null)
+        {
+            _scenarioSinks.Add(sink);
+        }
+
+        return sink;
+    }
+
+    private void CreateAmbientWorldLine(Vector2I startCell, int beltCount, FacingDirection facing)
+    {
+        var cell = startCell;
+        PlaceWorldStructure(BuildPrototypeKind.Producer, cell, facing);
+
+        for (var i = 1; i <= beltCount; i++)
+        {
+            cell += FactoryDirection.ToCellOffset(facing);
+            PlaceWorldStructure(BuildPrototypeKind.Belt, cell, facing);
+        }
+
+        cell += FactoryDirection.ToCellOffset(facing);
+        var sink = PlaceWorldStructure(BuildPrototypeKind.Sink, cell, facing) as SinkStructure;
+        if (sink is not null)
+        {
+            _scenarioSinks.Add(sink);
+        }
+    }
+
+    private void AddFactoryLabel(MobileFactoryInstance factory, string labelText, Color color)
+    {
+        if (_structureRoot is null)
+        {
+            return;
+        }
+
+        var label = new Label3D
+        {
+            Text = labelText,
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+            FontSize = 34,
+            Modulate = color,
+            OutlineSize = 3
+        };
+        label.SetMeta("base_text", labelText);
+        _structureRoot.AddChild(label);
+        _factoryLabels.Add(label);
+        _factoryLabelMap[factory] = label;
+    }
+
+    private void ClearFactoryLabels()
+    {
+        foreach (var label in _factoryLabels)
+        {
+            label.QueueFree();
+        }
+
+        _factoryLabels.Clear();
+        _factoryLabelMap.Clear();
+    }
+
+    private void UpdateFactoryLabels()
+    {
+        if (_factoryLabelMap.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var pair in _factoryLabelMap)
+        {
+            pair.Value.Position = pair.Key.WorldFocusPoint + new Vector3(0.0f, 1.6f, 0.0f);
+            var baseText = pair.Value.GetMeta("base_text", string.Empty).AsString();
+            pair.Value.Text = $"{baseText}\n{DescribeFactoryState(pair.Key)}";
+        }
+    }
+
+    private static string DescribeFactoryState(MobileFactoryInstance factory)
+    {
+        return factory.State switch
+        {
+            MobileFactoryLifecycleState.Deployed => $"已部署 | {factory.Profile.DisplayName}",
+            MobileFactoryLifecycleState.AutoDeploying => $"自动部署中 | {factory.Profile.DisplayName}",
+            MobileFactoryLifecycleState.Recalling => $"回收中 | {factory.Profile.DisplayName}",
+            _ => $"运输中 | {factory.Profile.DisplayName}"
+        };
+    }
+
+    private static Vector2I GetProfilePortCell(MobileFactoryProfile profile, Vector2I anchorCell, FacingDirection facing)
+    {
+        return anchorCell + FactoryDirection.RotateOffset(profile.PortOffsetsEast[0], facing);
     }
 
     private void HandleGlobalCommands()
@@ -660,7 +869,8 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         var focus = _mobileFactory.GetEditorFocusWorldCenter();
-        _editorCamera.Position = focus + new Vector3(0.0f, 7.0f, 0.0f);
+        _editorCamera.Size = _mobileFactory.GetSuggestedEditorCameraSize();
+        _editorCamera.Position = focus + new Vector3(0.0f, _editorCamera.Size * 1.8f, 0.0f);
         _editorCamera.Rotation = new Vector3(-Mathf.Pi * 0.5f, _mobileFactory.InteriorSite.WorldRotationRadians, 0.0f);
     }
 
@@ -696,7 +906,7 @@ public partial class MobileFactoryDemo : Node3D
         _hud.SetState(_mobileFactory.State, _mobileFactory.AnchorCell);
         _hud.SetHoverAnchor(_hoveredAnchor, _controlMode == MobileFactoryControlMode.DeployPreview && _hasHoveredAnchor);
         _hud.SetPreviewStatus(_worldStatusPositive, _worldPreviewMessage);
-        _hud.SetDeliveryStats(_sinkA?.DeliveredTotal ?? 0, _sinkB?.DeliveredTotal ?? 0);
+        _hud.SetDeliveryStats(GetPrimaryDeliveryTotal(), GetSecondaryDeliveryTotal());
         _hud.SetEditorSelection(_selectedInteriorKind, _selectedInteriorFacing);
         _hud.SetEditorPreview(_canPlaceInteriorCell, _interiorPreviewMessage);
         _hud.SetPortStatus(_mobileFactory.GetPortStatusLabel());
@@ -959,14 +1169,58 @@ public partial class MobileFactoryDemo : Node3D
         return count;
     }
 
-    private void CreateWorldPreviewVisuals()
+    private int GetPrimaryDeliveryTotal()
+    {
+        if (!UseLargeTestScenario)
+        {
+            return _sinkA?.DeliveredTotal ?? 0;
+        }
+
+        var sum = 0;
+        for (var i = 0; i < _scenarioSinks.Count; i += 2)
+        {
+            sum += _scenarioSinks[i].DeliveredTotal;
+        }
+
+        return sum;
+    }
+
+    private int GetSecondaryDeliveryTotal()
+    {
+        if (!UseLargeTestScenario)
+        {
+            return _sinkB?.DeliveredTotal ?? 0;
+        }
+
+        var sum = 0;
+        for (var i = 1; i < _scenarioSinks.Count; i += 2)
+        {
+            sum += _scenarioSinks[i].DeliveredTotal;
+        }
+
+        return sum;
+    }
+
+    private void CreateWorldPreviewVisuals(int footprintCount, int portCount)
     {
         if (_worldPreviewRoot is null)
         {
             return;
         }
 
-        for (var i = 0; i < 4; i++)
+        foreach (var child in _worldPreviewRoot.GetChildren())
+        {
+            if (child is Node node)
+            {
+                node.QueueFree();
+            }
+        }
+
+        _worldPreviewFootprintMeshes.Clear();
+        _worldPreviewPortMeshes.Clear();
+        _worldPreviewFacingArrow = null;
+
+        for (var i = 0; i < footprintCount; i++)
         {
             var footprint = new MeshInstance3D { Name = $"PreviewFootprint_{i}", Visible = false };
             footprint.Mesh = new BoxMesh
@@ -977,13 +1231,16 @@ public partial class MobileFactoryDemo : Node3D
             _worldPreviewFootprintMeshes.Add(footprint);
         }
 
-        var port = new MeshInstance3D { Name = "PreviewPort", Visible = false };
-        port.Mesh = new BoxMesh
+        for (var i = 0; i < portCount; i++)
         {
-            Size = new Vector3(FactoryConstants.CellSize * 0.55f, 0.12f, FactoryConstants.CellSize * 0.55f)
-        };
-        _worldPreviewRoot.AddChild(port);
-        _worldPreviewPortMeshes.Add(port);
+            var port = new MeshInstance3D { Name = $"PreviewPort_{i}", Visible = false };
+            port.Mesh = new BoxMesh
+            {
+                Size = new Vector3(FactoryConstants.CellSize * 0.55f, 0.12f, FactoryConstants.CellSize * 0.55f)
+            };
+            _worldPreviewRoot.AddChild(port);
+            _worldPreviewPortMeshes.Add(port);
+        }
 
         _worldPreviewFacingArrow = new MeshInstance3D { Name = "PreviewFacingArrow", Visible = false };
         _worldPreviewFacingArrow.Mesh = new BoxMesh
@@ -1065,11 +1322,24 @@ public partial class MobileFactoryDemo : Node3D
         }
     }
 
-    private static bool HasSmokeTestFlag()
+    private static bool HasFocusedSmokeTestFlag()
     {
         foreach (var arg in OS.GetCmdlineUserArgs())
         {
             if (string.Equals(arg, "--mobile-factory-smoke-test", global::System.StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasLargeScenarioSmokeTestFlag()
+    {
+        foreach (var arg in OS.GetCmdlineUserArgs())
+        {
+            if (string.Equals(arg, "--mobile-factory-large-smoke-test", global::System.StringComparison.Ordinal))
             {
                 return true;
             }
@@ -1180,6 +1450,101 @@ public partial class MobileFactoryDemo : Node3D
         GetTree().Quit();
     }
 
+    private async void RunLargeScenarioSmokeChecks()
+    {
+        if (_grid is null || _mobileFactory is null || _hud is null || _cameraRig is null || _backgroundFactories.Count < 3 || _scenarioSinks.Count < 4)
+        {
+            GD.PushError("MOBILE_FACTORY_LARGE_SMOKE_FAILED missing grid, player factory, hud, camera, background actors, or scenario sinks.");
+            GetTree().Quit(1);
+            return;
+        }
+
+        await ToSignal(GetTree().CreateTimer(0.4f), SceneTreeTimer.SignalName.Timeout);
+
+        var allFactories = new List<MobileFactoryInstance> { _mobileFactory };
+        allFactories.AddRange(_backgroundFactories);
+        var deployedCount = 0;
+        var inTransitCount = 0;
+        var profileIds = new HashSet<string>();
+        var presetIds = new HashSet<string>();
+        foreach (var factory in allFactories)
+        {
+            profileIds.Add(factory.Profile.Id);
+            presetIds.Add(factory.InteriorPreset.Id);
+            if (factory.State == MobileFactoryLifecycleState.Deployed)
+            {
+                deployedCount++;
+            }
+            else if (factory.State == MobileFactoryLifecycleState.InTransit)
+            {
+                inTransitCount++;
+            }
+        }
+
+        var mixedStates = deployedCount >= 2 && inTransitCount >= 1;
+        var variedProfiles = profileIds.Count >= 3;
+        var variedPresets = presetIds.Count >= 3;
+
+        var backgroundStartPositions = new List<Vector3>();
+        foreach (var factory in _backgroundFactories)
+        {
+            backgroundStartPositions.Add(factory.WorldFocusPoint);
+        }
+        var initialDelivered = GetPrimaryDeliveryTotal() + GetSecondaryDeliveryTotal();
+
+        var playerStartPosition = _mobileFactory.WorldFocusPoint;
+        _mobileFactory.ApplyTransitInput(_grid, 1.0f, -1.0f, 0.5);
+        var playerMoved = _mobileFactory.WorldFocusPoint.DistanceTo(playerStartPosition) > 0.05f;
+
+        _editorOpen = true;
+        _hud.SetEditorOpen(true);
+        await ToSignal(GetTree().CreateTimer(0.35f), SceneTreeTimer.SignalName.Timeout);
+        var editorVisible = _hud.IsEditorVisible;
+        _editorOpen = false;
+        _hud.SetEditorOpen(false);
+
+        _selectedDeployFacing = FacingDirection.East;
+        _hoveredAnchor = new Vector2I(-12, 3);
+        _hasHoveredAnchor = true;
+        _canDeployCurrentAnchor = _mobileFactory.CanDeployAt(_grid, _hoveredAnchor, FacingDirection.East);
+        SetControlMode(MobileFactoryControlMode.DeployPreview);
+        ConfirmDeployPreview();
+        await WaitForCondition(() => _mobileFactory.State == MobileFactoryLifecycleState.Deployed, 5.0f);
+        var playerDeployed = _mobileFactory.State == MobileFactoryLifecycleState.Deployed;
+
+        await ToSignal(GetTree().CreateTimer(3.0f), SceneTreeTimer.SignalName.Timeout);
+        var backgroundMoved = false;
+        for (var i = 0; i < _backgroundFactories.Count; i++)
+        {
+            if (_backgroundFactories[i].WorldFocusPoint.DistanceTo(backgroundStartPositions[i]) > 0.10f)
+            {
+                backgroundMoved = true;
+                break;
+            }
+        }
+        var deliveredDuringRun = GetPrimaryDeliveryTotal() + GetSecondaryDeliveryTotal() > initialDelivered;
+
+        var anyConnectedBridge = false;
+        foreach (var factory in allFactories)
+        {
+            if (factory.OutputBridge.IsConnectedToWorld)
+            {
+                anyConnectedBridge = true;
+                break;
+            }
+        }
+
+        if (!mixedStates || !variedProfiles || !variedPresets || !playerMoved || !editorVisible || !playerDeployed || !backgroundMoved || !deliveredDuringRun || !anyConnectedBridge)
+        {
+            GD.PushError($"MOBILE_FACTORY_LARGE_SMOKE_FAILED mixedStates={mixedStates} variedProfiles={variedProfiles} variedPresets={variedPresets} playerMoved={playerMoved} editorVisible={editorVisible} playerDeployed={playerDeployed} backgroundMoved={backgroundMoved} deliveredDuringRun={deliveredDuringRun} anyConnectedBridge={anyConnectedBridge} deployedCount={deployedCount} inTransitCount={inTransitCount}");
+            GetTree().Quit(1);
+            return;
+        }
+
+        GD.Print($"MOBILE_FACTORY_LARGE_SMOKE_OK deployed={deployedCount} inTransit={inTransitCount} delivered={GetPrimaryDeliveryTotal() + GetSecondaryDeliveryTotal()}");
+        GetTree().Quit();
+    }
+
     private static Vector2I FirstCell(IEnumerable<Vector2I> cells)
     {
         foreach (var cell in cells)
@@ -1264,6 +1629,59 @@ public partial class MobileFactoryDemo : Node3D
         };
     }
 
+    private int GetWorldMinCell()
+    {
+        return UseLargeTestScenario ? -20 : FactoryConstants.GridMin;
+    }
+
+    private int GetWorldMaxCell()
+    {
+        return UseLargeTestScenario ? 20 : FactoryConstants.GridMax;
+    }
+
+    private static Node3D CreateScenarioLandmarks()
+    {
+        var root = new Node3D { Name = "ScenarioLandmarks" };
+        root.AddChild(CreateLandmark("NorthYard", new Vector3(-14.0f, 0.0f, 14.0f), new Vector3(8.0f, 0.6f, 6.0f), new Color("1F2937")));
+        root.AddChild(CreateLandmark("SouthExport", new Vector3(12.0f, 0.0f, -12.0f), new Vector3(10.0f, 0.6f, 5.0f), new Color("312E81")));
+        root.AddChild(CreateLandmark("CentralSpine", new Vector3(0.0f, 0.0f, 0.0f), new Vector3(16.0f, 0.4f, 2.8f), new Color("0F766E")));
+
+        root.AddChild(CreateLandmarkLabel("北侧扩展试验区", new Vector3(-14.0f, 1.8f, 14.0f), new Color("BFDBFE")));
+        root.AddChild(CreateLandmarkLabel("南侧输出走廊", new Vector3(12.0f, 1.8f, -12.0f), new Color("C4B5FD")));
+        root.AddChild(CreateLandmarkLabel("中央观察脊", new Vector3(0.0f, 1.6f, 0.0f), new Color("A7F3D0")));
+
+        return root;
+    }
+
+    private static Node3D CreateLandmark(string name, Vector3 position, Vector3 size, Color color)
+    {
+        var mesh = new MeshInstance3D
+        {
+            Name = name,
+            Position = position + new Vector3(0.0f, size.Y * 0.5f, 0.0f),
+            Mesh = new BoxMesh { Size = size },
+            MaterialOverride = new StandardMaterial3D
+            {
+                AlbedoColor = color,
+                Roughness = 0.95f
+            }
+        };
+        return mesh;
+    }
+
+    private static Label3D CreateLandmarkLabel(string text, Vector3 position, Color color)
+    {
+        return new Label3D
+        {
+            Text = text,
+            Position = position,
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+            FontSize = 36,
+            Modulate = color,
+            OutlineSize = 3
+        };
+    }
+
     private static WorldEnvironment CreateEnvironment()
     {
         var environment = new Environment
@@ -1294,15 +1712,15 @@ public partial class MobileFactoryDemo : Node3D
         };
     }
 
-    private static Node3D CreateFloor()
+    private static Node3D CreateFloor(int minCell, int maxCell)
     {
         var floorRoot = new Node3D { Name = "FloorRoot" };
         var floor = new MeshInstance3D { Name = "FactoryFloor" };
         floor.Mesh = new PlaneMesh
         {
             Size = new Vector2(
-                (FactoryConstants.GridMax - FactoryConstants.GridMin + 1) * FactoryConstants.CellSize,
-                (FactoryConstants.GridMax - FactoryConstants.GridMin + 1) * FactoryConstants.CellSize)
+                (maxCell - minCell + 1) * FactoryConstants.CellSize,
+                (maxCell - minCell + 1) * FactoryConstants.CellSize)
         };
 
         floor.MaterialOverride = new StandardMaterial3D
@@ -1314,7 +1732,7 @@ public partial class MobileFactoryDemo : Node3D
         return floorRoot;
     }
 
-    private static Node3D CreateGridLines()
+    private static Node3D CreateGridLines(int minCell, int maxCell)
     {
         var gridRoot = new Node3D { Name = "GridLines" };
         var lineMaterial = new StandardMaterial3D
@@ -1323,11 +1741,11 @@ public partial class MobileFactoryDemo : Node3D
             Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
             Roughness = 1.0f
         };
-        var worldMin = (FactoryConstants.GridMin - 0.5f) * FactoryConstants.CellSize;
-        var worldMax = (FactoryConstants.GridMax + 0.5f) * FactoryConstants.CellSize;
+        var worldMin = (minCell - 0.5f) * FactoryConstants.CellSize;
+        var worldMax = (maxCell + 0.5f) * FactoryConstants.CellSize;
         var lineLength = worldMax - worldMin;
 
-        for (var i = FactoryConstants.GridMin; i <= FactoryConstants.GridMax + 1; i++)
+        for (var i = minCell; i <= maxCell + 1; i++)
         {
             var x = (i - 0.5f) * FactoryConstants.CellSize;
             var vertical = new MeshInstance3D();
