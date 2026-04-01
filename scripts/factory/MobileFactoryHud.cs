@@ -329,7 +329,7 @@ public partial class MobileFactoryHud : CanvasLayer
         _deployButton.Pressed += () => DeployModeToggleRequested?.Invoke();
         actionsRow.AddChild(_deployButton);
 
-        _hintLabel.Text = "默认操作：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 回收 | F 内部编辑";
+        _hintLabel.Text = "默认操作：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 上下文辅助 | F 内部编辑";
         _hintLabel.Modulate = new Color("EED49F");
     }
 

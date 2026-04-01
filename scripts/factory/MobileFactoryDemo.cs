@@ -488,12 +488,12 @@ public partial class MobileFactoryDemo : Node3D
 
         if (Input.IsActionJustPressed("cancel_mobile_command"))
         {
-            CancelWorldCommand();
+            HandleCommandSlot(MobileFactoryCommandSlot.Cancel);
         }
 
-        if (Input.IsActionJustPressed("recall_mobile_factory"))
+        if (Input.IsActionJustPressed("mobile_factory_auxiliary_command"))
         {
-            ReturnFactoryToTransitMode();
+            HandleCommandSlot(MobileFactoryCommandSlot.Auxiliary);
         }
     }
 
@@ -508,12 +508,12 @@ public partial class MobileFactoryDemo : Node3D
         {
             if (Input.IsActionJustPressed("deploy_rotate_left"))
             {
-                _selectedDeployFacing = FactoryDirection.RotateCounterClockwise(_selectedDeployFacing);
+                RotateDeployFacing(-1, "Q");
             }
 
             if (Input.IsActionJustPressed("deploy_rotate_right"))
             {
-                _selectedDeployFacing = FactoryDirection.RotateClockwise(_selectedDeployFacing);
+                RotateDeployFacing(1, "E");
             }
 
             return;
@@ -828,15 +828,15 @@ public partial class MobileFactoryDemo : Node3D
                 _worldStatusPositive = true;
                 break;
             case MobileFactoryControlMode.DeployPreview:
-                _worldPreviewMessage = "部署预览：移动鼠标选择落点，Q/E 旋转朝向，左键确认，Esc/G 取消。";
+                _worldPreviewMessage = "部署预览：移动鼠标选择落点，Q/E/R 旋转朝向，左键确认，Esc/G 取消。";
                 _worldStatusPositive = true;
                 break;
             default:
                 _worldPreviewMessage = _mobileFactory.State switch
                 {
-                    MobileFactoryLifecycleState.Deployed => "已部署：按 R 回收，Tab 进入观察模式，F 打开内部编辑。",
+                    MobileFactoryLifecycleState.Deployed => "已部署：按 R 切回移动态，Tab 进入观察模式，F 打开内部编辑。",
                     MobileFactoryLifecycleState.AutoDeploying => "自动部署中：移动工厂会自行前往目标并对齐朝向，Esc 可取消。",
-                    MobileFactoryLifecycleState.Recalling => "回收中：部署机构正在收拢，很快返回运输位。",
+                    MobileFactoryLifecycleState.Recalling => "切回移动态中：部署机构正在收拢，很快恢复机动。",
                     _ => "工厂控制：W/S 前进后退，A/D 转向，G 进入部署模式，Tab 进入观察模式。"
                 };
                 _worldStatusPositive = true;
@@ -954,7 +954,73 @@ public partial class MobileFactoryDemo : Node3D
 
         _selectedDeployFacing = _mobileFactory.TransitFacing;
         SetControlMode(MobileFactoryControlMode.DeployPreview);
-        ShowWorldEvent("部署预览已开启，移动鼠标选点，Q/E 旋转，左键确认。", true);
+        ShowWorldEvent("部署预览已开启，移动鼠标选点，Q/E/R 旋转，左键确认。", true);
+    }
+
+    private MobileFactoryInteractionPattern GetActiveInteractionPattern()
+    {
+        return _controlMode switch
+        {
+            MobileFactoryControlMode.DeployPreview => MobileFactoryInteractionPattern.DeployPlacement,
+            _ => MobileFactoryInteractionPattern.None
+        };
+    }
+
+    private void HandleCommandSlot(MobileFactoryCommandSlot commandSlot)
+    {
+        if (TryHandleInteractionPatternCommand(GetActiveInteractionPattern(), commandSlot))
+        {
+            return;
+        }
+
+        switch (commandSlot)
+        {
+            case MobileFactoryCommandSlot.Cancel:
+                CancelWorldCommand();
+                break;
+            case MobileFactoryCommandSlot.Auxiliary:
+                ReturnFactoryToTransitMode();
+                break;
+        }
+    }
+
+    private bool TryHandleInteractionPatternCommand(MobileFactoryInteractionPattern interactionPattern, MobileFactoryCommandSlot commandSlot)
+    {
+        switch (interactionPattern)
+        {
+            case MobileFactoryInteractionPattern.DeployPlacement:
+                return TryHandleDeployPlacementCommand(commandSlot);
+            default:
+                return false;
+        }
+    }
+
+    private bool TryHandleDeployPlacementCommand(MobileFactoryCommandSlot commandSlot)
+    {
+        switch (commandSlot)
+        {
+            case MobileFactoryCommandSlot.Cancel:
+                CancelWorldCommand();
+                return true;
+            case MobileFactoryCommandSlot.Auxiliary:
+                RotateDeployFacing(1, "R");
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void RotateDeployFacing(int direction, string sourceLabel)
+    {
+        if (_controlMode != MobileFactoryControlMode.DeployPreview)
+        {
+            return;
+        }
+
+        _selectedDeployFacing = direction < 0
+            ? FactoryDirection.RotateCounterClockwise(_selectedDeployFacing)
+            : FactoryDirection.RotateClockwise(_selectedDeployFacing);
+        ShowWorldEvent($"部署朝向已通过 {sourceLabel} 旋转到 {FactoryDirection.ToLabel(_selectedDeployFacing)}。", true);
     }
 
     private void CancelWorldCommand()
@@ -1300,7 +1366,7 @@ public partial class MobileFactoryDemo : Node3D
         EnsureAction("toggle_observer_mode", new InputEventKey { PhysicalKeycode = Key.Tab });
         EnsureAction("toggle_deploy_preview", new InputEventKey { PhysicalKeycode = Key.G });
         EnsureAction("cancel_mobile_command", new InputEventKey { PhysicalKeycode = Key.Escape });
-        EnsureAction("recall_mobile_factory", new InputEventKey { PhysicalKeycode = Key.R });
+        EnsureAction("mobile_factory_auxiliary_command", new InputEventKey { PhysicalKeycode = Key.R });
         EnsureAction("toggle_mobile_editor", new InputEventKey { PhysicalKeycode = Key.F });
     }
 
@@ -1395,6 +1461,11 @@ public partial class MobileFactoryDemo : Node3D
         var southPortCell = FirstCell(_mobileFactory.GetPortCells(AnchorA, FacingDirection.South));
         var westFootprintCell = FirstCell(_mobileFactory.GetFootprintCells(AnchorA, FacingDirection.West));
         var facingAwareCells = southPortCell == new Vector2I(-6, -1) && westFootprintCell == new Vector2I(-6, -3);
+        SetControlMode(MobileFactoryControlMode.DeployPreview);
+        _selectedDeployFacing = FacingDirection.East;
+        HandleCommandSlot(MobileFactoryCommandSlot.Auxiliary);
+        var contextualRotateWorks = _selectedDeployFacing == FacingDirection.South;
+        _selectedDeployFacing = FacingDirection.East;
 
         _editorOpen = false;
         _hud.SetEditorOpen(false);
@@ -1423,10 +1494,12 @@ public partial class MobileFactoryDemo : Node3D
         _editorOpen = false;
         _hud.SetEditorOpen(false);
         var transitRecycleBeforeRecall = _mobileFactory.OutputBridge.TransitRecycleTotal;
+        var deployedPositionBeforeRecall = _mobileFactory.WorldFocusPoint;
         var recalled = _mobileFactory.ReturnToTransitMode();
         await WaitForCondition(() => _mobileFactory.State == MobileFactoryLifecycleState.InTransit, 1.2f);
         await ToSignal(GetTree().CreateTimer(2.0f), SceneTreeTimer.SignalName.Timeout);
         var transitRecycleActive = _mobileFactory.OutputBridge.TransitRecycleTotal > transitRecycleBeforeRecall;
+        var stayedInPlaceAfterReturn = _mobileFactory.WorldFocusPoint.DistanceTo(deployedPositionBeforeRecall) < 0.05f;
         var reservationsReleased =
             _grid.CanReserveAll(_mobileFactory.GetFootprintCells(AnchorA, FacingDirection.East), _mobileFactory.ReservationOwnerId)
             && _grid.CanReserveAll(_mobileFactory.GetPortCells(AnchorA, FacingDirection.East), _mobileFactory.ReservationOwnerId);
@@ -1442,9 +1515,9 @@ public partial class MobileFactoryDemo : Node3D
         await ToSignal(GetTree().CreateTimer(3.5f), SceneTreeTimer.SignalName.Timeout);
         var secondDelivered = _sinkB.DeliveredTotal;
 
-        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !rightPaneHover || !leftPaneHover || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !blockedDeploy || !facingAwareCells || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !recalled || !transitRecycleActive || !reservationsReleased || !secondDeploy || secondDelivered <= 0)
+        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !rightPaneHover || !leftPaneHover || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !blockedDeploy || !facingAwareCells || !contextualRotateWorks || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !recalled || !transitRecycleActive || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0)
         {
-            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} rightHover={rightPaneHover} leftHover={leftPaneHover} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} blocked={blockedDeploy} facingAware={facingAwareCells} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} recalled={recalled} transitRecycleActive={transitRecycleActive} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered}");
+            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} rightHover={rightPaneHover} leftHover={leftPaneHover} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} blocked={blockedDeploy} facingAware={facingAwareCells} contextualRotateWorks={contextualRotateWorks} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} recalled={recalled} transitRecycleActive={transitRecycleActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered}");
             GetTree().Quit(1);
             return;
         }
@@ -1599,7 +1672,7 @@ public partial class MobileFactoryDemo : Node3D
         return _controlMode switch
         {
             MobileFactoryControlMode.Observer => "观察模式：WASD/方向键移动相机 | 滚轮缩放 | Tab 返回工厂控制 | F 内部编辑",
-            MobileFactoryControlMode.DeployPreview => "部署预览：左键确认 | Q/E 旋转朝向 | G/Esc 取消 | F 内部编辑",
+            MobileFactoryControlMode.DeployPreview => "部署预览：左键确认 | Q/E/R 旋转朝向 | G/Esc 取消 | F 内部编辑",
             _ => "工厂控制：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器用 1-5 选建筑"
         };
     }

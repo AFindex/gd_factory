@@ -37,6 +37,8 @@ public sealed class MobileFactoryInstance
     private readonly Vector3 _interiorFloorLocalOffset;
     private GridManager? _deployedGrid;
     private DeployTarget? _pendingDeployTarget;
+    private Vector3 _pendingTransitPosition;
+    private float _pendingTransitHeadingRadians;
     private float _currentHeadingRadians;
     private float _recallTimer;
     private string? _pendingStatusMessage;
@@ -274,6 +276,8 @@ public sealed class MobileFactoryInstance
         _deployedGrid.ReleaseOwner(ReservationOwnerId);
         _deployedGrid = null;
         AnchorCell = null;
+        _pendingTransitPosition = _hullRoot.Position;
+        _pendingTransitHeadingRadians = _currentHeadingRadians;
         _outputBridge.ClearBinding();
         _worldPortRoot.Visible = false;
         InteriorSite.SetRuntimeState(true, true);
@@ -460,7 +464,9 @@ public sealed class MobileFactoryInstance
             return;
         }
 
-        MoveToTransitParking();
+        ApplyHullTransform(_pendingTransitPosition, _pendingTransitHeadingRadians);
+        _worldPortRoot.Visible = false;
+        InteriorSite.SetRuntimeState(true, true);
         State = MobileFactoryLifecycleState.InTransit;
         PushStatus("移动工厂已切回移动态，可继续机动或重新部署；内部物流仍在持续运作。");
     }

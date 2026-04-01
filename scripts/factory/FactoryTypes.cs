@@ -35,6 +35,19 @@ public enum MobileFactoryControlMode
     Observer
 }
 
+public enum MobileFactoryInteractionPattern
+{
+    None,
+    DeployPlacement
+}
+
+public enum MobileFactoryCommandSlot
+{
+    Confirm,
+    Cancel,
+    Auxiliary
+}
+
 public sealed class FactoryItem
 {
     public FactoryItem(int id, BuildPrototypeKind sourceKind)
