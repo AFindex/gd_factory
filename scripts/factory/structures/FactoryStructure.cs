@@ -52,6 +52,11 @@ public abstract partial class FactoryStructure : Node3D
         return false;
     }
 
+    public virtual bool CanAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
+    {
+        return CanReceiveFrom(sourceCell);
+    }
+
     public virtual void RefreshPlacement()
     {
         Position = Site.CellToWorld(Cell);

@@ -1,15 +1,23 @@
 using Godot;
+using System.Diagnostics;
 using System.Collections.Generic;
 
 public partial class SimulationController : Node
 {
     private readonly List<FactoryStructure> _structures = new();
     private double _accumulator;
+    private double _averageStepMilliseconds;
+    private double _lastTopologyRebuildMilliseconds;
     private int _nextItemId = 1;
+    private int _activeTransportItemCount;
 
     public GridManager? WorldGrid { get; private set; }
 
     public float TickAlpha => (float)(_accumulator / FactoryConstants.SimulationStepSeconds);
+    public int RegisteredStructureCount => _structures.Count;
+    public int ActiveTransportItemCount => _activeTransportItemCount;
+    public double AverageStepMilliseconds => _averageStepMilliseconds;
+    public double LastTopologyRebuildMilliseconds => _lastTopologyRebuildMilliseconds;
 
     public void Configure(GridManager grid)
     {
@@ -51,6 +59,7 @@ public partial class SimulationController : Node
 
     public void RebuildTopology()
     {
+        var startTicks = Stopwatch.GetTimestamp();
         for (var i = 0; i < _structures.Count; i++)
         {
             if (_structures[i] is IFactoryTopologyAware topologyAware)
@@ -58,6 +67,8 @@ public partial class SimulationController : Node
                 topologyAware.RefreshTopology();
             }
         }
+
+        _lastTopologyRebuildMilliseconds = Stopwatch.GetElapsedTime(startTicks).TotalMilliseconds;
     }
 
     public override void _PhysicsProcess(double delta)
@@ -66,6 +77,7 @@ public partial class SimulationController : Node
 
         while (_accumulator >= FactoryConstants.SimulationStepSeconds)
         {
+            var stepStartTicks = Stopwatch.GetTimestamp();
             for (var i = 0; i < _structures.Count; i++)
             {
                 if (!_structures[i].Site.IsSimulationActive)
@@ -77,6 +89,29 @@ public partial class SimulationController : Node
             }
 
             _accumulator -= FactoryConstants.SimulationStepSeconds;
+            _activeTransportItemCount = CountTransitItems();
+            _averageStepMilliseconds = SmoothMetric(_averageStepMilliseconds, Stopwatch.GetElapsedTime(stepStartTicks).TotalMilliseconds, 0.18);
         }
+    }
+
+    private int CountTransitItems()
+    {
+        var total = 0;
+        for (var i = 0; i < _structures.Count; i++)
+        {
+            if (_structures[i] is FlowTransportStructure transport)
+            {
+                total += transport.TransitItemCount;
+            }
+        }
+
+        return total;
+    }
+
+    private static double SmoothMetric(double current, double sample, double weight)
+    {
+        return current <= 0.0
+            ? sample
+            : current + ((sample - current) * weight);
     }
 }

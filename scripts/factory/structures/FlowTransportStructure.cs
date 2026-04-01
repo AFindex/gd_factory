@@ -16,7 +16,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure
         public FactoryItem Item { get; }
         public MeshInstance3D Visual { get; }
         public Vector2I SourceCell { get; }
-        public Vector2I TargetCell { get; }
+        public Vector2I TargetCell { get; set; }
         public float Position { get; set; }
         public float PreviousPosition { get; set; }
     }
@@ -30,6 +30,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure
 
     public override bool IsTransportNode => true;
     public int TransitItemCount => _items.Count;
+    protected IList<TransitItemState> TransitItems => _items;
 
     public sealed override bool TryAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
@@ -55,7 +56,23 @@ public abstract partial class FlowTransportStructure : FactoryStructure
         };
         state.Visual.Position = EvaluatePathPoint(state, 0.0f);
         _items.Add(state);
+        OnTransitItemAccepted(state);
         return true;
+    }
+
+    public sealed override bool CanAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
+    {
+        if (!CanReceiveFrom(sourceCell))
+        {
+            return false;
+        }
+
+        if (!TryResolveTargetCell(item, sourceCell, simulation, out _))
+        {
+            return false;
+        }
+
+        return _items.Count == 0 || _items[^1].Position >= ItemSpacing;
     }
 
     public override void SimulationStep(SimulationController simulation, double stepSeconds)
@@ -64,6 +81,8 @@ public abstract partial class FlowTransportStructure : FactoryStructure
         {
             return;
         }
+
+        RefreshTransitTargets(simulation);
 
         var deltaProgress = (float)(stepSeconds * TravelSpeed);
 
@@ -164,6 +183,14 @@ public abstract partial class FlowTransportStructure : FactoryStructure
     protected virtual bool TryDispatchItem(TransitItemState state, SimulationController simulation)
     {
         return simulation.TrySendItem(this, state.TargetCell, state.Item);
+    }
+
+    protected virtual void RefreshTransitTargets(SimulationController simulation)
+    {
+    }
+
+    protected virtual void OnTransitItemAccepted(TransitItemState state)
+    {
     }
 
     protected abstract bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell);

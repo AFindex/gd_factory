@@ -1,5 +1,7 @@
 using Godot;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading.Tasks;
 
 public partial class FactoryDemo : Node3D
 {
@@ -23,6 +25,8 @@ public partial class FactoryDemo : Node3D
     private Node3D? _previewRoot;
     private MeshInstance3D? _previewCell;
     private MeshInstance3D? _previewArrow;
+    private double _averageFrameMilliseconds;
+    private double _averageVisualSyncMilliseconds;
 
     private BuildPrototypeKind _selectedKind = BuildPrototypeKind.Producer;
     private FacingDirection _selectedFacing = FacingDirection.East;
@@ -47,6 +51,7 @@ public partial class FactoryDemo : Node3D
 
     public override void _Process(double delta)
     {
+        _averageFrameMilliseconds = SmoothMetric(_averageFrameMilliseconds, delta * 1000.0, 0.1);
         UpdateHoveredCell();
         UpdatePreview();
         UpdateStructureVisuals();
@@ -174,45 +179,82 @@ public partial class FactoryDemo : Node3D
 
     private void CreateStarterLayout()
     {
-        PlaceStructure(BuildPrototypeKind.Producer, new Vector2I(-4, -2), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(-3, -2), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(-2, -2), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(-1, -2), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Sink, new Vector2I(0, -2), FacingDirection.East);
-
-        PlaceStructure(BuildPrototypeKind.Producer, new Vector2I(2, 0), FacingDirection.South);
-        PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(2, 1), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(3, 1), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Sink, new Vector2I(4, 1), FacingDirection.East);
-
-        PlaceStructure(BuildPrototypeKind.Producer, new Vector2I(-5, 3), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Splitter, new Vector2I(-4, 3), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(-4, 2), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(-4, 4), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Sink, new Vector2I(-3, 2), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Sink, new Vector2I(-3, 4), FacingDirection.East);
-
-        PlaceStructure(BuildPrototypeKind.Producer, new Vector2I(5, -5), FacingDirection.South);
-        PlaceStructure(BuildPrototypeKind.Producer, new Vector2I(5, -3), FacingDirection.North);
-        PlaceStructure(BuildPrototypeKind.Merger, new Vector2I(5, -4), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(6, -4), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Sink, new Vector2I(7, -4), FacingDirection.East);
-
-        PlaceStructure(BuildPrototypeKind.Producer, new Vector2I(-1, 6), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Bridge, new Vector2I(0, 6), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(1, 6), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Sink, new Vector2I(2, 6), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Producer, new Vector2I(0, 4), FacingDirection.South);
-        PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(0, 5), FacingDirection.South);
-        PlaceStructure(BuildPrototypeKind.Sink, new Vector2I(0, 7), FacingDirection.South);
-
-        PlaceStructure(BuildPrototypeKind.Producer, new Vector2I(6, 4), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Unloader, new Vector2I(7, 4), FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Belt, new Vector2I(8, 4), FacingDirection.South);
-        PlaceStructure(BuildPrototypeKind.Loader, new Vector2I(8, 5), FacingDirection.South);
-        PlaceStructure(BuildPrototypeKind.Sink, new Vector2I(8, 6), FacingDirection.South);
+        AddSouthThroughputCorridor();
+        AddWestSplitterFanout();
+        AddCentralBridgeCrossing();
+        AddUpperSplitMergeLoop();
+        AddRelayLoaderUnloaderChain();
 
         RefreshAllTopology();
+    }
+
+    private void AddSouthThroughputCorridor()
+    {
+        PlaceStructure(BuildPrototypeKind.Producer, -8, -7, FacingDirection.East);
+        PlaceBeltRun(new Vector2I(-7, -7), FacingDirection.East, 13);
+        PlaceStructure(BuildPrototypeKind.Sink, 6, -7, FacingDirection.East);
+    }
+
+    private void AddWestSplitterFanout()
+    {
+        PlaceStructure(BuildPrototypeKind.Producer, -8, -2, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, -7, -2, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Splitter, -6, -2, FacingDirection.East);
+
+        PlaceBeltRun(new Vector2I(-6, -3), FacingDirection.East, 3);
+        PlaceStructure(BuildPrototypeKind.Sink, -3, -3, FacingDirection.East);
+
+        PlaceBeltRun(new Vector2I(-6, -1), FacingDirection.East, 3);
+        PlaceStructure(BuildPrototypeKind.Sink, -3, -1, FacingDirection.East);
+    }
+
+    private void AddCentralBridgeCrossing()
+    {
+        PlaceStructure(BuildPrototypeKind.Producer, -2, 0, FacingDirection.East);
+        PlaceBeltRun(new Vector2I(-1, 0), FacingDirection.East, 3);
+        PlaceStructure(BuildPrototypeKind.Bridge, 2, 0, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, 3, 0, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Sink, 4, 0, FacingDirection.East);
+
+        PlaceStructure(BuildPrototypeKind.Producer, 2, -4, FacingDirection.South);
+        PlaceBeltRun(new Vector2I(2, -3), FacingDirection.South, 3);
+        PlaceBeltRun(new Vector2I(2, 1), FacingDirection.South, 2);
+        PlaceStructure(BuildPrototypeKind.Sink, 2, 3, FacingDirection.South);
+    }
+
+    private void AddUpperSplitMergeLoop()
+    {
+        PlaceStructure(BuildPrototypeKind.Producer, -4, 5, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, -3, 5, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Splitter, -2, 5, FacingDirection.East);
+
+        PlaceBeltRun(new Vector2I(-2, 4), FacingDirection.East, 3);
+        PlaceStructure(BuildPrototypeKind.Belt, 1, 4, FacingDirection.South);
+
+        PlaceBeltRun(new Vector2I(-2, 6), FacingDirection.East, 3);
+        PlaceStructure(BuildPrototypeKind.Belt, 1, 6, FacingDirection.North);
+
+        PlaceStructure(BuildPrototypeKind.Merger, 1, 5, FacingDirection.East);
+        PlaceBeltRun(new Vector2I(2, 5), FacingDirection.East, 2);
+        PlaceStructure(BuildPrototypeKind.Sink, 4, 5, FacingDirection.East);
+    }
+
+    private void AddRelayLoaderUnloaderChain()
+    {
+        PlaceStructure(BuildPrototypeKind.Producer, 4, -4, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Unloader, 5, -4, FacingDirection.East);
+        PlaceBeltRun(new Vector2I(6, -4), FacingDirection.South, 3);
+        PlaceStructure(BuildPrototypeKind.Loader, 6, -1, FacingDirection.South);
+        PlaceStructure(BuildPrototypeKind.Sink, 6, 0, FacingDirection.South);
+    }
+
+    private void PlaceBeltRun(Vector2I startCell, FacingDirection facing, int length)
+    {
+        var offset = FactoryDirection.ToCellOffset(facing);
+        for (var index = 0; index < length; index++)
+        {
+            PlaceStructure(BuildPrototypeKind.Belt, startCell + (offset * index), facing);
+        }
     }
 
     private void UpdateHoveredCell()
@@ -275,6 +317,7 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
+        var startTicks = Stopwatch.GetTimestamp();
         var alpha = _simulation.TickAlpha;
         foreach (var child in _structureRoot.GetChildren())
         {
@@ -283,6 +326,8 @@ public partial class FactoryDemo : Node3D
                 structure.UpdateVisuals(alpha);
             }
         }
+
+        _averageVisualSyncMilliseconds = SmoothMetric(_averageVisualSyncMilliseconds, Stopwatch.GetElapsedTime(startTicks).TotalMilliseconds, 0.18);
     }
 
     private void UpdateHud()
@@ -298,29 +343,39 @@ public partial class FactoryDemo : Node3D
         _hud.SetPreviewStatus(_hasHoveredCell && _canPlaceCurrentCell, _previewMessage);
         _hud.SetRotation(_selectedFacing);
 
-        var sink = FindSinkStructure();
-        if (sink is not null)
-        {
-            _hud.SetSinkStats(sink.DeliveredTotal, sink.DeliveredRate);
-        }
+        var sinkStats = CollectSinkStats();
+        _hud.SetSinkStats(sinkStats.deliveredTotal, sinkStats.deliveredRate, sinkStats.sinkCount);
+        _hud.SetProfilerStats(
+            (int)Engine.GetFramesPerSecond(),
+            _averageFrameMilliseconds,
+            _simulation?.RegisteredStructureCount ?? 0,
+            _simulation?.ActiveTransportItemCount ?? 0,
+            _simulation?.AverageStepMilliseconds ?? 0.0,
+            _averageVisualSyncMilliseconds,
+            _simulation?.LastTopologyRebuildMilliseconds ?? 0.0);
     }
 
-    private SinkStructure? FindSinkStructure()
+    private (int deliveredTotal, int deliveredRate, int sinkCount) CollectSinkStats()
     {
         if (_structureRoot is null)
         {
-            return null;
+            return (0, 0, 0);
         }
 
+        var deliveredTotal = 0;
+        var deliveredRate = 0;
+        var sinkCount = 0;
         foreach (var child in _structureRoot.GetChildren())
         {
             if (child is SinkStructure sink)
             {
-                return sink;
+                deliveredTotal += sink.DeliveredTotal;
+                deliveredRate += sink.DeliveredRate;
+                sinkCount++;
             }
         }
 
-        return null;
+        return (deliveredTotal, deliveredRate, sinkCount);
     }
 
     private void PlaceStructure(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
@@ -335,6 +390,11 @@ public partial class FactoryDemo : Node3D
         _grid.PlaceStructure(structure);
         _simulation.RegisterStructure(structure);
         RefreshAllTopology();
+    }
+
+    private void PlaceStructure(BuildPrototypeKind kind, int x, int y, FacingDirection facing)
+    {
+        PlaceStructure(kind, new Vector2I(x, y), facing);
     }
 
     private void RemoveStructure(Vector2I cell)
@@ -526,7 +586,7 @@ public partial class FactoryDemo : Node3D
 
     private async void RunSmokeChecks()
     {
-        if (_grid is null || _cameraRig is null || _cameraRig.Camera is null)
+        if (_grid is null || _cameraRig is null || _cameraRig.Camera is null || _simulation is null)
         {
             GD.PushError("FACTORY_SMOKE_FAILED missing grid or camera rig.");
             GetTree().Quit(1);
@@ -546,19 +606,86 @@ public partial class FactoryDemo : Node3D
         RemoveStructure(probeCell);
         var removed = _grid.CanPlace(probeCell);
 
-        await ToSignal(GetTree().CreateTimer(2.4f), SceneTreeTimer.SignalName.Timeout);
+        var initialStructureCount = _simulation.RegisteredStructureCount;
+        await ToSignal(GetTree().CreateTimer(2.8f), SceneTreeTimer.SignalName.Timeout);
 
-        var sink = FindSinkStructure();
-        var delivered = sink?.DeliveredTotal ?? 0;
+        var sinkStats = CollectSinkStats();
+        var profilerText = _hud?.ProfilerText ?? string.Empty;
+        var splitterFallbackRecovered = await RunSplitterFallbackSmoke();
 
-        if (!placed || !removed || delivered <= 0)
+        if (!placed
+            || !removed
+            || initialStructureCount < 55
+            || sinkStats.deliveredTotal <= 0
+            || string.IsNullOrWhiteSpace(profilerText)
+            || !profilerText.Contains("FPS", global::System.StringComparison.Ordinal)
+            || !splitterFallbackRecovered)
         {
-            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} delivered={delivered}");
+            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} structures={initialStructureCount} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"FACTORY_SMOKE_OK delivered={delivered}");
+        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered}");
         GetTree().Quit();
+    }
+
+    private async Task<bool> RunSplitterFallbackSmoke()
+    {
+        if (_grid is null)
+        {
+            return false;
+        }
+
+        var requiredCells = new[]
+        {
+            new Vector2I(4, 7),
+            new Vector2I(5, 7),
+            new Vector2I(6, 7),
+            new Vector2I(6, 6),
+            new Vector2I(7, 6),
+            new Vector2I(6, 8),
+            new Vector2I(7, 8),
+            new Vector2I(8, 8)
+        };
+
+        foreach (var cell in requiredCells)
+        {
+            if (!_grid.CanPlace(cell))
+            {
+                return false;
+            }
+        }
+
+        PlaceStructure(BuildPrototypeKind.Producer, 4, 7, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, 5, 7, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Splitter, 6, 7, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, 6, 6, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, 7, 6, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, 6, 8, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, 7, 8, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Sink, 8, 8, FacingDirection.East);
+
+        if (!_grid.TryGetStructure(new Vector2I(8, 8), out var sinkStructure) || sinkStructure is not SinkStructure sink
+            || !_grid.TryGetStructure(new Vector2I(7, 6), out var blockerStructure) || blockerStructure is not BeltStructure blockedBelt)
+        {
+            return false;
+        }
+
+        await ToSignal(GetTree().CreateTimer(5.0f), SceneTreeTimer.SignalName.Timeout);
+        var jammed = blockedBelt.TransitItemCount > 0;
+        var deliveredBefore = sink.DeliveredTotal;
+
+        await ToSignal(GetTree().CreateTimer(2.4f), SceneTreeTimer.SignalName.Timeout);
+        var deliveredAfter = sink.DeliveredTotal;
+
+        return jammed && deliveredAfter > deliveredBefore;
+    }
+
+    private static double SmoothMetric(double current, double sample, double weight)
+    {
+        return current <= 0.0
+            ? sample
+            : current + ((sample - current) * weight);
     }
 }

@@ -30,21 +30,20 @@ public partial class SplitterStructure : FlowTransportStructure
         var leftCell = GetLeftOutputCell();
         var rightCell = GetRightOutputCell();
         var preferLeft = _sendLeftNext;
-        _sendLeftNext = !_sendLeftNext;
 
-        if (CanConnectTo(leftCell, simulation) && CanConnectTo(rightCell, simulation))
+        if (CanConnectTo(leftCell) && CanConnectTo(rightCell))
         {
             targetCell = preferLeft ? leftCell : rightCell;
             return true;
         }
 
-        if (CanConnectTo(leftCell, simulation))
+        if (CanConnectTo(leftCell))
         {
             targetCell = leftCell;
             return true;
         }
 
-        if (CanConnectTo(rightCell, simulation))
+        if (CanConnectTo(rightCell))
         {
             targetCell = rightCell;
             return true;
@@ -52,6 +51,62 @@ public partial class SplitterStructure : FlowTransportStructure
 
         targetCell = preferLeft ? leftCell : rightCell;
         return true;
+    }
+
+    protected override void OnTransitItemAccepted(TransitItemState state)
+    {
+        _sendLeftNext = !_sendLeftNext;
+    }
+
+    protected override bool TryDispatchItem(TransitItemState state, SimulationController simulation)
+    {
+        var leftCell = GetLeftOutputCell();
+        var rightCell = GetRightOutputCell();
+        var primaryCell = state.TargetCell == rightCell ? rightCell : leftCell;
+        var secondaryCell = primaryCell == leftCell ? rightCell : leftCell;
+        var primaryAvailable = CanRouteToNow(primaryCell, state.Item, simulation);
+        var secondaryAvailable = CanRouteToNow(secondaryCell, state.Item, simulation);
+
+        if (primaryAvailable)
+        {
+            state.TargetCell = primaryCell;
+            if (simulation.TrySendItem(this, primaryCell, state.Item))
+            {
+                return true;
+            }
+        }
+
+        if (secondaryAvailable)
+        {
+            state.TargetCell = secondaryCell;
+            if (simulation.TrySendItem(this, secondaryCell, state.Item))
+            {
+                return true;
+            }
+        }
+
+        if (!primaryAvailable && secondaryAvailable)
+        {
+            state.TargetCell = secondaryCell;
+        }
+        else if (!secondaryAvailable)
+        {
+            state.TargetCell = primaryCell;
+        }
+
+        return false;
+    }
+
+    protected override void RefreshTransitTargets(SimulationController simulation)
+    {
+        for (var index = 0; index < TransitItems.Count; index++)
+        {
+            var state = TransitItems[index];
+            if (TryResolveDynamicTarget(state.TargetCell, state.Item, simulation, out var targetCell))
+            {
+                state.TargetCell = targetCell;
+            }
+        }
     }
 
     protected override Vector3 EvaluatePathPoint(TransitItemState state, float progress)
@@ -78,10 +133,36 @@ public partial class SplitterStructure : FlowTransportStructure
         return Cell + FactoryDirection.ToCellOffset(FactoryDirection.RotateClockwise(Facing));
     }
 
-    private bool CanConnectTo(Vector2I cell, SimulationController simulation)
+    private bool TryResolveDynamicTarget(Vector2I currentTargetCell, FactoryItem item, SimulationController simulation, out Vector2I targetCell)
+    {
+        var leftCell = GetLeftOutputCell();
+        var rightCell = GetRightOutputCell();
+        var preferredCell = currentTargetCell == rightCell ? rightCell : leftCell;
+        var alternateCell = preferredCell == leftCell ? rightCell : leftCell;
+        var preferredAvailable = CanRouteToNow(preferredCell, item, simulation);
+        var alternateAvailable = CanRouteToNow(alternateCell, item, simulation);
+
+        if (preferredAvailable || !alternateAvailable)
+        {
+            targetCell = preferredCell;
+            return true;
+        }
+
+        targetCell = alternateCell;
+        return true;
+    }
+
+    private bool CanConnectTo(Vector2I cell)
     {
         return Site.TryGetStructure(cell, out var structure)
             && structure is not null
             && structure.CanReceiveFrom(Cell);
+    }
+
+    private bool CanRouteToNow(Vector2I cell, FactoryItem item, SimulationController simulation)
+    {
+        return Site.TryGetStructure(cell, out var structure)
+            && structure is not null
+            && structure.CanAcceptItem(item, Cell, simulation);
     }
 }
