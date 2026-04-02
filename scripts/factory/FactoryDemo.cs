@@ -880,6 +880,7 @@ public partial class FactoryDemo : Node3D
         var sinkStats = CollectSinkStats();
         var profilerText = _hud?.ProfilerText ?? string.Empty;
         var splitterFallbackRecovered = await RunSplitterFallbackSmoke();
+        var bridgeLaneRecovered = await RunBridgeLaneIndependenceSmoke();
         var storageFlowVerified = await RunStorageInserterSmoke();
         var inspectionVerified = VerifyStorageInspectionPanel();
 
@@ -890,15 +891,16 @@ public partial class FactoryDemo : Node3D
             || string.IsNullOrWhiteSpace(profilerText)
             || !profilerText.Contains("FPS", global::System.StringComparison.Ordinal)
             || !splitterFallbackRecovered
+            || !bridgeLaneRecovered
             || !storageFlowVerified
             || !inspectionVerified)
         {
-            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} structures={initialStructureCount} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified}");
+            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} structures={initialStructureCount} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified}");
+        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified}");
         GetTree().Quit();
     }
 
@@ -949,6 +951,52 @@ public partial class FactoryDemo : Node3D
         var deliveredAfter = sink.DeliveredTotal;
 
         return blockedBranchOccupied || deliveredAfter > 0;
+    }
+
+    private async Task<bool> RunBridgeLaneIndependenceSmoke()
+    {
+        if (_grid is null)
+        {
+            return false;
+        }
+
+        var requiredCells = new[]
+        {
+            new Vector2I(7, 2),
+            new Vector2I(8, 2),
+            new Vector2I(9, 2),
+            new Vector2I(10, 2),
+            new Vector2I(9, 0),
+            new Vector2I(9, 1),
+            new Vector2I(9, 3)
+        };
+
+        foreach (var cell in requiredCells)
+        {
+            if (!_grid.CanPlace(cell))
+            {
+                return false;
+            }
+        }
+
+        PlaceStructure(BuildPrototypeKind.Producer, 7, 2, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, 8, 2, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Bridge, 9, 2, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Sink, 10, 2, FacingDirection.East);
+
+        PlaceStructure(BuildPrototypeKind.Producer, 9, 0, FacingDirection.South);
+        PlaceStructure(BuildPrototypeKind.Belt, 9, 1, FacingDirection.South);
+        PlaceStructure(BuildPrototypeKind.Belt, 9, 3, FacingDirection.South);
+
+        if (!_grid.TryGetStructure(new Vector2I(10, 2), out var sinkStructure) || sinkStructure is not SinkStructure sink
+            || !_grid.TryGetStructure(new Vector2I(9, 3), out var blockedStructure) || blockedStructure is not BeltStructure blockedBelt)
+        {
+            return false;
+        }
+
+        await ToSignal(GetTree().CreateTimer(6.0f), SceneTreeTimer.SignalName.Timeout);
+
+        return sink.DeliveredTotal > 0 && blockedBelt.TransitItemCount > 0;
     }
 
     private async Task<bool> RunStorageInserterSmoke()

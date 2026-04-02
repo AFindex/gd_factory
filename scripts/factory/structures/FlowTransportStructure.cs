@@ -11,12 +11,14 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
             Visual = visual;
             SourceCell = sourceCell;
             TargetCell = targetCell;
+            LaneKey = 0;
         }
 
         public FactoryItem Item { get; }
         public MeshInstance3D Visual { get; }
         public Vector2I SourceCell { get; }
         public Vector2I TargetCell { get; set; }
+        public int LaneKey { get; set; }
         public float Position { get; set; }
         public float PreviousPosition { get; set; }
     }
@@ -45,13 +47,16 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
             return false;
         }
 
-        if (_items.Count > 0 && _items[^1].Position < ItemSpacing)
+        var laneKey = GetTransitLaneKey(sourceCell, targetCell);
+        var tailIndex = FindLastItemIndexInLane(laneKey);
+        if (tailIndex >= 0 && _items[tailIndex].Position < ItemSpacing)
         {
             return false;
         }
 
         var state = new TransitItemState(item, CreateTransitVisual(), sourceCell, targetCell)
         {
+            LaneKey = laneKey,
             Position = 0.0f,
             PreviousPosition = 0.0f
         };
@@ -68,12 +73,14 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
             return false;
         }
 
-        if (!TryResolveTargetCell(item, sourceCell, simulation, out _))
+        if (!TryResolveTargetCell(item, sourceCell, simulation, out var targetCell))
         {
             return false;
         }
 
-        return _items.Count == 0 || _items[^1].Position >= ItemSpacing;
+        var laneKey = GetTransitLaneKey(sourceCell, targetCell);
+        var tailIndex = FindLastItemIndexInLane(laneKey);
+        return tailIndex < 0 || _items[tailIndex].Position >= ItemSpacing;
     }
 
     public bool TryPeekProvidedItem(Vector2I requesterCell, SimulationController simulation, out FactoryItem? item)
@@ -85,12 +92,12 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
             return false;
         }
 
-        var state = _items[0];
-        if (state.Position < ProviderPickupThreshold || !CanRequesterTakeState(state, requesterCell))
+        if (!TryFindProvidedStateIndex(requesterCell, out var stateIndex))
         {
             return false;
         }
 
+        var state = _items[stateIndex];
         item = state.Item;
         return true;
     }
@@ -104,9 +111,15 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
             return false;
         }
 
+        if (!TryFindProvidedStateIndex(requesterCell, out var stateIndex))
+        {
+            item = null;
+            return false;
+        }
+
         item = previewItem;
-        _items[0].Visual.QueueFree();
-        _items.RemoveAt(0);
+        _items[stateIndex].Visual.QueueFree();
+        _items.RemoveAt(stateIndex);
         return true;
     }
 
@@ -117,12 +130,14 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
             return false;
         }
 
-        if (!TryResolveTargetCell(item, sourceCell, simulation, out _))
+        if (!TryResolveTargetCell(item, sourceCell, simulation, out var targetCell))
         {
             return false;
         }
 
-        return _items.Count == 0 || _items[^1].Position >= ItemSpacing;
+        var laneKey = GetTransitLaneKey(sourceCell, targetCell);
+        var tailIndex = FindLastItemIndexInLane(laneKey);
+        return tailIndex < 0 || _items[tailIndex].Position >= ItemSpacing;
     }
 
     public bool TryReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
@@ -137,13 +152,16 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
             return false;
         }
 
-        if (_items.Count > 0 && _items[^1].Position < ItemSpacing)
+        var laneKey = GetTransitLaneKey(sourceCell, targetCell);
+        var tailIndex = FindLastItemIndexInLane(laneKey);
+        if (tailIndex >= 0 && _items[tailIndex].Position < ItemSpacing)
         {
             return false;
         }
 
         var state = new TransitItemState(item, CreateTransitVisual(), sourceCell, targetCell)
         {
+            LaneKey = laneKey,
             Position = 0.0f,
             PreviousPosition = 0.0f
         };
@@ -161,6 +179,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         }
 
         RefreshTransitTargets(simulation);
+        RefreshTransitLanes();
 
         var deltaProgress = (float)(stepSeconds * TravelSpeed);
 
@@ -173,8 +192,9 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         {
             var itemState = _items[i];
             var desired = itemState.Position + deltaProgress;
+            var previousLaneIndex = FindPreviousItemIndexInLane(i, itemState.LaneKey);
 
-            if (i == 0)
+            if (previousLaneIndex < 0)
             {
                 if (desired >= 1.0f)
                 {
@@ -191,7 +211,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
             }
             else
             {
-                desired = Mathf.Min(desired, _items[i - 1].Position - ItemSpacing);
+                desired = Mathf.Min(desired, _items[previousLaneIndex].Position - ItemSpacing);
             }
 
             itemState.Position = Mathf.Clamp(desired, 0.0f, 1.0f);
@@ -281,9 +301,73 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         return state.TargetCell == requesterCell;
     }
 
+    protected virtual int GetTransitLaneKey(Vector2I sourceCell, Vector2I targetCell)
+    {
+        return 0;
+    }
+
     protected virtual bool CanReceiveProvidedFrom(Vector2I sourceCell)
     {
         return CanReceiveFrom(sourceCell);
+    }
+
+    private void RefreshTransitLanes()
+    {
+        for (var i = 0; i < _items.Count; i++)
+        {
+            _items[i].LaneKey = GetTransitLaneKey(_items[i].SourceCell, _items[i].TargetCell);
+        }
+    }
+
+    private int FindLastItemIndexInLane(int laneKey)
+    {
+        for (var i = _items.Count - 1; i >= 0; i--)
+        {
+            if (_items[i].LaneKey == laneKey)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private int FindPreviousItemIndexInLane(int index, int laneKey)
+    {
+        for (var i = index - 1; i >= 0; i--)
+        {
+            if (_items[i].LaneKey == laneKey)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private bool TryFindProvidedStateIndex(Vector2I requesterCell, out int stateIndex)
+    {
+        stateIndex = -1;
+        var furthestProgress = float.MinValue;
+
+        for (var i = 0; i < _items.Count; i++)
+        {
+            var state = _items[i];
+            if (state.Position < ProviderPickupThreshold || !CanRequesterTakeState(state, requesterCell))
+            {
+                continue;
+            }
+
+            if (state.Position <= furthestProgress)
+            {
+                continue;
+            }
+
+            furthestProgress = state.Position;
+            stateIndex = i;
+        }
+
+        return stateIndex >= 0;
     }
 
     protected abstract bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell);

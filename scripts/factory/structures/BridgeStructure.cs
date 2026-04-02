@@ -32,4 +32,10 @@ public partial class BridgeStructure : FlowTransportStructure
         targetCell = Cell + (Cell - sourceCell);
         return true;
     }
+
+    protected override int GetTransitLaneKey(Vector2I sourceCell, Vector2I targetCell)
+    {
+        var inputDelta = sourceCell - Cell;
+        return Mathf.Abs(inputDelta.X) > 0 ? 0 : 1;
+    }
 }
