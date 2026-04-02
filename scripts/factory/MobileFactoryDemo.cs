@@ -105,6 +105,7 @@ public partial class MobileFactoryDemo : Node3D
     private bool _hoveringEditorPane;
     private bool _hoveringEditorViewport;
     private Vector2 _mousePosition = Vector2.Zero;
+    private Vector2 _editorCameraLocalOffset = Vector2.Zero;
 
     public override void _Ready()
     {
@@ -660,8 +661,7 @@ public partial class MobileFactoryDemo : Node3D
     {
         if (Input.IsActionJustPressed("toggle_mobile_editor"))
         {
-            _editorOpen = !_editorOpen;
-            _hud?.SetEditorOpen(_editorOpen);
+            SetEditorOpenState(!_editorOpen);
             FocusFactoryForCurrentMode();
         }
 
@@ -753,8 +753,7 @@ public partial class MobileFactoryDemo : Node3D
 
         if (keyEvent.Keycode == Key.Escape)
         {
-            _editorOpen = false;
-            _hud?.SetEditorOpen(false);
+            SetEditorOpenState(false);
             FocusFactoryForCurrentMode();
             return true;
         }
@@ -1102,9 +1101,38 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
+        var suggestedSize = _mobileFactory.GetSuggestedEditorCameraSize();
+        _editorCamera.Size = Mathf.Clamp(_editorCamera.Size, 2.6f, Mathf.Max(6.0f, suggestedSize + 1.4f));
+
+        if (CanUseEditorInput())
+        {
+            var panInput = new Vector2(
+                Input.GetActionStrength("camera_pan_right") - Input.GetActionStrength("camera_pan_left"),
+                Input.GetActionStrength("camera_pan_down") - Input.GetActionStrength("camera_pan_up"));
+
+            if (panInput.LengthSquared() > 1.0f)
+            {
+                panInput = panInput.Normalized();
+            }
+
+            var panSpeed = Mathf.Max(suggestedSize * 1.8f, _mobileFactory.Profile.InteriorCellSize * 5.5f);
+            _editorCameraLocalOffset += panInput * panSpeed * (float)GetProcessDeltaTime();
+        }
+
+        var panLimitX = Mathf.Max(
+            _mobileFactory.Profile.InteriorWidth * _mobileFactory.Profile.InteriorCellSize * 0.5f,
+            _mobileFactory.Profile.InteriorCellSize * 1.75f);
+        var panLimitY = Mathf.Max(
+            _mobileFactory.Profile.InteriorHeight * _mobileFactory.Profile.InteriorCellSize * 0.5f,
+            _mobileFactory.Profile.InteriorCellSize * 1.75f);
+        _editorCameraLocalOffset = new Vector2(
+            Mathf.Clamp(_editorCameraLocalOffset.X, -panLimitX, panLimitX),
+            Mathf.Clamp(_editorCameraLocalOffset.Y, -panLimitY, panLimitY));
+
         var focus = _mobileFactory.GetEditorFocusWorldCenter();
-        _editorCamera.Size = _mobileFactory.GetSuggestedEditorCameraSize();
-        _editorCamera.Position = focus + new Vector3(0.0f, _editorCamera.Size * 1.8f, 0.0f);
+        var worldOffset = new Vector3(_editorCameraLocalOffset.X, 0.0f, _editorCameraLocalOffset.Y)
+            .Rotated(Vector3.Up, _mobileFactory.InteriorSite.WorldRotationRadians);
+        _editorCamera.Position = focus + worldOffset + new Vector3(0.0f, _editorCamera.Size * 1.8f, 0.0f);
         _editorCamera.Rotation = new Vector3(-Mathf.Pi * 0.5f, _mobileFactory.InteriorSite.WorldRotationRadians, 0.0f);
     }
 
@@ -1343,7 +1371,10 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        _editorCamera.Size = Mathf.Clamp(_editorCamera.Size + delta, 2.6f, 6.0f);
+        var maxZoom = _mobileFactory is null
+            ? 6.0f
+            : Mathf.Max(6.0f, _mobileFactory.GetSuggestedEditorCameraSize() + 1.4f);
+        _editorCamera.Size = Mathf.Clamp(_editorCamera.Size + delta, 2.6f, maxZoom);
     }
 
     private bool TryProjectEditorMouseToInterior(out Vector3 worldPosition)
@@ -1444,6 +1475,24 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         FocusWorldCenterOnFactory();
+    }
+
+    private void SetEditorOpenState(bool isOpen)
+    {
+        _editorOpen = isOpen;
+        _hud?.SetEditorOpen(isOpen);
+
+        if (!isOpen)
+        {
+            _editorCameraLocalOffset = Vector2.Zero;
+            return;
+        }
+
+        _editorCameraLocalOffset = Vector2.Zero;
+        if (_editorCamera is not null && _mobileFactory is not null)
+        {
+            _editorCamera.Size = _mobileFactory.GetSuggestedEditorCameraSize();
+        }
     }
 
     private int CountEditableInteriorStructures()
@@ -1730,8 +1779,7 @@ public partial class MobileFactoryDemo : Node3D
         _mobileFactory.ApplyTransitInput(_grid, 1.0f, -1.0f, 0.5);
         var movedInTransit = _mobileFactory.WorldFocusPoint.DistanceTo(initialPosition) > 0.05f;
 
-        _editorOpen = true;
-        _hud.SetEditorOpen(true);
+        SetEditorOpenState(true);
         await ToSignal(GetTree().CreateTimer(0.35f), SceneTreeTimer.SignalName.Timeout);
 
         var openedInTransit = _hud.IsEditorVisible;
@@ -1767,8 +1815,7 @@ public partial class MobileFactoryDemo : Node3D
         var contextualRotateWorks = _selectedDeployFacing == FacingDirection.South;
         _selectedDeployFacing = FacingDirection.East;
 
-        _editorOpen = false;
-        _hud.SetEditorOpen(false);
+        SetEditorOpenState(false);
         SetControlMode(MobileFactoryControlMode.DeployPreview);
         _selectedDeployFacing = FacingDirection.East;
         _hoveredAnchor = AnchorA;
@@ -1781,8 +1828,7 @@ public partial class MobileFactoryDemo : Node3D
         _mobileFactory.ApplyTransitInput(_grid, 1.0f, 1.0f, 0.6);
         var moveRejectedWhileDeployed = _mobileFactory.WorldFocusPoint.DistanceTo(moveWhileDeployedStart) < 0.01f;
         await ToSignal(GetTree().CreateTimer(4.5f), SceneTreeTimer.SignalName.Timeout);
-        _editorOpen = true;
-        _hud.SetEditorOpen(true);
+        SetEditorOpenState(true);
         await ToSignal(GetTree().CreateTimer(0.35f), SceneTreeTimer.SignalName.Timeout);
         var openedWhileDeployed = _hud.IsEditorVisible;
         var portConnected = _mobileFactory.HasConnectedAttachment(BuildPrototypeKind.OutputPort);
@@ -1794,8 +1840,7 @@ public partial class MobileFactoryDemo : Node3D
         var inputAttachmentTransit = _mobileFactory.CountAttachmentTransitItems(BuildPrototypeKind.InputPort);
         var inputDeliveredWhileDeployed = (inputSinkInTransit?.DeliveredTotal ?? 0) > inputSinkTransitBaseline;
 
-        _editorOpen = false;
-        _hud.SetEditorOpen(false);
+        SetEditorOpenState(false);
         var blockedOutputBeforeRecall = _mobileFactory.CountAttachmentTransitItems(BuildPrototypeKind.OutputPort, onlyDisconnected: true);
         var deployedPositionBeforeRecall = _mobileFactory.WorldFocusPoint;
         var recalled = _mobileFactory.ReturnToTransitMode();
@@ -1876,12 +1921,10 @@ public partial class MobileFactoryDemo : Node3D
         _mobileFactory.ApplyTransitInput(_grid, 1.0f, -1.0f, 0.5);
         var playerMoved = _mobileFactory.WorldFocusPoint.DistanceTo(playerStartPosition) > 0.05f;
 
-        _editorOpen = true;
-        _hud.SetEditorOpen(true);
+        SetEditorOpenState(true);
         await ToSignal(GetTree().CreateTimer(0.35f), SceneTreeTimer.SignalName.Timeout);
         var editorVisible = _hud.IsEditorVisible;
-        _editorOpen = false;
-        _hud.SetEditorOpen(false);
+        SetEditorOpenState(false);
         _mobileFactory.TryGetInteriorStructure(new Vector2I(1, 3), out var playerInputSinkStructure);
         var playerInputSink = playerInputSinkStructure as SinkStructure;
         var playerInputDeliveredBaseline = playerInputSink?.DeliveredTotal ?? 0;
@@ -1981,7 +2024,7 @@ public partial class MobileFactoryDemo : Node3D
         {
             MobileFactoryControlMode.Observer => "观察模式：WASD/方向键移动相机 | 滚轮缩放 | Tab 返回工厂控制 | F 内部编辑",
             MobileFactoryControlMode.DeployPreview => "部署预览：左键确认 | Q/E/R 旋转朝向 | G/Esc 取消 | F 内部编辑",
-            _ => "工厂控制：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器用 1-0/-/= 选建筑/端口"
+            _ => "工厂控制：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器内 WASD 平移相机、滚轮缩放、1-0/-/= 选建筑/端口"
         };
     }
 

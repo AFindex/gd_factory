@@ -47,6 +47,7 @@ public partial class MobileFactoryHud : CanvasLayer
 
     private static readonly Color EditorFocusColor = new("7DD3FC");
     private static readonly Color WorldFocusColor = new("FDE68A");
+    private const float EditorSidebarWidth = 292.0f;
 
     public SubViewport EditorViewport => _editorViewport!;
     public bool IsEditorVisible => _editorProgress > 0.01f;
@@ -348,19 +349,43 @@ public partial class MobileFactoryHud : CanvasLayer
         AddChild(panel);
         _editorPanel = panel;
 
+        var chrome = new MarginContainer();
+        chrome.MouseFilter = Control.MouseFilterEnum.Pass;
+        chrome.AddThemeConstantOverride("margin_left", 10);
+        chrome.AddThemeConstantOverride("margin_top", 10);
+        chrome.AddThemeConstantOverride("margin_right", 10);
+        chrome.AddThemeConstantOverride("margin_bottom", 10);
+        panel.AddChild(chrome);
+
         var body = new VBoxContainer();
         body.MouseFilter = Control.MouseFilterEnum.Pass;
         body.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         body.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
-        body.AddThemeConstantOverride("separation", 8);
-        panel.AddChild(body);
+        body.AddThemeConstantOverride("separation", 0);
+        chrome.AddChild(body);
         _editorBody = body;
 
-        _editorModeLabel = CreateEditorLabel(body);
-        _selectionLabel = CreateEditorLabel(body);
-        _editorPreviewLabel = CreateEditorLabel(body);
-        _portStatusLabel = CreateEditorLabel(body);
-        BuildEditorToolbar(body);
+        var row = new HBoxContainer();
+        row.MouseFilter = Control.MouseFilterEnum.Pass;
+        row.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        row.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        row.AddThemeConstantOverride("separation", 10);
+        body.AddChild(row);
+
+        var viewportPanel = new PanelContainer();
+        viewportPanel.MouseFilter = Control.MouseFilterEnum.Pass;
+        viewportPanel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        viewportPanel.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        viewportPanel.AddThemeStyleboxOverride("panel", CreatePanelStyle(new Color("2A4E66")));
+        row.AddChild(viewportPanel);
+
+        var viewportMargin = new MarginContainer();
+        viewportMargin.MouseFilter = Control.MouseFilterEnum.Pass;
+        viewportMargin.AddThemeConstantOverride("margin_left", 8);
+        viewportMargin.AddThemeConstantOverride("margin_top", 8);
+        viewportMargin.AddThemeConstantOverride("margin_right", 8);
+        viewportMargin.AddThemeConstantOverride("margin_bottom", 8);
+        viewportPanel.AddChild(viewportMargin);
 
         var viewport = new SubViewport();
         viewport.TransparentBg = false;
@@ -374,8 +399,42 @@ public partial class MobileFactoryHud : CanvasLayer
         viewportRect.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
         viewportRect.MouseFilter = Control.MouseFilterEnum.Ignore;
         viewportRect.Texture = viewport.GetTexture();
-        body.AddChild(viewportRect);
+        viewportMargin.AddChild(viewportRect);
         _editorViewportRect = viewportRect;
+
+        var sidebarPanel = new PanelContainer();
+        sidebarPanel.MouseFilter = Control.MouseFilterEnum.Pass;
+        sidebarPanel.CustomMinimumSize = new Vector2(EditorSidebarWidth, 0.0f);
+        sidebarPanel.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        sidebarPanel.AddThemeStyleboxOverride("panel", CreatePanelStyle(new Color("3F6D8D")));
+        row.AddChild(sidebarPanel);
+
+        var sidebarMargin = new MarginContainer();
+        sidebarMargin.MouseFilter = Control.MouseFilterEnum.Pass;
+        sidebarMargin.AddThemeConstantOverride("margin_left", 10);
+        sidebarMargin.AddThemeConstantOverride("margin_top", 10);
+        sidebarMargin.AddThemeConstantOverride("margin_right", 10);
+        sidebarMargin.AddThemeConstantOverride("margin_bottom", 10);
+        sidebarPanel.AddChild(sidebarMargin);
+
+        var sidebar = new VBoxContainer();
+        sidebar.MouseFilter = Control.MouseFilterEnum.Pass;
+        sidebar.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        sidebar.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        sidebar.AddThemeConstantOverride("separation", 6);
+        sidebarMargin.AddChild(sidebar);
+
+        var editorTitle = CreateEditorLabel(sidebar, 18, Colors.White);
+        editorTitle.Text = "内部建造";
+
+        var editorNote = CreateEditorLabel(sidebar, 12, new Color("8FD3FF"));
+        editorNote.Text = "右侧管理建造与状态，左侧保留编辑视口。";
+
+        _editorModeLabel = CreateEditorLabel(sidebar, 12, new Color("D7E6F2"));
+        _selectionLabel = CreateEditorLabel(sidebar, 12, new Color("FDE68A"));
+        _editorPreviewLabel = CreateEditorLabel(sidebar, 12, new Color("D7E6F2"));
+        _portStatusLabel = CreateEditorLabel(sidebar, 12, new Color("FDE68A"));
+        BuildEditorToolbar(sidebar);
 
         AddChild(viewport);
     }
@@ -390,14 +449,13 @@ public partial class MobileFactoryHud : CanvasLayer
         var viewportSize = GetViewport().GetVisibleRect().Size;
         var margin = new Vector2(18.0f, 18.0f);
         var worldWidth = viewportSize.X / 6.0f;
-        var infoWidth = Mathf.Max(300.0f, viewportSize.X / 6.0f - margin.X * 2.0f);
-        var infoHeight = Mathf.Max(280.0f, viewportSize.Y * 0.35f);
+        var infoWidth = Mathf.Clamp(viewportSize.X * 0.24f, 270.0f, 340.0f);
+        var infoHeight = Mathf.Clamp(viewportSize.Y * 0.31f, 220.0f, 300.0f);
 
         _worldFocusFrame.Position = Vector2.Zero;
         _worldFocusFrame.Size = new Vector2(worldWidth, viewportSize.Y);
-        _infoPanel.Position = margin;
         _infoPanel.Size = new Vector2(infoWidth, infoHeight);
-        _infoPanel.Visible = _editorProgress < 0.01f;
+        UpdateInfoPanelTransition(margin);
 
         var editorWidth = viewportSize.X * 5.0f / 6.0f;
         var closedLeft = viewportSize.X + 12.0f;
@@ -408,7 +466,7 @@ public partial class MobileFactoryHud : CanvasLayer
         _editorPanel.Size = new Vector2(editorWidth, viewportSize.Y);
         _editorViewportRect.CustomMinimumSize = new Vector2(
             320.0f,
-            Mathf.Max(240.0f, viewportSize.Y - 220.0f));
+            Mathf.Max(240.0f, viewportSize.Y - 36.0f));
 
         var viewportSize2D = new Vector2I(
             Mathf.Max(320, Mathf.RoundToInt(_editorViewportRect.Size.X)),
@@ -422,6 +480,24 @@ public partial class MobileFactoryHud : CanvasLayer
         RefreshFocusVisuals();
     }
 
+    private void UpdateInfoPanelTransition(Vector2 basePosition)
+    {
+        if (_infoPanel is null || _infoBody is null)
+        {
+            return;
+        }
+
+        var visibility = 1.0f - Mathf.SmoothStep(0.0f, 1.0f, _editorProgress);
+        var hiddenOffset = new Vector2(-54.0f, 0.0f);
+        _infoPanel.Position = basePosition + hiddenOffset * (1.0f - visibility);
+        _infoPanel.Modulate = new Color(1.0f, 1.0f, 1.0f, visibility);
+        _infoPanel.Visible = visibility > 0.015f;
+
+        var canInteract = visibility > 0.985f;
+        _infoPanel.MouseFilter = canInteract ? Control.MouseFilterEnum.Pass : Control.MouseFilterEnum.Ignore;
+        _infoBody.MouseFilter = canInteract ? Control.MouseFilterEnum.Pass : Control.MouseFilterEnum.Ignore;
+    }
+
     private static Label CreateInfoLabel(Container parent)
     {
         var label = new Label();
@@ -431,11 +507,13 @@ public partial class MobileFactoryHud : CanvasLayer
         return label;
     }
 
-    private static Label CreateEditorLabel(Container parent)
+    private static Label CreateEditorLabel(Container parent, int fontSize = 13, Color? color = null)
     {
         var label = new Label();
         label.MouseFilter = Control.MouseFilterEnum.Ignore;
         label.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        label.AddThemeFontSizeOverride("font_size", fontSize);
+        label.Modulate = color ?? new Color("D7E6F2");
         parent.AddChild(label);
         return label;
     }
@@ -443,9 +521,9 @@ public partial class MobileFactoryHud : CanvasLayer
     private void BuildEditorToolbar(Container parent)
     {
         var paletteGrid = new GridContainer();
-        paletteGrid.Columns = 4;
-        paletteGrid.AddThemeConstantOverride("h_separation", 8);
-        paletteGrid.AddThemeConstantOverride("v_separation", 8);
+        paletteGrid.Columns = 3;
+        paletteGrid.AddThemeConstantOverride("h_separation", 6);
+        paletteGrid.AddThemeConstantOverride("v_separation", 6);
         parent.AddChild(paletteGrid);
 
         foreach (var kind in EditorPalette)
@@ -453,25 +531,30 @@ public partial class MobileFactoryHud : CanvasLayer
             var button = new Button();
             button.Text = GetKindLabel(kind);
             button.ToggleMode = true;
-            button.CustomMinimumSize = new Vector2(96.0f, 34.0f);
+            button.CustomMinimumSize = new Vector2(82.0f, 28.0f);
+            button.AddThemeFontSizeOverride("font_size", 11);
             button.Pressed += () => EditorPaletteSelected?.Invoke(kind);
             paletteGrid.AddChild(button);
             _paletteButtons[kind] = button;
         }
 
         var rotateRow = new HBoxContainer();
-        rotateRow.AddThemeConstantOverride("separation", 8);
+        rotateRow.AddThemeConstantOverride("separation", 6);
         parent.AddChild(rotateRow);
 
         var rotateLeft = new Button();
         rotateLeft.Text = "旋左";
-        rotateLeft.CustomMinimumSize = new Vector2(92.0f, 30.0f);
+        rotateLeft.CustomMinimumSize = new Vector2(0.0f, 28.0f);
+        rotateLeft.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        rotateLeft.AddThemeFontSizeOverride("font_size", 11);
         rotateLeft.Pressed += () => EditorRotateRequested?.Invoke(-1);
         rotateRow.AddChild(rotateLeft);
 
         var rotateRight = new Button();
         rotateRight.Text = "旋右";
-        rotateRight.CustomMinimumSize = new Vector2(92.0f, 30.0f);
+        rotateRight.CustomMinimumSize = new Vector2(0.0f, 28.0f);
+        rotateRight.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        rotateRight.AddThemeFontSizeOverride("font_size", 11);
         rotateRight.Pressed += () => EditorRotateRequested?.Invoke(1);
         rotateRow.AddChild(rotateRight);
     }
