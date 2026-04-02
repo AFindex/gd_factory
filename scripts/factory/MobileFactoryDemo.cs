@@ -16,6 +16,8 @@ public partial class MobileFactoryDemo : Node3D
         BuildPrototypeKind.Splitter,
         BuildPrototypeKind.Merger,
         BuildPrototypeKind.Sink,
+        BuildPrototypeKind.Storage,
+        BuildPrototypeKind.Inserter,
         BuildPrototypeKind.OutputPort,
         BuildPrototypeKind.InputPort
     };
@@ -30,6 +32,8 @@ public partial class MobileFactoryDemo : Node3D
         [BuildPrototypeKind.Splitter] = new BuildPrototypeDefinition(BuildPrototypeKind.Splitter, "分流器", new Color("C4B5FD"), "将后方输入分到左右两路。"),
         [BuildPrototypeKind.Merger] = new BuildPrototypeDefinition(BuildPrototypeKind.Merger, "合并器", new Color("99F6E4"), "把左右两路物流汇成前方一路。"),
         [BuildPrototypeKind.Sink] = new BuildPrototypeDefinition(BuildPrototypeKind.Sink, "回收器", new Color("FDE68A"), "吞掉输入物品并作为内部消费端。"),
+        [BuildPrototypeKind.Storage] = new BuildPrototypeDefinition(BuildPrototypeKind.Storage, "仓储", new Color("94A3B8"), "缓存多件物品，可向前输出，也能被机械臂抓取。"),
+        [BuildPrototypeKind.Inserter] = new BuildPrototypeDefinition(BuildPrototypeKind.Inserter, "机械臂", new Color("FACC15"), "从后方抓取一件物品并向前投送。"),
         [BuildPrototypeKind.OutputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.OutputPort, "输出端口", new Color("FB923C"), "将移动工厂内部物流送往世界网格。"),
         [BuildPrototypeKind.InputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.InputPort, "输入端口", new Color("60A5FA"), "把世界侧物流导入移动工厂内部。")
     };
@@ -666,6 +670,18 @@ public partial class MobileFactoryDemo : Node3D
         if (keyEvent.Keycode == Key.Key7)
         {
             _selectedInteriorKind = InteriorPalette[6];
+            return true;
+        }
+
+        if (keyEvent.Keycode == Key.Key8)
+        {
+            _selectedInteriorKind = InteriorPalette[7];
+            return true;
+        }
+
+        if (keyEvent.Keycode == Key.Key9)
+        {
+            _selectedInteriorKind = InteriorPalette[8];
             return true;
         }
 
