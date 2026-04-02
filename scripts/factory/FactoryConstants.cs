@@ -18,7 +18,9 @@ public static class FactoryConstants
     public const float GunTurretCooldownSeconds = 0.42f;
     public const int GunTurretAmmoCapacity = 10;
     public const float GunTurretDamage = 18.0f;
-    public const float GunTurretTurnSpeed = 6.2f;
+    public const float GunTurretReturnSpeed = 6.2f;
+    public const float GunTurretTrackingSpeed = 12.5f;
+    public const float GunTurretAimToleranceRadians = 0.22f;
     public const float GunTurretTracerLifetime = 0.12f;
     public const float GunTurretMuzzleFlashLifetime = 0.08f;
     public const float AmmoAssemblerSpawnSeconds = 0.85f;

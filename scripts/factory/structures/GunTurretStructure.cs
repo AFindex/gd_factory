@@ -18,6 +18,7 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
     private double _attackCooldown;
     private float _targetYaw;
     private float _currentYaw;
+    private bool _hasTarget;
     private float _muzzleFlashRemaining;
     private Node3D? _headPivot;
     private MeshInstance3D? _barrel;
@@ -66,6 +67,7 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
         _attackCooldown -= stepSeconds;
 
         var target = simulation.FindClosestEnemy(GlobalPosition, FactoryConstants.GunTurretRange);
+        _hasTarget = target is not null;
         if (target is not null)
         {
             var localTarget = ToLocal(target.GlobalPosition + new Vector3(0.0f, 0.35f, 0.0f));
@@ -77,6 +79,11 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
         }
 
         if (_bufferedAmmo <= 0 || _attackCooldown > 0.0 || target is null)
+        {
+            return;
+        }
+
+        if (Mathf.Abs(NormalizeAngle(_targetYaw - _currentYaw)) > FactoryConstants.GunTurretAimToleranceRadians)
         {
             return;
         }
@@ -114,7 +121,10 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
     public override void _Process(double delta)
     {
         var deltaF = (float)delta;
-        _currentYaw = Mathf.LerpAngle(_currentYaw, _targetYaw, Mathf.Clamp(deltaF * FactoryConstants.GunTurretTurnSpeed, 0.0f, 1.0f));
+        var turnSpeed = _hasTarget
+            ? FactoryConstants.GunTurretTrackingSpeed
+            : FactoryConstants.GunTurretReturnSpeed;
+        _currentYaw = Mathf.LerpAngle(_currentYaw, _targetYaw, Mathf.Clamp(deltaF * turnSpeed, 0.0f, 1.0f));
 
         if (_headPivot is not null)
         {
@@ -253,5 +263,20 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
         };
         parent.AddChild(mesh);
         return mesh;
+    }
+
+    private static float NormalizeAngle(float angleRadians)
+    {
+        while (angleRadians > Mathf.Pi)
+        {
+            angleRadians -= Mathf.Tau;
+        }
+
+        while (angleRadians < -Mathf.Pi)
+        {
+            angleRadians += Mathf.Tau;
+        }
+
+        return angleRadians;
     }
 }

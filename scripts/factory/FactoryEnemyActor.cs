@@ -203,7 +203,7 @@ public sealed partial class MeleeRaiderEnemy : FactoryEnemyActor
     protected override Vector3 BodySize => new Vector3(0.8f, 0.72f, 0.8f);
 
     public override string DisplayName => "近战袭击者";
-    public override float MaxHealth => 16.0f;
+    public override float MaxHealth => 160.0f;
     public override float MoveSpeed => FactoryConstants.EnemyMeleeSpeed;
     public override float AggroRange => FactoryConstants.EnemyAggroRange;
     public override float AttackRange => FactoryConstants.EnemyMeleeAttackRange;
@@ -218,7 +218,7 @@ public sealed partial class RangedRaiderEnemy : FactoryEnemyActor
     protected override Vector3 BodySize => new Vector3(0.82f, 0.74f, 0.82f);
 
     public override string DisplayName => "远程袭击者";
-    public override float MaxHealth => 14.0f;
+    public override float MaxHealth => 140.0f;
     public override float MoveSpeed => FactoryConstants.EnemyRangedSpeed;
     public override float AggroRange => FactoryConstants.EnemyAggroRange + 1.0f;
     public override float AttackRange => FactoryConstants.EnemyRangedAttackRange;
