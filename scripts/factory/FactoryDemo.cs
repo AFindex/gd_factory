@@ -209,6 +209,9 @@ public partial class FactoryDemo : Node3D
         AddStorageOutputCorridor();
         AddBeltToStorageTransferLine();
         AddInserterYard();
+        AddNorthWarehouseBus();
+        AddEastBridgeDepot();
+        AddSouthCrossDock();
         AddSharedPickupTestYard();
         AddSharedDropoffTestYard();
         RefreshAllTopology();
@@ -306,6 +309,69 @@ public partial class FactoryDemo : Node3D
         PlaceStructure(BuildPrototypeKind.Belt, -2, 6, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Belt, -1, 7, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Sink, 0, 7, FacingDirection.East);
+    }
+
+    private void AddNorthWarehouseBus()
+    {
+        PlaceStructure(BuildPrototypeKind.Producer, -5, 11, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, -4, 11, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Splitter, -3, 11, FacingDirection.East);
+
+        PlaceStructure(BuildPrototypeKind.Belt, -3, 10, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Inserter, -2, 10, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Storage, -1, 10, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Inserter, 0, 10, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, 1, 10, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, 2, 10, FacingDirection.South);
+
+        PlaceStructure(BuildPrototypeKind.Belt, -3, 12, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Inserter, -2, 12, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Storage, -1, 12, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Inserter, 0, 12, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, 1, 12, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, 2, 12, FacingDirection.North);
+
+        PlaceStructure(BuildPrototypeKind.Merger, 2, 11, FacingDirection.East);
+        PlaceBeltRun(new Vector2I(3, 11), FacingDirection.East, 2);
+        PlaceStructure(BuildPrototypeKind.Sink, 5, 11, FacingDirection.East);
+    }
+
+    private void AddEastBridgeDepot()
+    {
+        PlaceStructure(BuildPrototypeKind.Producer, 7, -4, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, 8, -4, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Storage, 9, -4, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Inserter, 10, -4, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Bridge, 11, -4, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Sink, 12, -4, FacingDirection.East);
+
+        PlaceStructure(BuildPrototypeKind.Producer, 11, -6, FacingDirection.South);
+        PlaceStructure(BuildPrototypeKind.Belt, 11, -5, FacingDirection.South);
+        PlaceStructure(BuildPrototypeKind.Belt, 11, -3, FacingDirection.South);
+        PlaceStructure(BuildPrototypeKind.Sink, 11, -2, FacingDirection.South);
+    }
+
+    private void AddSouthCrossDock()
+    {
+        PlaceStructure(BuildPrototypeKind.Producer, -4, -10, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, -3, -10, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Bridge, -2, -10, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, -1, -10, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Splitter, 0, -10, FacingDirection.East);
+
+        PlaceStructure(BuildPrototypeKind.Producer, -2, -12, FacingDirection.South);
+        PlaceStructure(BuildPrototypeKind.Belt, -2, -11, FacingDirection.South);
+        PlaceStructure(BuildPrototypeKind.Storage, -2, -9, FacingDirection.South);
+
+        PlaceStructure(BuildPrototypeKind.Belt, 0, -11, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Inserter, 1, -11, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Storage, 2, -11, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Inserter, 3, -11, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Sink, 4, -11, FacingDirection.East);
+
+        PlaceStructure(BuildPrototypeKind.Belt, 0, -9, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, 1, -9, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Sink, 2, -9, FacingDirection.East);
     }
 
     private void AddSharedPickupTestYard()
