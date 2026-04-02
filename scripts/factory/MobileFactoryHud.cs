@@ -16,6 +16,9 @@ public partial class MobileFactoryHud : CanvasLayer
         BuildPrototypeKind.Sink,
         BuildPrototypeKind.Storage,
         BuildPrototypeKind.Inserter,
+        BuildPrototypeKind.Wall,
+        BuildPrototypeKind.AmmoAssembler,
+        BuildPrototypeKind.GunTurret,
         BuildPrototypeKind.OutputPort,
         BuildPrototypeKind.InputPort
     };
@@ -37,6 +40,7 @@ public partial class MobileFactoryHud : CanvasLayer
     private Label? _selectionLabel;
     private Label? _editorPreviewLabel;
     private Label? _portStatusLabel;
+    private Label? _combatLabel;
     private Label? _focusLabel;
     private Button? _observerButton;
     private Button? _deployButton;
@@ -240,6 +244,15 @@ public partial class MobileFactoryHud : CanvasLayer
         }
     }
 
+    public void SetCombatStats(int activeEnemies, int kills, int structuresLost)
+    {
+        if (_combatLabel is not null)
+        {
+            _combatLabel.Text = $"世界威胁：敌人 {activeEnemies} | 击杀 {kills} | 损失建筑 {structuresLost}";
+            _combatLabel.Modulate = activeEnemies > 0 ? new Color("FCA5A5") : new Color("FDE68A");
+        }
+    }
+
     public void SetEditorFocusHint(bool overEditor)
     {
         if (_focusLabel is null)
@@ -311,6 +324,7 @@ public partial class MobileFactoryHud : CanvasLayer
         _hoverLabel = CreateInfoLabel(body);
         _previewLabel = CreateInfoLabel(body);
         _deliveryLabel = CreateInfoLabel(body);
+        _combatLabel = CreateInfoLabel(body);
         _focusLabel = CreateInfoLabel(body);
         _hintLabel = CreateInfoLabel(body);
 
@@ -337,7 +351,7 @@ public partial class MobileFactoryHud : CanvasLayer
         _deployButton.Pressed += () => DeployModeToggleRequested?.Invoke();
         actionsRow.AddChild(_deployButton);
 
-        _hintLabel.Text = "默认操作：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 上下文辅助 | F 内部编辑 | 1-0/-/= 切换内部建造/端口";
+        _hintLabel.Text = "默认操作：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 上下文辅助 | F 内部编辑 | 1-0/-/= 快速切物流件，右侧按钮可直接选墙体/弹药组装器/机枪炮塔";
         _hintLabel.Modulate = new Color("EED49F");
     }
 
@@ -622,6 +636,9 @@ public partial class MobileFactoryHud : CanvasLayer
             BuildPrototypeKind.Unloader => "卸载器",
             BuildPrototypeKind.Storage => "仓储",
             BuildPrototypeKind.Inserter => "机械臂",
+            BuildPrototypeKind.Wall => "墙体",
+            BuildPrototypeKind.AmmoAssembler => "弹药组装器",
+            BuildPrototypeKind.GunTurret => "机枪炮塔",
             BuildPrototypeKind.OutputPort => "输出端口",
             BuildPrototypeKind.InputPort => "输入端口",
             BuildPrototypeKind.Sink => "回收器",

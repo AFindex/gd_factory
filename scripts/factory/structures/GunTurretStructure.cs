@@ -227,8 +227,7 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
         var distance = Mathf.Max(0.08f, direction.Length());
         tracer.Mesh = new BoxMesh { Size = new Vector3(0.06f, 0.06f, distance) };
         AddChild(tracer);
-        tracer.GlobalPosition = start.Lerp(end, 0.5f);
-        tracer.LookAt(end, Vector3.Up, true);
+        tracer.LookAtFromPosition(start.Lerp(end, 0.5f), end, Vector3.Up, true);
 
         _tracers.Add(new TracerState
         {

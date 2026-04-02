@@ -100,6 +100,8 @@ public partial class FactoryCombatDirector : Node, IFactoryCombatSystem
         FactoryEnemyActor enemy = rule.EnemyTypeId switch
         {
             "ranged" => new RangedRaiderEnemy(),
+            "world-brute" => new WorldBruteEnemy(),
+            "world-siege" => new WorldSiegeEnemy(),
             _ => new MeleeRaiderEnemy()
         };
 

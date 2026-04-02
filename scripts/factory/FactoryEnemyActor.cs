@@ -16,9 +16,11 @@ public abstract partial class FactoryEnemyActor : Node3D
 
     protected abstract Color BodyColor { get; }
     protected abstract Vector3 BodySize { get; }
+    protected virtual Mesh CreateBodyMesh() => new BoxMesh { Size = BodySize };
 
     public string EnemyId { get; private set; } = string.Empty;
     public bool IsDefeated { get; private set; }
+    public float CurrentHealth => _currentHealth;
     public abstract string DisplayName { get; }
     public abstract float MaxHealth { get; }
     public abstract float MoveSpeed { get; }
@@ -54,7 +56,7 @@ public abstract partial class FactoryEnemyActor : Node3D
             _body = new MeshInstance3D
             {
                 Name = "Body",
-                Mesh = new BoxMesh { Size = BodySize },
+                Mesh = CreateBodyMesh(),
                 Position = new Vector3(0.0f, BodySize.Y * 0.5f, 0.0f),
                 MaterialOverride = _bodyMaterial
             };

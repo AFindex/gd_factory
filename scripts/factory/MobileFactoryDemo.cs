@@ -21,6 +21,9 @@ public partial class MobileFactoryDemo : Node3D
         BuildPrototypeKind.Sink,
         BuildPrototypeKind.Storage,
         BuildPrototypeKind.Inserter,
+        BuildPrototypeKind.Wall,
+        BuildPrototypeKind.AmmoAssembler,
+        BuildPrototypeKind.GunTurret,
         BuildPrototypeKind.OutputPort,
         BuildPrototypeKind.InputPort
     };
@@ -56,6 +59,9 @@ public partial class MobileFactoryDemo : Node3D
         [BuildPrototypeKind.Sink] = new BuildPrototypeDefinition(BuildPrototypeKind.Sink, "回收器", new Color("FDE68A"), "吞掉输入物品并作为内部消费端。"),
         [BuildPrototypeKind.Storage] = new BuildPrototypeDefinition(BuildPrototypeKind.Storage, "仓储", new Color("94A3B8"), "缓存多件物品，可向前输出，也能被机械臂抓取。"),
         [BuildPrototypeKind.Inserter] = new BuildPrototypeDefinition(BuildPrototypeKind.Inserter, "机械臂", new Color("FACC15"), "从后方抓取一件物品并向前投送。"),
+        [BuildPrototypeKind.Wall] = new BuildPrototypeDefinition(BuildPrototypeKind.Wall, "墙体", new Color("D1D5DB"), "给移动工厂的前缘补上一段高耐久掩体。"),
+        [BuildPrototypeKind.AmmoAssembler] = new BuildPrototypeDefinition(BuildPrototypeKind.AmmoAssembler, "弹药组装器", new Color("FB923C"), "在内部持续生产弹药，直接喂给炮塔。"),
+        [BuildPrototypeKind.GunTurret] = new BuildPrototypeDefinition(BuildPrototypeKind.GunTurret, "机枪炮塔", new Color("CBD5E1"), "会跟随移动工厂整体旋转，对世界中的敌人自动转向并射击。"),
         [BuildPrototypeKind.OutputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.OutputPort, "输出端口", new Color("FB923C"), "将移动工厂内部物流送往世界网格。"),
         [BuildPrototypeKind.InputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.InputPort, "输入端口", new Color("60A5FA"), "把世界侧物流导入移动工厂内部。")
     };
@@ -65,9 +71,11 @@ public partial class MobileFactoryDemo : Node3D
     private FactoryCameraRig? _cameraRig;
     private MobileFactoryHud? _hud;
     private Node3D? _structureRoot;
+    private Node3D? _enemyRoot;
     private Node3D? _worldPreviewRoot;
     private Node3D? _interiorPreviewRoot;
     private Camera3D? _editorCamera;
+    private FactoryCombatDirector? _combatDirector;
     private readonly List<MeshInstance3D> _worldPreviewFootprintMeshes = new();
     private readonly List<MeshInstance3D> _worldPreviewPortMeshes = new();
     private MeshInstance3D? _worldPreviewFacingArrow;
@@ -231,6 +239,9 @@ public partial class MobileFactoryDemo : Node3D
         _structureRoot = new Node3D { Name = "MobileDemoStructures" };
         AddChild(_structureRoot);
 
+        _enemyRoot = new Node3D { Name = "MobileEnemyRoot" };
+        AddChild(_enemyRoot);
+
         _worldPreviewRoot = new Node3D { Name = "WorldPreviewRoot" };
         AddChild(_worldPreviewRoot);
         CreateWorldPreviewVisuals(4, 1);
@@ -241,6 +252,9 @@ public partial class MobileFactoryDemo : Node3D
 
         _simulation = new SimulationController { Name = "SimulationController" };
         AddChild(_simulation);
+
+        _combatDirector = new FactoryCombatDirector { Name = "MobileCombatDirector" };
+        AddChild(_combatDirector);
 
         _cameraRig = new FactoryCameraRig();
         AddChild(_cameraRig);
@@ -263,6 +277,7 @@ public partial class MobileFactoryDemo : Node3D
             FactoryConstants.CellSize);
 
         _simulation!.Configure(_grid);
+        _combatDirector?.Configure(_simulation, _enemyRoot!);
         var cameraPadding = UseLargeTestScenario ? 6.0f : 4.0f;
         _cameraRig!.ConfigureBounds(_grid.GetWorldMin() + Vector2.One * cameraPadding, _grid.GetWorldMax() - Vector2.One * cameraPadding);
 
@@ -303,6 +318,7 @@ public partial class MobileFactoryDemo : Node3D
         CreateAmbientStorageDepot(new Vector2I(4, 8));
         CreateAmbientBridgeCrossing(new Vector2I(-1, 8));
         CreateAmbientLoaderRelay(new Vector2I(-10, 6));
+        ConfigureWorldCombatScenarios();
         _simulation!.RebuildTopology();
     }
 
@@ -373,6 +389,7 @@ public partial class MobileFactoryDemo : Node3D
         CreateAmbientStorageDepot(new Vector2I(-19, 14));
         CreateAmbientBridgeCrossing(new Vector2I(16, -15));
         CreateAmbientLoaderRelay(new Vector2I(-18, -15));
+        ConfigureWorldCombatScenarios();
 
         _simulation!.RebuildTopology();
     }
@@ -1172,6 +1189,7 @@ public partial class MobileFactoryDemo : Node3D
         _hud.SetEditorSelection(_selectedInteriorKind, _selectedInteriorFacing);
         _hud.SetEditorPreview(_canPlaceInteriorCell, _interiorPreviewMessage);
         _hud.SetPortStatus(_mobileFactory.GetPortStatusLabel());
+        _hud.SetCombatStats(_simulation?.ActiveEnemyCount ?? 0, _simulation?.DefeatedEnemyCount ?? 0, _simulation?.DestroyedStructureCount ?? 0);
         _hud.SetEditorState(_editorOpen, _mobileFactory.State, CountEditableInteriorStructures());
         _hud.SetHintText(GetHintText());
     }
@@ -1751,7 +1769,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private async void RunSmokeChecks()
     {
-        if (_grid is null || _mobileFactory is null || _sinkA is null || _sinkB is null || _hud is null || _cameraRig is null)
+        if (_grid is null || _mobileFactory is null || _sinkA is null || _sinkB is null || _hud is null || _cameraRig is null || _simulation is null)
         {
             GD.PushError("MOBILE_FACTORY_SMOKE_FAILED missing grid, factory, hud, camera, or sinks.");
             GetTree().Quit(1);
@@ -1774,6 +1792,9 @@ public partial class MobileFactoryDemo : Node3D
         _mobileFactory.TryGetInteriorStructure(new Vector2I(1, 3), out var presetInputSinkStructure);
         var inputSinkInTransit = presetInputSinkStructure as SinkStructure;
         var inputSinkTransitBaseline = inputSinkInTransit?.DeliveredTotal ?? 0;
+        _mobileFactory.TryGetInteriorStructure(new Vector2I(4, 0), out var escortTurretStructure);
+        var escortTurret = escortTurretStructure as GunTurretStructure;
+        var turretShotsBeforeDeploy = escortTurret?.ShotsFired ?? 0;
 
         var initialPosition = _mobileFactory.WorldFocusPoint;
         _mobileFactory.ApplyTransitInput(_grid, 1.0f, -1.0f, 0.5);
@@ -1839,6 +1860,8 @@ public partial class MobileFactoryDemo : Node3D
         await ToSignal(GetTree().CreateTimer(2.0f), SceneTreeTimer.SignalName.Timeout);
         var inputAttachmentTransit = _mobileFactory.CountAttachmentTransitItems(BuildPrototypeKind.InputPort);
         var inputDeliveredWhileDeployed = (inputSinkInTransit?.DeliveredTotal ?? 0) > inputSinkTransitBaseline;
+        var turretTrackedThreats = (escortTurret?.ShotsFired ?? 0) > turretShotsBeforeDeploy;
+        var mobileCombatActive = _simulation.ActiveEnemyCount > 0 || _simulation.DefeatedEnemyCount > 0;
 
         SetEditorOpenState(false);
         var blockedOutputBeforeRecall = _mobileFactory.CountAttachmentTransitItems(BuildPrototypeKind.OutputPort, onlyDisconnected: true);
@@ -1864,20 +1887,20 @@ public partial class MobileFactoryDemo : Node3D
         await ToSignal(GetTree().CreateTimer(3.5f), SceneTreeTimer.SignalName.Timeout);
         var secondDelivered = _sinkB.DeliveredTotal;
 
-        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !rightPaneHover || !leftPaneHover || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !contextualRotateWorks || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !inputDeliveredWhileDeployed || !recalled || !blockedOutputActive || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0)
+        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !rightPaneHover || !leftPaneHover || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !contextualRotateWorks || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !inputDeliveredWhileDeployed || !turretTrackedThreats || !mobileCombatActive || !recalled || !blockedOutputActive || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0)
         {
-            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} rightHover={rightPaneHover} leftHover={leftPaneHover} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} contextualRotateWorks={contextualRotateWorks} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered}");
+            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} rightHover={rightPaneHover} leftHover={leftPaneHover} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} contextualRotateWorks={contextualRotateWorks} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"MOBILE_FACTORY_SMOKE_OK firstDelivered={firstDelivered} secondDelivered={secondDelivered}");
+        GD.Print($"MOBILE_FACTORY_SMOKE_OK firstDelivered={firstDelivered} secondDelivered={secondDelivered} turretShots={(escortTurret?.ShotsFired ?? -1)} combatKills={_simulation.DefeatedEnemyCount}");
         GetTree().Quit();
     }
 
     private async void RunLargeScenarioSmokeChecks()
     {
-        if (_grid is null || _mobileFactory is null || _hud is null || _cameraRig is null || _backgroundFactories.Count < 3 || _scenarioSinks.Count < 4)
+        if (_grid is null || _mobileFactory is null || _hud is null || _cameraRig is null || _simulation is null || _backgroundFactories.Count < 3 || _scenarioSinks.Count < 4)
         {
             GD.PushError("MOBILE_FACTORY_LARGE_SMOKE_FAILED missing grid, player factory, hud, camera, background actors, or scenario sinks.");
             GetTree().Quit(1);
@@ -1928,6 +1951,7 @@ public partial class MobileFactoryDemo : Node3D
         _mobileFactory.TryGetInteriorStructure(new Vector2I(1, 3), out var playerInputSinkStructure);
         var playerInputSink = playerInputSinkStructure as SinkStructure;
         var playerInputDeliveredBaseline = playerInputSink?.DeliveredTotal ?? 0;
+        var turretShotsBaseline = CountMobileTurretShots();
 
         _selectedDeployFacing = FacingDirection.East;
         _hoveredAnchor = new Vector2I(-12, 3);
@@ -1950,6 +1974,9 @@ public partial class MobileFactoryDemo : Node3D
         }
         var deliveredDuringRun = GetPrimaryDeliveryTotal() + GetSecondaryDeliveryTotal() > initialDelivered;
         var inputDeliveredDuringRun = (playerInputSink?.DeliveredTotal ?? 0) > playerInputDeliveredBaseline;
+        var playerTurretTrackedThreats = CountMobileTurretShots() > turretShotsBaseline;
+        var heavyEnemyCount = CountActiveHeavyWorldEnemies();
+        var worldCombatActive = (_simulation.ActiveEnemyCount > 0 || _simulation.DefeatedEnemyCount > 0) && heavyEnemyCount > 0;
 
         var anyConnectedBridge = false;
         foreach (var factory in allFactories)
@@ -1961,14 +1988,14 @@ public partial class MobileFactoryDemo : Node3D
             }
         }
 
-        if (!mixedStates || !variedProfiles || !variedPresets || !playerMoved || !editorVisible || !playerDeployed || !backgroundMoved || !deliveredDuringRun || !inputDeliveredDuringRun || !anyConnectedBridge)
+        if (!mixedStates || !variedProfiles || !variedPresets || !playerMoved || !editorVisible || !playerDeployed || !backgroundMoved || !deliveredDuringRun || !inputDeliveredDuringRun || !anyConnectedBridge || !playerTurretTrackedThreats || !worldCombatActive)
         {
-            GD.PushError($"MOBILE_FACTORY_LARGE_SMOKE_FAILED mixedStates={mixedStates} variedProfiles={variedProfiles} variedPresets={variedPresets} playerMoved={playerMoved} editorVisible={editorVisible} playerDeployed={playerDeployed} backgroundMoved={backgroundMoved} deliveredDuringRun={deliveredDuringRun} inputDeliveredDuringRun={inputDeliveredDuringRun} anyConnectedBridge={anyConnectedBridge} deployedCount={deployedCount} inTransitCount={inTransitCount} playerInputDelivered={playerInputSink?.DeliveredTotal ?? -1}");
+            GD.PushError($"MOBILE_FACTORY_LARGE_SMOKE_FAILED mixedStates={mixedStates} variedProfiles={variedProfiles} variedPresets={variedPresets} playerMoved={playerMoved} editorVisible={editorVisible} playerDeployed={playerDeployed} backgroundMoved={backgroundMoved} deliveredDuringRun={deliveredDuringRun} inputDeliveredDuringRun={inputDeliveredDuringRun} anyConnectedBridge={anyConnectedBridge} deployedCount={deployedCount} inTransitCount={inTransitCount} playerInputDelivered={playerInputSink?.DeliveredTotal ?? -1} mobileTurretShots={CountMobileTurretShots()} heavyEnemyCount={heavyEnemyCount} activeEnemies={_simulation.ActiveEnemyCount} defeatedEnemies={_simulation.DefeatedEnemyCount}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"MOBILE_FACTORY_LARGE_SMOKE_OK deployed={deployedCount} inTransit={inTransitCount} delivered={GetPrimaryDeliveryTotal() + GetSecondaryDeliveryTotal()}");
+        GD.Print($"MOBILE_FACTORY_LARGE_SMOKE_OK deployed={deployedCount} inTransit={inTransitCount} delivered={GetPrimaryDeliveryTotal() + GetSecondaryDeliveryTotal()} heavyEnemies={heavyEnemyCount} mobileTurretShots={CountMobileTurretShots()}");
         GetTree().Quit();
     }
 
@@ -2024,7 +2051,7 @@ public partial class MobileFactoryDemo : Node3D
         {
             MobileFactoryControlMode.Observer => "观察模式：WASD/方向键移动相机 | 滚轮缩放 | Tab 返回工厂控制 | F 内部编辑",
             MobileFactoryControlMode.DeployPreview => "部署预览：左键确认 | Q/E/R 旋转朝向 | G/Esc 取消 | F 内部编辑",
-            _ => "工厂控制：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器内 WASD 平移相机、滚轮缩放、1-0/-/= 选建筑/端口"
+            _ => "工厂控制：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器内 WASD 平移相机、滚轮缩放、1-0/-/= 快速选物流件，防御建筑可直接点右侧按钮"
         };
     }
 
