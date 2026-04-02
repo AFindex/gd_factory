@@ -329,6 +329,7 @@ public partial class MobileFactoryDemo : Node3D
         CreatePreparedOutputLine(compact, new Vector2I(-9, 10), FacingDirection.East, 2);
         CreatePreparedOutputLine(medium, new Vector2I(-12, 3), FacingDirection.East, 2);
         CreatePreparedOutputLine(medium, new Vector2I(4, 10), FacingDirection.East, 2);
+        CreatePreparedInputLine(medium, new Vector2I(-12, 3), FacingDirection.East, 3);
 
         CreateAmbientWorldLine(new Vector2I(-18, -1), 5, FacingDirection.East);
         CreateAmbientWorldLine(new Vector2I(12, -12), 4, FacingDirection.North);
@@ -962,7 +963,7 @@ public partial class MobileFactoryDemo : Node3D
                 _worldPreviewMessage = _mobileFactory.State switch
                 {
                     MobileFactoryLifecycleState.Deployed => "已部署：按 R 切回移动态，Tab 进入观察模式，F 打开内部编辑。",
-                    MobileFactoryLifecycleState.AutoDeploying => "自动部署中：移动工厂会自行前往目标并对齐朝向，Esc 可取消。",
+                    MobileFactoryLifecycleState.AutoDeploying => "自动部署中：移动工厂会先朝目标行进，抵达后再转向展开，Esc 可取消。",
                     MobileFactoryLifecycleState.Recalling => "切回移动态中：部署机构正在收拢，很快恢复机动。",
                     _ => "工厂控制：W/S 前进后退，A/D 转向，G 进入部署模式，Tab 进入观察模式。"
                 };
@@ -1775,6 +1776,9 @@ public partial class MobileFactoryDemo : Node3D
         var editorVisible = _hud.IsEditorVisible;
         _editorOpen = false;
         _hud.SetEditorOpen(false);
+        _mobileFactory.TryGetInteriorStructure(new Vector2I(1, 3), out var playerInputSinkStructure);
+        var playerInputSink = playerInputSinkStructure as SinkStructure;
+        var playerInputDeliveredBaseline = playerInputSink?.DeliveredTotal ?? 0;
 
         _selectedDeployFacing = FacingDirection.East;
         _hoveredAnchor = new Vector2I(-12, 3);
@@ -1796,6 +1800,7 @@ public partial class MobileFactoryDemo : Node3D
             }
         }
         var deliveredDuringRun = GetPrimaryDeliveryTotal() + GetSecondaryDeliveryTotal() > initialDelivered;
+        var inputDeliveredDuringRun = (playerInputSink?.DeliveredTotal ?? 0) > playerInputDeliveredBaseline;
 
         var anyConnectedBridge = false;
         foreach (var factory in allFactories)
@@ -1807,9 +1812,9 @@ public partial class MobileFactoryDemo : Node3D
             }
         }
 
-        if (!mixedStates || !variedProfiles || !variedPresets || !playerMoved || !editorVisible || !playerDeployed || !backgroundMoved || !deliveredDuringRun || !anyConnectedBridge)
+        if (!mixedStates || !variedProfiles || !variedPresets || !playerMoved || !editorVisible || !playerDeployed || !backgroundMoved || !deliveredDuringRun || !inputDeliveredDuringRun || !anyConnectedBridge)
         {
-            GD.PushError($"MOBILE_FACTORY_LARGE_SMOKE_FAILED mixedStates={mixedStates} variedProfiles={variedProfiles} variedPresets={variedPresets} playerMoved={playerMoved} editorVisible={editorVisible} playerDeployed={playerDeployed} backgroundMoved={backgroundMoved} deliveredDuringRun={deliveredDuringRun} anyConnectedBridge={anyConnectedBridge} deployedCount={deployedCount} inTransitCount={inTransitCount}");
+            GD.PushError($"MOBILE_FACTORY_LARGE_SMOKE_FAILED mixedStates={mixedStates} variedProfiles={variedProfiles} variedPresets={variedPresets} playerMoved={playerMoved} editorVisible={editorVisible} playerDeployed={playerDeployed} backgroundMoved={backgroundMoved} deliveredDuringRun={deliveredDuringRun} inputDeliveredDuringRun={inputDeliveredDuringRun} anyConnectedBridge={anyConnectedBridge} deployedCount={deployedCount} inTransitCount={inTransitCount} playerInputDelivered={playerInputSink?.DeliveredTotal ?? -1}");
             GetTree().Quit(1);
             return;
         }

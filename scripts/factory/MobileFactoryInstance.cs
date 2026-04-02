@@ -30,6 +30,12 @@ public sealed class MobileFactoryInstance
     private const float AutopilotArrivalAngle = 0.10f;
     private const float AttachmentConnectorStartOffset = 0.45f;
     private const float AttachmentConnectorWorldInset = 0.10f;
+    private const string AttachmentIdMetaKey = "attachment_id";
+    private const string AttachmentFullLengthMetaKey = "full_length";
+    private const string AttachmentMouthExtensionMetaKey = "mouth_extension";
+    private const string AttachmentVisualProgressMetaKey = "visual_progress";
+    private const string AttachmentVisualTargetMetaKey = "visual_target";
+    private const string AttachmentRemoveWhenHiddenMetaKey = "remove_when_hidden";
 
     private readonly SimulationController _simulation;
     private readonly Node3D _structureRoot;
@@ -42,9 +48,6 @@ public sealed class MobileFactoryInstance
     private Vector3 _pendingTransitPosition;
     private float _pendingTransitHeadingRadians;
     private float _currentHeadingRadians;
-    private float _attachmentVisualProgress;
-    private float _attachmentVisualTarget;
-    private bool _clearAttachmentVisualsWhenHidden;
     private float _recallTimer;
     private string? _pendingStatusMessage;
 
@@ -264,7 +267,7 @@ public sealed class MobileFactoryInstance
 
         _pendingDeployTarget = new DeployTarget(worldGrid, anchorCell, facing);
         State = MobileFactoryLifecycleState.AutoDeploying;
-        PushStatus($"部署命令已确认，正在前往 ({anchorCell.X}, {anchorCell.Y}) 并对齐朝向 {FactoryDirection.ToLabel(facing)}。");
+        PushStatus($"部署命令已确认，正在朝 ({anchorCell.X}, {anchorCell.Y}) 行进；抵达后会转向 {FactoryDirection.ToLabel(facing)} 并展开。");
         return true;
     }
 
@@ -596,16 +599,19 @@ public sealed class MobileFactoryInstance
         }
 
         var targetCenter = GetFootprintCenterWorld(target.WorldGrid, target.AnchorCell, target.Facing);
-        var desiredHeading = FactoryDirection.ToYRotationRadians(target.Facing);
+        var deployHeading = FactoryDirection.ToYRotationRadians(target.Facing);
         var currentCenter = _hullRoot.Position;
         var toTarget = targetCenter - currentCenter;
         var planarDistance = new Vector2(toTarget.X, toTarget.Z).Length();
+        var isApproachingTarget = planarDistance > AutoDeployArrivalDistance;
+        var desiredHeading = deployHeading;
 
-        if (planarDistance > AutoDeployArrivalDistance)
+        if (isApproachingTarget)
         {
             var maxMove = AutoDeployMoveSpeed * delta;
             var move = Mathf.Min(maxMove, planarDistance);
             var moveDir = new Vector3(toTarget.X / planarDistance, 0.0f, toTarget.Z / planarDistance);
+            desiredHeading = Mathf.Atan2(-moveDir.Z, moveDir.X);
             currentCenter += moveDir * move;
             currentCenter = ClampHullCenter(target.WorldGrid, currentCenter, GetHullRadiusPadding());
         }
@@ -617,7 +623,7 @@ public sealed class MobileFactoryInstance
         _currentHeadingRadians = MoveAngleTowards(_currentHeadingRadians, desiredHeading, AutoDeployTurnSpeed * delta);
         ApplyHullTransform(currentCenter, _currentHeadingRadians);
 
-        if (currentCenter.DistanceTo(targetCenter) > AutoDeployArrivalDistance || Mathf.Abs(NormalizeAngle(desiredHeading - _currentHeadingRadians)) > AutoDeployArrivalAngle)
+        if (currentCenter.DistanceTo(targetCenter) > AutoDeployArrivalDistance || Mathf.Abs(NormalizeAngle(deployHeading - _currentHeadingRadians)) > AutoDeployArrivalAngle)
         {
             return;
         }
@@ -668,7 +674,7 @@ public sealed class MobileFactoryInstance
 
     private void ActivateAttachmentsForDeployment(GridManager worldGrid, Vector2I anchorCell, FacingDirection facing)
     {
-        ClearAttachmentBindings();
+        DisconnectAttachmentBindings();
 
         foreach (var projection in GetAttachmentProjections(anchorCell, facing))
         {
@@ -695,9 +701,11 @@ public sealed class MobileFactoryInstance
     {
         if (State == MobileFactoryLifecycleState.Deployed && _deployedGrid is not null && AnchorCell is Vector2I anchorCell)
         {
+            var deployedGrid = _deployedGrid;
             ReleaseDeploymentReservations();
-            _deployedGrid.ReserveCells(GetFootprintCells(anchorCell, DeploymentFacing), ReservationOwnerId, GridReservationKind.MobileFootprint);
-            ActivateAttachmentsForDeployment(_deployedGrid, anchorCell, DeploymentFacing);
+            _deployedGrid = deployedGrid;
+            deployedGrid.ReserveCells(GetFootprintCells(anchorCell, DeploymentFacing), ReservationOwnerId, GridReservationKind.MobileFootprint);
+            ActivateAttachmentsForDeployment(deployedGrid, anchorCell, DeploymentFacing);
         }
         else
         {
@@ -711,9 +719,6 @@ public sealed class MobileFactoryInstance
     private void MoveToTransitParking()
     {
         ApplyHullTransform(Profile.TransitParkingCenter, _currentHeadingRadians);
-        _attachmentVisualProgress = 0.0f;
-        _attachmentVisualTarget = 0.0f;
-        _clearAttachmentVisualsWhenHidden = false;
         _worldAttachmentVisualRoot.Visible = false;
         InteriorSite.SetRuntimeState(true, true);
     }
@@ -820,11 +825,12 @@ public sealed class MobileFactoryInstance
 
     private void RebuildWorldAttachmentVisuals(GridManager worldGrid, Vector2I anchorCell, FacingDirection facing)
     {
+        var existingVisuals = new Dictionary<ulong, Node3D>();
         foreach (var child in _worldAttachmentVisualRoot.GetChildren())
         {
-            if (child is Node node)
+            if (child is Node3D connectorRoot && connectorRoot.HasMeta(AttachmentIdMetaKey))
             {
-                node.QueueFree();
+                existingVisuals[connectorRoot.GetMeta(AttachmentIdMetaKey).AsUInt64()] = connectorRoot;
             }
         }
 
@@ -835,31 +841,39 @@ public sealed class MobileFactoryInstance
                 continue;
             }
 
-            _worldAttachmentVisualRoot.AddChild(CreateWorldAttachmentVisual(worldGrid, projection));
+            var attachmentId = projection.Attachment.GetInstanceId();
+            if (existingVisuals.Remove(attachmentId, out var connectorRoot))
+            {
+                ConfigureWorldAttachmentVisual(connectorRoot, worldGrid, projection);
+                connectorRoot.SetMeta(AttachmentVisualTargetMetaKey, 1.0f);
+                connectorRoot.SetMeta(AttachmentRemoveWhenHiddenMetaKey, false);
+            }
+            else
+            {
+                _worldAttachmentVisualRoot.AddChild(CreateWorldAttachmentVisual(worldGrid, projection, 0.0f));
+            }
+        }
+
+        foreach (var staleVisual in existingVisuals.Values)
+        {
+            staleVisual.SetMeta(AttachmentVisualTargetMetaKey, 0.0f);
+            staleVisual.SetMeta(AttachmentRemoveWhenHiddenMetaKey, true);
         }
 
         _worldAttachmentVisualRoot.Visible = _worldAttachmentVisualRoot.GetChildCount() > 0;
-        _attachmentVisualProgress = 0.0f;
-        _attachmentVisualTarget = _worldAttachmentVisualRoot.Visible ? 1.0f : 0.0f;
-        _clearAttachmentVisualsWhenHidden = false;
         ApplyAttachmentVisualProgress();
     }
 
-    private Node3D CreateWorldAttachmentVisual(GridManager worldGrid, MobileFactoryAttachmentProjection projection)
+    private Node3D CreateWorldAttachmentVisual(GridManager worldGrid, MobileFactoryAttachmentProjection projection, float initialProgress)
     {
-        var start = GetAttachmentConnectorStartWorld(projection.Attachment);
-        var end = GetAttachmentConnectorEndWorld(worldGrid, projection);
-        var connectorVector = end - start;
-        var connectorLength = new Vector2(connectorVector.X, connectorVector.Z).Length();
-        var connectorYaw = Mathf.Atan2(connectorVector.X, connectorVector.Z);
         var root = new Node3D
         {
-            Name = $"{projection.Attachment.Name}_WorldConnector",
-            Position = start,
-            Rotation = new Vector3(0.0f, connectorYaw, 0.0f)
+            Name = GetWorldAttachmentVisualName(projection.Attachment)
         };
-        root.SetMeta("full_length", connectorLength);
-        root.SetMeta("mouth_extension", 0.14f);
+        root.SetMeta(AttachmentIdMetaKey, projection.Attachment.GetInstanceId());
+        root.SetMeta(AttachmentVisualProgressMetaKey, initialProgress);
+        root.SetMeta(AttachmentVisualTargetMetaKey, 1.0f);
+        root.SetMeta(AttachmentRemoveWhenHiddenMetaKey, false);
 
         var connector = new MeshInstance3D
         {
@@ -879,7 +893,7 @@ public sealed class MobileFactoryInstance
             Name = "ConnectorEndpoint",
             Mesh = new BoxMesh { Size = new Vector3(0.56f, 0.16f, 0.56f) },
             Position = new Vector3(0.0f, 0.10f, 0.0f),
-            Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(projection.WorldFacing) - connectorYaw, 0.0f),
+            Rotation = Vector3.Zero,
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = projection.Attachment.AttachmentDefinition.Tint,
@@ -893,7 +907,7 @@ public sealed class MobileFactoryInstance
             Name = "ConnectorMouth",
             Mesh = new BoxMesh { Size = new Vector3(0.18f, 0.10f, 0.28f) },
             Position = new Vector3(0.0f, 0.20f, 0.0f),
-            Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(projection.WorldFacing) - connectorYaw, 0.0f),
+            Rotation = Vector3.Zero,
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = projection.Attachment.AttachmentDefinition.ConnectorColor.Lightened(0.12f),
@@ -902,7 +916,40 @@ public sealed class MobileFactoryInstance
         };
         root.AddChild(mouth);
 
+        ConfigureWorldAttachmentVisual(root, worldGrid, projection);
+        ApplySingleAttachmentVisualProgress(root, EaseAttachmentVisual(initialProgress));
         return root;
+    }
+
+    private static string GetWorldAttachmentVisualName(MobileFactoryBoundaryAttachmentStructure attachment)
+    {
+        return $"Attachment_{attachment.GetInstanceId()}_WorldConnector";
+    }
+
+    private static void ConfigureWorldAttachmentVisual(Node3D root, GridManager worldGrid, MobileFactoryAttachmentProjection projection)
+    {
+        var start = GetAttachmentConnectorStartWorld(projection.Attachment);
+        var end = GetAttachmentConnectorEndWorld(worldGrid, projection);
+        var connectorVector = end - start;
+        var connectorLength = new Vector2(connectorVector.X, connectorVector.Z).Length();
+        var connectorYaw = Mathf.Atan2(connectorVector.X, connectorVector.Z);
+
+        root.Name = GetWorldAttachmentVisualName(projection.Attachment);
+        root.Position = start;
+        root.Rotation = new Vector3(0.0f, connectorYaw, 0.0f);
+        root.SetMeta(AttachmentFullLengthMetaKey, connectorLength);
+        root.SetMeta(AttachmentMouthExtensionMetaKey, 0.14f);
+
+        var endpointYaw = FactoryDirection.ToYRotationRadians(projection.WorldFacing) - connectorYaw;
+        if (root.GetNodeOrNull<MeshInstance3D>("ConnectorEndpoint") is MeshInstance3D endpoint)
+        {
+            endpoint.Rotation = new Vector3(0.0f, endpointYaw, 0.0f);
+        }
+
+        if (root.GetNodeOrNull<MeshInstance3D>("ConnectorMouth") is MeshInstance3D mouth)
+        {
+            mouth.Rotation = new Vector3(0.0f, endpointYaw, 0.0f);
+        }
     }
 
     private static Vector3 GetAttachmentConnectorStartWorld(MobileFactoryBoundaryAttachmentStructure attachment)
@@ -975,60 +1022,71 @@ public sealed class MobileFactoryInstance
     {
         if (_worldAttachmentVisualRoot.GetChildCount() == 0)
         {
-            _attachmentVisualProgress = 0.0f;
-            _attachmentVisualTarget = 0.0f;
-            _clearAttachmentVisualsWhenHidden = false;
             _worldAttachmentVisualRoot.Visible = false;
             return;
         }
 
-        _attachmentVisualTarget = 0.0f;
-        _clearAttachmentVisualsWhenHidden = true;
+        foreach (var child in _worldAttachmentVisualRoot.GetChildren())
+        {
+            if (child is Node3D connectorRoot)
+            {
+                connectorRoot.SetMeta(AttachmentVisualTargetMetaKey, 0.0f);
+                connectorRoot.SetMeta(AttachmentRemoveWhenHiddenMetaKey, true);
+            }
+        }
+
         _worldAttachmentVisualRoot.Visible = true;
         ApplyAttachmentVisualProgress();
     }
 
     private void UpdateAttachmentVisualAnimation(float delta)
     {
-        if (Mathf.IsEqualApprox(_attachmentVisualProgress, _attachmentVisualTarget))
-        {
-            if (_clearAttachmentVisualsWhenHidden && _attachmentVisualProgress <= 0.001f)
-            {
-                ClearAttachmentBindings();
-                _clearAttachmentVisualsWhenHidden = false;
-            }
-
-            return;
-        }
-
-        _attachmentVisualProgress = Mathf.MoveToward(_attachmentVisualProgress, _attachmentVisualTarget, delta * 3.8f);
-        ApplyAttachmentVisualProgress();
-
-        if (_clearAttachmentVisualsWhenHidden && _attachmentVisualProgress <= 0.001f)
-        {
-            ClearAttachmentBindings();
-            _clearAttachmentVisualsWhenHidden = false;
-        }
+        ApplyAttachmentVisualProgress(delta);
     }
 
-    private void ApplyAttachmentVisualProgress()
+    private void ApplyAttachmentVisualProgress(float delta = 0.0f)
     {
-        if (_worldAttachmentVisualRoot.GetChildCount() == 0 && _attachmentVisualProgress <= 0.001f && _attachmentVisualTarget <= 0.001f)
+        if (_worldAttachmentVisualRoot.GetChildCount() == 0)
         {
             _worldAttachmentVisualRoot.Visible = false;
             return;
         }
 
-        var eased = EaseAttachmentVisual(_attachmentVisualProgress);
-        _worldAttachmentVisualRoot.Visible = eased > 0.001f || _attachmentVisualTarget > 0.001f;
+        var hasVisibleConnector = false;
+        var connectorsToRemove = new List<Node3D>();
 
         foreach (var child in _worldAttachmentVisualRoot.GetChildren())
         {
             if (child is Node3D connectorRoot)
             {
+                var progress = connectorRoot.GetMeta(AttachmentVisualProgressMetaKey, 1.0f).AsSingle();
+                var target = connectorRoot.GetMeta(AttachmentVisualTargetMetaKey, 1.0f).AsSingle();
+                if (delta > 0.0f && !Mathf.IsEqualApprox(progress, target))
+                {
+                    progress = Mathf.MoveToward(progress, target, delta * 3.8f);
+                    connectorRoot.SetMeta(AttachmentVisualProgressMetaKey, progress);
+                }
+
+                var eased = EaseAttachmentVisual(progress);
                 ApplySingleAttachmentVisualProgress(connectorRoot, eased);
+
+                var removeWhenHidden = connectorRoot.GetMeta(AttachmentRemoveWhenHiddenMetaKey, false).AsBool();
+                if (removeWhenHidden && progress <= 0.001f)
+                {
+                    connectorsToRemove.Add(connectorRoot);
+                    continue;
+                }
+
+                hasVisibleConnector |= eased > 0.001f || target > 0.001f;
             }
         }
+
+        foreach (var connectorRoot in connectorsToRemove)
+        {
+            connectorRoot.QueueFree();
+        }
+
+        _worldAttachmentVisualRoot.Visible = hasVisibleConnector || _worldAttachmentVisualRoot.GetChildCount() > connectorsToRemove.Count;
     }
 
     private static float EaseAttachmentVisual(float t)
@@ -1039,8 +1097,8 @@ public sealed class MobileFactoryInstance
 
     private static void ApplySingleAttachmentVisualProgress(Node3D connectorRoot, float eased)
     {
-        var fullLength = connectorRoot.GetMeta("full_length", 0.0f).AsSingle();
-        var mouthExtension = connectorRoot.GetMeta("mouth_extension", 0.14f).AsSingle();
+        var fullLength = connectorRoot.GetMeta(AttachmentFullLengthMetaKey, 0.0f).AsSingle();
+        var mouthExtension = connectorRoot.GetMeta(AttachmentMouthExtensionMetaKey, 0.14f).AsSingle();
         var currentLength = Mathf.Max(0.001f, fullLength * eased);
 
         var stem = connectorRoot.GetNodeOrNull<MeshInstance3D>("ConnectorStem");

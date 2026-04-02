@@ -185,6 +185,30 @@ public static class MobileFactoryScenarioLibrary
             });
     }
 
+    public static MobileFactoryInteriorPreset CreateExpeditionInputVerificationPreset()
+    {
+        return new MobileFactoryInteriorPreset(
+            id: "expedition-input-verification",
+            displayName: "远征输入验证线",
+            description: "中型移动工厂保留一条稳定外输主线，并在西侧挂接输入端口，把世界物流直接送进内部回收端。",
+            recoverySummary: "东侧输出接世界回收线，西侧输入持续喂给内部回收器，适合在大场景里验证输入端口功能。",
+            placements: new[]
+            {
+                new FactoryPlacementSpec(BuildPrototypeKind.Producer, new Vector2I(0, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(1, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(2, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(4, 1), FacingDirection.South),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(4, 2), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Sink, new Vector2I(1, 3), FacingDirection.East)
+            },
+            attachmentPlacements: new[]
+            {
+                new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.InputPort, new Vector2I(0, 3), FacingDirection.West),
+                new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.OutputPort, new Vector2I(5, 2), FacingDirection.East)
+            });
+    }
+
     public static MobileFactoryInteriorPreset CreateBranchAndMergePreset()
     {
         return new MobileFactoryInteriorPreset(
@@ -279,6 +303,7 @@ public static class MobileFactoryScenarioLibrary
         var heavy = CreateHeavyProfile();
 
         var branch = CreateBranchAndMergePreset();
+        var expeditionInputVerification = CreateExpeditionInputVerificationPreset();
         var relay = CreateBridgeRelayPreset();
         var dualFeed = CreateDualFeedPreset();
         var wideLoop = CreateWideLoopPreset();
@@ -289,7 +314,7 @@ public static class MobileFactoryScenarioLibrary
                 actorId: "player-expedition",
                 displayLabel: "玩家工厂",
                 profile: medium,
-                interiorPreset: branch,
+                interiorPreset: expeditionInputVerification,
                 isPlayerControlled: true,
                 transitPosition: new Vector3(-14.0f, 0.0f, 10.0f),
                 transitFacing: FacingDirection.East,

@@ -2,7 +2,6 @@
 
 ## Purpose
 TBD - updated by change add-complex-mobile-factory-test-scenario. Refine Purpose after archive.
-
 ## Requirements
 ### Requirement: Mobile factory editing uses a split-view workspace
 The game SHALL open mobile factory interior editing as a side-sliding split view that keeps the world visible while dedicating most of the screen to the interior editor.
@@ -34,18 +33,18 @@ The game SHALL route mouse interactions to the pane the pointer is currently hov
 - **THEN** mouse actions affect world interaction and do not place or remove internal structures
 
 ### Requirement: Interior editing reuses factory-style build controls
-The game SHALL provide interior building controls that mirror the existing factory-building interaction style for selecting, rotating, placing, and removing structures on the internal grid.
+The game SHALL provide interior building controls that mirror the existing factory-building interaction style for selecting, rotating, placing, and removing structures on the internal grid, including boundary attachments that span the factory edge.
 
-#### Scenario: Internal placement uses familiar controls
-- **WHEN** the player is inside the mobile factory editor and chooses a structure, rotates it, and clicks a valid internal cell
-- **THEN** the structure is previewed and placed using the same style of build controls used in the main factory-building experience
+#### Scenario: Boundary attachment placement uses familiar controls
+- **WHEN** the player is inside the mobile factory editor and chooses a boundary attachment, rotates it, and clicks a valid boundary mount
+- **THEN** the attachment is previewed and placed using the same style of build controls used for ordinary internal structures while still respecting its cross-boundary shape rules
 
 ### Requirement: Interior editor shows ports and their external state
-The game SHALL display mobile factory port cells inside the editor along with direction and external connection state.
+The game SHALL display mobile factory boundary attachments inside the editor along with their direction, cross-boundary shape, and external connection state.
 
-#### Scenario: Editor shows whether a port is connected
-- **WHEN** the player views a port cell in the mobile factory editor
-- **THEN** the editor indicates the port direction and whether it is currently connected to a world-side route
+#### Scenario: Editor shows attachment role and connection state
+- **WHEN** the player views a boundary attachment in the mobile factory editor
+- **THEN** the editor indicates whether it is an input or output attachment, which cells belong inside versus outside the hull, and whether it is currently connected, disconnected, or blocked at the world boundary
 
 ### Requirement: World miniature mirrors the shared interior layout
 The game SHALL present a miniature world representation of the mobile factory that reflects the same internal layout and item flow shown in the editor.
@@ -71,3 +70,4 @@ The game SHALL ensure the authored interior test layouts used in the large-scale
 #### Scenario: Interior layouts include recovery or consumption paths
 - **WHEN** the player inspects a mobile factory interior layout that is meant to run continuously in the large-scale scenario
 - **THEN** that layout includes sink, recycler, recirculation, or equivalent recovery structures that prevent the test case from depending on permanent belt blockage as its steady state
+
