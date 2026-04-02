@@ -86,7 +86,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         }
 
         var state = _items[0];
-        if (state.Position < ProviderPickupThreshold || state.TargetCell != requesterCell)
+        if (state.Position < ProviderPickupThreshold || !CanRequesterTakeState(state, requesterCell))
         {
             return false;
         }
@@ -274,6 +274,11 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
     protected virtual bool CanProvideTo(Vector2I requesterCell)
     {
         return CanOutputTo(requesterCell);
+    }
+
+    protected virtual bool CanRequesterTakeState(TransitItemState state, Vector2I requesterCell)
+    {
+        return state.TargetCell == requesterCell;
     }
 
     protected virtual bool CanReceiveProvidedFrom(Vector2I sourceCell)

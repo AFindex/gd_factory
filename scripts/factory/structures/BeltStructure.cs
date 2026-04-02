@@ -47,6 +47,11 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
         return IsOrthogonallyAdjacent(Cell, requesterCell);
     }
 
+    protected override bool CanRequesterTakeState(TransitItemState state, Vector2I requesterCell)
+    {
+        return IsOrthogonallyAdjacent(Cell, requesterCell);
+    }
+
     protected override bool CanReceiveProvidedFrom(Vector2I sourceCell)
     {
         return IsOrthogonallyAdjacent(Cell, sourceCell) && sourceCell != GetOutputCell();
