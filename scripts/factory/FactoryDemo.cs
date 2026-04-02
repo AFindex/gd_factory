@@ -129,6 +129,8 @@ public partial class FactoryDemo : Node3D
         _hud = new FactoryHud();
         _hud.SelectionChanged += SelectBuildKind;
         AddChild(_hud);
+
+        AddChild(new LauncherNavigationOverlay());
     }
 
     private void ConfigureGameplay()

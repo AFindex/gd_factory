@@ -76,6 +76,7 @@ public partial class UiShowcase : Control
         SetAnchorsPreset(LayoutPreset.FullRect);
 
         BuildScene();
+        AddChild(new LauncherNavigationOverlay());
         RefreshBackgroundLayout();
         ApplyPalette(_palettes[0]);
         PopulateTree();

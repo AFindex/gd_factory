@@ -10,6 +10,9 @@ public partial class MobileFactoryHud : CanvasLayer
         BuildPrototypeKind.Belt,
         BuildPrototypeKind.Splitter,
         BuildPrototypeKind.Merger,
+        BuildPrototypeKind.Bridge,
+        BuildPrototypeKind.Loader,
+        BuildPrototypeKind.Unloader,
         BuildPrototypeKind.Sink,
         BuildPrototypeKind.Storage,
         BuildPrototypeKind.Inserter,
@@ -333,7 +336,7 @@ public partial class MobileFactoryHud : CanvasLayer
         _deployButton.Pressed += () => DeployModeToggleRequested?.Invoke();
         actionsRow.AddChild(_deployButton);
 
-        _hintLabel.Text = "默认操作：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 上下文辅助 | F 内部编辑 | 1-9 切换内部建造/端口";
+        _hintLabel.Text = "默认操作：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 上下文辅助 | F 内部编辑 | 1-0/-/= 切换内部建造/端口";
         _hintLabel.Modulate = new Color("EED49F");
     }
 
@@ -439,18 +442,20 @@ public partial class MobileFactoryHud : CanvasLayer
 
     private void BuildEditorToolbar(Container parent)
     {
-        var paletteRow = new HBoxContainer();
-        paletteRow.AddThemeConstantOverride("separation", 8);
-        parent.AddChild(paletteRow);
+        var paletteGrid = new GridContainer();
+        paletteGrid.Columns = 4;
+        paletteGrid.AddThemeConstantOverride("h_separation", 8);
+        paletteGrid.AddThemeConstantOverride("v_separation", 8);
+        parent.AddChild(paletteGrid);
 
         foreach (var kind in EditorPalette)
         {
             var button = new Button();
             button.Text = GetKindLabel(kind);
             button.ToggleMode = true;
-            button.CustomMinimumSize = new Vector2(92.0f, 34.0f);
+            button.CustomMinimumSize = new Vector2(96.0f, 34.0f);
             button.Pressed += () => EditorPaletteSelected?.Invoke(kind);
-            paletteRow.AddChild(button);
+            paletteGrid.AddChild(button);
             _paletteButtons[kind] = button;
         }
 

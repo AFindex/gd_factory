@@ -166,22 +166,29 @@ public static class MobileFactoryScenarioLibrary
     public static MobileFactoryInteriorPreset CreateFocusedDemoPreset()
     {
         return new MobileFactoryInteriorPreset(
-            id: "focused-line",
-            displayName: "基础直通线",
-            description: "在厂内保留一条向外输出的主线，并增加一条从世界输入后进入内部回收的支线。",
-            recoverySummary: "输出通过世界侧回收站长期消化，输入通过内部回收器稳定消费。",
+            id: "focused-dual-logistics",
+            displayName: "双线物流样板",
+            description: "主生产线经过仓储与机械臂后从主输出端口外送，副生产线走辅助输出端口，西侧输入端口则直接接入内部回收。",
+            recoverySummary: "双输出端口分别接世界侧回收线，输入端口持续把外部物流导入内部回收器。",
             placements: new[]
             {
-                new FactoryPlacementSpec(BuildPrototypeKind.Producer, new Vector2I(0, 1), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(1, 1), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(2, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Producer, new Vector2I(0, 2), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Splitter, new Vector2I(1, 2), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(1, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(2, 1), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Producer, new Vector2I(0, 4), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(1, 4), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(2, 4), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 4), FacingDirection.South),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 3), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.Sink, new Vector2I(1, 3), FacingDirection.East)
             },
             attachmentPlacements: new[]
             {
                 new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.InputPort, new Vector2I(0, 3), FacingDirection.West),
-                new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.OutputPort, new Vector2I(4, 1), FacingDirection.East)
+                new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.OutputPort, new Vector2I(4, 1), FacingDirection.East),
+                new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.OutputPort, new Vector2I(4, 3), FacingDirection.East)
             });
     }
 
@@ -189,16 +196,16 @@ public static class MobileFactoryScenarioLibrary
     {
         return new MobileFactoryInteriorPreset(
             id: "expedition-input-verification",
-            displayName: "远征输入验证线",
-            description: "中型移动工厂保留一条稳定外输主线，并在西侧挂接输入端口，把世界物流直接送进内部回收端。",
-            recoverySummary: "东侧输出接世界回收线，西侧输入持续喂给内部回收器，适合在大场景里验证输入端口功能。",
+            displayName: "远征输入分拨线",
+            description: "中型移动工厂保留一条仓储缓冲后外输的主线，并在西侧挂接输入端口，把世界物流直接送进内部回收端。",
+            recoverySummary: "东侧主输出通过仓储和机械臂稳定发货，西侧输入持续喂给内部回收器。",
             placements: new[]
             {
                 new FactoryPlacementSpec(BuildPrototypeKind.Producer, new Vector2I(0, 1), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(1, 1), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(2, 1), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 1), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(4, 1), FacingDirection.South),
+                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(1, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(2, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 1), FacingDirection.South),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 2), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(4, 2), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.Sink, new Vector2I(1, 3), FacingDirection.East)
             },
@@ -214,17 +221,17 @@ public static class MobileFactoryScenarioLibrary
         return new MobileFactoryInteriorPreset(
             id: "branch-and-merge",
             displayName: "分流回汇",
-            description: "主线分成上下两路，再汇回主输出，方便验证分流器、两路转向和合并器的组合。",
-            recoverySummary: "最终通过输出桥接到世界回收线，由世界侧持续消化。",
+            description: "主线分到上下两路，上路先经过仓储和机械臂缓冲，下路由世界输入端口和自产物流共线，再汇回主输出。",
+            recoverySummary: "上路展示仓储抓取，下路展示输入端口并线，最终统一由世界侧回收线消化。",
             placements: new[]
             {
                 new FactoryPlacementSpec(BuildPrototypeKind.Producer, new Vector2I(0, 2), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.Splitter, new Vector2I(1, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(1, 1), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(2, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(1, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(2, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 1), FacingDirection.South),
                 new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(1, 3), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(2, 3), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 1), FacingDirection.South),
                 new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 3), FacingDirection.North),
                 new FactoryPlacementSpec(BuildPrototypeKind.Merger, new Vector2I(3, 2), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(4, 2), FacingDirection.East)
@@ -276,23 +283,26 @@ public static class MobileFactoryScenarioLibrary
     {
         return new MobileFactoryInteriorPreset(
             id: "wide-buffer-loop",
-            displayName: "宽幅缓冲回路",
-            description: "先分流到上下两层缓冲线，再回汇到主输出，拓扑更宽更密，适合长期观察。",
-            recoverySummary: "最终输出连接世界侧回收线，同时保留多段缓冲，避免主干轻易卡死。",
+            displayName: "宽幅双层缓冲回路",
+            description: "先分流到上下两层，其中上层经过仓储与机械臂节流，下层保持长距离输送，再回汇到主输出。",
+            recoverySummary: "输入端口持续注入外部物流，上下两层缓冲最终在东侧主输出回汇，适合长期观察拥堵恢复。",
             placements: new[]
             {
-                new FactoryPlacementSpec(BuildPrototypeKind.Producer, new Vector2I(0, 3), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Splitter, new Vector2I(1, 3), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(1, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(2, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(4, 2), FacingDirection.South),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(1, 4), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(2, 4), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 4), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(4, 4), FacingDirection.North),
-                new FactoryPlacementSpec(BuildPrototypeKind.Merger, new Vector2I(4, 3), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(5, 3), FacingDirection.East)
+                new FactoryPlacementSpec(BuildPrototypeKind.Producer, new Vector2I(0, 2), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Splitter, new Vector2I(1, 2), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(1, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(2, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(4, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(5, 1), FacingDirection.South),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(1, 3), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(2, 3), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 3), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(4, 3), FacingDirection.South),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(4, 4), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(5, 4), FacingDirection.North),
+                new FactoryPlacementSpec(BuildPrototypeKind.Merger, new Vector2I(5, 3), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Sink, new Vector2I(1, 4), FacingDirection.East)
             });
     }
 

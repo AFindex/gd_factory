@@ -15,11 +15,30 @@ public partial class MobileFactoryDemo : Node3D
         BuildPrototypeKind.Belt,
         BuildPrototypeKind.Splitter,
         BuildPrototypeKind.Merger,
+        BuildPrototypeKind.Bridge,
+        BuildPrototypeKind.Loader,
+        BuildPrototypeKind.Unloader,
         BuildPrototypeKind.Sink,
         BuildPrototypeKind.Storage,
         BuildPrototypeKind.Inserter,
         BuildPrototypeKind.OutputPort,
         BuildPrototypeKind.InputPort
+    };
+
+    private static readonly Key[] InteriorPaletteKeys =
+    {
+        Key.Key1,
+        Key.Key2,
+        Key.Key3,
+        Key.Key4,
+        Key.Key5,
+        Key.Key6,
+        Key.Key7,
+        Key.Key8,
+        Key.Key9,
+        Key.Key0,
+        Key.Minus,
+        Key.Equal
     };
 
     [Export]
@@ -31,6 +50,9 @@ public partial class MobileFactoryDemo : Node3D
         [BuildPrototypeKind.Belt] = new BuildPrototypeDefinition(BuildPrototypeKind.Belt, "传送带", new Color("7DD3FC"), "将物品沿直线向前输送。"),
         [BuildPrototypeKind.Splitter] = new BuildPrototypeDefinition(BuildPrototypeKind.Splitter, "分流器", new Color("C4B5FD"), "将后方输入分到左右两路。"),
         [BuildPrototypeKind.Merger] = new BuildPrototypeDefinition(BuildPrototypeKind.Merger, "合并器", new Color("99F6E4"), "把左右两路物流汇成前方一路。"),
+        [BuildPrototypeKind.Bridge] = new BuildPrototypeDefinition(BuildPrototypeKind.Bridge, "跨桥", new Color("F59E0B"), "让南北和东西两路物流跨越而不互连。"),
+        [BuildPrototypeKind.Loader] = new BuildPrototypeDefinition(BuildPrototypeKind.Loader, "装载器", new Color("FDBA74"), "把后方带上的物品装入前方机器或回收端。"),
+        [BuildPrototypeKind.Unloader] = new BuildPrototypeDefinition(BuildPrototypeKind.Unloader, "卸载器", new Color("93C5FD"), "把机器端输出卸到前方传送网络。"),
         [BuildPrototypeKind.Sink] = new BuildPrototypeDefinition(BuildPrototypeKind.Sink, "回收器", new Color("FDE68A"), "吞掉输入物品并作为内部消费端。"),
         [BuildPrototypeKind.Storage] = new BuildPrototypeDefinition(BuildPrototypeKind.Storage, "仓储", new Color("94A3B8"), "缓存多件物品，可向前输出，也能被机械臂抓取。"),
         [BuildPrototypeKind.Inserter] = new BuildPrototypeDefinition(BuildPrototypeKind.Inserter, "机械臂", new Color("FACC15"), "从后方抓取一件物品并向前投送。"),
@@ -228,6 +250,8 @@ public partial class MobileFactoryDemo : Node3D
         _hud.ObserverModeToggleRequested += ToggleObserverMode;
         _hud.DeployModeToggleRequested += ToggleDeployPreview;
         AddChild(_hud);
+
+        AddChild(new LauncherNavigationOverlay());
     }
 
     private void ConfigureGameplay()
@@ -270,8 +294,14 @@ public partial class MobileFactoryDemo : Node3D
         var focusedProfile = MobileFactoryScenarioLibrary.CreateFocusedDemoProfile();
         _sinkA = CreatePreparedOutputLine(focusedProfile, AnchorA, FacingDirection.East, 2);
         _sinkB = CreatePreparedOutputLine(focusedProfile, AnchorB, FacingDirection.East, 2);
+        CreatePreparedMountOutputLine(focusedProfile, AnchorA, FacingDirection.East, "east-output-aux", 1);
+        CreatePreparedMountOutputLine(focusedProfile, AnchorB, FacingDirection.East, "east-output-aux", 1);
         CreatePreparedInputLine(focusedProfile, AnchorA, FacingDirection.East, 1);
         CreatePreparedInputLine(focusedProfile, AnchorB, FacingDirection.East, 3);
+        CreateAmbientBranchDepot(new Vector2I(4, -9));
+        CreateAmbientStorageDepot(new Vector2I(4, 8));
+        CreateAmbientBridgeCrossing(new Vector2I(-1, 8));
+        CreateAmbientLoaderRelay(new Vector2I(-10, 6));
         _simulation!.RebuildTopology();
     }
 
@@ -338,6 +368,10 @@ public partial class MobileFactoryDemo : Node3D
         CreateAmbientWorldLine(new Vector2I(-18, -1), 5, FacingDirection.East);
         CreateAmbientWorldLine(new Vector2I(12, -12), 4, FacingDirection.North);
         CreateAmbientWorldLine(new Vector2I(-3, -14), 6, FacingDirection.East);
+        CreateAmbientBranchDepot(new Vector2I(12, 14));
+        CreateAmbientStorageDepot(new Vector2I(-19, 14));
+        CreateAmbientBridgeCrossing(new Vector2I(16, -15));
+        CreateAmbientLoaderRelay(new Vector2I(-18, -15));
 
         _simulation!.RebuildTopology();
     }
@@ -375,6 +409,27 @@ public partial class MobileFactoryDemo : Node3D
     {
         var portCell = GetProfilePortCell(profile, anchorCell, facing, BuildPrototypeKind.OutputPort);
         var outboundFacing = GetProfilePortFacing(profile, facing, BuildPrototypeKind.OutputPort);
+        var cursor = portCell;
+        for (var i = 0; i < beltCount; i++)
+        {
+            cursor += FactoryDirection.ToCellOffset(outboundFacing);
+            PlaceWorldStructure(BuildPrototypeKind.Belt, cursor, outboundFacing);
+        }
+
+        var sinkCell = cursor + FactoryDirection.ToCellOffset(outboundFacing);
+        var sink = PlaceWorldStructure(BuildPrototypeKind.Sink, sinkCell, outboundFacing) as SinkStructure;
+        if (sink is not null)
+        {
+            _scenarioSinks.Add(sink);
+        }
+
+        return sink;
+    }
+
+    private SinkStructure? CreatePreparedMountOutputLine(MobileFactoryProfile profile, Vector2I anchorCell, FacingDirection facing, string mountId, int beltCount)
+    {
+        var portCell = GetProfileMountPortCell(profile, anchorCell, facing, mountId);
+        var outboundFacing = GetProfileMountFacing(profile, facing, mountId);
         var cursor = portCell;
         for (var i = 0; i < beltCount; i++)
         {
@@ -435,6 +490,56 @@ public partial class MobileFactoryDemo : Node3D
         {
             _scenarioSinks.Add(sink);
         }
+    }
+
+    private void CreateAmbientBranchDepot(Vector2I originCell)
+    {
+        PlaceWorldStructure(BuildPrototypeKind.Producer, originCell, FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(1, 0), FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Splitter, originCell + new Vector2I(2, 0), FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(2, -1), FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(3, -1), FacingDirection.South);
+        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(2, 1), FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(3, 1), FacingDirection.North);
+        PlaceWorldStructure(BuildPrototypeKind.Merger, originCell + new Vector2I(3, 0), FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(4, 0), FacingDirection.East);
+        RegisterScenarioSink(PlaceWorldStructure(BuildPrototypeKind.Sink, originCell + new Vector2I(5, 0), FacingDirection.East) as SinkStructure);
+    }
+
+    private void CreateAmbientStorageDepot(Vector2I originCell)
+    {
+        PlaceWorldStructure(BuildPrototypeKind.Producer, originCell, FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(1, 0), FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Storage, originCell + new Vector2I(2, 0), FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Inserter, originCell + new Vector2I(3, 0), FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(4, 0), FacingDirection.East);
+        RegisterScenarioSink(PlaceWorldStructure(BuildPrototypeKind.Sink, originCell + new Vector2I(5, 0), FacingDirection.East) as SinkStructure);
+        PlaceWorldStructure(BuildPrototypeKind.Producer, originCell + new Vector2I(2, -2), FacingDirection.South);
+        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(2, -1), FacingDirection.South);
+    }
+
+    private void CreateAmbientBridgeCrossing(Vector2I centerCell)
+    {
+        PlaceWorldStructure(BuildPrototypeKind.Producer, centerCell + new Vector2I(-2, 0), FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Belt, centerCell + new Vector2I(-1, 0), FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Bridge, centerCell, FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Belt, centerCell + new Vector2I(1, 0), FacingDirection.East);
+        RegisterScenarioSink(PlaceWorldStructure(BuildPrototypeKind.Sink, centerCell + new Vector2I(2, 0), FacingDirection.East) as SinkStructure);
+
+        PlaceWorldStructure(BuildPrototypeKind.Producer, centerCell + new Vector2I(0, -2), FacingDirection.South);
+        PlaceWorldStructure(BuildPrototypeKind.Belt, centerCell + new Vector2I(0, -1), FacingDirection.South);
+        PlaceWorldStructure(BuildPrototypeKind.Belt, centerCell + new Vector2I(0, 1), FacingDirection.South);
+        RegisterScenarioSink(PlaceWorldStructure(BuildPrototypeKind.Sink, centerCell + new Vector2I(0, 2), FacingDirection.South) as SinkStructure);
+    }
+
+    private void CreateAmbientLoaderRelay(Vector2I originCell)
+    {
+        PlaceWorldStructure(BuildPrototypeKind.Producer, originCell, FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Unloader, originCell + new Vector2I(1, 0), FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(2, 0), FacingDirection.South);
+        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(2, 1), FacingDirection.South);
+        PlaceWorldStructure(BuildPrototypeKind.Loader, originCell + new Vector2I(2, 2), FacingDirection.South);
+        RegisterScenarioSink(PlaceWorldStructure(BuildPrototypeKind.Sink, originCell + new Vector2I(2, 3), FacingDirection.South) as SinkStructure);
     }
 
     private void AddFactoryLabel(MobileFactoryInstance factory, string labelText, Color color)
@@ -515,6 +620,34 @@ public partial class MobileFactoryDemo : Node3D
         {
             var mount = profile.AttachmentMounts[i];
             if (mount.Allows(kind))
+            {
+                return FactoryDirection.RotateBy(mount.Facing, deployFacing);
+            }
+        }
+
+        return deployFacing;
+    }
+
+    private static Vector2I GetProfileMountPortCell(MobileFactoryProfile profile, Vector2I anchorCell, FacingDirection facing, string mountId)
+    {
+        for (var i = 0; i < profile.AttachmentMounts.Count; i++)
+        {
+            var mount = profile.AttachmentMounts[i];
+            if (mount.Id == mountId)
+            {
+                return anchorCell + FactoryDirection.RotateOffset(mount.WorldPortOffsetEast, facing);
+            }
+        }
+
+        return anchorCell;
+    }
+
+    private static FacingDirection GetProfileMountFacing(MobileFactoryProfile profile, FacingDirection deployFacing, string mountId)
+    {
+        for (var i = 0; i < profile.AttachmentMounts.Count; i++)
+        {
+            var mount = profile.AttachmentMounts[i];
+            if (mount.Id == mountId)
             {
                 return FactoryDirection.RotateBy(mount.Facing, deployFacing);
             }
@@ -631,57 +764,14 @@ public partial class MobileFactoryDemo : Node3D
             return false;
         }
 
-        if (keyEvent.Keycode == Key.Key1)
+        for (var i = 0; i < InteriorPalette.Length && i < InteriorPaletteKeys.Length; i++)
         {
-            _selectedInteriorKind = InteriorPalette[0];
-            return true;
-        }
+            if (keyEvent.Keycode != InteriorPaletteKeys[i])
+            {
+                continue;
+            }
 
-        if (keyEvent.Keycode == Key.Key2)
-        {
-            _selectedInteriorKind = InteriorPalette[1];
-            return true;
-        }
-
-        if (keyEvent.Keycode == Key.Key3)
-        {
-            _selectedInteriorKind = InteriorPalette[2];
-            return true;
-        }
-
-        if (keyEvent.Keycode == Key.Key4)
-        {
-            _selectedInteriorKind = InteriorPalette[3];
-            return true;
-        }
-
-        if (keyEvent.Keycode == Key.Key5)
-        {
-            _selectedInteriorKind = InteriorPalette[4];
-            return true;
-        }
-
-        if (keyEvent.Keycode == Key.Key6)
-        {
-            _selectedInteriorKind = InteriorPalette[5];
-            return true;
-        }
-
-        if (keyEvent.Keycode == Key.Key7)
-        {
-            _selectedInteriorKind = InteriorPalette[6];
-            return true;
-        }
-
-        if (keyEvent.Keycode == Key.Key8)
-        {
-            _selectedInteriorKind = InteriorPalette[7];
-            return true;
-        }
-
-        if (keyEvent.Keycode == Key.Key9)
-        {
-            _selectedInteriorKind = InteriorPalette[8];
+            _selectedInteriorKind = InteriorPalette[i];
             return true;
         }
 
@@ -1891,8 +1981,16 @@ public partial class MobileFactoryDemo : Node3D
         {
             MobileFactoryControlMode.Observer => "观察模式：WASD/方向键移动相机 | 滚轮缩放 | Tab 返回工厂控制 | F 内部编辑",
             MobileFactoryControlMode.DeployPreview => "部署预览：左键确认 | Q/E/R 旋转朝向 | G/Esc 取消 | F 内部编辑",
-            _ => "工厂控制：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器用 1-7 选建筑/端口"
+            _ => "工厂控制：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器用 1-0/-/= 选建筑/端口"
         };
+    }
+
+    private void RegisterScenarioSink(SinkStructure? sink)
+    {
+        if (sink is not null)
+        {
+            _scenarioSinks.Add(sink);
+        }
     }
 
     private Vector3 GetPreviewCenter(Vector2I anchorCell, FacingDirection facing)
