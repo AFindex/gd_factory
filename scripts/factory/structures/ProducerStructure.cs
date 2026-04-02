@@ -1,9 +1,10 @@
 using Godot;
 
-public partial class ProducerStructure : FactoryStructure
+public partial class ProducerStructure : FactoryStructure, IFactoryItemProvider
 {
     private double _cooldown;
     private MeshInstance3D? _indicator;
+    private FactoryItem? _bufferedItem;
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.Producer;
 
@@ -18,9 +19,10 @@ public partial class ProducerStructure : FactoryStructure
             return;
         }
 
-        var item = simulation.CreateItem(Kind);
-        if (simulation.TrySendItem(this, GetOutputCell(), item))
+        _bufferedItem ??= simulation.CreateItem(Kind);
+        if (simulation.TrySendItem(this, GetOutputCell(), _bufferedItem))
         {
+            _bufferedItem = null;
             _cooldown = FactoryConstants.ProducerSpawnSeconds;
             if (_indicator is not null)
             {
@@ -29,11 +31,40 @@ public partial class ProducerStructure : FactoryStructure
         }
     }
 
+    public bool TryPeekProvidedItem(Vector2I requesterCell, SimulationController simulation, out FactoryItem? item)
+    {
+        item = null;
+
+        if (requesterCell != GetOutputCell() || _bufferedItem is null)
+        {
+            return false;
+        }
+
+        item = _bufferedItem;
+        return true;
+    }
+
+    public bool TryTakeProvidedItem(Vector2I requesterCell, SimulationController simulation, out FactoryItem? item)
+    {
+        item = null;
+
+        if (!TryPeekProvidedItem(requesterCell, simulation, out var previewItem))
+        {
+            return false;
+        }
+
+        item = previewItem;
+        _bufferedItem = null;
+        _cooldown = FactoryConstants.ProducerSpawnSeconds;
+        return true;
+    }
+
     public override void UpdateVisuals(float tickAlpha)
     {
         if (_indicator is not null)
         {
-            _indicator.Scale = _indicator.Scale.Lerp(Vector3.One, tickAlpha * 0.5f);
+            var targetScale = _bufferedItem is null ? Vector3.One : new Vector3(1.15f, 1.15f, 1.15f);
+            _indicator.Scale = _indicator.Scale.Lerp(targetScale, tickAlpha * 0.5f);
         }
     }
 

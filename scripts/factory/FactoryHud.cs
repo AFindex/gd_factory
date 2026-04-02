@@ -7,20 +7,27 @@ public partial class FactoryHud : CanvasLayer
     private readonly Dictionary<BuildPrototypeKind, Button> _selectionButtons = new();
 
     private Control? _root;
-    private Control? _panel;
+    private PanelContainer? _panel;
     private MarginContainer? _chrome;
     private VBoxContainer? _body;
+    private Label? _modeLabel;
     private Label? _selectedLabel;
+    private Label? _selectionTargetLabel;
     private Label? _hoverLabel;
     private Label? _previewLabel;
     private Label? _rotationLabel;
     private Label? _deliveryLabel;
     private Label? _noteLabel;
     private Label? _profilerLabel;
+    private PanelContainer? _inspectionPanel;
+    private Label? _inspectionTitleLabel;
+    private Label? _inspectionBodyLabel;
 
-    public event Action<BuildPrototypeKind>? SelectionChanged;
+    public event Action<BuildPrototypeKind?>? SelectionChanged;
 
     public string ProfilerText => _profilerLabel?.Text ?? string.Empty;
+    public string InspectionTitleText => _inspectionTitleLabel?.Text ?? string.Empty;
+    public string InspectionBodyText => _inspectionBodyLabel?.Text ?? string.Empty;
 
     public override void _Ready()
     {
@@ -53,11 +60,8 @@ public partial class FactoryHud : CanvasLayer
         chrome.AddChild(body);
         _body = body;
 
-        var title = CreateSectionLabel("Net Factory Stress Demo", 18, Colors.White);
-        body.AddChild(title);
-
-        var subtitle = CreateValueLabel("复杂拓扑、吞吐观察与 profiler 回归基线。", new Color("A8B8C6"));
-        body.AddChild(subtitle);
+        body.AddChild(CreateSectionLabel("Net Factory Logistics Demo", 18, Colors.White));
+        body.AddChild(CreateValueLabel("默认交互模式下可选中建筑，显式选择原型后才进入建造模式。", new Color("A8B8C6")));
 
         body.AddChild(CreateDivider());
         body.AddChild(CreateSectionLabel("建造面板", 12, new Color("F8FAFC")));
@@ -77,14 +81,20 @@ public partial class FactoryHud : CanvasLayer
         CreateSelectionButton(buttonGrid, BuildPrototypeKind.Bridge, "6 跨桥");
         CreateSelectionButton(buttonGrid, BuildPrototypeKind.Loader, "7 装载器");
         CreateSelectionButton(buttonGrid, BuildPrototypeKind.Unloader, "8 卸载器");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Storage, "9 仓储");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Inserter, "0 机械臂");
 
         body.AddChild(CreateDivider());
         body.AddChild(CreateSectionLabel("状态", 12, new Color("F8FAFC")));
+        _modeLabel = CreateValueLabel(string.Empty);
         _selectedLabel = CreateValueLabel(string.Empty);
+        _selectionTargetLabel = CreateValueLabel(string.Empty);
         _rotationLabel = CreateValueLabel(string.Empty);
         _hoverLabel = CreateValueLabel(string.Empty);
         _previewLabel = CreateValueLabel(string.Empty);
+        body.AddChild(_modeLabel);
         body.AddChild(_selectedLabel);
+        body.AddChild(_selectionTargetLabel);
         body.AddChild(_rotationLabel);
         body.AddChild(_hoverLabel);
         body.AddChild(_previewLabel);
@@ -97,21 +107,41 @@ public partial class FactoryHud : CanvasLayer
         body.AddChild(_noteLabel);
 
         body.AddChild(CreateDivider());
+        body.AddChild(CreateSectionLabel("仓储面板", 12, new Color("F8FAFC")));
+        var inspectionPanel = new PanelContainer();
+        inspectionPanel.MouseFilter = Control.MouseFilterEnum.Ignore;
+        inspectionPanel.Visible = false;
+        body.AddChild(inspectionPanel);
+        _inspectionPanel = inspectionPanel;
+
+        var inspectionBody = new VBoxContainer();
+        inspectionBody.MouseFilter = Control.MouseFilterEnum.Ignore;
+        inspectionBody.AddThemeConstantOverride("separation", 4);
+        inspectionPanel.AddChild(inspectionBody);
+
+        _inspectionTitleLabel = CreateValueLabel(string.Empty, new Color("FDE68A"));
+        _inspectionBodyLabel = CreateValueLabel(string.Empty, new Color("D7E3EE"));
+        inspectionBody.AddChild(_inspectionTitleLabel);
+        inspectionBody.AddChild(_inspectionBodyLabel);
+
+        body.AddChild(CreateDivider());
         body.AddChild(CreateSectionLabel("Profiler", 12, new Color("F8FAFC")));
         _profilerLabel = CreateValueLabel(string.Empty, new Color("CFE7FF"));
         body.AddChild(_profilerLabel);
 
         body.AddChild(CreateDivider());
-        var help = CreateValueLabel("镜头 WASD/方向键 | 缩放 滚轮 | 朝向 Q/E | 放置 左键 | 拆除 右键/Delete", new Color("8EA4B8"));
-        body.AddChild(help);
+        body.AddChild(CreateValueLabel("镜头 WASD/方向键 | 缩放 滚轮 | 朝向 Q/E | 数字键进建造 | Esc 返回交互 | 交互模式左键选中 | 建造模式左键放置 / 右键或 Delete 拆除", new Color("8EA4B8")));
 
-        SetSelectedKind(BuildPrototypeKind.Producer, "持续向前方投放物品");
+        SetMode(FactoryInteractionMode.Interact);
+        SetBuildSelection(null, null);
+        SetSelectionTarget("未选中建筑");
         SetHoverCell(Vector2I.Zero, false);
-        SetPreviewStatus(false, "把鼠标移到地面网格上选择格子。");
+        SetPreviewStatus(false, "交互模式：点击建筑查看；按数字键选择建筑后进入建造。");
         SetRotation(FacingDirection.East);
         SetSinkStats(0, 0, 0);
         SetProfilerStats(0, 0.0, 0, 0, 0.0, 0.0, 0.0);
-        SetNote("默认场景已预置多段压力拓扑，右上角保留 smoke 回归探针空区。");
+        SetNote("默认场景已扩展仓储、机械臂与回收链路，右上角仍保留 smoke 回归探针空区。");
+        SetInspection(null, null);
         UpdateLayout();
         GetViewport().SizeChanged += UpdateLayout;
     }
@@ -124,17 +154,49 @@ public partial class FactoryHud : CanvasLayer
         }
     }
 
-    public void SetSelectedKind(BuildPrototypeKind kind, string details)
+    public void SetMode(FactoryInteractionMode mode)
+    {
+        if (_modeLabel is null)
+        {
+            return;
+        }
+
+        _modeLabel.Text = mode == FactoryInteractionMode.Build
+            ? "当前模式: 建造模式"
+            : "当前模式: 交互模式";
+        _modeLabel.Modulate = mode == FactoryInteractionMode.Build ? new Color("A7F3A0") : new Color("FDE68A");
+    }
+
+    public void SetBuildSelection(BuildPrototypeKind? kind, string? details)
     {
         foreach (var pair in _selectionButtons)
         {
-            pair.Value.Modulate = pair.Key == kind ? Colors.White : new Color(0.72f, 0.78f, 0.86f);
+            pair.Value.ButtonPressed = kind.HasValue && pair.Key == kind.Value;
+            pair.Value.Modulate = pair.Value.ButtonPressed ? Colors.White : new Color(0.72f, 0.78f, 0.86f);
         }
 
-        if (_selectedLabel is not null)
+        if (_selectedLabel is null)
         {
-            _selectedLabel.Text = $"当前建造: {GetKindLabel(kind)}\n{details}";
-            _selectedLabel.TooltipText = details;
+            return;
+        }
+
+        if (!kind.HasValue)
+        {
+            _selectedLabel.Text = "当前建造: 未选择";
+            _selectedLabel.TooltipText = "交互模式下点击建筑查看详情。";
+            return;
+        }
+
+        var detailText = details ?? string.Empty;
+        _selectedLabel.Text = $"当前建造: {FactoryPresentation.GetKindLabel(kind.Value)}\n{detailText}";
+        _selectedLabel.TooltipText = detailText;
+    }
+
+    public void SetSelectionTarget(string text)
+    {
+        if (_selectionTargetLabel is not null)
+        {
+            _selectionTargetLabel.Text = $"当前选中: {text}";
         }
     }
 
@@ -150,7 +212,7 @@ public partial class FactoryHud : CanvasLayer
     {
         if (_previewLabel is not null)
         {
-            _previewLabel.Text = $"预览: {text}";
+            _previewLabel.Text = $"提示: {text}";
             _previewLabel.Modulate = isValid ? new Color("A7F3A0") : new Color("FFB4A2");
         }
     }
@@ -191,6 +253,19 @@ public partial class FactoryHud : CanvasLayer
         {
             _noteLabel.Text = text;
         }
+    }
+
+    public void SetInspection(string? title, string? body)
+    {
+        if (_inspectionPanel is null || _inspectionTitleLabel is null || _inspectionBodyLabel is null)
+        {
+            return;
+        }
+
+        var isVisible = !string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(body);
+        _inspectionPanel.Visible = isVisible;
+        _inspectionTitleLabel.Text = title ?? string.Empty;
+        _inspectionBodyLabel.Text = body ?? string.Empty;
     }
 
     public bool BlocksWorldInput(Control? control)
@@ -249,10 +324,10 @@ public partial class FactoryHud : CanvasLayer
 
         var viewportSize = GetViewport().GetVisibleRect().Size;
         var outerMargin = 14.0f;
-        var panelWidth = Mathf.Clamp(viewportSize.X * 0.2f, 220.0f, 320.0f);
-        var availableHeight = Mathf.Max(220.0f, viewportSize.Y - outerMargin * 2.0f);
-        var targetHeight = Mathf.Clamp(viewportSize.Y * 0.48f, 260.0f, availableHeight);
-        var innerWidth = Mathf.Max(180.0f, panelWidth - 24.0f);
+        var panelWidth = Mathf.Clamp(viewportSize.X * 0.23f, 240.0f, 360.0f);
+        var availableHeight = Mathf.Max(260.0f, viewportSize.Y - outerMargin * 2.0f);
+        var targetHeight = Mathf.Clamp(viewportSize.Y * 0.68f, 340.0f, availableHeight);
+        var innerWidth = Mathf.Max(200.0f, panelWidth - 24.0f);
 
         _panel.Position = new Vector2(outerMargin, outerMargin);
         _panel.Size = new Vector2(panelWidth, targetHeight);
@@ -265,11 +340,16 @@ public partial class FactoryHud : CanvasLayer
         var localKind = kind;
         var button = new Button();
         button.Text = text;
+        button.ToggleMode = true;
         button.MouseFilter = Control.MouseFilterEnum.Stop;
         button.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         button.CustomMinimumSize = new Vector2(0.0f, 30.0f);
         button.AddThemeFontSizeOverride("font_size", 12);
-        button.Pressed += () => SelectionChanged?.Invoke(localKind);
+        button.Pressed += () =>
+        {
+            BuildPrototypeKind? nextKind = button.ButtonPressed ? localKind : null;
+            SelectionChanged?.Invoke(nextKind);
+        };
         parent.AddChild(button);
         _selectionButtons[kind] = button;
     }
@@ -302,22 +382,6 @@ public partial class FactoryHud : CanvasLayer
             MouseFilter = Control.MouseFilterEnum.Ignore,
             CustomMinimumSize = new Vector2(0.0f, 1.0f),
             Color = new Color(0.45f, 0.53f, 0.61f, 0.28f)
-        };
-    }
-
-    private static string GetKindLabel(BuildPrototypeKind kind)
-    {
-        return kind switch
-        {
-            BuildPrototypeKind.Producer => "生产器",
-            BuildPrototypeKind.Belt => "传送带",
-            BuildPrototypeKind.Sink => "回收站",
-            BuildPrototypeKind.Splitter => "分流器",
-            BuildPrototypeKind.Merger => "合并器",
-            BuildPrototypeKind.Bridge => "跨桥",
-            BuildPrototypeKind.Loader => "装载器",
-            BuildPrototypeKind.Unloader => "卸载器",
-            _ => kind.ToString()
         };
     }
 }

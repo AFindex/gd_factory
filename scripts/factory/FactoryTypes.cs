@@ -10,6 +10,8 @@ public enum BuildPrototypeKind
     Bridge,
     Loader,
     Unloader,
+    Storage,
+    Inserter,
     OutputPort,
     InputPort
 }
@@ -35,6 +37,12 @@ public enum MobileFactoryControlMode
     FactoryCommand,
     DeployPreview,
     Observer
+}
+
+public enum FactoryInteractionMode
+{
+    Interact,
+    Build
 }
 
 public enum MobileFactoryInteractionPattern
@@ -82,6 +90,29 @@ public sealed class BuildPrototypeDefinition
     public string DisplayName { get; }
     public Color Tint { get; }
     public string Details { get; }
+}
+
+public static class FactoryPresentation
+{
+    public static string GetKindLabel(BuildPrototypeKind kind)
+    {
+        return kind switch
+        {
+            BuildPrototypeKind.Producer => "生产器",
+            BuildPrototypeKind.Belt => "传送带",
+            BuildPrototypeKind.Sink => "回收站",
+            BuildPrototypeKind.Splitter => "分流器",
+            BuildPrototypeKind.Merger => "合并器",
+            BuildPrototypeKind.Bridge => "跨桥",
+            BuildPrototypeKind.Loader => "装载器",
+            BuildPrototypeKind.Unloader => "卸载器",
+            BuildPrototypeKind.Storage => "仓储",
+            BuildPrototypeKind.Inserter => "机械臂",
+            BuildPrototypeKind.OutputPort => "输出端口",
+            BuildPrototypeKind.InputPort => "输入端口",
+            _ => kind.ToString()
+        };
+    }
 }
 
 public static class FactoryDirection

@@ -1,7 +1,7 @@
 using Godot;
 using System.Collections.Generic;
 
-public abstract partial class FlowTransportStructure : FactoryStructure
+public abstract partial class FlowTransportStructure : FactoryStructure, IFactoryItemProvider, IFactoryItemReceiver
 {
     protected sealed class TransitItemState
     {
@@ -27,6 +27,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure
     protected virtual float ExitBuffer => 0.985f;
     protected virtual float TravelSpeed => FactoryConstants.BeltItemsPerSecond;
     protected virtual float ItemHeight => 0.34f;
+    protected virtual float ProviderPickupThreshold => 0.78f;
 
     public override bool IsTransportNode => true;
     public int TransitItemCount => _items.Count;
@@ -73,6 +74,50 @@ public abstract partial class FlowTransportStructure : FactoryStructure
         }
 
         return _items.Count == 0 || _items[^1].Position >= ItemSpacing;
+    }
+
+    public bool TryPeekProvidedItem(Vector2I requesterCell, SimulationController simulation, out FactoryItem? item)
+    {
+        item = null;
+
+        if (_items.Count == 0 || !CanProvideTo(requesterCell))
+        {
+            return false;
+        }
+
+        var state = _items[0];
+        if (state.Position < ProviderPickupThreshold || state.TargetCell != requesterCell)
+        {
+            return false;
+        }
+
+        item = state.Item;
+        return true;
+    }
+
+    public bool TryTakeProvidedItem(Vector2I requesterCell, SimulationController simulation, out FactoryItem? item)
+    {
+        item = null;
+
+        if (!TryPeekProvidedItem(requesterCell, simulation, out var previewItem))
+        {
+            return false;
+        }
+
+        item = previewItem;
+        _items[0].Visual.QueueFree();
+        _items.RemoveAt(0);
+        return true;
+    }
+
+    public bool CanReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
+    {
+        return CanAcceptItem(item, sourceCell, simulation);
+    }
+
+    public bool TryReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
+    {
+        return TryAcceptItem(item, sourceCell, simulation);
     }
 
     public override void SimulationStep(SimulationController simulation, double stepSeconds)
@@ -191,6 +236,11 @@ public abstract partial class FlowTransportStructure : FactoryStructure
 
     protected virtual void OnTransitItemAccepted(TransitItemState state)
     {
+    }
+
+    protected virtual bool CanProvideTo(Vector2I requesterCell)
+    {
+        return CanOutputTo(requesterCell);
     }
 
     protected abstract bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell);

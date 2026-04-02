@@ -11,6 +11,7 @@ public abstract partial class FactoryStructure : Node3D
     public Vector2I Cell { get; private set; }
     public FacingDirection Facing { get; protected set; }
     public string ReservationOwnerId { get; private set; } = string.Empty;
+    public string DisplayName => FactoryPresentation.GetKindLabel(Kind);
 
     public abstract BuildPrototypeKind Kind { get; }
     public abstract string Description { get; }

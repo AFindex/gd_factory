@@ -9,6 +9,9 @@ public static class FactoryConstants
     public const float SimulationStepSeconds = 0.05f;
     public const float ProducerSpawnSeconds = 0.8f;
     public const float BeltItemsPerSecond = 1.6f;
+    public const float StorageDispatchSeconds = 0.3f;
+    public const int StorageCapacity = 8;
+    public const float InserterCycleSeconds = 0.55f;
     public const float CameraPitchDegrees = -55.0f;
     public const float CameraMinZoom = 15.0f;
     public const float CameraMaxZoom = 34.0f;

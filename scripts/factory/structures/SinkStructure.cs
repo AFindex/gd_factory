@@ -1,6 +1,6 @@
 using Godot;
 
-public partial class SinkStructure : FactoryStructure
+public partial class SinkStructure : FactoryStructure, IFactoryItemReceiver
 {
     private int _recentDelivered;
     private double _rateTimer;
@@ -12,6 +12,11 @@ public partial class SinkStructure : FactoryStructure
     public override BuildPrototypeKind Kind => BuildPrototypeKind.Sink;
 
     public override string Description => "Destination hub counting delivered items.";
+
+    public bool CanReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
+    {
+        return AcceptsFrom(sourceCell);
+    }
 
     public override bool TryAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
@@ -29,6 +34,11 @@ public partial class SinkStructure : FactoryStructure
         }
 
         return true;
+    }
+
+    public bool TryReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
+    {
+        return TryAcceptItem(item, sourceCell, simulation);
     }
 
     public override void SimulationStep(SimulationController simulation, double stepSeconds)

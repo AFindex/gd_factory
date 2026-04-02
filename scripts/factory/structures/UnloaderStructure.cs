@@ -30,14 +30,14 @@ public partial class UnloaderStructure : FlowTransportStructure
     {
         targetCell = GetOutputCell();
 
-        if (!Site.TryGetStructure(sourceCell, out var source) || source is null || source.IsTransportNode)
+        if (!Site.TryGetStructure(sourceCell, out var source) || source is null || source is not IFactoryItemProvider || source.IsTransportNode)
         {
             return false;
         }
 
         if (Site.TryGetStructure(targetCell, out var target) && target is not null)
         {
-            return target.IsTransportNode;
+            return target is IFactoryItemReceiver && target.IsTransportNode;
         }
 
         return true;

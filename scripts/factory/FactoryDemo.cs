@@ -13,8 +13,10 @@ public partial class FactoryDemo : Node3D
         [BuildPrototypeKind.Splitter] = new BuildPrototypeDefinition(BuildPrototypeKind.Splitter, "分流器", new Color("C4B5FD"), "将后方输入分到左右两路。"),
         [BuildPrototypeKind.Merger] = new BuildPrototypeDefinition(BuildPrototypeKind.Merger, "合并器", new Color("99F6E4"), "把左右两路物流汇成前方一路。"),
         [BuildPrototypeKind.Bridge] = new BuildPrototypeDefinition(BuildPrototypeKind.Bridge, "跨桥", new Color("F59E0B"), "让南北和东西两路物流跨越而不互连。"),
-[BuildPrototypeKind.Loader] = new BuildPrototypeDefinition(BuildPrototypeKind.Loader, "装载器", new Color("FDBA74"), "把后方带上的物品装入前方机器或回收端。"),
-[BuildPrototypeKind.Unloader] = new BuildPrototypeDefinition(BuildPrototypeKind.Unloader, "卸载器", new Color("93C5FD"), "把机器端输出卸到前方传送网络。")
+        [BuildPrototypeKind.Loader] = new BuildPrototypeDefinition(BuildPrototypeKind.Loader, "装载器", new Color("FDBA74"), "把后方带上的物品装入前方机器或回收端。"),
+        [BuildPrototypeKind.Unloader] = new BuildPrototypeDefinition(BuildPrototypeKind.Unloader, "卸载器", new Color("93C5FD"), "把机器端输出卸到前方传送网络。"),
+        [BuildPrototypeKind.Storage] = new BuildPrototypeDefinition(BuildPrototypeKind.Storage, "仓储", new Color("94A3B8"), "缓存多件物品，可向前输出，也能被机械臂抓取。"),
+        [BuildPrototypeKind.Inserter] = new BuildPrototypeDefinition(BuildPrototypeKind.Inserter, "机械臂", new Color("FACC15"), "从后方抓取一件物品并向前投送。")
     };
 
     private GridManager? _grid;
@@ -27,13 +29,15 @@ public partial class FactoryDemo : Node3D
     private MeshInstance3D? _previewArrow;
     private double _averageFrameMilliseconds;
     private double _averageVisualSyncMilliseconds;
-
-    private BuildPrototypeKind _selectedKind = BuildPrototypeKind.Producer;
+    private BuildPrototypeKind? _selectedBuildKind;
     private FacingDirection _selectedFacing = FacingDirection.East;
+    private FactoryInteractionMode _interactionMode = FactoryInteractionMode.Interact;
+    private FactoryStructure? _selectedStructure;
+    private FactoryStructure? _hoveredStructure;
     private Vector2I _hoveredCell;
     private bool _hasHoveredCell;
     private bool _canPlaceCurrentCell;
-    private string _previewMessage = "把鼠标移到地面网格上选择格子。";
+    private string _previewMessage = "交互模式：点击建筑查看；按数字键选择建筑后进入建造。";
 
     public override void _Ready()
     {
@@ -56,81 +60,48 @@ public partial class FactoryDemo : Node3D
         UpdatePreview();
         UpdateStructureVisuals();
         UpdateHud();
-
-        if (Input.IsActionJustPressed("select_producer"))
-        {
-            SelectKind(BuildPrototypeKind.Producer);
-        }
-
-        if (Input.IsActionJustPressed("select_belt"))
-        {
-            SelectKind(BuildPrototypeKind.Belt);
-        }
-
-        if (Input.IsActionJustPressed("select_sink"))
-        {
-            SelectKind(BuildPrototypeKind.Sink);
-        }
-
-        if (Input.IsActionJustPressed("select_splitter"))
-        {
-            SelectKind(BuildPrototypeKind.Splitter);
-        }
-
-        if (Input.IsActionJustPressed("select_merger"))
-        {
-            SelectKind(BuildPrototypeKind.Merger);
-        }
-
-        if (Input.IsActionJustPressed("select_bridge"))
-        {
-            SelectKind(BuildPrototypeKind.Bridge);
-        }
-
-        if (Input.IsActionJustPressed("select_loader"))
-        {
-            SelectKind(BuildPrototypeKind.Loader);
-        }
-
-        if (Input.IsActionJustPressed("select_unloader"))
-        {
-            SelectKind(BuildPrototypeKind.Unloader);
-        }
-
-        if (Input.IsActionJustPressed("camera_rotate_left"))
-        {
-            _selectedFacing = FactoryDirection.RotateCounterClockwise(_selectedFacing);
-        }
-
-        if (Input.IsActionJustPressed("camera_rotate_right"))
-        {
-            _selectedFacing = FactoryDirection.RotateClockwise(_selectedFacing);
-        }
+        HandleHotkeys();
     }
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo && keyEvent.Keycode == Key.Delete && _hasHoveredCell)
-        {
-            RemoveStructure(_hoveredCell);
-            GetViewport().SetInputAsHandled();
-            return;
-        }
-
-        if (@event is not InputEventMouseButton mouseButton || !mouseButton.Pressed || IsPointerOverUi())
+        if (IsPointerOverUi())
         {
             return;
         }
 
-        if (mouseButton.ButtonIndex == MouseButton.Left && _hasHoveredCell && _canPlaceCurrentCell)
+        if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
         {
-            PlaceStructure(_selectedKind, _hoveredCell, _selectedFacing);
-            GetViewport().SetInputAsHandled();
+            if (keyEvent.Keycode == Key.Delete && _interactionMode == FactoryInteractionMode.Build && _hoveredStructure is not null)
+            {
+                RemoveStructure(_hoveredStructure.Cell);
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (keyEvent.Keycode == Key.Escape)
+            {
+                EnterInteractionMode();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
         }
 
-        if (mouseButton.ButtonIndex == MouseButton.Right && _hasHoveredCell)
+        if (@event is not InputEventMouseButton mouseButton || !mouseButton.Pressed)
         {
-            RemoveStructure(_hoveredCell);
+            return;
+        }
+
+        if (mouseButton.ButtonIndex == MouseButton.Left)
+        {
+            HandlePrimaryClick();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (mouseButton.ButtonIndex == MouseButton.Right)
+        {
+            HandleSecondaryClick();
             GetViewport().SetInputAsHandled();
         }
     }
@@ -156,7 +127,7 @@ public partial class FactoryDemo : Node3D
         AddChild(_cameraRig);
 
         _hud = new FactoryHud();
-        _hud.SelectionChanged += SelectKind;
+        _hud.SelectionChanged += SelectBuildKind;
         AddChild(_hud);
     }
 
@@ -169,12 +140,63 @@ public partial class FactoryDemo : Node3D
 
         _simulation!.Configure(_grid);
         _cameraRig!.ConfigureBounds(_grid.GetWorldMin() + Vector2.One * 4.0f, _grid.GetWorldMax() - Vector2.One * 4.0f);
-        SelectKind(BuildPrototypeKind.Producer);
+        EnterInteractionMode();
     }
 
-    private void SelectKind(BuildPrototypeKind kind)
+    private void HandleHotkeys()
     {
-        _selectedKind = kind;
+        HandleBuildShortcut("select_producer", BuildPrototypeKind.Producer);
+        HandleBuildShortcut("select_belt", BuildPrototypeKind.Belt);
+        HandleBuildShortcut("select_sink", BuildPrototypeKind.Sink);
+        HandleBuildShortcut("select_splitter", BuildPrototypeKind.Splitter);
+        HandleBuildShortcut("select_merger", BuildPrototypeKind.Merger);
+        HandleBuildShortcut("select_bridge", BuildPrototypeKind.Bridge);
+        HandleBuildShortcut("select_loader", BuildPrototypeKind.Loader);
+        HandleBuildShortcut("select_unloader", BuildPrototypeKind.Unloader);
+        HandleBuildShortcut("select_storage", BuildPrototypeKind.Storage);
+        HandleBuildShortcut("select_inserter", BuildPrototypeKind.Inserter);
+
+        if (Input.IsActionJustPressed("build_cancel"))
+        {
+            EnterInteractionMode();
+        }
+
+        if (Input.IsActionJustPressed("camera_rotate_left"))
+        {
+            _selectedFacing = FactoryDirection.RotateCounterClockwise(_selectedFacing);
+        }
+
+        if (Input.IsActionJustPressed("camera_rotate_right"))
+        {
+            _selectedFacing = FactoryDirection.RotateClockwise(_selectedFacing);
+        }
+    }
+
+    private void HandleBuildShortcut(string actionName, BuildPrototypeKind kind)
+    {
+        if (!Input.IsActionJustPressed(actionName))
+        {
+            return;
+        }
+
+        SelectBuildKind(_selectedBuildKind == kind ? null : kind);
+    }
+
+    private void SelectBuildKind(BuildPrototypeKind? kind)
+    {
+        _selectedBuildKind = kind;
+        _interactionMode = kind.HasValue ? FactoryInteractionMode.Build : FactoryInteractionMode.Interact;
+
+        if (_interactionMode == FactoryInteractionMode.Build)
+        {
+            _selectedStructure = null;
+        }
+    }
+
+    private void EnterInteractionMode()
+    {
+        _selectedBuildKind = null;
+        _interactionMode = FactoryInteractionMode.Interact;
     }
 
     private void CreateStarterLayout()
@@ -184,7 +206,9 @@ public partial class FactoryDemo : Node3D
         AddCentralBridgeCrossing();
         AddUpperSplitMergeLoop();
         AddRelayLoaderUnloaderChain();
-
+        AddStorageOutputCorridor();
+        AddBeltToStorageTransferLine();
+        AddInserterYard();
         RefreshAllTopology();
     }
 
@@ -200,10 +224,8 @@ public partial class FactoryDemo : Node3D
         PlaceStructure(BuildPrototypeKind.Producer, -8, -2, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Belt, -7, -2, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Splitter, -6, -2, FacingDirection.East);
-
         PlaceBeltRun(new Vector2I(-6, -3), FacingDirection.East, 3);
         PlaceStructure(BuildPrototypeKind.Sink, -3, -3, FacingDirection.East);
-
         PlaceBeltRun(new Vector2I(-6, -1), FacingDirection.East, 3);
         PlaceStructure(BuildPrototypeKind.Sink, -3, -1, FacingDirection.East);
     }
@@ -227,13 +249,10 @@ public partial class FactoryDemo : Node3D
         PlaceStructure(BuildPrototypeKind.Producer, -4, 5, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Belt, -3, 5, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Splitter, -2, 5, FacingDirection.East);
-
         PlaceBeltRun(new Vector2I(-2, 4), FacingDirection.East, 3);
         PlaceStructure(BuildPrototypeKind.Belt, 1, 4, FacingDirection.South);
-
         PlaceBeltRun(new Vector2I(-2, 6), FacingDirection.East, 3);
         PlaceStructure(BuildPrototypeKind.Belt, 1, 6, FacingDirection.North);
-
         PlaceStructure(BuildPrototypeKind.Merger, 1, 5, FacingDirection.East);
         PlaceBeltRun(new Vector2I(2, 5), FacingDirection.East, 2);
         PlaceStructure(BuildPrototypeKind.Sink, 4, 5, FacingDirection.East);
@@ -248,6 +267,45 @@ public partial class FactoryDemo : Node3D
         PlaceStructure(BuildPrototypeKind.Sink, 6, 0, FacingDirection.South);
     }
 
+    private void AddStorageOutputCorridor()
+    {
+        PlaceStructure(BuildPrototypeKind.Producer, -8, 2, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, -7, 2, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Storage, -6, 2, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Inserter, -5, 2, FacingDirection.East);
+        PlaceBeltRun(new Vector2I(-4, 2), FacingDirection.East, 3);
+        PlaceStructure(BuildPrototypeKind.Sink, -1, 2, FacingDirection.East);
+    }
+
+    private void AddBeltToStorageTransferLine()
+    {
+        PlaceStructure(BuildPrototypeKind.Producer, -8, 1, FacingDirection.East);
+        PlaceBeltRun(new Vector2I(-7, 1), FacingDirection.East, 3);
+        PlaceStructure(BuildPrototypeKind.Inserter, -4, 1, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Storage, -3, 1, FacingDirection.East);
+        PlaceBeltRun(new Vector2I(-2, 1), FacingDirection.East, 2);
+        PlaceStructure(BuildPrototypeKind.Sink, 0, 1, FacingDirection.East);
+    }
+
+    private void AddInserterYard()
+    {
+        PlaceStructure(BuildPrototypeKind.Producer, -8, 7, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, -7, 7, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Inserter, -6, 7, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Storage, -5, 7, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Inserter, -4, 7, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, -3, 7, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Merger, -2, 7, FacingDirection.East);
+
+        PlaceStructure(BuildPrototypeKind.Producer, -5, 8, FacingDirection.South);
+        PlaceStructure(BuildPrototypeKind.Storage, -5, 6, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Inserter, -4, 6, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, -3, 6, FacingDirection.North);
+        PlaceStructure(BuildPrototypeKind.Belt, -2, 6, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, -1, 7, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Sink, 0, 7, FacingDirection.East);
+    }
+
     private void PlaceBeltRun(Vector2I startCell, FacingDirection facing, int length)
     {
         var offset = FactoryDirection.ToCellOffset(facing);
@@ -260,8 +318,11 @@ public partial class FactoryDemo : Node3D
     private void UpdateHoveredCell()
     {
         _hasHoveredCell = false;
+        _hoveredStructure = null;
         _canPlaceCurrentCell = false;
-        _previewMessage = "把鼠标移到地面网格上选择格子。";
+        _previewMessage = _interactionMode == FactoryInteractionMode.Build
+            ? "把鼠标移到地面网格上选择格子。"
+            : "交互模式：点击建筑查看；按数字键选择建筑后进入建造。";
 
         if (_grid is null || _cameraRig is null)
         {
@@ -276,17 +337,25 @@ public partial class FactoryDemo : Node3D
         var cell = _grid.WorldToCell(worldPosition);
         _hoveredCell = cell;
         _hasHoveredCell = _grid.IsInBounds(cell);
-
         if (!_hasHoveredCell)
         {
             _previewMessage = "超出可建造范围。";
             return;
         }
 
-        _canPlaceCurrentCell = _grid.CanPlace(cell);
-        _previewMessage = _canPlaceCurrentCell
-            ? $"可在 ({cell.X}, {cell.Y}) 放置{_definitions[_selectedKind].DisplayName}，朝向 {FactoryDirection.ToLabel(_selectedFacing)}"
-            : $"格子 ({cell.X}, {cell.Y}) 已被占用。";
+        _grid.TryGetStructure(cell, out _hoveredStructure);
+        if (_interactionMode == FactoryInteractionMode.Build && _selectedBuildKind.HasValue)
+        {
+            _canPlaceCurrentCell = _grid.CanPlace(cell);
+            _previewMessage = _canPlaceCurrentCell
+                ? $"可在 ({cell.X}, {cell.Y}) 放置{_definitions[_selectedBuildKind.Value].DisplayName}，朝向 {FactoryDirection.ToLabel(_selectedFacing)}"
+                : $"格子 ({cell.X}, {cell.Y}) 已被 {_hoveredStructure?.DisplayName ?? "占用结构"} 占用。";
+            return;
+        }
+
+        _previewMessage = _hoveredStructure is null
+            ? $"交互模式：空地 ({cell.X}, {cell.Y})，点击可清除当前选中。"
+            : $"交互模式：点击选中 {_hoveredStructure.DisplayName} ({cell.X}, {cell.Y})。";
     }
 
     private void UpdatePreview()
@@ -296,8 +365,9 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        _previewRoot.Visible = _hasHoveredCell;
-        if (!_hasHoveredCell)
+        var showPreview = _interactionMode == FactoryInteractionMode.Build && _selectedBuildKind.HasValue && _hasHoveredCell;
+        _previewRoot.Visible = showPreview;
+        if (!showPreview)
         {
             return;
         }
@@ -337,11 +407,31 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        var definition = _definitions[_selectedKind];
-        _hud.SetSelectedKind(_selectedKind, definition.Details);
+        _hud.SetMode(_interactionMode);
+
+        if (_selectedBuildKind.HasValue)
+        {
+            var definition = _definitions[_selectedBuildKind.Value];
+            _hud.SetBuildSelection(_selectedBuildKind, definition.Details);
+        }
+        else
+        {
+            _hud.SetBuildSelection(null, null);
+        }
+
         _hud.SetHoverCell(_hoveredCell, _hasHoveredCell);
-        _hud.SetPreviewStatus(_hasHoveredCell && _canPlaceCurrentCell, _previewMessage);
+        _hud.SetPreviewStatus(_interactionMode == FactoryInteractionMode.Build && _canPlaceCurrentCell, _previewMessage);
         _hud.SetRotation(_selectedFacing);
+        _hud.SetSelectionTarget(GetSelectedStructureText());
+
+        if (_selectedStructure is IFactoryInspectable inspectable)
+        {
+            _hud.SetInspection(inspectable.InspectionTitle, string.Join("\n", inspectable.GetInspectionLines()));
+        }
+        else
+        {
+            _hud.SetInspection(null, null);
+        }
 
         var sinkStats = CollectSinkStats();
         _hud.SetSinkStats(sinkStats.deliveredTotal, sinkStats.deliveredRate, sinkStats.sinkCount);
@@ -353,6 +443,21 @@ public partial class FactoryDemo : Node3D
             _simulation?.AverageStepMilliseconds ?? 0.0,
             _averageVisualSyncMilliseconds,
             _simulation?.LastTopologyRebuildMilliseconds ?? 0.0);
+
+        var modeNote = _interactionMode == FactoryInteractionMode.Build
+            ? "建造模式：左键放置，右键或 Delete 拆除，Esc 返回交互。"
+            : "交互模式：左键查看建筑，数字键切换到对应建造工具。";
+        _hud.SetNote(modeNote);
+    }
+
+    private string GetSelectedStructureText()
+    {
+        if (_selectedStructure is null || !_selectedStructure.IsInsideTree())
+        {
+            return "未选中建筑";
+        }
+
+        return $"{_selectedStructure.DisplayName} @ ({_selectedStructure.Cell.X}, {_selectedStructure.Cell.Y})";
     }
 
     private (int deliveredTotal, int deliveredRate, int sinkCount) CollectSinkStats()
@@ -378,11 +483,11 @@ public partial class FactoryDemo : Node3D
         return (deliveredTotal, deliveredRate, sinkCount);
     }
 
-    private void PlaceStructure(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
+    private FactoryStructure? PlaceStructure(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
     {
         if (_grid is null || _structureRoot is null || _simulation is null || !_grid.CanPlace(cell))
         {
-            return;
+            return null;
         }
 
         var structure = FactoryStructureFactory.Create(kind, new FactoryStructurePlacement(_grid, cell, facing));
@@ -390,11 +495,12 @@ public partial class FactoryDemo : Node3D
         _grid.PlaceStructure(structure);
         _simulation.RegisterStructure(structure);
         RefreshAllTopology();
+        return structure;
     }
 
-    private void PlaceStructure(BuildPrototypeKind kind, int x, int y, FacingDirection facing)
+    private FactoryStructure? PlaceStructure(BuildPrototypeKind kind, int x, int y, FacingDirection facing)
     {
-        PlaceStructure(kind, new Vector2I(x, y), facing);
+        return PlaceStructure(kind, new Vector2I(x, y), facing);
     }
 
     private void RemoveStructure(Vector2I cell)
@@ -402,6 +508,11 @@ public partial class FactoryDemo : Node3D
         if (_grid is null || _simulation is null || !_grid.TryGetStructure(cell, out var structure) || structure is null)
         {
             return;
+        }
+
+        if (_selectedStructure == structure)
+        {
+            _selectedStructure = null;
         }
 
         _simulation.UnregisterStructure(structure);
@@ -412,12 +523,47 @@ public partial class FactoryDemo : Node3D
 
     private void RefreshAllTopology()
     {
-        if (_simulation is null)
+        _simulation?.RebuildTopology();
+    }
+
+    private void HandlePrimaryClick()
+    {
+        if (!_hasHoveredCell)
         {
             return;
         }
 
-        _simulation.RebuildTopology();
+        if (_interactionMode == FactoryInteractionMode.Build && _selectedBuildKind.HasValue)
+        {
+            if (_canPlaceCurrentCell)
+            {
+                PlaceStructure(_selectedBuildKind.Value, _hoveredCell, _selectedFacing);
+            }
+
+            return;
+        }
+
+        _selectedStructure = _hoveredStructure;
+    }
+
+    private void HandleSecondaryClick()
+    {
+        if (!_hasHoveredCell)
+        {
+            return;
+        }
+
+        if (_interactionMode == FactoryInteractionMode.Build)
+        {
+            if (_hoveredStructure is not null)
+            {
+                RemoveStructure(_hoveredCell);
+            }
+
+            return;
+        }
+
+        _selectedStructure = null;
     }
 
     private bool IsPointerOverUi()
@@ -444,6 +590,7 @@ public partial class FactoryDemo : Node3D
 
         ApplyPreviewColor(_previewCell, new Color(0.35f, 0.95f, 0.55f, 0.45f));
         ApplyPreviewColor(_previewArrow, new Color(0.35f, 0.95f, 0.55f, 0.45f));
+        _previewRoot.Visible = false;
     }
 
     private static void ApplyPreviewColor(MeshInstance3D meshInstance, Color color)
@@ -506,7 +653,12 @@ public partial class FactoryDemo : Node3D
     private static Node3D CreateGridLines()
     {
         var gridRoot = new Node3D { Name = "GridLines" };
-        var lineMaterial = new StandardMaterial3D { AlbedoColor = new Color(0.35f, 0.43f, 0.53f, 0.65f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha, Roughness = 1.0f };
+        var lineMaterial = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.35f, 0.43f, 0.53f, 0.65f),
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            Roughness = 1.0f
+        };
         var worldMin = (FactoryConstants.GridMin - 0.5f) * FactoryConstants.CellSize;
         var worldMax = (FactoryConstants.GridMax + 0.5f) * FactoryConstants.CellSize;
         var lineLength = worldMax - worldMin;
@@ -543,6 +695,7 @@ public partial class FactoryDemo : Node3D
         EnsureAction("camera_rotate_right", new InputEventKey { PhysicalKeycode = Key.E });
         EnsureAction("build_confirm", new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true });
         EnsureAction("remove_structure", new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = true });
+        EnsureAction("build_cancel", new InputEventKey { PhysicalKeycode = Key.Escape });
         EnsureAction("select_producer", new InputEventKey { PhysicalKeycode = Key.Key1 });
         EnsureAction("select_belt", new InputEventKey { PhysicalKeycode = Key.Key2 });
         EnsureAction("select_sink", new InputEventKey { PhysicalKeycode = Key.Key3 });
@@ -551,6 +704,8 @@ public partial class FactoryDemo : Node3D
         EnsureAction("select_bridge", new InputEventKey { PhysicalKeycode = Key.Key6 });
         EnsureAction("select_loader", new InputEventKey { PhysicalKeycode = Key.Key7 });
         EnsureAction("select_unloader", new InputEventKey { PhysicalKeycode = Key.Key8 });
+        EnsureAction("select_storage", new InputEventKey { PhysicalKeycode = Key.Key9 });
+        EnsureAction("select_inserter", new InputEventKey { PhysicalKeycode = Key.Key0 });
     }
 
     private static void EnsureAction(string actionName, params InputEvent[] events)
@@ -607,26 +762,30 @@ public partial class FactoryDemo : Node3D
         var removed = _grid.CanPlace(probeCell);
 
         var initialStructureCount = _simulation.RegisteredStructureCount;
-        await ToSignal(GetTree().CreateTimer(2.8f), SceneTreeTimer.SignalName.Timeout);
+        await ToSignal(GetTree().CreateTimer(3.2f), SceneTreeTimer.SignalName.Timeout);
 
         var sinkStats = CollectSinkStats();
         var profilerText = _hud?.ProfilerText ?? string.Empty;
         var splitterFallbackRecovered = await RunSplitterFallbackSmoke();
+        var storageFlowVerified = await RunStorageInserterSmoke();
+        var inspectionVerified = VerifyStorageInspectionPanel();
 
         if (!placed
             || !removed
-            || initialStructureCount < 55
+            || initialStructureCount < 65
             || sinkStats.deliveredTotal <= 0
             || string.IsNullOrWhiteSpace(profilerText)
             || !profilerText.Contains("FPS", global::System.StringComparison.Ordinal)
-            || !splitterFallbackRecovered)
+            || !splitterFallbackRecovered
+            || !storageFlowVerified
+            || !inspectionVerified)
         {
-            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} structures={initialStructureCount} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered}");
+            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} structures={initialStructureCount} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered}");
+        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified}");
         GetTree().Quit();
     }
 
@@ -680,6 +839,72 @@ public partial class FactoryDemo : Node3D
         var deliveredAfter = sink.DeliveredTotal;
 
         return jammed && deliveredAfter > deliveredBefore;
+    }
+
+    private async Task<bool> RunStorageInserterSmoke()
+    {
+        if (_grid is null)
+        {
+            return false;
+        }
+
+        var requiredCells = new[]
+        {
+            new Vector2I(4, -8),
+            new Vector2I(5, -8),
+            new Vector2I(6, -8),
+            new Vector2I(7, -8),
+            new Vector2I(8, -8)
+        };
+
+        foreach (var cell in requiredCells)
+        {
+            if (!_grid.CanPlace(cell))
+            {
+                return false;
+            }
+        }
+
+        PlaceStructure(BuildPrototypeKind.Producer, 4, -8, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Storage, 5, -8, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Inserter, 6, -8, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, 7, -8, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Sink, 8, -8, FacingDirection.East);
+
+        if (!_grid.TryGetStructure(new Vector2I(5, -8), out var storageStructure) || storageStructure is not StorageStructure storage
+            || !_grid.TryGetStructure(new Vector2I(8, -8), out var sinkStructure) || sinkStructure is not SinkStructure sink)
+        {
+            return false;
+        }
+
+        await ToSignal(GetTree().CreateTimer(3.5f), SceneTreeTimer.SignalName.Timeout);
+        var bufferedBefore = storage.BufferedCount;
+        var deliveredBefore = sink.DeliveredTotal;
+
+        await ToSignal(GetTree().CreateTimer(3.5f), SceneTreeTimer.SignalName.Timeout);
+        var deliveredAfter = sink.DeliveredTotal;
+
+        return bufferedBefore >= 0 && deliveredAfter > deliveredBefore;
+    }
+
+    private bool VerifyStorageInspectionPanel()
+    {
+        if (_grid is null || _hud is null)
+        {
+            return false;
+        }
+
+        EnterInteractionMode();
+        if (!_grid.TryGetStructure(new Vector2I(-6, 2), out var structure) || structure is null)
+        {
+            return false;
+        }
+
+        _selectedStructure = structure;
+        UpdateHud();
+
+        return _hud.InspectionTitleText.Contains("仓储", global::System.StringComparison.Ordinal)
+            && _hud.InspectionBodyText.Contains("容量", global::System.StringComparison.Ordinal);
     }
 
     private static double SmoothMetric(double current, double sample, double weight)

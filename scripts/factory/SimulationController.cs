@@ -47,11 +47,60 @@ public partial class SimulationController : Node
         return source.Site.TrySendItem(source, targetCell, item, this);
     }
 
+    public bool TryPeekProvidedItem(IFactorySite site, Vector2I providerCell, Vector2I requesterCell, out FactoryItem? item)
+    {
+        item = null;
+
+        if (!site.TryGetStructure(providerCell, out var structure) || structure is not IFactoryItemProvider provider)
+        {
+            return false;
+        }
+
+        return provider.TryPeekProvidedItem(requesterCell, this, out item);
+    }
+
+    public bool TryTakeProvidedItem(IFactorySite site, Vector2I providerCell, Vector2I requesterCell, out FactoryItem? item)
+    {
+        item = null;
+
+        if (!site.TryGetStructure(providerCell, out var structure) || structure is not IFactoryItemProvider provider)
+        {
+            return false;
+        }
+
+        return provider.TryTakeProvidedItem(requesterCell, this, out item);
+    }
+
+    public bool CanReceiveProvidedItem(FactoryStructure source, IFactorySite targetSite, Vector2I targetCell, FactoryItem item)
+    {
+        if (!targetSite.TryGetStructure(targetCell, out var structure) || structure is not IFactoryItemReceiver receiver)
+        {
+            return false;
+        }
+
+        return receiver.CanReceiveProvidedItem(item, source.Cell, this);
+    }
+
+    public bool TryReceiveProvidedItem(FactoryStructure source, IFactorySite targetSite, Vector2I targetCell, FactoryItem item)
+    {
+        if (!targetSite.TryGetStructure(targetCell, out var structure) || structure is not IFactoryItemReceiver receiver)
+        {
+            return false;
+        }
+
+        return receiver.TryReceiveProvidedItem(item, source.Cell, this);
+    }
+
     public bool TrySendItemToSite(FactoryStructure source, Vector2I sourceCell, IFactorySite targetSite, Vector2I targetCell, FactoryItem item)
     {
         if (!targetSite.TryGetStructure(targetCell, out var structure) || structure is null)
         {
             return false;
+        }
+
+        if (structure is IFactoryItemReceiver receiver)
+        {
+            return receiver.TryReceiveProvidedItem(item, sourceCell, this);
         }
 
         return structure.TryAcceptItem(item, sourceCell, this);
