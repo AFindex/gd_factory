@@ -37,11 +37,15 @@ The game SHALL expose compact on-screen feedback in the static factory demo that
 - **THEN** the HUD shows runtime telemetry including current frame rate and at least one performance-hotspot-oriented metric relevant to the demo simulation
 
 ### Requirement: Demo scene is immediately playable
-The project SHALL boot into a playable factory demo scene without requiring manual scene switching in the editor.
+The project SHALL boot into a launcher scene that exposes the static factory demo as a selectable experience, and entering that demo from the launcher SHALL still load a playable factory slice without requiring manual scene switching in the editor.
 
-#### Scenario: Project startup enters gameplay slice
+#### Scenario: Project startup enters launcher first
 - **WHEN** the player starts the project normally
-- **THEN** the main scene loads the factory demo and exposes the camera, building, and automation loop defined by this change
+- **THEN** the main scene loads the launcher and presents the static factory demo as one of the available entries
+
+#### Scenario: Launcher opens the factory gameplay slice
+- **WHEN** the player selects the static factory demo from the launcher
+- **THEN** the project loads the factory demo scene with the camera, building, and automation loop defined by this capability
 
 ### Requirement: Splitter preserves available output under asymmetric blockage
 The game SHALL allow a splitter in the static factory simulation to keep forwarding items through any output that is currently able to receive them, even if the other output is blocked.
