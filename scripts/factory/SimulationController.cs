@@ -98,11 +98,6 @@ public partial class SimulationController : Node
             return false;
         }
 
-        if (structure is IFactoryItemReceiver receiver)
-        {
-            return receiver.TryReceiveProvidedItem(item, sourceCell, this);
-        }
-
         return structure.TryAcceptItem(item, sourceCell, this);
     }
 

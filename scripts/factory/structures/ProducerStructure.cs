@@ -35,7 +35,7 @@ public partial class ProducerStructure : FactoryStructure, IFactoryItemProvider
     {
         item = null;
 
-        if (requesterCell != GetOutputCell() || _bufferedItem is null)
+        if (!IsOrthogonallyAdjacent(Cell, requesterCell) || _bufferedItem is null)
         {
             return false;
         }

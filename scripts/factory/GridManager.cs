@@ -125,11 +125,6 @@ public sealed class GridManager : IFactorySite
             return false;
         }
 
-        if (structure is IFactoryItemReceiver receiver)
-        {
-            return receiver.TryReceiveProvidedItem(item, source.Cell, simulation);
-        }
-
         return structure.TryAcceptItem(item, source.Cell, simulation);
     }
 

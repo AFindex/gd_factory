@@ -95,6 +95,12 @@ public abstract partial class FactoryStructure : Node3D
         return GetOutputCell() == targetCell;
     }
 
+    protected static bool IsOrthogonallyAdjacent(Vector2I a, Vector2I b)
+    {
+        var delta = a - b;
+        return Mathf.Abs(delta.X) + Mathf.Abs(delta.Y) == 1;
+    }
+
     protected abstract void BuildVisuals();
 
     protected MeshInstance3D CreateBox(string name, Vector3 size, Color color, Vector3? localPosition = null)

@@ -15,7 +15,7 @@ public partial class SinkStructure : FactoryStructure, IFactoryItemReceiver
 
     public bool CanReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
-        return AcceptsFrom(sourceCell);
+        return IsOrthogonallyAdjacent(Cell, sourceCell);
     }
 
     public override bool TryAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)

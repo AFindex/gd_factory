@@ -28,7 +28,7 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
 
     public bool CanReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
-        return AcceptsFrom(sourceCell) && !_buffer.IsFull;
+        return IsOrthogonallyAdjacent(Cell, sourceCell) && !_buffer.IsFull;
     }
 
     public override bool CanAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
@@ -55,7 +55,7 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
     {
         item = null;
 
-        if (requesterCell != GetOutputCell())
+        if (!IsOrthogonallyAdjacent(Cell, requesterCell))
         {
             return false;
         }
@@ -67,7 +67,7 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
     {
         item = null;
 
-        if (requesterCell != GetOutputCell())
+        if (!IsOrthogonallyAdjacent(Cell, requesterCell))
         {
             return false;
         }

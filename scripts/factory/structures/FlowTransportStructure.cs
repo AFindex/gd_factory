@@ -112,12 +112,45 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
 
     public bool CanReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
-        return CanAcceptItem(item, sourceCell, simulation);
+        if (!CanReceiveProvidedFrom(sourceCell))
+        {
+            return false;
+        }
+
+        if (!TryResolveTargetCell(item, sourceCell, simulation, out _))
+        {
+            return false;
+        }
+
+        return _items.Count == 0 || _items[^1].Position >= ItemSpacing;
     }
 
     public bool TryReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
-        return TryAcceptItem(item, sourceCell, simulation);
+        if (!CanReceiveProvidedFrom(sourceCell))
+        {
+            return false;
+        }
+
+        if (!TryResolveTargetCell(item, sourceCell, simulation, out var targetCell))
+        {
+            return false;
+        }
+
+        if (_items.Count > 0 && _items[^1].Position < ItemSpacing)
+        {
+            return false;
+        }
+
+        var state = new TransitItemState(item, CreateTransitVisual(), sourceCell, targetCell)
+        {
+            Position = 0.0f,
+            PreviousPosition = 0.0f
+        };
+        state.Visual.Position = EvaluatePathPoint(state, 0.0f);
+        _items.Add(state);
+        OnTransitItemAccepted(state);
+        return true;
     }
 
     public override void SimulationStep(SimulationController simulation, double stepSeconds)
@@ -241,6 +274,11 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
     protected virtual bool CanProvideTo(Vector2I requesterCell)
     {
         return CanOutputTo(requesterCell);
+    }
+
+    protected virtual bool CanReceiveProvidedFrom(Vector2I sourceCell)
+    {
+        return CanReceiveFrom(sourceCell);
     }
 
     protected abstract bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell);

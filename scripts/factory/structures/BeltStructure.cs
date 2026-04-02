@@ -42,6 +42,16 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
         return Cell + FactoryDirection.ToCellOffset(_inputFacing);
     }
 
+    protected override bool CanProvideTo(Vector2I requesterCell)
+    {
+        return IsOrthogonallyAdjacent(Cell, requesterCell);
+    }
+
+    protected override bool CanReceiveProvidedFrom(Vector2I sourceCell)
+    {
+        return IsOrthogonallyAdjacent(Cell, sourceCell) && sourceCell != GetOutputCell();
+    }
+
     protected override void BuildVisuals()
     {
         _centerMesh = CreateColoredBox(
