@@ -23,6 +23,7 @@ public sealed class MobileFactorySite : IFactorySite
     public float CellSize { get; }
     public bool IsVisible { get; private set; }
     public bool IsSimulationActive { get; private set; }
+    public float CombatOverlayScale { get; private set; } = FactoryConstants.MobileInteriorCombatOverlayScale;
     public Vector3 WorldOrigin => _worldOrigin;
     public float WorldRotationRadians => _worldRotationRadians;
 
@@ -89,6 +90,12 @@ public sealed class MobileFactorySite : IFactorySite
     {
         IsVisible = isVisible;
         IsSimulationActive = isSimulationActive;
+        RefreshStructures();
+    }
+
+    public void SetCombatOverlayScale(float combatOverlayScale)
+    {
+        CombatOverlayScale = Mathf.Max(0.1f, combatOverlayScale);
         RefreshStructures();
     }
 

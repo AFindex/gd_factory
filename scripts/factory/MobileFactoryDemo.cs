@@ -1499,6 +1499,9 @@ public partial class MobileFactoryDemo : Node3D
     {
         _editorOpen = isOpen;
         _hud?.SetEditorOpen(isOpen);
+        _mobileFactory?.SetCombatOverlayScale(isOpen
+            ? FactoryConstants.NormalCombatOverlayScale
+            : FactoryConstants.MobileInteriorCombatOverlayScale);
 
         if (!isOpen)
         {

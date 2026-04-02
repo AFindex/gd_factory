@@ -41,6 +41,7 @@ public interface IFactorySite
     float CellSize { get; }
     bool IsVisible { get; }
     bool IsSimulationActive { get; }
+    float CombatOverlayScale { get; }
     float WorldRotationRadians { get; }
 
     bool IsInBounds(Vector2I cell);

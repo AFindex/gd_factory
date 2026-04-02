@@ -4,6 +4,7 @@ using System.Collections.Generic;
 public abstract partial class FactoryStructure : Node3D, IFactoryInspectable
 {
     private bool _visualsBuilt;
+    private Node3D? _combatOverlayRoot;
     private MeshInstance3D? _healthBarBackground;
     private MeshInstance3D? _healthBarFill;
     private MeshInstance3D? _focusRing;
@@ -81,6 +82,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable
         Position = Site.CellToWorld(Cell);
         Rotation = new Vector3(0.0f, Site.WorldRotationRadians + FactoryDirection.ToYRotationRadians(Facing), 0.0f);
         Visible = Site.IsVisible;
+        SyncCombatOverlayPlacement();
     }
 
     public virtual IEnumerable<Vector2I> GetOccupiedCells()
@@ -151,11 +153,12 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable
 
     public void SyncCombatVisuals(float tickAlpha)
     {
-        if (_healthBarBackground is null || _healthBarFill is null || _focusRing is null || _healthBarFillMaterial is null || _focusRingMaterial is null)
+        if (_combatOverlayRoot is null || _healthBarBackground is null || _healthBarFill is null || _focusRing is null || _healthBarFillMaterial is null || _focusRingMaterial is null)
         {
             return;
         }
 
+        SyncCombatOverlayPlacement();
         var healthRatio = Mathf.Clamp(CurrentHealth / MaxHealth, 0.0f, 1.0f);
         var showBar = IsUnderAttack || _isHovered || _isSelected || healthRatio < 0.999f;
         _healthBarBackground.Visible = showBar;
@@ -207,6 +210,13 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable
 
     private void BuildCombatVisuals()
     {
+        _combatOverlayRoot = new Node3D
+        {
+            Name = "CombatOverlayRoot",
+            TopLevel = true
+        };
+        AddChild(_combatOverlayRoot);
+
         _healthBarBackground = new MeshInstance3D
         {
             Name = "HealthBarBackground",
@@ -220,7 +230,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable
             },
             Visible = false
         };
-        AddChild(_healthBarBackground);
+        _combatOverlayRoot.AddChild(_healthBarBackground);
 
         _healthBarFillMaterial = new StandardMaterial3D
         {
@@ -236,7 +246,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable
             MaterialOverride = _healthBarFillMaterial,
             Visible = false
         };
-        AddChild(_healthBarFill);
+        _combatOverlayRoot.AddChild(_healthBarFill);
 
         _focusRingMaterial = new StandardMaterial3D
         {
@@ -252,6 +262,20 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable
             MaterialOverride = _focusRingMaterial,
             Visible = false
         };
-        AddChild(_focusRing);
+        _combatOverlayRoot.AddChild(_focusRing);
+        SyncCombatOverlayPlacement();
+    }
+
+    private void SyncCombatOverlayPlacement()
+    {
+        if (_combatOverlayRoot is null)
+        {
+            return;
+        }
+
+        _combatOverlayRoot.Visible = Visible;
+        _combatOverlayRoot.GlobalPosition = GlobalPosition;
+        _combatOverlayRoot.GlobalRotation = Vector3.Zero;
+        _combatOverlayRoot.Scale = Vector3.One * Site.CombatOverlayScale;
     }
 }

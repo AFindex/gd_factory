@@ -126,7 +126,7 @@ public partial class SimulationController : Node
         for (var i = 0; i < _structures.Count; i++)
         {
             var structure = _structures[i];
-            if (structure.IsDestroyed || structure.Site != WorldGrid)
+            if (structure.IsDestroyed || !structure.Site.IsVisible || !structure.Site.IsSimulationActive)
             {
                 continue;
             }

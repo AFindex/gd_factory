@@ -14,6 +14,8 @@ public static class FactoryConstants
     public const float InserterCycleSeconds = 0.55f;
     public const float StructureDamageFlashSeconds = 0.9f;
     public const float StructureHealthBarHeight = 1.86f;
+    public const float MobileInteriorCombatOverlayScale = 0.62f;
+    public const float NormalCombatOverlayScale = 1.0f;
     public const float GunTurretRange = 9.5f;
     public const float GunTurretCooldownSeconds = 0.42f;
     public const int GunTurretAmmoCapacity = 10;
@@ -29,6 +31,8 @@ public static class FactoryConstants
     public const float EnemyMeleeAttackRange = 1.35f;
     public const float EnemyRangedAttackRange = 5.9f;
     public const float EnemyAggroRange = 5.2f;
+    public const float EnemyPursuitLeashMultiplier = 1.65f;
+    public const float EnemyAttackTracerLifetime = 0.18f;
     public const float CameraPitchDegrees = -55.0f;
     public const float CameraMinZoom = 15.0f;
     public const float CameraMaxZoom = 34.0f;

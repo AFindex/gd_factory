@@ -18,6 +18,7 @@ public sealed class GridManager : IFactorySite
     public float CellSize { get; }
     public bool IsVisible => true;
     public bool IsSimulationActive => true;
+    public float CombatOverlayScale => FactoryConstants.NormalCombatOverlayScale;
     public float WorldRotationRadians => 0.0f;
 
     public bool IsInBounds(Vector2I cell)

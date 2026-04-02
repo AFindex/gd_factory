@@ -30,6 +30,13 @@ public sealed partial class WorldSiegeEnemy : FactoryEnemyActor
 {
     protected override Color BodyColor => new Color("3B0764");
     protected override Vector3 BodySize => new Vector3(1.46f, 1.04f, 1.62f);
+    protected override bool UsesAttackTracerVisual => true;
+    protected override Color AttackTracerColor => new Color("0F766E");
+    protected override Color AttackTracerEmission => new Color("5EEAD4");
+    protected override float AttackTracerWidth => 0.12f;
+    protected override float PursuitStopDistance => AttackRange * 0.88f;
+    protected override Vector3 AttackOriginOffset => new Vector3(0.0f, 0.92f, 0.0f);
+    protected override Vector3 AttackImpactOffset => new Vector3(0.0f, 0.86f, 0.0f);
 
     public override string DisplayName => "大世界攻城体";
     public override float MaxHealth => 840.0f;

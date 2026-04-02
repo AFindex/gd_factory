@@ -327,6 +327,11 @@ public sealed class MobileFactoryInstance
         return ReturnToTransitMode();
     }
 
+    public void SetCombatOverlayScale(float combatOverlayScale)
+    {
+        InteriorSite.SetCombatOverlayScale(combatOverlayScale);
+    }
+
     public void UpdateRuntime(double delta)
     {
         UpdateAttachmentVisualAnimation((float)delta);
