@@ -1,7 +1,7 @@
 using Godot;
 using System.Collections.Generic;
 
-public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, IFactoryItemReceiver, IFactoryInspectable
+public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, IFactoryItemReceiver
 {
     private readonly FactoryItemBuffer _buffer = new(FactoryConstants.StorageCapacity);
     private readonly List<MeshInstance3D> _fillIndicators = new();
@@ -11,7 +11,8 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
 
     public int BufferedCount => _buffer.Count;
     public int Capacity => _buffer.Capacity;
-    public string InspectionTitle => $"仓储 ({Cell.X}, {Cell.Y})";
+    public override string InspectionTitle => $"仓储 ({Cell.X}, {Cell.Y})";
+    public override float MaxHealth => 54.0f;
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.Storage;
     public override string Description => "缓存多个物品，并可将库存向前输出或供机械臂抓取。";
@@ -81,8 +82,13 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
         return removed;
     }
 
-    public IEnumerable<string> GetInspectionLines()
+    public override IEnumerable<string> GetInspectionLines()
     {
+        foreach (var line in base.GetInspectionLines())
+        {
+            yield return line;
+        }
+
         yield return $"容量：{BufferedCount}/{Capacity}";
         yield return $"输出方向：{FactoryDirection.ToLabel(Facing)}";
 
@@ -96,7 +102,7 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
         for (var index = 0; index < snapshot.Length; index++)
         {
             var item = snapshot[index];
-            yield return $"{index + 1}. {FactoryPresentation.GetKindLabel(item.SourceKind)} #{item.Id}";
+            yield return $"{index + 1}. {FactoryPresentation.GetItemLabel(item)}";
         }
     }
 

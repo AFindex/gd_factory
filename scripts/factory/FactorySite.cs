@@ -47,6 +47,7 @@ public interface IFactorySite
     Vector3 CellToWorld(Vector2I cell);
     bool TryGetStructure(Vector2I cell, out FactoryStructure? structure);
     bool TrySendItem(FactoryStructure source, Vector2I targetCell, FactoryItem item, SimulationController simulation);
+    void RemoveStructure(FactoryStructure structure);
 }
 
 public interface IFactoryTopologyAware

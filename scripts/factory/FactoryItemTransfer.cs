@@ -19,6 +19,11 @@ public interface IFactoryInspectable
     IEnumerable<string> GetInspectionLines();
 }
 
+public interface IFactoryCombatSystem
+{
+    void SimulationStep(SimulationController simulation, double stepSeconds);
+}
+
 public sealed class FactoryItemBuffer
 {
     private readonly Queue<FactoryItem> _items = new();
@@ -71,5 +76,19 @@ public sealed class FactoryItemBuffer
     public FactoryItem[] Snapshot()
     {
         return _items.ToArray();
+    }
+
+    public int CountByKind(FactoryItemKind itemKind)
+    {
+        var total = 0;
+        foreach (var item in _items)
+        {
+            if (item.ItemKind == itemKind)
+            {
+                total++;
+            }
+        }
+
+        return total;
     }
 }

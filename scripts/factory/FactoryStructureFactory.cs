@@ -36,6 +36,9 @@ public static class FactoryStructureFactory
         [BuildPrototypeKind.Unloader] = new FactoryStructureDefinition(BuildPrototypeKind.Unloader, () => new UnloaderStructure(), true, true),
         [BuildPrototypeKind.Storage] = new FactoryStructureDefinition(BuildPrototypeKind.Storage, () => new StorageStructure(), true, true),
         [BuildPrototypeKind.Inserter] = new FactoryStructureDefinition(BuildPrototypeKind.Inserter, () => new InserterStructure(), true, true),
+        [BuildPrototypeKind.Wall] = new FactoryStructureDefinition(BuildPrototypeKind.Wall, () => new WallStructure(), true, true),
+        [BuildPrototypeKind.AmmoAssembler] = new FactoryStructureDefinition(BuildPrototypeKind.AmmoAssembler, () => new AmmoAssemblerStructure(), true, true),
+        [BuildPrototypeKind.GunTurret] = new FactoryStructureDefinition(BuildPrototypeKind.GunTurret, () => new GunTurretStructure(), true, true),
         [BuildPrototypeKind.OutputPort] = new FactoryStructureDefinition(BuildPrototypeKind.OutputPort, () => new MobileFactoryOutputPortStructure(), false, true),
         [BuildPrototypeKind.InputPort] = new FactoryStructureDefinition(BuildPrototypeKind.InputPort, () => new MobileFactoryInputPortStructure(), false, true)
     };

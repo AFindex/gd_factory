@@ -5,6 +5,10 @@ using System.Collections.Generic;
 public partial class SimulationController : Node
 {
     private readonly List<FactoryStructure> _structures = new();
+    private readonly List<IFactoryCombatSystem> _combatSystems = new();
+    private readonly List<FactoryEnemyActor> _hostiles = new();
+    private readonly HashSet<FactoryStructure> _destroyedStructures = new();
+    private readonly HashSet<FactoryEnemyActor> _defeatedHostiles = new();
     private double _accumulator;
     private double _averageStepMilliseconds;
     private double _lastTopologyRebuildMilliseconds;
@@ -18,6 +22,9 @@ public partial class SimulationController : Node
     public int ActiveTransportItemCount => _activeTransportItemCount;
     public double AverageStepMilliseconds => _averageStepMilliseconds;
     public double LastTopologyRebuildMilliseconds => _lastTopologyRebuildMilliseconds;
+    public int ActiveEnemyCount => _hostiles.Count;
+    public int DestroyedStructureCount { get; private set; }
+    public int DefeatedEnemyCount { get; private set; }
 
     public void Configure(GridManager grid)
     {
@@ -37,9 +44,131 @@ public partial class SimulationController : Node
         _structures.Remove(structure);
     }
 
-    public FactoryItem CreateItem(BuildPrototypeKind sourceKind)
+    public FactoryItem CreateItem(BuildPrototypeKind sourceKind, FactoryItemKind itemKind = FactoryItemKind.GenericCargo)
     {
-        return new FactoryItem(_nextItemId++, sourceKind);
+        return new FactoryItem(_nextItemId++, sourceKind, itemKind);
+    }
+
+    public void RegisterCombatSystem(IFactoryCombatSystem combatSystem)
+    {
+        if (!_combatSystems.Contains(combatSystem))
+        {
+            _combatSystems.Add(combatSystem);
+        }
+    }
+
+    public void UnregisterCombatSystem(IFactoryCombatSystem combatSystem)
+    {
+        _combatSystems.Remove(combatSystem);
+    }
+
+    public void RegisterEnemy(FactoryEnemyActor hostile)
+    {
+        if (!_hostiles.Contains(hostile))
+        {
+            _hostiles.Add(hostile);
+        }
+    }
+
+    public void UnregisterEnemy(FactoryEnemyActor hostile)
+    {
+        _hostiles.Remove(hostile);
+        _defeatedHostiles.Remove(hostile);
+    }
+
+    public void QueueStructureDestruction(FactoryStructure structure)
+    {
+        if (structure.IsDestroyed)
+        {
+            _destroyedStructures.Add(structure);
+        }
+    }
+
+    public void QueueEnemyRemoval(FactoryEnemyActor hostile)
+    {
+        _defeatedHostiles.Add(hostile);
+    }
+
+    public FactoryEnemyActor? FindClosestEnemy(Vector3 worldPosition, float range)
+    {
+        FactoryEnemyActor? closest = null;
+        var bestDistanceSquared = range * range;
+
+        for (var i = 0; i < _hostiles.Count; i++)
+        {
+            var hostile = _hostiles[i];
+            if (!GodotObject.IsInstanceValid(hostile) || hostile.IsDefeated)
+            {
+                continue;
+            }
+
+            var distanceSquared = worldPosition.DistanceSquaredTo(hostile.GlobalPosition);
+            if (distanceSquared > bestDistanceSquared)
+            {
+                continue;
+            }
+
+            bestDistanceSquared = distanceSquared;
+            closest = hostile;
+        }
+
+        return closest;
+    }
+
+    public FactoryStructure? FindNearestAttackableStructure(Vector3 worldPosition, float range, IReadOnlyCollection<BuildPrototypeKind>? preferredKinds = null)
+    {
+        FactoryStructure? preferred = null;
+        FactoryStructure? fallback = null;
+        var maxDistanceSquared = range * range;
+        var bestPreferred = maxDistanceSquared;
+        var bestFallback = maxDistanceSquared;
+
+        for (var i = 0; i < _structures.Count; i++)
+        {
+            var structure = _structures[i];
+            if (structure.IsDestroyed || structure.Site != WorldGrid)
+            {
+                continue;
+            }
+
+            var distanceSquared = worldPosition.DistanceSquaredTo(structure.GlobalPosition);
+            if (distanceSquared > maxDistanceSquared)
+            {
+                continue;
+            }
+
+            var isPreferredKind = false;
+            if (preferredKinds is not null)
+            {
+                foreach (var preferredKind in preferredKinds)
+                {
+                    if (preferredKind == structure.Kind)
+                    {
+                        isPreferredKind = true;
+                        break;
+                    }
+                }
+            }
+
+            if (isPreferredKind)
+            {
+                if (distanceSquared < bestPreferred)
+                {
+                    bestPreferred = distanceSquared;
+                    preferred = structure;
+                }
+
+                continue;
+            }
+
+            if (distanceSquared < bestFallback)
+            {
+                bestFallback = distanceSquared;
+                fallback = structure;
+            }
+        }
+
+        return preferred ?? fallback;
     }
 
     public bool TrySendItem(FactoryStructure source, Vector2I targetCell, FactoryItem item)
@@ -124,17 +253,78 @@ public partial class SimulationController : Node
             var stepStartTicks = Stopwatch.GetTimestamp();
             for (var i = 0; i < _structures.Count; i++)
             {
-                if (!_structures[i].Site.IsSimulationActive)
+                if (_structures[i].IsDestroyed || !_structures[i].Site.IsSimulationActive)
                 {
                     continue;
                 }
 
+                _structures[i].AdvanceCombatState(FactoryConstants.SimulationStepSeconds);
                 _structures[i].SimulationStep(this, FactoryConstants.SimulationStepSeconds);
             }
 
+            for (var i = 0; i < _combatSystems.Count; i++)
+            {
+                _combatSystems[i].SimulationStep(this, FactoryConstants.SimulationStepSeconds);
+            }
+
+            for (var i = 0; i < _hostiles.Count; i++)
+            {
+                if (!GodotObject.IsInstanceValid(_hostiles[i]) || _hostiles[i].IsDefeated)
+                {
+                    continue;
+                }
+
+                _hostiles[i].SimulationStep(this, FactoryConstants.SimulationStepSeconds);
+            }
+
+            ProcessQueuedCombatCleanup();
             _accumulator -= FactoryConstants.SimulationStepSeconds;
             _activeTransportItemCount = CountTransitItems();
             _averageStepMilliseconds = SmoothMetric(_averageStepMilliseconds, Stopwatch.GetElapsedTime(stepStartTicks).TotalMilliseconds, 0.18);
+        }
+    }
+
+    private void ProcessQueuedCombatCleanup()
+    {
+        if (_destroyedStructures.Count > 0)
+        {
+            var destroyedSnapshot = new List<FactoryStructure>(_destroyedStructures);
+            _destroyedStructures.Clear();
+
+            for (var i = 0; i < destroyedSnapshot.Count; i++)
+            {
+                var structure = destroyedSnapshot[i];
+                if (!GodotObject.IsInstanceValid(structure))
+                {
+                    continue;
+                }
+
+                UnregisterStructure(structure);
+                structure.Site.RemoveStructure(structure);
+                structure.QueueFree();
+                DestroyedStructureCount++;
+            }
+
+            RebuildTopology();
+        }
+
+        if (_defeatedHostiles.Count > 0)
+        {
+            var hostileSnapshot = new List<FactoryEnemyActor>(_defeatedHostiles);
+            _defeatedHostiles.Clear();
+
+            for (var i = 0; i < hostileSnapshot.Count; i++)
+            {
+                var hostile = hostileSnapshot[i];
+                if (!GodotObject.IsInstanceValid(hostile))
+                {
+                    continue;
+                }
+
+                UnregisterEnemy(hostile);
+                hostile.QueueFree();
+                DefeatedEnemyCount++;
+            }
         }
     }
 

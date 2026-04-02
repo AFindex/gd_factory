@@ -19,6 +19,7 @@ public partial class FactoryHud : CanvasLayer
     private Label? _deliveryLabel;
     private Label? _noteLabel;
     private Label? _profilerLabel;
+    private Label? _combatLabel;
     private PanelContainer? _inspectionPanel;
     private Label? _inspectionTitleLabel;
     private Label? _inspectionBodyLabel;
@@ -83,6 +84,9 @@ public partial class FactoryHud : CanvasLayer
         CreateSelectionButton(buttonGrid, BuildPrototypeKind.Unloader, "8 卸载器");
         CreateSelectionButton(buttonGrid, BuildPrototypeKind.Storage, "9 仓储");
         CreateSelectionButton(buttonGrid, BuildPrototypeKind.Inserter, "0 机械臂");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Wall, "墙体");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.AmmoAssembler, "弹药组装器");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.GunTurret, "机枪炮塔");
 
         body.AddChild(CreateDivider());
         body.AddChild(CreateSectionLabel("状态", 12, new Color("F8FAFC")));
@@ -107,7 +111,7 @@ public partial class FactoryHud : CanvasLayer
         body.AddChild(_noteLabel);
 
         body.AddChild(CreateDivider());
-        body.AddChild(CreateSectionLabel("仓储面板", 12, new Color("F8FAFC")));
+        body.AddChild(CreateSectionLabel("建筑面板", 12, new Color("F8FAFC")));
         var inspectionPanel = new PanelContainer();
         inspectionPanel.MouseFilter = Control.MouseFilterEnum.Ignore;
         inspectionPanel.Visible = false;
@@ -125,12 +129,17 @@ public partial class FactoryHud : CanvasLayer
         inspectionBody.AddChild(_inspectionBodyLabel);
 
         body.AddChild(CreateDivider());
+        body.AddChild(CreateSectionLabel("Combat", 12, new Color("F8FAFC")));
+        _combatLabel = CreateValueLabel(string.Empty, new Color("FCA5A5"));
+        body.AddChild(_combatLabel);
+
+        body.AddChild(CreateDivider());
         body.AddChild(CreateSectionLabel("Profiler", 12, new Color("F8FAFC")));
         _profilerLabel = CreateValueLabel(string.Empty, new Color("CFE7FF"));
         body.AddChild(_profilerLabel);
 
         body.AddChild(CreateDivider());
-        body.AddChild(CreateValueLabel("镜头 WASD/方向键 | 缩放 滚轮 | 朝向 Q/E | 数字键进建造 | Esc 返回交互 | 交互模式左键选中 | 建造模式左键放置 / 右键或 Delete 拆除", new Color("8EA4B8")));
+        body.AddChild(CreateValueLabel("镜头 WASD/方向键 | 缩放 滚轮 | 朝向 Q/E | 数字键或面板按钮进建造 | Esc 返回交互 | 交互模式左键选中 | 建造模式左键放置 / 右键或 Delete 拆除", new Color("8EA4B8")));
 
         SetMode(FactoryInteractionMode.Interact);
         SetBuildSelection(null, null);
@@ -140,7 +149,8 @@ public partial class FactoryHud : CanvasLayer
         SetRotation(FacingDirection.East);
         SetSinkStats(0, 0, 0);
         SetProfilerStats(0, 0.0, 0, 0, 0.0, 0.0, 0.0);
-        SetNote("默认场景已扩展仓储、机械臂与回收链路，右上角仍保留 smoke 回归探针空区。");
+        SetCombatStats(0, 0, 0);
+        SetNote("默认场景已扩展仓储、机械臂与塔防补给链路，右上角仍保留 smoke 回归探针空区。");
         SetInspection(null, null);
         UpdateLayout();
         GetViewport().SizeChanged += UpdateLayout;
@@ -245,6 +255,14 @@ public partial class FactoryHud : CanvasLayer
             $"结构 {structureCount} | 在途 {transitItemCount}\n" +
             $"热点 sim {simulationMilliseconds:0.00} ms | visual {visualMilliseconds:0.00} ms\n" +
             $"拓扑重建 {topologyMilliseconds:0.00} ms";
+    }
+
+    public void SetCombatStats(int activeEnemies, int kills, int structuresLost)
+    {
+        if (_combatLabel is not null)
+        {
+            _combatLabel.Text = $"敌人 {activeEnemies} | 击杀 {kills} | 损失建筑 {structuresLost}";
+        }
     }
 
     public void SetNote(string text)

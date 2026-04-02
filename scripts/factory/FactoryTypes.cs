@@ -12,8 +12,17 @@ public enum BuildPrototypeKind
     Unloader,
     Storage,
     Inserter,
+    Wall,
+    AmmoAssembler,
+    GunTurret,
     OutputPort,
     InputPort
+}
+
+public enum FactoryItemKind
+{
+    GenericCargo,
+    AmmoMagazine
 }
 
 public enum FacingDirection
@@ -66,14 +75,16 @@ public enum MobileFactoryAttachmentChannelType
 
 public sealed class FactoryItem
 {
-    public FactoryItem(int id, BuildPrototypeKind sourceKind)
+    public FactoryItem(int id, BuildPrototypeKind sourceKind, FactoryItemKind itemKind = FactoryItemKind.GenericCargo)
     {
         Id = id;
         SourceKind = sourceKind;
+        ItemKind = itemKind;
     }
 
     public int Id { get; }
     public BuildPrototypeKind SourceKind { get; }
+    public FactoryItemKind ItemKind { get; }
 }
 
 public sealed class BuildPrototypeDefinition
@@ -108,9 +119,21 @@ public static class FactoryPresentation
             BuildPrototypeKind.Unloader => "卸载器",
             BuildPrototypeKind.Storage => "仓储",
             BuildPrototypeKind.Inserter => "机械臂",
+            BuildPrototypeKind.Wall => "墙体",
+            BuildPrototypeKind.AmmoAssembler => "弹药组装器",
+            BuildPrototypeKind.GunTurret => "机枪炮塔",
             BuildPrototypeKind.OutputPort => "输出端口",
             BuildPrototypeKind.InputPort => "输入端口",
             _ => kind.ToString()
+        };
+    }
+
+    public static string GetItemLabel(FactoryItem item)
+    {
+        return item.ItemKind switch
+        {
+            FactoryItemKind.AmmoMagazine => $"弹药 #{item.Id}",
+            _ => $"{GetKindLabel(item.SourceKind)} #{item.Id}"
         };
     }
 }
