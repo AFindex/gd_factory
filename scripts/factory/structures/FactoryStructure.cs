@@ -275,7 +275,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable
 
         _combatOverlayRoot.Visible = Visible;
         _combatOverlayRoot.GlobalPosition = GlobalPosition;
-        _combatOverlayRoot.GlobalRotation = Vector3.Zero;
+        _combatOverlayRoot.GlobalRotation = new Vector3(0.0f, Site.WorldRotationRadians, 0.0f);
         _combatOverlayRoot.Scale = Vector3.One * Site.CombatOverlayScale;
     }
 }

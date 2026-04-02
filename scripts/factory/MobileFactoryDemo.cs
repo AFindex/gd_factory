@@ -105,6 +105,9 @@ public partial class MobileFactoryDemo : Node3D
 
     private BuildPrototypeKind _selectedInteriorKind = BuildPrototypeKind.Belt;
     private FacingDirection _selectedInteriorFacing = FacingDirection.East;
+    private FactoryInteractionMode _interiorInteractionMode = FactoryInteractionMode.Interact;
+    private FactoryStructure? _selectedInteriorStructure;
+    private FactoryStructure? _hoveredInteriorStructure;
     private Vector2I _hoveredInteriorCell;
     private bool _hasHoveredInteriorCell;
     private bool _canPlaceInteriorCell;
@@ -184,15 +187,15 @@ public partial class MobileFactoryDemo : Node3D
 
         if (CanUseEditorViewportInput())
         {
-            if (mouseButton.ButtonIndex == MouseButton.Left && _hasHoveredInteriorCell && _canPlaceInteriorCell)
+            if (mouseButton.ButtonIndex == MouseButton.Left)
             {
-                PlaceInteriorStructure();
+                HandleEditorPrimaryClick();
                 GetViewport().SetInputAsHandled();
             }
 
             if (mouseButton.ButtonIndex == MouseButton.Right && _hasHoveredInteriorCell)
             {
-                RemoveInteriorStructure();
+                HandleEditorSecondaryClick();
                 GetViewport().SetInputAsHandled();
             }
 
@@ -770,8 +773,15 @@ public partial class MobileFactoryDemo : Node3D
 
         if (keyEvent.Keycode == Key.Escape)
         {
-            SetEditorOpenState(false);
-            FocusFactoryForCurrentMode();
+            if (_interiorInteractionMode == FactoryInteractionMode.Build)
+            {
+                EnterInteriorInteractionMode();
+            }
+            else
+            {
+                SetEditorOpenState(false);
+                FocusFactoryForCurrentMode();
+            }
             return true;
         }
 
@@ -787,7 +797,9 @@ public partial class MobileFactoryDemo : Node3D
                 continue;
             }
 
-            _selectedInteriorKind = InteriorPalette[i];
+            SelectInteriorBuildKind(_selectedInteriorKind == InteriorPalette[i] && _interiorInteractionMode == FactoryInteractionMode.Build
+                ? null
+                : InteriorPalette[i]);
             return true;
         }
 
@@ -855,7 +867,10 @@ public partial class MobileFactoryDemo : Node3D
     {
         _hasHoveredInteriorCell = false;
         _canPlaceInteriorCell = false;
-        _interiorPreviewMessage = "把鼠标移入右侧编辑区，可直接调整移动工厂内部布局。";
+        _hoveredInteriorStructure = null;
+        _interiorPreviewMessage = _interiorInteractionMode == FactoryInteractionMode.Build
+            ? "把鼠标移入右侧编辑区，可直接调整移动工厂内部布局。"
+            : "交互模式：把鼠标移入右侧编辑区，点击内部建筑查看状态。";
 
         if (!_editorOpen || !_hoveringEditorViewport || _mobileFactory is null || _editorCamera is null)
         {
@@ -874,6 +889,15 @@ public partial class MobileFactoryDemo : Node3D
         if (!_hasHoveredInteriorCell)
         {
             _interiorPreviewMessage = "当前鼠标不在移动工厂内部可编辑网格上。";
+            return;
+        }
+
+        _mobileFactory.TryGetInteriorStructure(cell, out _hoveredInteriorStructure);
+        if (_interiorInteractionMode == FactoryInteractionMode.Interact)
+        {
+            _interiorPreviewMessage = _hoveredInteriorStructure is not null
+                ? $"点击查看 {_hoveredInteriorStructure.DisplayName} 的状态。"
+                : $"格 ({cell.X}, {cell.Y}) 当前为空。";
             return;
         }
 
@@ -976,7 +1000,10 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        _interiorPreviewRoot.Visible = _editorOpen && _hoveringEditorViewport && _hasHoveredInteriorCell;
+        _interiorPreviewRoot.Visible = _editorOpen
+            && _hoveringEditorViewport
+            && _hasHoveredInteriorCell
+            && _interiorInteractionMode == FactoryInteractionMode.Build;
         if (!_interiorPreviewRoot.Visible)
         {
             return;
@@ -1106,7 +1133,12 @@ public partial class MobileFactoryDemo : Node3D
         {
             if (child is FactoryStructure structure)
             {
+                var isInteriorStructure = structure.Site is MobileFactorySite;
+                structure.SetCombatFocus(
+                    isInteriorStructure && structure == _hoveredInteriorStructure,
+                    isInteriorStructure && structure == _selectedInteriorStructure);
                 structure.UpdateVisuals(alpha);
+                structure.SyncCombatVisuals(alpha);
             }
         }
     }
@@ -1186,11 +1218,21 @@ public partial class MobileFactoryDemo : Node3D
         _hud.SetHoverAnchor(_hoveredAnchor, _controlMode == MobileFactoryControlMode.DeployPreview && _hasHoveredAnchor);
         _hud.SetPreviewStatus(_worldStatusPositive, _worldPreviewMessage);
         _hud.SetDeliveryStats(GetPrimaryDeliveryTotal(), GetSecondaryDeliveryTotal());
-        _hud.SetEditorSelection(_selectedInteriorKind, _selectedInteriorFacing);
-        _hud.SetEditorPreview(_canPlaceInteriorCell, _interiorPreviewMessage);
+        _hud.SetEditorSelection(_interiorInteractionMode, _selectedInteriorKind, _selectedInteriorFacing);
+        _hud.SetEditorSelectionTarget(GetSelectedInteriorStructureText());
+        _hud.SetEditorPreview(_interiorInteractionMode == FactoryInteractionMode.Build ? _canPlaceInteriorCell : true, _interiorPreviewMessage);
         _hud.SetPortStatus(_mobileFactory.GetPortStatusLabel());
         _hud.SetCombatStats(_simulation?.ActiveEnemyCount ?? 0, _simulation?.DefeatedEnemyCount ?? 0, _simulation?.DestroyedStructureCount ?? 0);
-        _hud.SetEditorState(_editorOpen, _mobileFactory.State, CountEditableInteriorStructures());
+        if (_selectedInteriorStructure is not null && GodotObject.IsInstanceValid(_selectedInteriorStructure) && _selectedInteriorStructure.IsInsideTree() && _selectedInteriorStructure is IFactoryInspectable inspectable)
+        {
+            _hud.SetEditorInspection(inspectable.InspectionTitle, string.Join("\n", inspectable.GetInspectionLines()));
+        }
+        else
+        {
+            _hud.SetEditorInspection(null, null);
+        }
+
+        _hud.SetEditorState(_editorOpen, _mobileFactory.State, CountEditableInteriorStructures(), _interiorInteractionMode);
         _hud.SetHintText(GetHintText());
     }
 
@@ -1365,6 +1407,7 @@ public partial class MobileFactoryDemo : Node3D
 
         if (_mobileFactory.PlaceInteriorStructure(_selectedInteriorKind, _hoveredInteriorCell, _selectedInteriorFacing))
         {
+            _selectedInteriorStructure = null;
             _interiorPreviewMessage = $"已在内部格 ({_hoveredInteriorCell.X}, {_hoveredInteriorCell.Y}) 放置{_definitions[_selectedInteriorKind].DisplayName}。";
         }
     }
@@ -1378,6 +1421,10 @@ public partial class MobileFactoryDemo : Node3D
 
         if (_mobileFactory.RemoveInteriorStructure(_hoveredInteriorCell))
         {
+            if (_selectedInteriorStructure is not null && _selectedInteriorStructure.Cell == _hoveredInteriorCell)
+            {
+                _selectedInteriorStructure = null;
+            }
             _interiorPreviewMessage = $"已移除内部格 ({_hoveredInteriorCell.X}, {_hoveredInteriorCell.Y}) 的结构。";
         }
     }
@@ -1445,7 +1492,9 @@ public partial class MobileFactoryDemo : Node3D
 
     private void OnEditorPaletteSelected(BuildPrototypeKind kind)
     {
-        _selectedInteriorKind = kind;
+        SelectInteriorBuildKind(_selectedInteriorKind == kind && _interiorInteractionMode == FactoryInteractionMode.Build
+            ? null
+            : kind);
     }
 
     private void OnEditorRotateRequested(int direction)
@@ -1505,6 +1554,7 @@ public partial class MobileFactoryDemo : Node3D
 
         if (!isOpen)
         {
+            EnterInteriorInteractionMode();
             _editorCameraLocalOffset = Vector2.Zero;
             return;
         }
@@ -1514,6 +1564,72 @@ public partial class MobileFactoryDemo : Node3D
         {
             _editorCamera.Size = _mobileFactory.GetSuggestedEditorCameraSize();
         }
+    }
+
+    private void SelectInteriorBuildKind(BuildPrototypeKind? kind)
+    {
+        if (!kind.HasValue)
+        {
+            EnterInteriorInteractionMode();
+            return;
+        }
+
+        _selectedInteriorKind = kind.Value;
+        _interiorInteractionMode = FactoryInteractionMode.Build;
+        _selectedInteriorStructure = null;
+    }
+
+    private void EnterInteriorInteractionMode()
+    {
+        _interiorInteractionMode = FactoryInteractionMode.Interact;
+    }
+
+    private void HandleEditorPrimaryClick()
+    {
+        if (!_hasHoveredInteriorCell)
+        {
+            return;
+        }
+
+        if (_interiorInteractionMode == FactoryInteractionMode.Build)
+        {
+            if (_canPlaceInteriorCell)
+            {
+                PlaceInteriorStructure();
+            }
+
+            return;
+        }
+
+        _selectedInteriorStructure = _hoveredInteriorStructure;
+    }
+
+    private void HandleEditorSecondaryClick()
+    {
+        if (!_hasHoveredInteriorCell)
+        {
+            return;
+        }
+
+        if (_interiorInteractionMode == FactoryInteractionMode.Build)
+        {
+            RemoveInteriorStructure();
+            return;
+        }
+
+        _selectedInteriorStructure = null;
+    }
+
+    private string GetSelectedInteriorStructureText()
+    {
+        if (_selectedInteriorStructure is null || !_selectedInteriorStructure.IsInsideTree())
+        {
+            return _interiorInteractionMode == FactoryInteractionMode.Build
+                ? "建造预览中"
+                : "未选中建筑";
+        }
+
+        return $"{_selectedInteriorStructure.DisplayName} @ ({_selectedInteriorStructure.Cell.X}, {_selectedInteriorStructure.Cell.Y}) | HP {_selectedInteriorStructure.CurrentHealth:0}/{_selectedInteriorStructure.MaxHealth:0}";
     }
 
     private int CountEditableInteriorStructures()
@@ -2054,7 +2170,7 @@ public partial class MobileFactoryDemo : Node3D
         {
             MobileFactoryControlMode.Observer => "观察模式：WASD/方向键移动相机 | 滚轮缩放 | Tab 返回工厂控制 | F 内部编辑",
             MobileFactoryControlMode.DeployPreview => "部署预览：左键确认 | Q/E/R 旋转朝向 | G/Esc 取消 | F 内部编辑",
-            _ => "工厂控制：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器内 WASD 平移相机、滚轮缩放、1-0/-/= 快速选物流件，防御建筑可直接点右侧按钮"
+            _ => "工厂控制：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器里和 sandbox 一样，点按钮进建造，Esc 回交互"
         };
     }
 

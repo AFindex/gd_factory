@@ -38,9 +38,13 @@ public partial class MobileFactoryHud : CanvasLayer
     private Label? _hintLabel;
     private Label? _editorModeLabel;
     private Label? _selectionLabel;
+    private Label? _selectionTargetLabel;
     private Label? _editorPreviewLabel;
     private Label? _portStatusLabel;
     private Label? _combatLabel;
+    private PanelContainer? _inspectionPanel;
+    private Label? _inspectionTitleLabel;
+    private Label? _inspectionBodyLabel;
     private Label? _focusLabel;
     private Button? _observerButton;
     private Button? _deployButton;
@@ -213,15 +217,22 @@ public partial class MobileFactoryHud : CanvasLayer
         _deliveryLabel.Text = $"演示回收站：A 线路累计 {sinkA} | B 线路累计 {sinkB}";
     }
 
-    public void SetEditorSelection(BuildPrototypeKind kind, FacingDirection facing)
+    public void SetEditorSelection(FactoryInteractionMode interactionMode, BuildPrototypeKind? kind, FacingDirection facing)
     {
         if (_selectionLabel is null)
         {
             return;
         }
 
-        _selectionLabel.Text = $"内部建造：{GetKindLabel(kind)} | 朝向 {FactoryDirection.ToLabel(facing)}";
-        RefreshPaletteButtons(kind);
+        if (interactionMode == FactoryInteractionMode.Build && kind.HasValue)
+        {
+            _selectionLabel.Text = $"内部模式：建造 | {GetKindLabel(kind.Value)} | 朝向 {FactoryDirection.ToLabel(facing)}";
+            RefreshPaletteButtons(kind.Value);
+            return;
+        }
+
+        _selectionLabel.Text = "内部模式：交互 | 点击建筑查看状态";
+        RefreshPaletteButtons(null);
     }
 
     public void SetEditorPreview(bool isValid, string text)
@@ -253,6 +264,27 @@ public partial class MobileFactoryHud : CanvasLayer
         }
     }
 
+    public void SetEditorSelectionTarget(string text)
+    {
+        if (_selectionTargetLabel is not null)
+        {
+            _selectionTargetLabel.Text = $"内部选中：{text}";
+        }
+    }
+
+    public void SetEditorInspection(string? title, string? body)
+    {
+        if (_inspectionPanel is null || _inspectionTitleLabel is null || _inspectionBodyLabel is null)
+        {
+            return;
+        }
+
+        var isVisible = !string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(body);
+        _inspectionPanel.Visible = isVisible;
+        _inspectionTitleLabel.Text = title ?? string.Empty;
+        _inspectionBodyLabel.Text = body ?? string.Empty;
+    }
+
     public void SetEditorFocusHint(bool overEditor)
     {
         if (_focusLabel is null)
@@ -265,7 +297,7 @@ public partial class MobileFactoryHud : CanvasLayer
             : "鼠标焦点：大世界";
     }
 
-    public void SetEditorState(bool isOpen, MobileFactoryLifecycleState lifecycleState, int structureCount)
+    public void SetEditorState(bool isOpen, MobileFactoryLifecycleState lifecycleState, int structureCount, FactoryInteractionMode interactionMode)
     {
         if (_editorModeLabel is null)
         {
@@ -280,7 +312,8 @@ public partial class MobileFactoryHud : CanvasLayer
             _ => "运输中"
         };
         var paneText = isOpen ? "分屏编辑已展开" : "按 F 打开内部编辑";
-        _editorModeLabel.Text = $"内部编辑：{paneText} | 生命周期：{stateText} | 当前内部件数：{structureCount}";
+        var interactionText = interactionMode == FactoryInteractionMode.Build ? "建造模式" : "交互模式";
+        _editorModeLabel.Text = $"内部编辑：{paneText} | 生命周期：{stateText} | {interactionText} | 当前内部件数：{structureCount}";
     }
 
     public void SetHintText(string text)
@@ -446,8 +479,21 @@ public partial class MobileFactoryHud : CanvasLayer
 
         _editorModeLabel = CreateEditorLabel(sidebar, 12, new Color("D7E6F2"));
         _selectionLabel = CreateEditorLabel(sidebar, 12, new Color("FDE68A"));
+        _selectionTargetLabel = CreateEditorLabel(sidebar, 12, new Color("D7E6F2"));
         _editorPreviewLabel = CreateEditorLabel(sidebar, 12, new Color("D7E6F2"));
         _portStatusLabel = CreateEditorLabel(sidebar, 12, new Color("FDE68A"));
+
+        _inspectionPanel = new PanelContainer
+        {
+            Visible = false
+        };
+        sidebar.AddChild(_inspectionPanel);
+        var inspectionBody = new VBoxContainer();
+        inspectionBody.AddThemeConstantOverride("separation", 4);
+        _inspectionPanel.AddChild(inspectionBody);
+        _inspectionTitleLabel = CreateEditorLabel(inspectionBody, 12, new Color("FDE68A"));
+        _inspectionBodyLabel = CreateEditorLabel(inspectionBody, 11, new Color("D7E6F2"));
+
         BuildEditorToolbar(sidebar);
 
         AddChild(viewport);
@@ -615,11 +661,11 @@ public partial class MobileFactoryHud : CanvasLayer
         return style;
     }
 
-    private void RefreshPaletteButtons(BuildPrototypeKind selectedKind)
+    private void RefreshPaletteButtons(BuildPrototypeKind? selectedKind)
     {
         foreach (var pair in _paletteButtons)
         {
-            pair.Value.ButtonPressed = pair.Key == selectedKind;
+            pair.Value.ButtonPressed = selectedKind.HasValue && pair.Key == selectedKind.Value;
         }
     }
 
