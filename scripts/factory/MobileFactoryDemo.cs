@@ -76,6 +76,7 @@ public partial class MobileFactoryDemo : Node3D
     private Node3D? _worldPreviewRoot;
     private Node3D? _interiorPreviewRoot;
     private Node3D? _interiorBlueprintPreviewRoot;
+    private Node3D? _interiorBlueprintGhostPreviewRoot;
     private Camera3D? _editorCamera;
     private FactoryCombatDirector? _combatDirector;
     private readonly List<MeshInstance3D> _worldPreviewFootprintMeshes = new();
@@ -86,6 +87,7 @@ public partial class MobileFactoryDemo : Node3D
     private readonly List<MeshInstance3D> _interiorPreviewBoundaryMeshes = new();
     private readonly List<MeshInstance3D> _interiorPreviewExteriorMeshes = new();
     private readonly List<MeshInstance3D> _interiorBlueprintPreviewMeshes = new();
+    private readonly List<FactoryStructure> _interiorBlueprintPreviewGhosts = new();
     private FactoryBlueprintSiteAdapter? _interiorBlueprintSite;
 
     private MobileFactoryInstance? _mobileFactory;
@@ -377,6 +379,9 @@ public partial class MobileFactoryDemo : Node3D
 
         _interiorBlueprintPreviewRoot = new Node3D { Name = "InteriorBlueprintPreviewRoot", Visible = false };
         AddChild(_interiorBlueprintPreviewRoot);
+
+        _interiorBlueprintGhostPreviewRoot = new Node3D { Name = "InteriorBlueprintGhostPreviewRoot", Visible = false };
+        AddChild(_interiorBlueprintGhostPreviewRoot);
 
         _simulation = new SimulationController { Name = "SimulationController" };
         AddChild(_simulation);
@@ -1401,9 +1406,22 @@ public partial class MobileFactoryDemo : Node3D
             mesh.Visible = false;
         }
 
+        foreach (var ghost in _interiorBlueprintPreviewGhosts)
+        {
+            ghost.Visible = false;
+        }
+
         _interiorBlueprintPreviewRoot.Visible = _editorOpen && _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && _interiorBlueprintPlan is not null;
+        if (_interiorBlueprintGhostPreviewRoot is not null)
+        {
+            _interiorBlueprintGhostPreviewRoot.Visible = _interiorBlueprintPreviewRoot.Visible;
+        }
         if (!_interiorBlueprintPreviewRoot.Visible || _interiorBlueprintPlan is null)
         {
+            if (_interiorBlueprintGhostPreviewRoot is not null)
+            {
+                _interiorBlueprintGhostPreviewRoot.Visible = false;
+            }
             return;
         }
 
@@ -1414,6 +1432,11 @@ public partial class MobileFactoryDemo : Node3D
             0.0f);
 
         EnsureInteriorBlueprintPreviewCapacity(_interiorBlueprintPlan.Entries.Count);
+        var showGhostPreview = SupportsGhostBlueprintPreview();
+        if (_interiorBlueprintGhostPreviewRoot is not null)
+        {
+            _interiorBlueprintGhostPreviewRoot.Visible = showGhostPreview;
+        }
         for (var index = 0; index < _interiorBlueprintPlan.Entries.Count; index++)
         {
             var entry = _interiorBlueprintPlan.Entries[index];
@@ -1426,6 +1449,20 @@ public partial class MobileFactoryDemo : Node3D
             ApplyPreviewColor(mesh, entry.IsValid
                 ? new Color(0.35f, 0.95f, 0.55f, 0.36f)
                 : new Color(1.0f, 0.35f, 0.35f, 0.36f));
+
+            if (showGhostPreview)
+            {
+                var ghost = EnsureInteriorBlueprintGhostPreview(entry, index);
+                ghost.Visible = true;
+                if (ghost.Site != _mobileFactory.InteriorSite || ghost.Cell != entry.TargetCell || ghost.Facing != entry.TargetFacing)
+                {
+                    ghost.Configure(_mobileFactory.InteriorSite, entry.TargetCell, entry.TargetFacing);
+                }
+
+                ghost.ApplyGhostVisual(entry.IsValid
+                    ? new Color(0.54f, 0.84f, 1.0f, 0.58f)
+                    : new Color(1.0f, 0.52f, 0.52f, 0.54f));
+            }
         }
     }
 
@@ -2193,6 +2230,38 @@ public partial class MobileFactoryDemo : Node3D
             _interiorBlueprintPreviewRoot.AddChild(mesh);
             _interiorBlueprintPreviewMeshes.Add(mesh);
         }
+    }
+
+    private FactoryStructure EnsureInteriorBlueprintGhostPreview(FactoryBlueprintPlanEntry entry, int index)
+    {
+        if (_interiorBlueprintGhostPreviewRoot is null || _mobileFactory is null)
+        {
+            throw new System.InvalidOperationException("Interior blueprint ghost preview root is missing.");
+        }
+
+        if (index < _interiorBlueprintPreviewGhosts.Count && _interiorBlueprintPreviewGhosts[index].Kind == entry.SourceEntry.Kind)
+        {
+            return _interiorBlueprintPreviewGhosts[index];
+        }
+
+        if (index < _interiorBlueprintPreviewGhosts.Count)
+        {
+            _interiorBlueprintPreviewGhosts[index].QueueFree();
+            _interiorBlueprintPreviewGhosts.RemoveAt(index);
+        }
+
+        var ghost = FactoryStructureFactory.CreateGhostPreview(
+            entry.SourceEntry.Kind,
+            new FactoryStructurePlacement(_mobileFactory.InteriorSite, entry.TargetCell, entry.TargetFacing));
+        ghost.Name = $"InteriorBlueprintGhostPreview_{index}_{entry.SourceEntry.Kind}";
+        _interiorBlueprintGhostPreviewRoot.AddChild(ghost);
+        _interiorBlueprintPreviewGhosts.Insert(index, ghost);
+        return ghost;
+    }
+
+    private static bool SupportsGhostBlueprintPreview()
+    {
+        return !HasFocusedSmokeTestFlag() && !HasLargeScenarioSmokeTestFlag();
     }
 
     private FactoryBlueprintSiteAdapter CreateInteriorBlueprintSiteAdapter()

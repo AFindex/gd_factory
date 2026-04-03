@@ -14,6 +14,8 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
     private bool _isSelected;
     private double _recentDamageTimer;
     private float _currentHealth;
+    private bool _ghostVisualApplied;
+    private Color _ghostTint = new(-1.0f, -1.0f, -1.0f, -1.0f);
 
     protected float CellSize { get; private set; } = FactoryConstants.CellSize;
 
@@ -48,15 +50,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
 
     public override void _Ready()
     {
-        if (_visualsBuilt)
-        {
-            return;
-        }
-
-        _visualsBuilt = true;
-        BuildVisuals();
-        BuildCombatVisuals();
-        SyncCombatVisuals(0.0f);
+        EnsureVisualsBuilt();
     }
 
     public virtual void SimulationStep(SimulationController simulation, double stepSeconds)
@@ -183,6 +177,39 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
     {
         _isHovered = isHovered;
         _isSelected = isSelected;
+    }
+
+    public void EnsureVisualsBuilt()
+    {
+        if (_visualsBuilt)
+        {
+            return;
+        }
+
+        _visualsBuilt = true;
+        BuildVisuals();
+        BuildCombatVisuals();
+        SyncCombatVisuals(0.0f);
+    }
+
+    public void ApplyGhostVisual(Color tint)
+    {
+        EnsureVisualsBuilt();
+        ProcessMode = ProcessModeEnum.Disabled;
+
+        if (_combatOverlayRoot is not null)
+        {
+            _combatOverlayRoot.Visible = false;
+        }
+
+        if (_ghostVisualApplied && _ghostTint.IsEqualApprox(tint))
+        {
+            return;
+        }
+
+        _ghostVisualApplied = true;
+        _ghostTint = tint;
+        ApplyGhostTintRecursive(this, tint);
     }
 
     public void SyncCombatVisuals(float tickAlpha)
@@ -334,5 +361,30 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
         _combatOverlayRoot.GlobalPosition = GlobalPosition;
         _combatOverlayRoot.GlobalRotation = new Vector3(0.0f, Site.WorldRotationRadians, 0.0f);
         _combatOverlayRoot.Scale = Vector3.One * Site.CombatOverlayScale;
+    }
+
+    private static void ApplyGhostTintRecursive(Node node, Color tint)
+    {
+        if (node is MeshInstance3D meshInstance)
+        {
+            meshInstance.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+            meshInstance.MaterialOverride = new StandardMaterial3D
+            {
+                AlbedoColor = tint,
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                Roughness = 0.18f,
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                EmissionEnabled = true,
+                Emission = tint.Lightened(0.12f)
+            };
+        }
+
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Node childNode)
+            {
+                ApplyGhostTintRecursive(childNode, tint);
+            }
+        }
     }
 }

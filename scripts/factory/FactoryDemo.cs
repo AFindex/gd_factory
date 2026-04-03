@@ -30,9 +30,11 @@ public partial class FactoryDemo : Node3D
     private Node3D? _enemyRoot;
     private Node3D? _previewRoot;
     private Node3D? _blueprintPreviewRoot;
+    private Node3D? _blueprintGhostPreviewRoot;
     private MeshInstance3D? _previewCell;
     private MeshInstance3D? _previewArrow;
     private readonly List<MeshInstance3D> _blueprintPreviewMeshes = new();
+    private readonly List<FactoryStructure> _blueprintPreviewGhosts = new();
     private FactoryCombatDirector? _combatDirector;
     private FactoryBlueprintSiteAdapter? _blueprintSite;
     private double _averageFrameMilliseconds;
@@ -278,6 +280,9 @@ public partial class FactoryDemo : Node3D
 
         _blueprintPreviewRoot = new Node3D { Name = "BlueprintPreviewRoot", Visible = false };
         AddChild(_blueprintPreviewRoot);
+
+        _blueprintGhostPreviewRoot = new Node3D { Name = "BlueprintGhostPreviewRoot", Visible = false };
+        AddChild(_blueprintGhostPreviewRoot);
 
         _simulation = new SimulationController { Name = "SimulationController" };
         AddChild(_simulation);
@@ -946,14 +951,32 @@ public partial class FactoryDemo : Node3D
             mesh.Visible = false;
         }
 
+        foreach (var ghost in _blueprintPreviewGhosts)
+        {
+            ghost.Visible = false;
+        }
+
         var plan = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview ? _blueprintApplyPlan : null;
         _blueprintPreviewRoot.Visible = plan is not null && _hasHoveredCell;
+        if (_blueprintGhostPreviewRoot is not null)
+        {
+            _blueprintGhostPreviewRoot.Visible = _blueprintPreviewRoot.Visible;
+        }
         if (!_blueprintPreviewRoot.Visible || plan is null)
         {
+            if (_blueprintGhostPreviewRoot is not null)
+            {
+                _blueprintGhostPreviewRoot.Visible = false;
+            }
             return;
         }
 
         EnsureBlueprintPreviewCapacity(plan.Entries.Count);
+        var showGhostPreview = SupportsGhostBlueprintPreview();
+        if (_blueprintGhostPreviewRoot is not null)
+        {
+            _blueprintGhostPreviewRoot.Visible = showGhostPreview;
+        }
         for (var index = 0; index < plan.Entries.Count; index++)
         {
             var entry = plan.Entries[index];
@@ -963,6 +986,20 @@ public partial class FactoryDemo : Node3D
             ApplyPreviewColor(mesh, entry.IsValid
                 ? new Color(0.35f, 0.95f, 0.55f, 0.42f)
                 : new Color(1.0f, 0.35f, 0.35f, 0.42f));
+
+            if (showGhostPreview)
+            {
+                var ghost = EnsureBlueprintGhostPreview(entry, index);
+                ghost.Visible = true;
+                if (ghost.Site != _grid || ghost.Cell != entry.TargetCell || ghost.Facing != entry.TargetFacing)
+                {
+                    ghost.Configure(_grid, entry.TargetCell, entry.TargetFacing);
+                }
+
+                ghost.ApplyGhostVisual(entry.IsValid
+                    ? new Color(0.54f, 0.84f, 1.0f, 0.58f)
+                    : new Color(1.0f, 0.52f, 0.52f, 0.54f));
+            }
         }
     }
 
@@ -1353,6 +1390,38 @@ public partial class FactoryDemo : Node3D
             _blueprintPreviewRoot.AddChild(mesh);
             _blueprintPreviewMeshes.Add(mesh);
         }
+    }
+
+    private FactoryStructure EnsureBlueprintGhostPreview(FactoryBlueprintPlanEntry entry, int index)
+    {
+        if (_blueprintGhostPreviewRoot is null)
+        {
+            throw new System.InvalidOperationException("Blueprint ghost preview root is missing.");
+        }
+
+        if (index < _blueprintPreviewGhosts.Count && _blueprintPreviewGhosts[index].Kind == entry.SourceEntry.Kind)
+        {
+            return _blueprintPreviewGhosts[index];
+        }
+
+        if (index < _blueprintPreviewGhosts.Count)
+        {
+            _blueprintPreviewGhosts[index].QueueFree();
+            _blueprintPreviewGhosts.RemoveAt(index);
+        }
+
+        var ghost = FactoryStructureFactory.CreateGhostPreview(
+            entry.SourceEntry.Kind,
+            new FactoryStructurePlacement(_grid!, entry.TargetCell, entry.TargetFacing));
+        ghost.Name = $"BlueprintGhostPreview_{index}_{entry.SourceEntry.Kind}";
+        _blueprintGhostPreviewRoot.AddChild(ghost);
+        _blueprintPreviewGhosts.Insert(index, ghost);
+        return ghost;
+    }
+
+    private static bool SupportsGhostBlueprintPreview()
+    {
+        return !HasSmokeTestFlag();
     }
 
     private FactoryBlueprintSiteAdapter CreateBlueprintSiteAdapter()

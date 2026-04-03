@@ -70,4 +70,12 @@ public static class FactoryStructureFactory
     {
         return Definitions[kind];
     }
+
+    public static FactoryStructure CreateGhostPreview(
+        BuildPrototypeKind kind,
+        FactoryStructurePlacement placement)
+    {
+        var structure = Create(kind, placement);
+        return structure;
+    }
 }
