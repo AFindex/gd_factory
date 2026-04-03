@@ -57,6 +57,7 @@ public partial class FactoryDemo : Node3D
     private Rect2I _blueprintSelectionRect;
     private FactoryBlueprintRecord? _pendingBlueprintCapture;
     private FactoryBlueprintApplyPlan? _blueprintApplyPlan;
+    private FacingDirection _blueprintApplyRotation = FacingDirection.East;
     private string _previewMessage = "交互模式：点击建筑查看；按数字键选择建筑后进入建造，或按住 Shift 左键框选蓝图。";
 
     public override void _Ready()
@@ -322,6 +323,19 @@ public partial class FactoryDemo : Node3D
     {
         if (_blueprintMode != FactoryBlueprintWorkflowMode.None)
         {
+            if (_blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview)
+            {
+                if (Input.IsActionJustPressed("camera_rotate_left"))
+                {
+                    RotateBlueprintApplyPreview(-1);
+                }
+
+                if (Input.IsActionJustPressed("camera_rotate_right"))
+                {
+                    RotateBlueprintApplyPreview(1);
+                }
+            }
+
             if (Input.IsActionJustPressed("build_cancel"))
             {
                 CancelBlueprintWorkflow();
@@ -727,7 +741,7 @@ public partial class FactoryDemo : Node3D
         _previewMessage = _blueprintMode switch
         {
             FactoryBlueprintWorkflowMode.CaptureSelection => "蓝图框选：拖拽选择一片现有布局，然后在右侧面板保存。",
-            FactoryBlueprintWorkflowMode.ApplyPreview => "蓝图预览：移动鼠标选择锚点，确认后应用当前蓝图。",
+            FactoryBlueprintWorkflowMode.ApplyPreview => $"蓝图预览：移动鼠标选择锚点，按 Q/E 旋转，当前朝向 {FactoryDirection.ToLabel(_blueprintApplyRotation)}。",
             _ => _interactionMode switch
             {
                 FactoryInteractionMode.Build => "把鼠标移到地面网格上选择格子。",
@@ -793,9 +807,9 @@ public partial class FactoryDemo : Node3D
                 return;
             }
 
-            _blueprintApplyPlan = FactoryBlueprintPlanner.CreatePlan(activeBlueprint, _blueprintSite, cell);
+            _blueprintApplyPlan = FactoryBlueprintPlanner.CreatePlan(activeBlueprint, _blueprintSite, cell, _blueprintApplyRotation);
             _previewMessage = _blueprintApplyPlan.IsValid
-                ? $"蓝图 {activeBlueprint.DisplayName} 可应用到锚点 ({cell.X}, {cell.Y})。"
+                ? $"蓝图 {activeBlueprint.DisplayName} 可应用到锚点 ({cell.X}, {cell.Y})，旋转 {FactoryDirection.ToLabel(_blueprintApplyRotation)}。"
                 : _blueprintApplyPlan.GetIssueSummary();
             return;
         }
@@ -1052,7 +1066,7 @@ public partial class FactoryDemo : Node3D
         var modeText = _blueprintMode switch
         {
             FactoryBlueprintWorkflowMode.CaptureSelection => "蓝图模式：框选保存",
-            FactoryBlueprintWorkflowMode.ApplyPreview => "蓝图模式：应用预览",
+            FactoryBlueprintWorkflowMode.ApplyPreview => $"蓝图模式：应用预览（旋转 {FactoryDirection.ToLabel(_blueprintApplyRotation)}）",
             _ => "蓝图模式：待命"
         };
         var activeText = activeBlueprint is null
@@ -1062,7 +1076,7 @@ public partial class FactoryDemo : Node3D
             ? "未捕获待保存蓝图。点击“框选保存”或在交互模式按住 Shift 左键拖拽选择。"
             : $"待保存：{_pendingBlueprintCapture.DisplayName} | {_pendingBlueprintCapture.GetSummaryText()}";
         var issueText = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && _blueprintApplyPlan is not null
-            ? _blueprintApplyPlan.GetIssueSummary()
+            ? $"当前旋转：{FactoryDirection.ToLabel(_blueprintApplyRotation)} | 占地 {_blueprintApplyPlan.FootprintSize.X}x{_blueprintApplyPlan.FootprintSize.Y}\n{_blueprintApplyPlan.GetIssueSummary()}"
             : _blueprintMode == FactoryBlueprintWorkflowMode.CaptureSelection
                 ? "框选完成后在这里输入名称并保存。"
                 : "选择库中的蓝图后进入预览，再移动鼠标选择落点。";
@@ -1395,6 +1409,7 @@ public partial class FactoryDemo : Node3D
         EnterInteractionMode();
         _blueprintMode = FactoryBlueprintWorkflowMode.CaptureSelection;
         _blueprintApplyPlan = null;
+        _blueprintApplyRotation = FacingDirection.East;
         _pendingBlueprintCapture = null;
         _hasBlueprintSelectionRect = false;
         _blueprintSelectionDragActive = false;
@@ -1473,7 +1488,7 @@ public partial class FactoryDemo : Node3D
             var activeBlueprint = FactoryBlueprintLibrary.GetActive();
             _blueprintApplyPlan = activeBlueprint is null
                 ? null
-                : FactoryBlueprintPlanner.CreatePlan(activeBlueprint, _blueprintSite, _hoveredCell);
+                : FactoryBlueprintPlanner.CreatePlan(activeBlueprint, _blueprintSite, _hoveredCell, _blueprintApplyRotation);
         }
     }
 
@@ -1488,6 +1503,7 @@ public partial class FactoryDemo : Node3D
         _pendingBlueprintCapture = null;
         _hasBlueprintSelectionRect = false;
         _blueprintMode = FactoryBlueprintWorkflowMode.ApplyPreview;
+        _blueprintApplyRotation = FacingDirection.East;
     }
 
     private void ConfirmBlueprintApply()
@@ -1505,7 +1521,7 @@ public partial class FactoryDemo : Node3D
 
         _selectedStructure = null;
         RefreshAllTopology();
-        _previewMessage = $"已应用蓝图：{_blueprintApplyPlan.Blueprint.DisplayName}";
+        _previewMessage = $"已应用蓝图：{_blueprintApplyPlan.Blueprint.DisplayName}（旋转 {FactoryDirection.ToLabel(_blueprintApplyPlan.Rotation)}）";
     }
 
     private void HandleBlueprintDeleteRequested(string blueprintId)
@@ -1529,10 +1545,28 @@ public partial class FactoryDemo : Node3D
         _hasBlueprintSelectionRect = false;
         _pendingBlueprintCapture = null;
         _blueprintApplyPlan = null;
+        _blueprintApplyRotation = FacingDirection.East;
 
         if (clearActiveBlueprint)
         {
             FactoryBlueprintLibrary.ClearActive();
+        }
+    }
+
+    private void RotateBlueprintApplyPreview(int direction)
+    {
+        if (_blueprintMode != FactoryBlueprintWorkflowMode.ApplyPreview)
+        {
+            return;
+        }
+
+        _blueprintApplyRotation = direction < 0
+            ? FactoryDirection.RotateCounterClockwise(_blueprintApplyRotation)
+            : FactoryDirection.RotateClockwise(_blueprintApplyRotation);
+
+        if (_hasHoveredCell && _blueprintSite is not null && FactoryBlueprintLibrary.GetActive() is FactoryBlueprintRecord activeBlueprint)
+        {
+            _blueprintApplyPlan = FactoryBlueprintPlanner.CreatePlan(activeBlueprint, _blueprintSite, _hoveredCell, _blueprintApplyRotation);
         }
     }
 
@@ -1820,12 +1854,12 @@ public partial class FactoryDemo : Node3D
 
         var invalidPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintSite, captured.SuggestedAnchorCell);
         var structureCountBefore = _simulation.RegisteredStructureCount;
-        if (!TryFindBlueprintAnchor(captured, out var validAnchor))
+        if (!TryFindBlueprintAnchor(captured, FacingDirection.South, out var validAnchor))
         {
             return false;
         }
 
-        var validPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintSite, validAnchor);
+        var validPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintSite, validAnchor, FacingDirection.South);
         var committed = validPlan.IsValid && FactoryBlueprintPlanner.CommitPlan(validPlan, _blueprintSite);
         if (!committed)
         {
@@ -1833,10 +1867,13 @@ public partial class FactoryDemo : Node3D
         }
 
         var placedEntries = 0;
-        for (var index = 0; index < captured.Entries.Count; index++)
+        for (var index = 0; index < validPlan.Entries.Count; index++)
         {
-            var targetCell = validAnchor + captured.Entries[index].LocalCell;
-            if (_grid.TryGetStructure(targetCell, out var structure) && structure is not null && structure.Kind == captured.Entries[index].Kind)
+            var entry = validPlan.Entries[index];
+            if (_grid.TryGetStructure(entry.TargetCell, out var structure)
+                && structure is not null
+                && structure.Kind == entry.SourceEntry.Kind
+                && structure.Facing == entry.TargetFacing)
             {
                 placedEntries++;
             }
@@ -1850,6 +1887,11 @@ public partial class FactoryDemo : Node3D
 
     private bool TryFindBlueprintAnchor(FactoryBlueprintRecord blueprint, out Vector2I anchor)
     {
+        return TryFindBlueprintAnchor(blueprint, FacingDirection.East, out anchor);
+    }
+
+    private bool TryFindBlueprintAnchor(FactoryBlueprintRecord blueprint, FacingDirection rotation, out Vector2I anchor)
+    {
         anchor = Vector2I.Zero;
         if (_blueprintSite is null || _grid is null)
         {
@@ -1861,7 +1903,7 @@ public partial class FactoryDemo : Node3D
             for (var x = _grid.MinCell.X; x <= _grid.MaxCell.X; x++)
             {
                 var candidate = new Vector2I(x, y);
-                var plan = FactoryBlueprintPlanner.CreatePlan(blueprint, _blueprintSite, candidate);
+                var plan = FactoryBlueprintPlanner.CreatePlan(blueprint, _blueprintSite, candidate, rotation);
                 if (!plan.IsValid)
                 {
                     continue;

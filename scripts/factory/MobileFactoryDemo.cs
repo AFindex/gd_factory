@@ -127,6 +127,7 @@ public partial class MobileFactoryDemo : Node3D
     private Rect2I _interiorBlueprintSelectionRect;
     private FactoryBlueprintRecord? _pendingBlueprintCapture;
     private FactoryBlueprintApplyPlan? _interiorBlueprintPlan;
+    private FacingDirection _interiorBlueprintRotation = FacingDirection.East;
     private string _interiorPreviewMessage = "按 F 展开内部编辑区，然后把鼠标移入右侧区域开始调整移动工厂内部布局。";
     private bool _editorOpen;
     private bool _hoveringEditorPane;
@@ -915,6 +916,21 @@ public partial class MobileFactoryDemo : Node3D
                 return true;
             }
 
+            if (_blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview)
+            {
+                if (keyEvent.Keycode == Key.Q)
+                {
+                    RotateInteriorBlueprintPreview(-1);
+                    return true;
+                }
+
+                if (keyEvent.Keycode == Key.E)
+                {
+                    RotateInteriorBlueprintPreview(1);
+                    return true;
+                }
+            }
+
             return false;
         }
 
@@ -1041,7 +1057,7 @@ public partial class MobileFactoryDemo : Node3D
         _interiorPreviewMessage = _blueprintMode switch
         {
             FactoryBlueprintWorkflowMode.CaptureSelection => "蓝图框选：按住左键拖拽选择一片内部布局，松开后可保存。",
-            FactoryBlueprintWorkflowMode.ApplyPreview => "蓝图预览：移动鼠标选择内部锚点，确认后将当前蓝图应用到内部布局。",
+            FactoryBlueprintWorkflowMode.ApplyPreview => $"蓝图预览：移动鼠标选择内部锚点，按 Q/E 或面板旋转按钮旋转，当前朝向 {FactoryDirection.ToLabel(_interiorBlueprintRotation)}。",
             _ => _interiorInteractionMode switch
             {
                 FactoryInteractionMode.Build => "把鼠标移入右侧编辑区，可直接调整移动工厂内部布局。",
@@ -1603,7 +1619,7 @@ public partial class MobileFactoryDemo : Node3D
         var modeText = _blueprintMode switch
         {
             FactoryBlueprintWorkflowMode.CaptureSelection => "蓝图模式：内部框选保存",
-            FactoryBlueprintWorkflowMode.ApplyPreview => "蓝图模式：内部应用预览",
+            FactoryBlueprintWorkflowMode.ApplyPreview => $"蓝图模式：内部应用预览（旋转 {FactoryDirection.ToLabel(_interiorBlueprintRotation)}）",
             _ => "蓝图模式：待命"
         };
         var activeText = activeBlueprint is null
@@ -1613,7 +1629,7 @@ public partial class MobileFactoryDemo : Node3D
             ? "可框选当前内部布局保存为蓝图，也可一键保存整个内部布局。"
             : $"待保存：{_pendingBlueprintCapture.DisplayName} | {_pendingBlueprintCapture.GetSummaryText()}";
         var issueText = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && _interiorBlueprintPlan is not null
-            ? _interiorBlueprintPlan.GetIssueSummary()
+            ? $"当前旋转：{FactoryDirection.ToLabel(_interiorBlueprintRotation)} | 占地 {_interiorBlueprintPlan.FootprintSize.X}x{_interiorBlueprintPlan.FootprintSize.Y}\n{_interiorBlueprintPlan.GetIssueSummary()}"
             : _blueprintMode == FactoryBlueprintWorkflowMode.CaptureSelection
                 ? "框选完成后在这里输入名称并保存。"
                 : "保存当前布局，或从蓝图库选择一个内部蓝图进行预览。";
@@ -1904,6 +1920,12 @@ public partial class MobileFactoryDemo : Node3D
 
     private void OnEditorRotateRequested(int direction)
     {
+        if (_blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview)
+        {
+            RotateInteriorBlueprintPreview(direction);
+            return;
+        }
+
         _selectedInteriorFacing = direction < 0
             ? FactoryDirection.RotateCounterClockwise(_selectedInteriorFacing)
             : FactoryDirection.RotateClockwise(_selectedInteriorFacing);
@@ -2144,9 +2166,9 @@ public partial class MobileFactoryDemo : Node3D
         var anchor = _hasHoveredInteriorCell
             ? _hoveredInteriorCell
             : _interiorBlueprintSite.GetDefaultApplyAnchor(activeBlueprint);
-        _interiorBlueprintPlan = FactoryBlueprintPlanner.CreatePlan(activeBlueprint, _interiorBlueprintSite, anchor);
+        _interiorBlueprintPlan = FactoryBlueprintPlanner.CreatePlan(activeBlueprint, _interiorBlueprintSite, anchor, _interiorBlueprintRotation);
         _interiorPreviewMessage = _interiorBlueprintPlan.IsValid
-            ? $"蓝图 {activeBlueprint.DisplayName} 可应用到内部锚点 ({anchor.X}, {anchor.Y})。"
+            ? $"蓝图 {activeBlueprint.DisplayName} 可应用到内部锚点 ({anchor.X}, {anchor.Y})，旋转 {FactoryDirection.ToLabel(_interiorBlueprintRotation)}。"
             : _interiorBlueprintPlan.GetIssueSummary();
     }
 
@@ -2248,6 +2270,7 @@ public partial class MobileFactoryDemo : Node3D
         EnterInteriorInteractionMode();
         _blueprintMode = FactoryBlueprintWorkflowMode.CaptureSelection;
         _interiorBlueprintPlan = null;
+        _interiorBlueprintRotation = FacingDirection.East;
         _pendingBlueprintCapture = null;
         _hasInteriorBlueprintSelectionRect = false;
         _interiorBlueprintSelectionDragActive = false;
@@ -2355,6 +2378,7 @@ public partial class MobileFactoryDemo : Node3D
         _pendingBlueprintCapture = null;
         _hasInteriorBlueprintSelectionRect = false;
         _blueprintMode = FactoryBlueprintWorkflowMode.ApplyPreview;
+        _interiorBlueprintRotation = FacingDirection.East;
         UpdateInteriorBlueprintPlan();
     }
 
@@ -2372,7 +2396,7 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         _selectedInteriorStructure = null;
-        _interiorPreviewMessage = $"已应用蓝图：{_interiorBlueprintPlan.Blueprint.DisplayName}";
+        _interiorPreviewMessage = $"已应用蓝图：{_interiorBlueprintPlan.Blueprint.DisplayName}（旋转 {FactoryDirection.ToLabel(_interiorBlueprintPlan.Rotation)}）";
     }
 
     private void HandleInteriorBlueprintDeleteRequested(string blueprintId)
@@ -2396,11 +2420,25 @@ public partial class MobileFactoryDemo : Node3D
         _hasInteriorBlueprintSelectionRect = false;
         _pendingBlueprintCapture = null;
         _interiorBlueprintPlan = null;
+        _interiorBlueprintRotation = FacingDirection.East;
 
         if (clearActiveBlueprint)
         {
             FactoryBlueprintLibrary.ClearActive();
         }
+    }
+
+    private void RotateInteriorBlueprintPreview(int direction)
+    {
+        if (_blueprintMode != FactoryBlueprintWorkflowMode.ApplyPreview)
+        {
+            return;
+        }
+
+        _interiorBlueprintRotation = direction < 0
+            ? FactoryDirection.RotateCounterClockwise(_interiorBlueprintRotation)
+            : FactoryDirection.RotateClockwise(_interiorBlueprintRotation);
+        UpdateInteriorBlueprintPlan();
     }
 
     private void UpdateCursorShape()

@@ -129,12 +129,16 @@ public sealed class FactoryBlueprintApplyPlan
         FactoryBlueprintRecord blueprint,
         FactoryBlueprintSiteKind destinationSiteKind,
         Vector2I anchorCell,
+        FacingDirection rotation,
+        Vector2I footprintSize,
         IReadOnlyList<FactoryBlueprintPlanEntry> entries,
         IReadOnlyList<FactoryBlueprintApplyIssue> issues)
     {
         Blueprint = blueprint;
         DestinationSiteKind = destinationSiteKind;
         AnchorCell = anchorCell;
+        Rotation = rotation;
+        FootprintSize = footprintSize;
         Entries = entries;
         Issues = issues;
     }
@@ -142,6 +146,8 @@ public sealed class FactoryBlueprintApplyPlan
     public FactoryBlueprintRecord Blueprint { get; }
     public FactoryBlueprintSiteKind DestinationSiteKind { get; }
     public Vector2I AnchorCell { get; }
+    public FacingDirection Rotation { get; }
+    public Vector2I FootprintSize { get; }
     public IReadOnlyList<FactoryBlueprintPlanEntry> Entries { get; }
     public IReadOnlyList<FactoryBlueprintApplyIssue> Issues { get; }
     public bool IsValid => Issues.Count == 0;
@@ -463,27 +469,39 @@ public static class FactoryBlueprintCaptureService
 
 public static class FactoryBlueprintPlanner
 {
-    public static FactoryBlueprintApplyPlan CreatePlan(FactoryBlueprintRecord blueprint, FactoryBlueprintSiteAdapter site, Vector2I anchorCell)
+    public static FactoryBlueprintApplyPlan CreatePlan(
+        FactoryBlueprintRecord blueprint,
+        FactoryBlueprintSiteAdapter site,
+        Vector2I anchorCell,
+        FacingDirection rotation = FacingDirection.East)
     {
         var planEntries = new List<FactoryBlueprintPlanEntry>(blueprint.Entries.Count);
         var issues = new List<FactoryBlueprintApplyIssue>();
+        var transformedBlueprint = CreateTransformedBlueprint(blueprint, rotation);
 
         if (blueprint.SourceSiteKind != site.SiteKind)
         {
             issues.Add(new FactoryBlueprintApplyIssue(
                 $"该蓝图来自{FactoryBlueprintRecord.GetSiteKindLabel(blueprint.SourceSiteKind)}，不能应用到{site.DisplayName}。"));
-            return new FactoryBlueprintApplyPlan(blueprint, site.SiteKind, anchorCell, planEntries, issues);
+            return new FactoryBlueprintApplyPlan(
+                blueprint,
+                site.SiteKind,
+                anchorCell,
+                rotation,
+                transformedBlueprint.BoundsSize,
+                planEntries,
+                issues);
         }
 
-        if (site.ValidateCompatibility(blueprint) is string compatibilityIssue)
+        if (site.ValidateCompatibility(transformedBlueprint) is string compatibilityIssue)
         {
             issues.Add(new FactoryBlueprintApplyIssue(compatibilityIssue));
         }
 
         var plannedCells = new HashSet<Vector2I>();
-        for (var index = 0; index < blueprint.Entries.Count; index++)
+        for (var index = 0; index < transformedBlueprint.Entries.Count; index++)
         {
-            var entry = blueprint.Entries[index];
+            var entry = transformedBlueprint.Entries[index];
             var targetCell = anchorCell + entry.LocalCell;
             var targetFacing = entry.Facing;
             string? issue = null;
@@ -505,7 +523,14 @@ public static class FactoryBlueprintPlanner
             }
         }
 
-        return new FactoryBlueprintApplyPlan(blueprint, site.SiteKind, anchorCell, planEntries, issues);
+        return new FactoryBlueprintApplyPlan(
+            blueprint,
+            site.SiteKind,
+            anchorCell,
+            rotation,
+            transformedBlueprint.BoundsSize,
+            planEntries,
+            issues);
     }
 
     public static bool CommitPlan(FactoryBlueprintApplyPlan plan, FactoryBlueprintSiteAdapter site)
@@ -538,6 +563,55 @@ public static class FactoryBlueprintPlanner
         {
             site.RemoveStructureAtCell(placedCells[index]);
         }
+    }
+
+    private static FactoryBlueprintRecord CreateTransformedBlueprint(FactoryBlueprintRecord blueprint, FacingDirection rotation)
+    {
+        if (rotation == FacingDirection.East || blueprint.Entries.Count == 0)
+        {
+            return blueprint;
+        }
+
+        var rotatedEntryLocals = new Vector2I[blueprint.Entries.Count];
+        var minLocal = new Vector2I(int.MaxValue, int.MaxValue);
+        var maxLocal = new Vector2I(int.MinValue, int.MinValue);
+        for (var index = 0; index < blueprint.Entries.Count; index++)
+        {
+            var rotatedLocal = FactoryDirection.RotateOffset(blueprint.Entries[index].LocalCell, rotation);
+            rotatedEntryLocals[index] = rotatedLocal;
+            minLocal = new Vector2I(Math.Min(minLocal.X, rotatedLocal.X), Math.Min(minLocal.Y, rotatedLocal.Y));
+            maxLocal = new Vector2I(Math.Max(maxLocal.X, rotatedLocal.X), Math.Max(maxLocal.Y, rotatedLocal.Y));
+        }
+
+        var transformedEntries = new List<FactoryBlueprintStructureEntry>(blueprint.Entries.Count);
+        for (var index = 0; index < blueprint.Entries.Count; index++)
+        {
+            var entry = blueprint.Entries[index];
+            transformedEntries.Add(new FactoryBlueprintStructureEntry(
+                entry.Kind,
+                rotatedEntryLocals[index] - minLocal,
+                FactoryDirection.RotateBy(entry.Facing, rotation),
+                entry.Configuration));
+        }
+
+        var transformedAttachments = new List<FactoryBlueprintAttachmentRequirement>(blueprint.RequiredAttachments.Count);
+        for (var index = 0; index < blueprint.RequiredAttachments.Count; index++)
+        {
+            var attachment = blueprint.RequiredAttachments[index];
+            transformedAttachments.Add(new FactoryBlueprintAttachmentRequirement(
+                attachment.Kind,
+                FactoryDirection.RotateOffset(attachment.LocalCell, rotation) - minLocal,
+                FactoryDirection.RotateBy(attachment.Facing, rotation)));
+        }
+
+        return new FactoryBlueprintRecord(
+            blueprint.Id,
+            blueprint.DisplayName,
+            blueprint.SourceSiteKind,
+            blueprint.SuggestedAnchorCell,
+            new Vector2I(maxLocal.X - minLocal.X + 1, maxLocal.Y - minLocal.Y + 1),
+            transformedEntries,
+            transformedAttachments);
     }
 }
 
