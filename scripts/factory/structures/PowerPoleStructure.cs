@@ -3,6 +3,8 @@ using System.Collections.Generic;
 
 public partial class PowerPoleStructure : FactoryStructure, IFactoryPowerNode
 {
+    private MeshInstance3D? _powerRange;
+
     public override BuildPrototypeKind Kind => BuildPrototypeKind.PowerPole;
     public override string Description => "延伸电网覆盖，把发电机的供电范围传递给更远的机器。";
     public int PowerConnectionRangeCells => 6;
@@ -17,8 +19,23 @@ public partial class PowerPoleStructure : FactoryStructure, IFactoryPowerNode
         yield return $"供电覆盖：半径 {PowerConnectionRangeCells} 格";
     }
 
+    public override void SetPowerRangeVisible(bool visible)
+    {
+        if (_powerRange is not null)
+        {
+            _powerRange.Visible = visible;
+        }
+    }
+
     protected override void BuildVisuals()
     {
+        _powerRange = CreateDisc(
+            "PowerRange",
+            CellSize * PowerConnectionRangeCells,
+            0.03f,
+            new Color(0.99f, 0.88f, 0.42f, 0.12f),
+            new Vector3(0.0f, 0.02f, 0.0f));
+        _powerRange.Visible = false;
         CreateBox("Footing", new Vector3(CellSize * 0.32f, 0.12f, CellSize * 0.32f), new Color("475569"), new Vector3(0.0f, 0.06f, 0.0f));
         CreateBox("Pole", new Vector3(CellSize * 0.12f, 1.48f, CellSize * 0.12f), new Color("A16207"), new Vector3(0.0f, 0.74f, 0.0f));
         CreateBox("Crossbar", new Vector3(CellSize * 0.62f, 0.10f, CellSize * 0.10f), new Color("FDE68A"), new Vector3(0.0f, 1.42f, 0.0f));

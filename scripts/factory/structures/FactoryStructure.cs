@@ -61,6 +61,10 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
     {
     }
 
+    public virtual void SetPowerRangeVisible(bool visible)
+    {
+    }
+
     public virtual bool TryAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
         return false;
@@ -259,6 +263,37 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
         material.AlbedoColor = color;
         material.Roughness = 0.85f;
         mesh.MaterialOverride = material;
+
+        if (localPosition is not null)
+        {
+            mesh.Position = localPosition.Value;
+        }
+
+        AddChild(mesh);
+        return mesh;
+    }
+
+    protected MeshInstance3D CreateDisc(string name, float radius, float height, Color color, Vector3? localPosition = null)
+    {
+        var mesh = new MeshInstance3D();
+        mesh.Name = name;
+        mesh.Mesh = new CylinderMesh
+        {
+            TopRadius = radius,
+            BottomRadius = radius,
+            Height = height
+        };
+
+        var material = new StandardMaterial3D
+        {
+            AlbedoColor = color,
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            Roughness = 1.0f,
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled
+        };
+        mesh.MaterialOverride = material;
+        mesh.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
 
         if (localPosition is not null)
         {

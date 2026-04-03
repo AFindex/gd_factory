@@ -6,6 +6,7 @@ public partial class GeneratorStructure : FactoryStructure, IFactoryItemReceiver
     private readonly FactorySlottedItemInventory _fuelInventory = new(2, 1);
     private double _burnRemaining;
     private MeshInstance3D? _beacon;
+    private MeshInstance3D? _powerRange;
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.Generator;
     public override string Description => "消耗煤炭发电，为连通电网提供基础电力。";
@@ -97,8 +98,23 @@ public partial class GeneratorStructure : FactoryStructure, IFactoryItemReceiver
         }
     }
 
+    public override void SetPowerRangeVisible(bool visible)
+    {
+        if (_powerRange is not null)
+        {
+            _powerRange.Visible = visible;
+        }
+    }
+
     protected override void BuildVisuals()
     {
+        _powerRange = CreateDisc(
+            "PowerRange",
+            CellSize * PowerConnectionRangeCells,
+            0.03f,
+            new Color(0.98f, 0.66f, 0.19f, 0.14f),
+            new Vector3(0.0f, 0.02f, 0.0f));
+        _powerRange.Visible = false;
         CreateBox("Base", new Vector3(CellSize * 0.96f, 0.22f, CellSize * 0.96f), new Color("3F3F46"), new Vector3(0.0f, 0.11f, 0.0f));
         CreateBox("Core", new Vector3(CellSize * 0.76f, 0.92f, CellSize * 0.76f), new Color("57534E"), new Vector3(0.0f, 0.68f, 0.0f));
         CreateBox("Stack", new Vector3(CellSize * 0.20f, 0.72f, CellSize * 0.20f), new Color("A8A29E"), new Vector3(-CellSize * 0.18f, 1.34f, 0.0f));

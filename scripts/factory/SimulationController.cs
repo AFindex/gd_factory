@@ -426,6 +426,11 @@ public partial class SimulationController : Node
     {
         for (var i = 0; i < _structures.Count; i++)
         {
+            if (_structures[i].IsDestroyed || !_structures[i].Site.IsSimulationActive)
+            {
+                continue;
+            }
+
             if (_structures[i] is IFactoryPowerConsumer disconnectedConsumer)
             {
                 disconnectedConsumer.SetPowerState(FactoryPowerStatus.Disconnected, 0.0f, -1);
@@ -447,33 +452,93 @@ public partial class SimulationController : Node
                     network.Supply += producer.GetAvailablePower(this);
                     network.HasProducer = true;
                 }
-
-                if (runtime.Node is IFactoryPowerConsumer consumer && consumer.WantsPower(this))
-                {
-                    network.Demand += consumer.GetRequestedPower(this);
-                }
             }
+        }
+
+        var networkConsumers = new Dictionary<int, List<IFactoryPowerConsumer>>();
+        for (var i = 0; i < _structures.Count; i++)
+        {
+            var structure = _structures[i];
+            if (structure.IsDestroyed || !structure.Site.IsSimulationActive || structure is not IFactoryPowerConsumer consumer)
+            {
+                continue;
+            }
+
+            var connectedNetwork = FindConsumerPowerNetwork(structure);
+            if (connectedNetwork is null)
+            {
+                continue;
+            }
+
+            if (consumer.WantsPower(this))
+            {
+                connectedNetwork.Demand += consumer.GetRequestedPower(this);
+            }
+
+            if (!networkConsumers.TryGetValue(connectedNetwork.Id, out var consumers))
+            {
+                consumers = new List<IFactoryPowerConsumer>();
+                networkConsumers[connectedNetwork.Id] = consumers;
+            }
+
+            consumers.Add(consumer);
+        }
+
+        for (var i = 0; i < _powerNetworks.Count; i++)
+        {
+            var network = _powerNetworks[i];
 
             network.Satisfaction = network.Demand <= 0.001f
                 ? (network.Supply > 0.001f ? 1.0f : 0.0f)
                 : Mathf.Clamp(network.Supply / network.Demand, 0.0f, 1.0f);
 
+            if (!networkConsumers.TryGetValue(network.Id, out var consumers))
+            {
+                continue;
+            }
+
+            var status = !network.HasProducer
+                ? FactoryPowerStatus.Disconnected
+                : network.Satisfaction >= 0.999f
+                    ? FactoryPowerStatus.Powered
+                    : FactoryPowerStatus.Underpowered;
+            for (var consumerIndex = 0; consumerIndex < consumers.Count; consumerIndex++)
+            {
+                consumers[consumerIndex].SetPowerState(status, network.Satisfaction, network.Id);
+            }
+        }
+    }
+
+    private PowerNetworkRuntime? FindConsumerPowerNetwork(FactoryStructure consumerStructure)
+    {
+        PowerNetworkRuntime? bestNetwork = null;
+        var bestDistance = float.MaxValue;
+        var consumerCell = new Vector2(consumerStructure.Cell.X, consumerStructure.Cell.Y);
+
+        for (var networkIndex = 0; networkIndex < _powerNetworks.Count; networkIndex++)
+        {
+            var network = _powerNetworks[networkIndex];
             for (var nodeIndex = 0; nodeIndex < network.Nodes.Count; nodeIndex++)
             {
                 var runtime = network.Nodes[nodeIndex];
-                if (runtime.Node is not IFactoryPowerConsumer consumer)
+                if (runtime.Structure.Site != consumerStructure.Site)
                 {
                     continue;
                 }
 
-                var status = !network.HasProducer
-                    ? FactoryPowerStatus.Disconnected
-                    : network.Satisfaction >= 0.999f
-                        ? FactoryPowerStatus.Powered
-                        : FactoryPowerStatus.Underpowered;
-                consumer.SetPowerState(status, network.Satisfaction, network.Id);
+                var nodeCell = new Vector2(runtime.Structure.Cell.X, runtime.Structure.Cell.Y);
+                var distance = consumerCell.DistanceTo(nodeCell);
+                if (distance > runtime.Node.PowerConnectionRangeCells || distance >= bestDistance)
+                {
+                    continue;
+                }
+
+                bestDistance = distance;
+                bestNetwork = network;
             }
         }
+
+        return bestNetwork;
     }
 
     private static bool ArePowerNodesConnected(PowerNodeRuntime a, PowerNodeRuntime b)

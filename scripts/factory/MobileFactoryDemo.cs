@@ -6,6 +6,13 @@ public partial class MobileFactoryDemo : Node3D
 {
     private const int InteriorRenderLayer = 1;
     private const int HullRenderLayer = 2;
+    private const float PowerDashBaseLength = FactoryConstants.CellSize * 0.52f;
+    private const float PowerDashGapLength = FactoryConstants.CellSize * 0.28f;
+    private const float PowerDashThickness = 0.08f;
+    private const float PowerDashWidth = 0.11f;
+    private const float PowerLinkEndpointInset = FactoryConstants.CellSize * 0.22f;
+    private const float PreviewPowerPoleWireHeight = 1.44f;
+    private const int PreviewPowerPoleConnectionRangeCells = 6;
 
     private static readonly Vector2I AnchorA = new(-6, -3);
     private static readonly Vector2I AnchorB = new(2, 3);
@@ -77,6 +84,7 @@ public partial class MobileFactoryDemo : Node3D
     private Node3D? _interiorPreviewRoot;
     private Node3D? _interiorBlueprintPreviewRoot;
     private Node3D? _interiorBlueprintGhostPreviewRoot;
+    private Node3D? _interiorPowerLinkOverlayRoot;
     private Camera3D? _editorCamera;
     private FactoryCombatDirector? _combatDirector;
     private readonly List<MeshInstance3D> _worldPreviewFootprintMeshes = new();
@@ -84,10 +92,12 @@ public partial class MobileFactoryDemo : Node3D
     private MeshInstance3D? _worldPreviewFacingArrow;
     private MeshInstance3D? _interiorPreviewCell;
     private MeshInstance3D? _interiorPreviewArrow;
+    private MeshInstance3D? _interiorPreviewPowerRange;
     private readonly List<MeshInstance3D> _interiorPreviewBoundaryMeshes = new();
     private readonly List<MeshInstance3D> _interiorPreviewExteriorMeshes = new();
     private readonly List<MeshInstance3D> _interiorBlueprintPreviewMeshes = new();
     private readonly List<FactoryStructure> _interiorBlueprintPreviewGhosts = new();
+    private readonly List<MeshInstance3D> _interiorPowerLinkDashes = new();
     private FactoryBlueprintSiteAdapter? _interiorBlueprintSite;
 
     private MobileFactoryInstance? _mobileFactory;
@@ -182,6 +192,7 @@ public partial class MobileFactoryDemo : Node3D
         UpdateInteriorPreview();
         UpdateWorldStatusMessage(delta);
         UpdateStructureVisuals();
+        UpdateInteriorPowerVisuals();
         UpdateFactoryLabels();
         UpdateEditorCamera();
         UpdateCameraTracking();
@@ -381,6 +392,9 @@ public partial class MobileFactoryDemo : Node3D
         _interiorPreviewRoot = new Node3D { Name = "InteriorPreviewRoot", Visible = false };
         AddChild(_interiorPreviewRoot);
         CreateInteriorPreviewVisuals();
+
+        _interiorPowerLinkOverlayRoot = new Node3D { Name = "InteriorPowerLinkOverlayRoot", Visible = false };
+        AddChild(_interiorPowerLinkOverlayRoot);
 
         _interiorBlueprintPreviewRoot = new Node3D { Name = "InteriorBlueprintPreviewRoot", Visible = false };
         AddChild(_interiorBlueprintPreviewRoot);
@@ -1254,12 +1268,13 @@ public partial class MobileFactoryDemo : Node3D
 
     private void UpdateInteriorPreview()
     {
-        if (_mobileFactory is null || _interiorPreviewRoot is null || _interiorPreviewCell is null || _interiorPreviewArrow is null)
+        if (_mobileFactory is null || _interiorPreviewRoot is null || _interiorPreviewCell is null || _interiorPreviewArrow is null || _interiorPreviewPowerRange is null)
         {
             return;
         }
 
         UpdateInteriorBlueprintPreview();
+        _interiorPreviewPowerRange.Visible = false;
 
         if (_blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview)
         {
@@ -1362,6 +1377,7 @@ public partial class MobileFactoryDemo : Node3D
         _interiorPreviewArrow.Visible = true;
         ApplyPreviewColor(_interiorPreviewCell, tint);
         ApplyPreviewColor(_interiorPreviewArrow, tint.Lightened(0.1f));
+        UpdatePreviewPowerRange(_selectedInteriorKind, _mobileFactory.InteriorSite, _interiorPreviewPowerRange, tint);
 
         if (!MobileFactoryBoundaryAttachmentCatalog.IsAttachmentKind(_selectedInteriorKind))
         {
@@ -1541,10 +1557,303 @@ public partial class MobileFactoryDemo : Node3D
                 structure.SetCombatFocus(
                     isInteriorStructure && structure == _hoveredInteriorStructure,
                     isInteriorStructure && structure == _selectedInteriorStructure);
+                structure.SetPowerRangeVisible(ShouldShowInteriorPowerRange(structure));
                 structure.UpdateVisuals(alpha);
                 structure.SyncCombatVisuals(alpha);
             }
         }
+    }
+
+    private void UpdateInteriorPowerVisuals()
+    {
+        if (_mobileFactory is null || _interiorPowerLinkOverlayRoot is null)
+        {
+            return;
+        }
+
+        if (!_editorOpen || _blueprintMode != FactoryBlueprintWorkflowMode.None)
+        {
+            SetInteriorPowerLinkDashCount(0);
+            return;
+        }
+
+        if (_interiorInteractionMode == FactoryInteractionMode.Build
+            && _hasHoveredInteriorCell
+            && _selectedInteriorKind == BuildPrototypeKind.PowerPole)
+        {
+            var previewColor = _canPlaceInteriorCell
+                ? new Color(0.98f, 0.89f, 0.52f, 0.92f)
+                : new Color(1.0f, 0.45f, 0.45f, 0.90f);
+            RenderInteriorPowerLinkSet(
+                GetPreviewPowerAnchor(_mobileFactory.InteriorSite, _hoveredInteriorCell, PreviewPowerPoleWireHeight),
+                _hoveredInteriorCell,
+                PreviewPowerPoleConnectionRangeCells,
+                previewColor,
+                _mobileFactory.InteriorSite);
+            return;
+        }
+
+        if (_interiorInteractionMode == FactoryInteractionMode.Interact
+            && _selectedInteriorStructure is PowerPoleStructure selectedPole
+            && GodotObject.IsInstanceValid(selectedPole)
+            && selectedPole.IsInsideTree())
+        {
+            RenderInteriorPowerLinkSet(
+                GetPowerAnchor(selectedPole),
+                selectedPole.Cell,
+                selectedPole.PowerConnectionRangeCells,
+                new Color(0.99f, 0.93f, 0.62f, 0.92f),
+                selectedPole.Site,
+                selectedPole);
+            return;
+        }
+
+        SetInteriorPowerLinkDashCount(0);
+    }
+
+    private void RenderInteriorPowerLinkSet(
+        Vector3 origin,
+        Vector2I originCell,
+        int originRange,
+        Color color,
+        IFactorySite site,
+        FactoryStructure? exclude = null)
+    {
+        var targets = CollectConnectablePowerNodes(site, originCell, originRange, exclude);
+        if (targets.Count == 0)
+        {
+            SetInteriorPowerLinkDashCount(0);
+            return;
+        }
+
+        var dashIndex = 0;
+        for (var i = 0; i < targets.Count; i++)
+        {
+            dashIndex = DrawInteriorDashedPowerLink(origin, GetPowerAnchor(targets[i]), color, dashIndex);
+        }
+
+        SetInteriorPowerLinkDashCount(dashIndex);
+    }
+
+    private List<FactoryStructure> CollectConnectablePowerNodes(IFactorySite site, Vector2I originCell, int originRange, FactoryStructure? exclude)
+    {
+        if (_structureRoot is null)
+        {
+            return new List<FactoryStructure>();
+        }
+
+        var candidates = new List<(FactoryStructure structure, float distance)>();
+        var origin = new Vector2(originCell.X, originCell.Y);
+        foreach (var child in _structureRoot.GetChildren())
+        {
+            if (child is not FactoryStructure structure
+                || structure.Site != site
+                || structure == exclude
+                || structure.IsDestroyed
+                || !structure.Site.IsSimulationActive
+                || structure is not IFactoryPowerNode powerNode
+                || powerNode.PowerConnectionRangeCells <= 0
+                || structure.Cell == originCell)
+            {
+                continue;
+            }
+
+            var target = new Vector2(structure.Cell.X, structure.Cell.Y);
+            var distance = origin.DistanceTo(target);
+            if (distance > originRange + powerNode.PowerConnectionRangeCells)
+            {
+                continue;
+            }
+
+            candidates.Add((structure, distance));
+        }
+
+        candidates.Sort((a, b) => a.distance.CompareTo(b.distance));
+        var ordered = new List<FactoryStructure>(candidates.Count);
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            ordered.Add(candidates[i].structure);
+        }
+
+        return ordered;
+    }
+
+    private int DrawInteriorDashedPowerLink(Vector3 start, Vector3 end, Color color, int dashIndex)
+    {
+        var startFlat = new Vector3(start.X, 0.0f, start.Z);
+        var endFlat = new Vector3(end.X, 0.0f, end.Z);
+        var delta = endFlat - startFlat;
+        var totalLength = delta.Length();
+        if (totalLength <= PowerLinkEndpointInset * 2.0f)
+        {
+            return dashIndex;
+        }
+
+        var direction = delta / totalLength;
+        var linkHeight = Mathf.Max(start.Y, end.Y);
+        var dashStart = new Vector3(start.X, linkHeight, start.Z) + (direction * PowerLinkEndpointInset);
+        var dashEnd = new Vector3(end.X, linkHeight, end.Z) - (direction * PowerLinkEndpointInset);
+        var dashVector = dashEnd - dashStart;
+        var dashDistance = dashVector.Length();
+        if (dashDistance <= 0.05f)
+        {
+            return dashIndex;
+        }
+
+        var rotationY = Mathf.Atan2(direction.X, direction.Z);
+        var step = PowerDashBaseLength + PowerDashGapLength;
+        var progress = 0.0f;
+        while (progress < dashDistance)
+        {
+            var dashLength = Mathf.Min(PowerDashBaseLength, dashDistance - progress);
+            if (dashLength <= 0.02f)
+            {
+                break;
+            }
+
+            EnsureInteriorPowerLinkDashCapacity(dashIndex + 1);
+            var dash = _interiorPowerLinkDashes[dashIndex];
+            dash.Visible = true;
+            dash.Position = dashStart + (direction * (progress + (dashLength * 0.5f)));
+            dash.Rotation = new Vector3(0.0f, rotationY, 0.0f);
+            dash.Scale = new Vector3(1.0f, 1.0f, dashLength / PowerDashBaseLength);
+            ApplyPowerLinkColor(dash, color);
+            dashIndex++;
+            progress += step;
+        }
+
+        return dashIndex;
+    }
+
+    private void EnsureInteriorPowerLinkDashCapacity(int count)
+    {
+        if (_interiorPowerLinkOverlayRoot is null)
+        {
+            return;
+        }
+
+        while (_interiorPowerLinkDashes.Count < count)
+        {
+            var dash = new MeshInstance3D
+            {
+                Name = $"InteriorPowerLinkDash_{_interiorPowerLinkDashes.Count}",
+                Visible = false,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                Mesh = new BoxMesh
+                {
+                    Size = new Vector3(PowerDashWidth, PowerDashThickness, PowerDashBaseLength)
+                },
+                MaterialOverride = new StandardMaterial3D
+                {
+                    AlbedoColor = new Color(0.99f, 0.93f, 0.62f, 0.92f),
+                    Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                    ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                    Roughness = 0.15f,
+                    EmissionEnabled = true,
+                    Emission = new Color(0.99f, 0.93f, 0.62f)
+                }
+            };
+            _interiorPowerLinkOverlayRoot.AddChild(dash);
+            _interiorPowerLinkDashes.Add(dash);
+        }
+    }
+
+    private void SetInteriorPowerLinkDashCount(int visibleCount)
+    {
+        if (_interiorPowerLinkOverlayRoot is null)
+        {
+            return;
+        }
+
+        for (var i = visibleCount; i < _interiorPowerLinkDashes.Count; i++)
+        {
+            _interiorPowerLinkDashes[i].Visible = false;
+        }
+
+        _interiorPowerLinkOverlayRoot.Visible = visibleCount > 0;
+    }
+
+    private bool ShouldShowInteriorPowerRange(FactoryStructure structure)
+    {
+        return IsInteriorPowerPreviewActive()
+            && structure is IFactoryPowerNode
+            && structure.Site == _mobileFactory?.InteriorSite
+            && GodotObject.IsInstanceValid(structure)
+            && structure.IsInsideTree();
+    }
+
+    private bool IsInteriorPowerPreviewActive()
+    {
+        if (!_editorOpen)
+        {
+            return false;
+        }
+
+        return _interiorInteractionMode == FactoryInteractionMode.Build
+            ? _hasHoveredInteriorCell && (_selectedInteriorKind == BuildPrototypeKind.Generator || _selectedInteriorKind == BuildPrototypeKind.PowerPole)
+            : _interiorInteractionMode == FactoryInteractionMode.Interact && _selectedInteriorStructure is IFactoryPowerNode;
+    }
+
+    private static void UpdatePreviewPowerRange(BuildPrototypeKind kind, IFactorySite site, MeshInstance3D previewPowerRange, Color tint)
+    {
+        if (!TryGetPowerPreviewInfo(kind, out var rangeCells))
+        {
+            previewPowerRange.Visible = false;
+            return;
+        }
+
+        previewPowerRange.Mesh = new CylinderMesh
+        {
+            TopRadius = site.CellSize * rangeCells,
+            BottomRadius = site.CellSize * rangeCells,
+            Height = 0.03f
+        };
+        previewPowerRange.Position = new Vector3(0.0f, 0.02f, 0.0f);
+        previewPowerRange.Visible = true;
+        ApplyPreviewColor(previewPowerRange, new Color(tint.R, tint.G, tint.B, 0.15f));
+    }
+
+    private static bool TryGetPowerPreviewInfo(BuildPrototypeKind kind, out int rangeCells)
+    {
+        switch (kind)
+        {
+            case BuildPrototypeKind.Generator:
+                rangeCells = 5;
+                return true;
+            case BuildPrototypeKind.PowerPole:
+                rangeCells = PreviewPowerPoleConnectionRangeCells;
+                return true;
+            default:
+                rangeCells = 0;
+                return false;
+        }
+    }
+
+    private static void ApplyPowerLinkColor(MeshInstance3D dash, Color color)
+    {
+        if (dash.MaterialOverride is not StandardMaterial3D material)
+        {
+            return;
+        }
+
+        material.AlbedoColor = color;
+        material.Emission = color.Lightened(0.08f);
+    }
+
+    private static Vector3 GetPreviewPowerAnchor(IFactorySite site, Vector2I cell, float height)
+    {
+        return site.CellToWorld(cell) + new Vector3(0.0f, height, 0.0f);
+    }
+
+    private static Vector3 GetPowerAnchor(FactoryStructure structure)
+    {
+        var height = structure switch
+        {
+            PowerPoleStructure => 1.44f,
+            GeneratorStructure => 1.06f,
+            _ => 1.18f
+        };
+        return structure.GlobalPosition + new Vector3(0.0f, height, 0.0f);
     }
 
     private void UpdateEditorCamera()
@@ -2766,6 +3075,12 @@ public partial class MobileFactoryDemo : Node3D
         _interiorPreviewArrow.Mesh = new BoxMesh { Size = new Vector3(0.14f, 0.10f, 0.20f) };
         _interiorPreviewArrow.Position = new Vector3(0.18f, 0.12f, 0.0f);
         _interiorPreviewRoot.AddChild(_interiorPreviewArrow);
+
+        _interiorPreviewPowerRange = new MeshInstance3D { Name = "InteriorPreviewPowerRange", Visible = false };
+        _interiorPreviewPowerRange.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+        _interiorPreviewRoot.AddChild(_interiorPreviewPowerRange);
+
+        ApplyPreviewColor(_interiorPreviewPowerRange, new Color(0.35f, 0.95f, 0.55f, 0.15f));
     }
 
     private void UpdateInteriorPreviewSizing()

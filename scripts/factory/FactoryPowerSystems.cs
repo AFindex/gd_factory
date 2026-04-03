@@ -17,7 +17,7 @@ public interface IFactoryPowerProducer : IFactoryPowerNode
     float GetAvailablePower(SimulationController simulation);
 }
 
-public interface IFactoryPowerConsumer : IFactoryPowerNode
+public interface IFactoryPowerConsumer
 {
     bool WantsPower(SimulationController simulation);
     float GetRequestedPower(SimulationController simulation);
