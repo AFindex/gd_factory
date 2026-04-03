@@ -33,7 +33,11 @@ public partial class MobileFactoryDemo : Node3D
         BuildPrototypeKind.AmmoAssembler,
         BuildPrototypeKind.GunTurret,
         BuildPrototypeKind.OutputPort,
-        BuildPrototypeKind.InputPort
+        BuildPrototypeKind.InputPort,
+        BuildPrototypeKind.Generator,
+        BuildPrototypeKind.PowerPole,
+        BuildPrototypeKind.Smelter,
+        BuildPrototypeKind.Assembler
     };
 
     private static readonly Key[] InteriorPaletteKeys =
@@ -71,7 +75,11 @@ public partial class MobileFactoryDemo : Node3D
         [BuildPrototypeKind.AmmoAssembler] = new BuildPrototypeDefinition(BuildPrototypeKind.AmmoAssembler, "弹药组装器", new Color("FB923C"), "在内部持续生产弹药，直接喂给炮塔。"),
         [BuildPrototypeKind.GunTurret] = new BuildPrototypeDefinition(BuildPrototypeKind.GunTurret, "机枪炮塔", new Color("CBD5E1"), "会跟随移动工厂整体旋转，对世界中的敌人自动转向并射击。"),
         [BuildPrototypeKind.OutputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.OutputPort, "输出端口", new Color("FB923C"), "将移动工厂内部物流送往世界网格。"),
-        [BuildPrototypeKind.InputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.InputPort, "输入端口", new Color("60A5FA"), "把世界侧物流导入移动工厂内部。")
+        [BuildPrototypeKind.InputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.InputPort, "输入端口", new Color("60A5FA"), "把世界侧物流导入移动工厂内部。"),
+        [BuildPrototypeKind.Generator] = new BuildPrototypeDefinition(BuildPrototypeKind.Generator, "发电机", new Color("FB923C"), "消耗煤炭发电，为移动工厂内部设备提供基础电力。"),
+        [BuildPrototypeKind.PowerPole] = new BuildPrototypeDefinition(BuildPrototypeKind.PowerPole, "电线杆", new Color("FDE68A"), "延伸移动工厂内部的供电覆盖，并可预览连线。"),
+        [BuildPrototypeKind.Smelter] = new BuildPrototypeDefinition(BuildPrototypeKind.Smelter, "熔炉", new Color("CBD5E1"), "消耗电力把矿石炼成铁板，便于在内部试配生产链。"),
+        [BuildPrototypeKind.Assembler] = new BuildPrototypeDefinition(BuildPrototypeKind.Assembler, "组装机", new Color("67E8F9"), "消耗中间品和电力，在移动工厂内部验证真实配方。")
     };
 
     private GridManager? _grid;
@@ -507,6 +515,7 @@ public partial class MobileFactoryDemo : Node3D
 
         if (_mobileFactory is not null)
         {
+            PrimeMobileFactoryShowcase(_mobileFactory);
             _selectedDeployFacing = _mobileFactory.TransitFacing;
             CreateWorldPreviewVisuals(
                 _mobileFactory.Profile.FootprintOffsetsEast.Count,
@@ -532,6 +541,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private void CreateLargeScenarioWorld()
     {
+        var focused = MobileFactoryScenarioLibrary.CreateFocusedDemoProfile();
         var heavy = MobileFactoryScenarioLibrary.CreateHeavyProfile();
         var medium = MobileFactoryScenarioLibrary.CreateMediumProfile();
         var compact = MobileFactoryScenarioLibrary.CreateCompactProfile();
@@ -542,9 +552,10 @@ public partial class MobileFactoryDemo : Node3D
         _sinkB = CreatePreparedOutputLine(medium, new Vector2I(-4, 7), FacingDirection.East, 2);
         CreatePreparedOutputLine(compact, new Vector2I(1, 9), FacingDirection.East, 2);
         CreatePreparedOutputLine(compact, new Vector2I(-9, 10), FacingDirection.East, 2);
-        CreatePreparedOutputLine(medium, new Vector2I(-12, 3), FacingDirection.East, 2);
+        CreatePreparedOutputLine(focused, new Vector2I(-12, 3), FacingDirection.East, 2);
+        CreatePreparedMountOutputLine(focused, new Vector2I(-12, 3), FacingDirection.East, "east-output-aux", 1);
         CreatePreparedOutputLine(medium, new Vector2I(4, 10), FacingDirection.East, 2);
-        CreatePreparedInputLine(medium, new Vector2I(-12, 3), FacingDirection.East, 3);
+        CreatePreparedInputLine(focused, new Vector2I(-12, 3), FacingDirection.East, 3);
 
         CreateAmbientWorldLine(new Vector2I(-18, -1), 5, FacingDirection.East);
         CreateAmbientWorldLine(new Vector2I(12, -12), 4, FacingDirection.North);
@@ -583,7 +594,46 @@ public partial class MobileFactoryDemo : Node3D
                 }
             }
 
+            PrimeMobileFactoryShowcase(instance);
             AddFactoryLabel(instance, actor.DisplayLabel, actor.LabelColor);
+        }
+    }
+
+    private void PrimeMobileFactoryShowcase(MobileFactoryInstance factory)
+    {
+        if (_simulation is null || factory.InteriorPreset.Id != "focused-dual-logistics")
+        {
+            return;
+        }
+
+        if (factory.TryGetInteriorStructure(new Vector2I(1, 7), out var generatorStructure)
+            && generatorStructure is GeneratorStructure generator)
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                generator.TryReceiveProvidedItem(
+                    _simulation.CreateItem(BuildPrototypeKind.Generator, FactoryItemKind.Coal),
+                    generator.Cell + Vector2I.Left,
+                    _simulation);
+            }
+        }
+
+        if (factory.TryGetInteriorStructure(new Vector2I(4, 5), out var smelterStructure)
+            && smelterStructure is SmelterStructure smelter)
+        {
+            for (var i = 0; i < 5; i++)
+            {
+                smelter.TryReceiveProvidedItem(
+                    _simulation.CreateItem(BuildPrototypeKind.Smelter, FactoryItemKind.IronOre),
+                    smelter.Cell + Vector2I.Left,
+                    _simulation);
+            }
+        }
+
+        if (factory.TryGetInteriorStructure(new Vector2I(6, 5), out var assemblerStructure)
+            && assemblerStructure is AssemblerStructure assembler)
+        {
+            assembler.TrySetDetailRecipe("machine-parts");
         }
     }
 

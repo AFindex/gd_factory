@@ -19,7 +19,7 @@ public static class MobileFactoryScenarioLibrary
             id: "focused-standard",
             displayName: "标准移动工厂",
             interiorMinCell: new Vector2I(0, 0),
-            interiorMaxCell: new Vector2I(4, 4),
+            interiorMaxCell: new Vector2I(7, 7),
             interiorCellSize: 0.72f,
             interiorFloorHeight: 0.36f,
             interiorPlatformBorder: 0.18f,
@@ -34,7 +34,7 @@ public static class MobileFactoryScenarioLibrary
             {
                 new Vector2I(2, 0)
             },
-            outputBridgeCell: new Vector2I(4, 2),
+            outputBridgeCell: new Vector2I(7, 2),
             outputBridgeFacing: FacingDirection.East,
             transitParkingCenter: new Vector3(-11.0f, 0.0f, 7.0f),
             hullColor: new Color("1F2937"),
@@ -44,8 +44,8 @@ public static class MobileFactoryScenarioLibrary
             attachmentMounts: new[]
             {
                 CreateAttachmentMount("west-input-main", new Vector2I(0, 3), FacingDirection.West, new Vector2I(-1, 1), BuildPrototypeKind.InputPort),
-                CreateAttachmentMount("east-output-main", new Vector2I(4, 1), FacingDirection.East, new Vector2I(2, 0), BuildPrototypeKind.OutputPort),
-                CreateAttachmentMount("east-output-aux", new Vector2I(4, 3), FacingDirection.East, new Vector2I(2, 1), BuildPrototypeKind.OutputPort)
+                CreateAttachmentMount("east-output-main", new Vector2I(7, 1), FacingDirection.East, new Vector2I(2, 0), BuildPrototypeKind.OutputPort),
+                CreateAttachmentMount("east-output-aux", new Vector2I(7, 4), FacingDirection.East, new Vector2I(2, 1), BuildPrototypeKind.OutputPort)
             });
     }
 
@@ -167,9 +167,9 @@ public static class MobileFactoryScenarioLibrary
     {
         return new MobileFactoryInteriorPreset(
             id: "focused-dual-logistics",
-            displayName: "双线物流样板",
-            description: "主生产线经过仓储与机械臂后从主输出端口外送，副生产线走辅助输出端口，西侧输入端口则直接接入内部回收。",
-            recoverySummary: "双输出端口分别接世界侧回收线，输入端口持续把外部物流导入内部回收器；顶部还带一条自供弹药的防御位。",
+            displayName: "扩展供电物流样板",
+            description: "扩展后的玩家移动工厂保留双线物流与防御位，并新增一组带发电机、电线杆、熔炉和组装机的内部 powered workshop 供观察和手动扩建。",
+            recoverySummary: "双输出端口分别接世界侧回收线，西侧输入端口持续把外部物流导入内部回收器，底部额外预留了一条可观察供电覆盖与配方机器状态的展示工位。",
             placements: new[]
             {
                 new FactoryPlacementSpec(BuildPrototypeKind.Producer, new Vector2I(0, 2), FacingDirection.East),
@@ -177,21 +177,31 @@ public static class MobileFactoryScenarioLibrary
                 new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(1, 1), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(2, 1), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(4, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(5, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(6, 1), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.Producer, new Vector2I(0, 4), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(1, 4), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(2, 4), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 4), FacingDirection.South),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 3), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 4), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(4, 4), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(5, 4), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(6, 4), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.Sink, new Vector2I(1, 3), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.Wall, new Vector2I(0, 0), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.AmmoAssembler, new Vector2I(3, 0), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.GunTurret, new Vector2I(4, 0), FacingDirection.East)
+                new FactoryPlacementSpec(BuildPrototypeKind.GunTurret, new Vector2I(4, 0), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Generator, new Vector2I(1, 7), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.PowerPole, new Vector2I(4, 6), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Smelter, new Vector2I(4, 5), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Assembler, new Vector2I(6, 5), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Sink, new Vector2I(7, 5), FacingDirection.East)
             },
             attachmentPlacements: new[]
             {
                 new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.InputPort, new Vector2I(0, 3), FacingDirection.West),
-                new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.OutputPort, new Vector2I(4, 1), FacingDirection.East),
-                new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.OutputPort, new Vector2I(4, 3), FacingDirection.East)
+                new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.OutputPort, new Vector2I(7, 1), FacingDirection.East),
+                new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.OutputPort, new Vector2I(7, 4), FacingDirection.East)
             });
     }
 
@@ -323,12 +333,13 @@ public static class MobileFactoryScenarioLibrary
 
     public static IReadOnlyList<MobileFactoryScenarioActorDefinition> CreateLargeScenarioActors()
     {
+        var focused = CreateFocusedDemoProfile();
         var compact = CreateCompactProfile();
         var medium = CreateMediumProfile();
         var heavy = CreateHeavyProfile();
 
+        var focusedDemo = CreateFocusedDemoPreset();
         var branch = CreateBranchAndMergePreset();
-        var expeditionInputVerification = CreateExpeditionInputVerificationPreset();
         var relay = CreateBridgeRelayPreset();
         var dualFeed = CreateDualFeedPreset();
         var wideLoop = CreateWideLoopPreset();
@@ -338,8 +349,8 @@ public static class MobileFactoryScenarioLibrary
             new MobileFactoryScenarioActorDefinition(
                 actorId: "player-expedition",
                 displayLabel: "玩家工厂",
-                profile: medium,
-                interiorPreset: expeditionInputVerification,
+                profile: focused,
+                interiorPreset: focusedDemo,
                 isPlayerControlled: true,
                 transitPosition: new Vector3(-14.0f, 0.0f, 10.0f),
                 transitFacing: FacingDirection.East,

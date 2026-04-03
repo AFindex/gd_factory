@@ -20,7 +20,11 @@ public partial class MobileFactoryHud : CanvasLayer
         BuildPrototypeKind.AmmoAssembler,
         BuildPrototypeKind.GunTurret,
         BuildPrototypeKind.OutputPort,
-        BuildPrototypeKind.InputPort
+        BuildPrototypeKind.InputPort,
+        BuildPrototypeKind.Generator,
+        BuildPrototypeKind.PowerPole,
+        BuildPrototypeKind.Smelter,
+        BuildPrototypeKind.Assembler
     };
 
     private PanelContainer? _worldFocusFrame;
@@ -464,7 +468,7 @@ public partial class MobileFactoryHud : CanvasLayer
         _deployButton.Pressed += () => DeployModeToggleRequested?.Invoke();
         actionsRow.AddChild(_deployButton);
 
-        _hintLabel.Text = "默认操作：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 上下文辅助 | F 内部编辑 | 1-0/-/= 快速切物流件，右侧按钮可直接选墙体/弹药组装器/机枪炮塔";
+        _hintLabel.Text = "默认操作：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 上下文辅助 | F 内部编辑 | 1-0/-/= 快速切物流件，其余可在右侧按钮直接选发电机/电线杆/熔炉/组装机等模块";
         _hintLabel.Modulate = new Color("EED49F");
     }
 
@@ -812,6 +816,10 @@ public partial class MobileFactoryHud : CanvasLayer
             BuildPrototypeKind.OutputPort => "输出端口",
             BuildPrototypeKind.InputPort => "输入端口",
             BuildPrototypeKind.Sink => "回收器",
+            BuildPrototypeKind.Generator => "发电机",
+            BuildPrototypeKind.PowerPole => "电线杆",
+            BuildPrototypeKind.Smelter => "熔炉",
+            BuildPrototypeKind.Assembler => "组装机",
             _ => kind.ToString()
         };
     }
