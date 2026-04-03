@@ -53,7 +53,8 @@ public enum MobileFactoryControlMode
 public enum FactoryInteractionMode
 {
     Interact,
-    Build
+    Build,
+    Delete
 }
 
 public enum MobileFactoryInteractionPattern

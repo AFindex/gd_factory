@@ -145,7 +145,7 @@ public partial class FactoryHud : CanvasLayer
         body.AddChild(_profilerLabel);
 
         body.AddChild(CreateDivider());
-        body.AddChild(CreateValueLabel("镜头 WASD/方向键 | 缩放 滚轮 | 朝向 Q/E | 数字键或面板按钮进建造 | Esc 返回交互 | 交互模式左键选中 | 建造模式左键放置 / 右键退出建造 / Delete 拆除", new Color("8EA4B8")));
+        body.AddChild(CreateValueLabel("镜头 WASD/方向键 | 缩放 滚轮 | 朝向 Q/E | 数字键或面板按钮进建造 | X 删除模式 | Esc 返回交互 | 交互模式左键选中 | 建造模式左键放置 / 右键退出建造 / Delete 拆除", new Color("8EA4B8")));
 
         _detailWindow = new FactoryStructureDetailWindow();
         _detailWindow.InventoryMoveRequested += (inventoryId, fromSlot, toSlot) => DetailInventoryMoveRequested?.Invoke(inventoryId, fromSlot, toSlot);
@@ -183,10 +183,18 @@ public partial class FactoryHud : CanvasLayer
             return;
         }
 
-        _modeLabel.Text = mode == FactoryInteractionMode.Build
-            ? "当前模式: 建造模式"
-            : "当前模式: 交互模式";
-        _modeLabel.Modulate = mode == FactoryInteractionMode.Build ? new Color("A7F3A0") : new Color("FDE68A");
+        _modeLabel.Text = mode switch
+        {
+            FactoryInteractionMode.Build => "当前模式: 建造模式",
+            FactoryInteractionMode.Delete => "当前模式: 删除模式",
+            _ => "当前模式: 交互模式"
+        };
+        _modeLabel.Modulate = mode switch
+        {
+            FactoryInteractionMode.Build => new Color("A7F3A0"),
+            FactoryInteractionMode.Delete => new Color("FCA5A5"),
+            _ => new Color("FDE68A")
+        };
     }
 
     public void SetBuildSelection(BuildPrototypeKind? kind, string? details)

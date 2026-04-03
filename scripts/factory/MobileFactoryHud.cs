@@ -248,6 +248,13 @@ public partial class MobileFactoryHud : CanvasLayer
             return;
         }
 
+        if (interactionMode == FactoryInteractionMode.Delete)
+        {
+            _selectionLabel.Text = "内部模式：删除 | X 切换，右键退出，Shift 可框选删除";
+            RefreshPaletteButtons(null);
+            return;
+        }
+
         _selectionLabel.Text = "内部模式：交互 | 点击建筑查看状态";
         RefreshPaletteButtons(null);
     }
@@ -329,7 +336,12 @@ public partial class MobileFactoryHud : CanvasLayer
             _ => "运输中"
         };
         var paneText = isOpen ? "分屏编辑已展开" : "按 F 打开内部编辑";
-        var interactionText = interactionMode == FactoryInteractionMode.Build ? "建造模式" : "交互模式";
+        var interactionText = interactionMode switch
+        {
+            FactoryInteractionMode.Build => "建造模式",
+            FactoryInteractionMode.Delete => "删除模式",
+            _ => "交互模式"
+        };
         _editorModeLabel.Text = $"内部编辑：{paneText} | 生命周期：{stateText} | {interactionText} | 当前内部件数：{structureCount}";
     }
 

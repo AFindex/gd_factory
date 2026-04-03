@@ -112,6 +112,10 @@ public partial class MobileFactoryDemo : Node3D
     private Vector2I _hoveredInteriorCell;
     private bool _hasHoveredInteriorCell;
     private bool _canPlaceInteriorCell;
+    private bool _canDeleteInteriorCell;
+    private bool _deleteInteriorDragActive;
+    private Vector2I _deleteInteriorDragStartCell;
+    private Vector2I _deleteInteriorDragCurrentCell;
     private string _interiorPreviewMessage = "按 F 展开内部编辑区，然后把鼠标移入右侧区域开始调整移动工厂内部布局。";
     private bool _editorOpen;
     private bool _hoveringEditorPane;
@@ -168,6 +172,12 @@ public partial class MobileFactoryDemo : Node3D
         UpdateEditorCamera();
         UpdateCameraTracking();
         UpdateHud();
+        UpdateCursorShape();
+
+        if (_editorOpen && _interiorInteractionMode == FactoryInteractionMode.Delete && _deleteInteriorDragActive && _hasHoveredInteriorCell)
+        {
+            _deleteInteriorDragCurrentCell = _hoveredInteriorCell;
+        }
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -181,13 +191,43 @@ public partial class MobileFactoryDemo : Node3D
             }
         }
 
-        if (@event is not InputEventMouseButton mouseButton || !mouseButton.Pressed)
+        if (@event is not InputEventMouseButton mouseButton)
         {
             return;
         }
 
         if (CanUseEditorViewportInput())
         {
+            if (_interiorInteractionMode == FactoryInteractionMode.Delete)
+            {
+                if (mouseButton.ButtonIndex == MouseButton.Right && mouseButton.Pressed)
+                {
+                    EnterInteriorInteractionMode();
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+
+                if (mouseButton.ButtonIndex == MouseButton.Left)
+                {
+                    if (mouseButton.Pressed)
+                    {
+                        HandleEditorDeletePrimaryPress(mouseButton.ShiftPressed);
+                    }
+                    else
+                    {
+                        HandleEditorDeletePrimaryRelease();
+                    }
+
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+            }
+
+            if (!mouseButton.Pressed)
+            {
+                return;
+            }
+
             if (mouseButton.ButtonIndex == MouseButton.Left)
             {
                 HandleEditorPrimaryClick();
@@ -217,6 +257,11 @@ public partial class MobileFactoryDemo : Node3D
 
         if (CanUseEditorInput())
         {
+            if (_interiorInteractionMode == FactoryInteractionMode.Delete && mouseButton.ButtonIndex == MouseButton.Right && mouseButton.Pressed)
+            {
+                EnterInteriorInteractionMode();
+            }
+
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -775,9 +820,23 @@ public partial class MobileFactoryDemo : Node3D
             return false;
         }
 
+        if (keyEvent.Keycode == Key.X)
+        {
+            if (_interiorInteractionMode == FactoryInteractionMode.Delete)
+            {
+                EnterInteriorInteractionMode();
+            }
+            else
+            {
+                EnterInteriorDeleteMode();
+            }
+
+            return true;
+        }
+
         if (keyEvent.Keycode == Key.Escape)
         {
-            if (_interiorInteractionMode == FactoryInteractionMode.Build)
+            if (_interiorInteractionMode == FactoryInteractionMode.Build || _interiorInteractionMode == FactoryInteractionMode.Delete)
             {
                 EnterInteriorInteractionMode();
             }
@@ -794,7 +853,7 @@ public partial class MobileFactoryDemo : Node3D
             return false;
         }
 
-        if (keyEvent.Keycode == Key.Delete && _interiorInteractionMode == FactoryInteractionMode.Build && _hasHoveredInteriorCell && _hoveredInteriorStructure is not null)
+        if (keyEvent.Keycode == Key.Delete && (_interiorInteractionMode == FactoryInteractionMode.Build || _interiorInteractionMode == FactoryInteractionMode.Delete) && _hasHoveredInteriorCell && _hoveredInteriorStructure is not null)
         {
             RemoveInteriorStructure();
             return true;
@@ -877,10 +936,14 @@ public partial class MobileFactoryDemo : Node3D
     {
         _hasHoveredInteriorCell = false;
         _canPlaceInteriorCell = false;
+        _canDeleteInteriorCell = false;
         _hoveredInteriorStructure = null;
-        _interiorPreviewMessage = _interiorInteractionMode == FactoryInteractionMode.Build
-            ? "把鼠标移入右侧编辑区，可直接调整移动工厂内部布局。"
-            : "交互模式：把鼠标移入右侧编辑区，点击内部建筑查看状态。";
+        _interiorPreviewMessage = _interiorInteractionMode switch
+        {
+            FactoryInteractionMode.Build => "把鼠标移入右侧编辑区，可直接调整移动工厂内部布局。",
+            FactoryInteractionMode.Delete => "删除模式：左键删除内部建筑，按住 Shift 左键拖拽可框选删除。",
+            _ => "交互模式：把鼠标移入右侧编辑区，点击内部建筑查看状态。"
+        };
 
         if (!_editorOpen || !_hoveringEditorViewport || _mobileFactory is null || _editorCamera is null)
         {
@@ -908,6 +971,25 @@ public partial class MobileFactoryDemo : Node3D
             _interiorPreviewMessage = _hoveredInteriorStructure is not null
                 ? $"点击查看 {_hoveredInteriorStructure.DisplayName} 的状态。"
                 : $"格 ({cell.X}, {cell.Y}) 当前为空。";
+            return;
+        }
+
+        if (_interiorInteractionMode == FactoryInteractionMode.Delete)
+        {
+            if (_deleteInteriorDragActive)
+            {
+                _deleteInteriorDragCurrentCell = cell;
+                var deletionCount = CountInteriorStructuresInDeleteRect(_deleteInteriorDragStartCell, _deleteInteriorDragCurrentCell);
+                _canDeleteInteriorCell = deletionCount > 0;
+                var rect = GetDeleteRect(_deleteInteriorDragStartCell, _deleteInteriorDragCurrentCell);
+                _interiorPreviewMessage = $"删除模式：框选 [{rect.Position.X},{rect.Position.Y}] - [{rect.End.X - 1},{rect.End.Y - 1}]，将删除 {deletionCount} 个内部建筑。";
+                return;
+            }
+
+            _canDeleteInteriorCell = _hoveredInteriorStructure is not null;
+            _interiorPreviewMessage = _hoveredInteriorStructure is not null
+                ? $"删除模式：左键删除 {_hoveredInteriorStructure.DisplayName}，Shift+左键拖拽可框选删除。"
+                : $"删除模式：格 ({cell.X}, {cell.Y}) 当前为空。";
             return;
         }
 
@@ -1013,9 +1095,44 @@ public partial class MobileFactoryDemo : Node3D
         _interiorPreviewRoot.Visible = _editorOpen
             && _hoveringEditorViewport
             && _hasHoveredInteriorCell
-            && _interiorInteractionMode == FactoryInteractionMode.Build;
+            && (_interiorInteractionMode == FactoryInteractionMode.Build || _interiorInteractionMode == FactoryInteractionMode.Delete);
         if (!_interiorPreviewRoot.Visible)
         {
+            return;
+        }
+
+        for (var i = 0; i < _interiorPreviewBoundaryMeshes.Count; i++)
+        {
+            _interiorPreviewBoundaryMeshes[i].Visible = false;
+        }
+
+        for (var i = 0; i < _interiorPreviewExteriorMeshes.Count; i++)
+        {
+            _interiorPreviewExteriorMeshes[i].Visible = false;
+        }
+
+        if (_interiorInteractionMode == FactoryInteractionMode.Delete)
+        {
+            var start = _deleteInteriorDragActive ? _deleteInteriorDragStartCell : _hoveredInteriorCell;
+            var end = _deleteInteriorDragActive ? _deleteInteriorDragCurrentCell : _hoveredInteriorCell;
+            var rect = GetDeleteRect(start, end);
+            var minCell = rect.Position;
+            var maxCell = rect.End - Vector2I.One;
+            var minWorld = _mobileFactory.InteriorSite.CellToWorld(minCell);
+            var maxWorld = _mobileFactory.InteriorSite.CellToWorld(maxCell);
+            _interiorPreviewRoot.Position = (minWorld + maxWorld) * 0.5f;
+            _interiorPreviewRoot.Rotation = new Vector3(0.0f, _mobileFactory.InteriorSite.WorldRotationRadians, 0.0f);
+            _interiorPreviewCell.Mesh = new BoxMesh
+            {
+                Size = new Vector3(
+                    _mobileFactory.InteriorSite.CellSize * rect.Size.X - (_mobileFactory.InteriorSite.CellSize * 0.22f),
+                    0.06f,
+                    _mobileFactory.InteriorSite.CellSize * rect.Size.Y - (_mobileFactory.InteriorSite.CellSize * 0.22f))
+            };
+            _interiorPreviewCell.Position = new Vector3(0.0f, 0.04f, 0.0f);
+            _interiorPreviewArrow.Visible = false;
+            var deleteTint = _canDeleteInteriorCell ? new Color(1.0f, 0.35f, 0.35f, 0.42f) : new Color(0.75f, 0.30f, 0.30f, 0.28f);
+            ApplyPreviewColor(_interiorPreviewCell, deleteTint);
             return;
         }
 
@@ -1028,18 +1145,11 @@ public partial class MobileFactoryDemo : Node3D
         var tint = _canPlaceInteriorCell
             ? new Color(0.35f, 0.95f, 0.55f, 0.45f)
             : new Color(1.0f, 0.35f, 0.35f, 0.45f);
+        _interiorPreviewCell.Mesh = new BoxMesh { Size = new Vector3(_mobileFactory.InteriorSite.CellSize * 0.78f, 0.06f, _mobileFactory.InteriorSite.CellSize * 0.78f) };
+        _interiorPreviewCell.Position = new Vector3(0.0f, 0.04f, 0.0f);
+        _interiorPreviewArrow.Visible = true;
         ApplyPreviewColor(_interiorPreviewCell, tint);
         ApplyPreviewColor(_interiorPreviewArrow, tint.Lightened(0.1f));
-
-        for (var i = 0; i < _interiorPreviewBoundaryMeshes.Count; i++)
-        {
-            _interiorPreviewBoundaryMeshes[i].Visible = false;
-        }
-
-        for (var i = 0; i < _interiorPreviewExteriorMeshes.Count; i++)
-        {
-            _interiorPreviewExteriorMeshes[i].Visible = false;
-        }
 
         if (!MobileFactoryBoundaryAttachmentCatalog.IsAttachmentKind(_selectedInteriorKind))
         {
@@ -1230,7 +1340,13 @@ public partial class MobileFactoryDemo : Node3D
         _hud.SetDeliveryStats(GetPrimaryDeliveryTotal(), GetSecondaryDeliveryTotal());
         _hud.SetEditorSelection(_interiorInteractionMode, _selectedInteriorKind, _selectedInteriorFacing);
         _hud.SetEditorSelectionTarget(GetSelectedInteriorStructureText());
-        _hud.SetEditorPreview(_interiorInteractionMode == FactoryInteractionMode.Build ? _canPlaceInteriorCell : true, _interiorPreviewMessage);
+        var editorPreviewPositive = _interiorInteractionMode switch
+        {
+            FactoryInteractionMode.Build => _canPlaceInteriorCell,
+            FactoryInteractionMode.Delete => _canDeleteInteriorCell,
+            _ => true
+        };
+        _hud.SetEditorPreview(editorPreviewPositive, _interiorPreviewMessage);
         _hud.SetPortStatus(_mobileFactory.GetPortStatusLabel());
         _hud.SetCombatStats(_simulation?.ActiveEnemyCount ?? 0, _simulation?.DefeatedEnemyCount ?? 0, _simulation?.DestroyedStructureCount ?? 0);
         if (_selectedInteriorStructure is not null && GodotObject.IsInstanceValid(_selectedInteriorStructure) && _selectedInteriorStructure.IsInsideTree() && _selectedInteriorStructure is IFactoryInspectable inspectable)
@@ -1601,6 +1717,14 @@ public partial class MobileFactoryDemo : Node3D
     private void EnterInteriorInteractionMode()
     {
         _interiorInteractionMode = FactoryInteractionMode.Interact;
+        _deleteInteriorDragActive = false;
+    }
+
+    private void EnterInteriorDeleteMode()
+    {
+        _selectedInteriorStructure = null;
+        _interiorInteractionMode = FactoryInteractionMode.Delete;
+        _deleteInteriorDragActive = false;
     }
 
     private void HandleEditorPrimaryClick()
@@ -1637,6 +1761,106 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         _selectedInteriorStructure = null;
+    }
+
+    private void HandleEditorDeletePrimaryPress(bool shiftPressed)
+    {
+        if (!_hasHoveredInteriorCell)
+        {
+            return;
+        }
+
+        if (shiftPressed)
+        {
+            _deleteInteriorDragActive = true;
+            _deleteInteriorDragStartCell = _hoveredInteriorCell;
+            _deleteInteriorDragCurrentCell = _hoveredInteriorCell;
+            return;
+        }
+
+        RemoveInteriorStructure();
+    }
+
+    private void HandleEditorDeletePrimaryRelease()
+    {
+        if (!_deleteInteriorDragActive)
+        {
+            return;
+        }
+
+        _deleteInteriorDragActive = false;
+        DeleteInteriorStructuresInRect(_deleteInteriorDragStartCell, _deleteInteriorDragCurrentCell);
+    }
+
+    private Rect2I GetDeleteRect(Vector2I start, Vector2I end)
+    {
+        var minX = Mathf.Min(start.X, end.X);
+        var minY = Mathf.Min(start.Y, end.Y);
+        var maxX = Mathf.Max(start.X, end.X);
+        var maxY = Mathf.Max(start.Y, end.Y);
+        return new Rect2I(minX, minY, maxX - minX + 1, maxY - minY + 1);
+    }
+
+    private int CountInteriorStructuresInDeleteRect(Vector2I start, Vector2I end)
+    {
+        if (_mobileFactory is null)
+        {
+            return 0;
+        }
+
+        var rect = GetDeleteRect(start, end);
+        var count = 0;
+        for (var y = rect.Position.Y; y < rect.End.Y; y++)
+        {
+            for (var x = rect.Position.X; x < rect.End.X; x++)
+            {
+                if (_mobileFactory.TryGetInteriorStructure(new Vector2I(x, y), out var structure) && structure is not null)
+                {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+
+    private void DeleteInteriorStructuresInRect(Vector2I start, Vector2I end)
+    {
+        if (_mobileFactory is null)
+        {
+            return;
+        }
+
+        var rect = GetDeleteRect(start, end);
+        var cellsToDelete = new List<Vector2I>();
+        for (var y = rect.Position.Y; y < rect.End.Y; y++)
+        {
+            for (var x = rect.Position.X; x < rect.End.X; x++)
+            {
+                var cell = new Vector2I(x, y);
+                if (_mobileFactory.TryGetInteriorStructure(cell, out var structure) && structure is not null)
+                {
+                    cellsToDelete.Add(cell);
+                }
+            }
+        }
+
+        for (var index = 0; index < cellsToDelete.Count; index++)
+        {
+            _hoveredInteriorCell = cellsToDelete[index];
+            RemoveInteriorStructure();
+        }
+    }
+
+    private void UpdateCursorShape()
+    {
+        if (_editorOpen && _hoveringEditorViewport && _interiorInteractionMode == FactoryInteractionMode.Delete)
+        {
+            Input.SetDefaultCursorShape(Input.CursorShape.Cross);
+            return;
+        }
+
+        Input.SetDefaultCursorShape(Input.CursorShape.Arrow);
     }
 
     private void HandleEditorDetailInventoryMoveRequested(string inventoryId, Vector2I fromSlot, Vector2I toSlot)
@@ -2314,7 +2538,7 @@ public partial class MobileFactoryDemo : Node3D
         {
             MobileFactoryControlMode.Observer => "观察模式：WASD/方向键移动相机 | 滚轮缩放 | Tab 返回工厂控制 | F 内部编辑",
             MobileFactoryControlMode.DeployPreview => "部署预览：左键确认 | Q/E/R 旋转朝向 | G/Esc 取消 | F 内部编辑",
-            _ => "工厂控制：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器里和 sandbox 一样，点按钮进建造，右键或 Esc 回交互，Delete 拆除悬停建筑"
+            _ => "工厂控制：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器里和 sandbox 一样，X 进删除模式，右键或 Esc 回交互，Delete 拆除悬停建筑"
         };
     }
 

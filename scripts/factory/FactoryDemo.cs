@@ -42,6 +42,10 @@ public partial class FactoryDemo : Node3D
     private Vector2I _hoveredCell;
     private bool _hasHoveredCell;
     private bool _canPlaceCurrentCell;
+    private bool _canDeleteCurrentCell;
+    private bool _deleteDragActive;
+    private Vector2I _deleteDragStartCell;
+    private Vector2I _deleteDragCurrentCell;
     private string _previewMessage = "交互模式：点击建筑查看；按数字键选择建筑后进入建造。";
 
     public override void _Ready()
@@ -66,6 +70,12 @@ public partial class FactoryDemo : Node3D
         UpdateStructureVisuals();
         UpdateHud();
         HandleHotkeys();
+        UpdateCursorShape();
+
+        if (_interactionMode == FactoryInteractionMode.Delete && _deleteDragActive && _hasHoveredCell)
+        {
+            _deleteDragCurrentCell = _hoveredCell;
+        }
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -77,9 +87,31 @@ public partial class FactoryDemo : Node3D
 
         if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
         {
+            if (keyEvent.Keycode == Key.X)
+            {
+                if (_interactionMode == FactoryInteractionMode.Delete)
+                {
+                    EnterInteractionMode();
+                }
+                else
+                {
+                    EnterDeleteMode();
+                }
+
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
             if (keyEvent.Keycode == Key.Delete && _interactionMode == FactoryInteractionMode.Build && _hoveredStructure is not null)
             {
                 RemoveStructure(_hoveredStructure.Cell);
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (keyEvent.Keycode == Key.Delete && _interactionMode == FactoryInteractionMode.Delete)
+            {
+                DeleteHoveredStructure();
                 GetViewport().SetInputAsHandled();
                 return;
             }
@@ -92,7 +124,37 @@ public partial class FactoryDemo : Node3D
             }
         }
 
-        if (@event is not InputEventMouseButton mouseButton || !mouseButton.Pressed)
+        if (@event is not InputEventMouseButton mouseButton)
+        {
+            return;
+        }
+
+        if (_interactionMode == FactoryInteractionMode.Delete)
+        {
+            if (mouseButton.ButtonIndex == MouseButton.Right && mouseButton.Pressed)
+            {
+                EnterInteractionMode();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (mouseButton.ButtonIndex == MouseButton.Left)
+            {
+                if (mouseButton.Pressed)
+                {
+                    HandleDeletePrimaryPress(mouseButton.ShiftPressed);
+                }
+                else
+                {
+                    HandleDeletePrimaryRelease();
+                }
+
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+        }
+
+        if (!mouseButton.Pressed)
         {
             return;
         }
@@ -206,6 +268,7 @@ public partial class FactoryDemo : Node3D
     {
         _selectedBuildKind = kind;
         _interactionMode = kind.HasValue ? FactoryInteractionMode.Build : FactoryInteractionMode.Interact;
+        _deleteDragActive = false;
 
         if (_interactionMode == FactoryInteractionMode.Build)
         {
@@ -217,6 +280,15 @@ public partial class FactoryDemo : Node3D
     {
         _selectedBuildKind = null;
         _interactionMode = FactoryInteractionMode.Interact;
+        _deleteDragActive = false;
+    }
+
+    private void EnterDeleteMode()
+    {
+        _selectedBuildKind = null;
+        _selectedStructure = null;
+        _interactionMode = FactoryInteractionMode.Delete;
+        _deleteDragActive = false;
     }
 
     private void CreateStarterLayout()
@@ -543,9 +615,13 @@ public partial class FactoryDemo : Node3D
         _hasHoveredCell = false;
         _hoveredStructure = null;
         _canPlaceCurrentCell = false;
-        _previewMessage = _interactionMode == FactoryInteractionMode.Build
-            ? "把鼠标移到地面网格上选择格子。"
-            : "交互模式：点击建筑查看；按快捷键或左侧按钮选择建筑后进入建造。";
+        _canDeleteCurrentCell = false;
+        _previewMessage = _interactionMode switch
+        {
+            FactoryInteractionMode.Build => "把鼠标移到地面网格上选择格子。",
+            FactoryInteractionMode.Delete => "删除模式：点击建筑删除，按住 Shift 左键拖拽可框选删除。",
+            _ => "交互模式：点击建筑查看；按快捷键或左侧按钮选择建筑后进入建造。"
+        };
 
         if (_grid is null || _cameraRig is null)
         {
@@ -576,6 +652,25 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
+        if (_interactionMode == FactoryInteractionMode.Delete)
+        {
+            if (_deleteDragActive)
+            {
+                _deleteDragCurrentCell = cell;
+                var deletionCount = CountStructuresInDeleteRect(_deleteDragStartCell, _deleteDragCurrentCell);
+                _canDeleteCurrentCell = deletionCount > 0;
+                var rect = GetDeleteRect(_deleteDragStartCell, _deleteDragCurrentCell);
+                _previewMessage = $"删除模式：框选 [{rect.Position.X},{rect.Position.Y}] - [{rect.End.X - 1},{rect.End.Y - 1}]，将删除 {deletionCount} 个建筑。";
+                return;
+            }
+
+            _canDeleteCurrentCell = _hoveredStructure is not null;
+            _previewMessage = _hoveredStructure is null
+                ? $"删除模式：格子 ({cell.X}, {cell.Y}) 为空，按 X 可返回普通交互。"
+                : $"删除模式：左键删除 {_hoveredStructure.DisplayName}，Shift+左键拖拽可框选删除。";
+            return;
+        }
+
         _previewMessage = _hoveredStructure is null
             ? $"交互模式：空地 ({cell.X}, {cell.Y})，点击可清除当前选中。"
             : $"交互模式：点击选中 {_hoveredStructure.DisplayName} ({cell.X}, {cell.Y})。";
@@ -588,15 +683,46 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        var showPreview = _interactionMode == FactoryInteractionMode.Build && _selectedBuildKind.HasValue && _hasHoveredCell;
+        var showPreview = _hasHoveredCell
+            && ((_interactionMode == FactoryInteractionMode.Build && _selectedBuildKind.HasValue)
+                || _interactionMode == FactoryInteractionMode.Delete);
         _previewRoot.Visible = showPreview;
         if (!showPreview)
         {
+            _previewArrow.Visible = false;
+            return;
+        }
+
+        if (_interactionMode == FactoryInteractionMode.Delete)
+        {
+            var start = _deleteDragActive ? _deleteDragStartCell : _hoveredCell;
+            var end = _deleteDragActive ? _deleteDragCurrentCell : _hoveredCell;
+            var rect = GetDeleteRect(start, end);
+            var minCell = rect.Position;
+            var maxCell = rect.End - Vector2I.One;
+            var minWorld = _grid.CellToWorld(minCell);
+            var maxWorld = _grid.CellToWorld(maxCell);
+            _previewRoot.Position = (minWorld + maxWorld) * 0.5f;
+            _previewRoot.Rotation = Vector3.Zero;
+            _previewCell.Mesh = new BoxMesh
+            {
+                Size = new Vector3(
+                    FactoryConstants.CellSize * rect.Size.X - (FactoryConstants.CellSize * 0.08f),
+                    0.08f,
+                    FactoryConstants.CellSize * rect.Size.Y - (FactoryConstants.CellSize * 0.08f))
+            };
+            _previewCell.Position = new Vector3(0.0f, 0.05f, 0.0f);
+            _previewArrow.Visible = false;
+            var deleteTint = _canDeleteCurrentCell ? new Color(1.0f, 0.35f, 0.35f, 0.42f) : new Color(0.75f, 0.30f, 0.30f, 0.28f);
+            ApplyPreviewColor(_previewCell, deleteTint);
             return;
         }
 
         _previewRoot.Position = _grid.CellToWorld(_hoveredCell);
         _previewRoot.Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(_selectedFacing), 0.0f);
+        _previewCell.Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.92f, 0.08f, FactoryConstants.CellSize * 0.92f) };
+        _previewCell.Position = new Vector3(0.0f, 0.05f, 0.0f);
+        _previewArrow.Visible = true;
 
         var tint = _canPlaceCurrentCell ? new Color(0.35f, 0.95f, 0.55f, 0.45f) : new Color(1.0f, 0.35f, 0.35f, 0.45f);
         ApplyPreviewColor(_previewCell, tint);
@@ -645,7 +771,13 @@ public partial class FactoryDemo : Node3D
         }
 
         _hud.SetHoverCell(_hoveredCell, _hasHoveredCell);
-        _hud.SetPreviewStatus(_interactionMode == FactoryInteractionMode.Build && _canPlaceCurrentCell, _previewMessage);
+        var previewPositive = _interactionMode switch
+        {
+            FactoryInteractionMode.Build => _canPlaceCurrentCell,
+            FactoryInteractionMode.Delete => _canDeleteCurrentCell,
+            _ => true
+        };
+        _hud.SetPreviewStatus(previewPositive, _previewMessage);
         _hud.SetRotation(_selectedFacing);
         _hud.SetSelectionTarget(GetSelectedStructureText());
 
@@ -684,6 +816,8 @@ public partial class FactoryDemo : Node3D
 
         var modeNote = _interactionMode == FactoryInteractionMode.Build
             ? "建造模式：左键放置，右键或 Esc 返回交互，Delete 拆除悬停建筑。"
+            : _interactionMode == FactoryInteractionMode.Delete
+                ? "删除模式：左键删除悬停建筑，Shift+左键拖拽框选删除，右键或 Esc 返回交互。"
             : "交互模式：左键查看建筑，数字键或按钮切换到对应建造工具。";
         _hud.SetNote(modeNote);
     }
@@ -798,6 +932,109 @@ public partial class FactoryDemo : Node3D
         }
 
         _selectedStructure = null;
+    }
+
+    private void HandleDeletePrimaryPress(bool shiftPressed)
+    {
+        if (!_hasHoveredCell)
+        {
+            return;
+        }
+
+        if (shiftPressed)
+        {
+            _deleteDragActive = true;
+            _deleteDragStartCell = _hoveredCell;
+            _deleteDragCurrentCell = _hoveredCell;
+            return;
+        }
+
+        DeleteHoveredStructure();
+    }
+
+    private void HandleDeletePrimaryRelease()
+    {
+        if (!_deleteDragActive)
+        {
+            return;
+        }
+
+        _deleteDragActive = false;
+        DeleteStructuresInRect(_deleteDragStartCell, _deleteDragCurrentCell);
+    }
+
+    private void DeleteHoveredStructure()
+    {
+        if (_hoveredStructure is not null)
+        {
+            RemoveStructure(_hoveredStructure.Cell);
+        }
+    }
+
+    private Rect2I GetDeleteRect(Vector2I start, Vector2I end)
+    {
+        var minX = Mathf.Min(start.X, end.X);
+        var minY = Mathf.Min(start.Y, end.Y);
+        var maxX = Mathf.Max(start.X, end.X);
+        var maxY = Mathf.Max(start.Y, end.Y);
+        return new Rect2I(minX, minY, maxX - minX + 1, maxY - minY + 1);
+    }
+
+    private int CountStructuresInDeleteRect(Vector2I start, Vector2I end)
+    {
+        if (_grid is null)
+        {
+            return 0;
+        }
+
+        var rect = GetDeleteRect(start, end);
+        var count = 0;
+        for (var y = rect.Position.Y; y < rect.End.Y; y++)
+        {
+            for (var x = rect.Position.X; x < rect.End.X; x++)
+            {
+                if (_grid.TryGetStructure(new Vector2I(x, y), out var structure) && structure is not null)
+                {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+
+    private void DeleteStructuresInRect(Vector2I start, Vector2I end)
+    {
+        if (_grid is null)
+        {
+            return;
+        }
+
+        var rect = GetDeleteRect(start, end);
+        var cellsToDelete = new List<Vector2I>();
+        for (var y = rect.Position.Y; y < rect.End.Y; y++)
+        {
+            for (var x = rect.Position.X; x < rect.End.X; x++)
+            {
+                var cell = new Vector2I(x, y);
+                if (_grid.TryGetStructure(cell, out var structure) && structure is not null)
+                {
+                    cellsToDelete.Add(cell);
+                }
+            }
+        }
+
+        for (var index = 0; index < cellsToDelete.Count; index++)
+        {
+            RemoveStructure(cellsToDelete[index]);
+        }
+    }
+
+    private void UpdateCursorShape()
+    {
+        Input.SetDefaultCursorShape(_interactionMode == FactoryInteractionMode.Delete
+            ? Input.CursorShape.Cross
+            : Input.CursorShape.Arrow);
     }
 
     private void HandleDetailInventoryMoveRequested(string inventoryId, Vector2I fromSlot, Vector2I toSlot)
