@@ -22,7 +22,9 @@ public enum BuildPrototypeKind
 public enum FactoryItemKind
 {
     GenericCargo,
-    AmmoMagazine
+    MachinePart,
+    AmmoMagazine,
+    HighVelocityAmmo
 }
 
 public enum FacingDirection
@@ -132,9 +134,27 @@ public static class FactoryPresentation
     {
         return item.ItemKind switch
         {
+            FactoryItemKind.MachinePart => $"机加工件 #{item.Id}",
             FactoryItemKind.AmmoMagazine => $"弹药 #{item.Id}",
+            FactoryItemKind.HighVelocityAmmo => $"高速弹药 #{item.Id}",
             _ => $"{GetKindLabel(item.SourceKind)} #{item.Id}"
         };
+    }
+
+    public static Color GetItemAccentColor(FactoryItemKind itemKind)
+    {
+        return itemKind switch
+        {
+            FactoryItemKind.MachinePart => new Color("8B5CF6"),
+            FactoryItemKind.AmmoMagazine => new Color("FACC15"),
+            FactoryItemKind.HighVelocityAmmo => new Color("F97316"),
+            _ => new Color("7DD3FC")
+        };
+    }
+
+    public static bool IsAmmoItem(FactoryItemKind itemKind)
+    {
+        return itemKind == FactoryItemKind.AmmoMagazine || itemKind == FactoryItemKind.HighVelocityAmmo;
     }
 }
 

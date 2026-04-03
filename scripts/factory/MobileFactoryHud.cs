@@ -24,6 +24,7 @@ public partial class MobileFactoryHud : CanvasLayer
     };
 
     private PanelContainer? _worldFocusFrame;
+    private Control? _overlayRoot;
     private PanelContainer? _infoPanel;
     private VBoxContainer? _infoBody;
     private PanelContainer? _editorPanel;
@@ -46,6 +47,7 @@ public partial class MobileFactoryHud : CanvasLayer
     private Label? _inspectionTitleLabel;
     private Label? _inspectionBodyLabel;
     private Label? _focusLabel;
+    private FactoryStructureDetailWindow? _detailWindow;
     private Button? _observerButton;
     private Button? _deployButton;
     private readonly Dictionary<BuildPrototypeKind, Button> _paletteButtons = new();
@@ -60,17 +62,32 @@ public partial class MobileFactoryHud : CanvasLayer
     public SubViewport EditorViewport => _editorViewport!;
     public bool IsEditorVisible => _editorProgress > 0.01f;
     public string PortStatusText => _portStatusLabel?.Text ?? string.Empty;
+    public bool IsDetailVisible => _detailWindow?.IsShowing ?? false;
+    public string DetailTitleText => _detailWindow?.CurrentTitleText ?? string.Empty;
     public event Action<BuildPrototypeKind>? EditorPaletteSelected;
     public event Action<int>? EditorRotateRequested;
     public event Action? ObserverModeToggleRequested;
     public event Action? DeployModeToggleRequested;
+    public event Action<string, Vector2I, Vector2I>? EditorDetailInventoryMoveRequested;
+    public event Action<string>? EditorDetailRecipeSelected;
+    public event Action? EditorDetailClosed;
 
     public override void _Ready()
     {
         Name = "MobileFactoryHud";
 
+        var overlayRoot = new Control();
+        overlayRoot.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        overlayRoot.MouseFilter = Control.MouseFilterEnum.Ignore;
+        AddChild(overlayRoot);
+        _overlayRoot = overlayRoot;
+
         BuildInfoPanel();
         BuildEditorPanel();
+        if (_overlayRoot is not null)
+        {
+            MoveChild(_overlayRoot, GetChildCount() - 1);
+        }
         UpdateLayout();
         GetViewport().SizeChanged += UpdateLayout;
     }
@@ -324,6 +341,22 @@ public partial class MobileFactoryHud : CanvasLayer
         }
     }
 
+    public void SetEditorStructureDetails(FactoryStructureDetailModel? model)
+    {
+        if (_detailWindow is null || _editorPanel is null)
+        {
+            return;
+        }
+
+        if (model is null)
+        {
+            _detailWindow.HideWindow();
+            return;
+        }
+
+        _detailWindow.ShowDetails(model, _editorPanel.Position + new Vector2(28.0f, 24.0f));
+    }
+
     private void BuildInfoPanel()
     {
         var worldFocusFrame = new PanelContainer();
@@ -497,6 +530,12 @@ public partial class MobileFactoryHud : CanvasLayer
         BuildEditorToolbar(sidebar);
 
         AddChild(viewport);
+
+        _detailWindow = new FactoryStructureDetailWindow();
+        _detailWindow.InventoryMoveRequested += (inventoryId, fromSlot, toSlot) => EditorDetailInventoryMoveRequested?.Invoke(inventoryId, fromSlot, toSlot);
+        _detailWindow.RecipeSelected += recipeId => EditorDetailRecipeSelected?.Invoke(recipeId);
+        _detailWindow.CloseRequested += () => EditorDetailClosed?.Invoke();
+        _overlayRoot?.AddChild(_detailWindow);
     }
 
     private void UpdateLayout()
@@ -537,6 +576,7 @@ public partial class MobileFactoryHud : CanvasLayer
             _editorViewport.Size = viewportSize2D;
         }
 
+        _detailWindow?.SetDragBounds(new Rect2(_editorPanel.Position, _editorPanel.Size));
         RefreshFocusVisuals();
     }
 

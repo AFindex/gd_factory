@@ -1,5 +1,6 @@
 using Godot;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 public partial class MobileFactoryDemo : Node3D
 {
@@ -267,6 +268,9 @@ public partial class MobileFactoryDemo : Node3D
         _hud.EditorRotateRequested += OnEditorRotateRequested;
         _hud.ObserverModeToggleRequested += ToggleObserverMode;
         _hud.DeployModeToggleRequested += ToggleDeployPreview;
+        _hud.EditorDetailInventoryMoveRequested += HandleEditorDetailInventoryMoveRequested;
+        _hud.EditorDetailRecipeSelected += HandleEditorDetailRecipeSelected;
+        _hud.EditorDetailClosed += HandleEditorDetailClosed;
         AddChild(_hud);
 
         AddChild(new LauncherNavigationOverlay());
@@ -790,6 +794,12 @@ public partial class MobileFactoryDemo : Node3D
             return false;
         }
 
+        if (keyEvent.Keycode == Key.Delete && _interiorInteractionMode == FactoryInteractionMode.Build && _hasHoveredInteriorCell && _hoveredInteriorStructure is not null)
+        {
+            RemoveInteriorStructure();
+            return true;
+        }
+
         for (var i = 0; i < InteriorPalette.Length && i < InteriorPaletteKeys.Length; i++)
         {
             if (keyEvent.Keycode != InteriorPaletteKeys[i])
@@ -923,7 +933,7 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        _interiorPreviewMessage = $"内部格 ({cell.X}, {cell.Y}) 已被占用，右键可拆除已安装的内部结构或边界 attachment。";
+        _interiorPreviewMessage = $"内部格 ({cell.X}, {cell.Y}) 已被占用，Delete 可拆除悬停结构，右键可退出建造模式。";
     }
 
     private void UpdateWorldPreview()
@@ -1230,6 +1240,15 @@ public partial class MobileFactoryDemo : Node3D
         else
         {
             _hud.SetEditorInspection(null, null);
+        }
+
+        if (_selectedInteriorStructure is not null && GodotObject.IsInstanceValid(_selectedInteriorStructure) && _selectedInteriorStructure.IsInsideTree() && _selectedInteriorStructure is IFactoryStructureDetailProvider detailProvider)
+        {
+            _hud.SetEditorStructureDetails(detailProvider.GetDetailModel());
+        }
+        else
+        {
+            _hud.SetEditorStructureDetails(null);
         }
 
         _hud.SetEditorState(_editorOpen, _mobileFactory.State, CountEditableInteriorStructures(), _interiorInteractionMode);
@@ -1613,16 +1632,38 @@ public partial class MobileFactoryDemo : Node3D
 
         if (_interiorInteractionMode == FactoryInteractionMode.Build)
         {
-            RemoveInteriorStructure();
+            EnterInteriorInteractionMode();
             return;
         }
 
         _selectedInteriorStructure = null;
     }
 
+    private void HandleEditorDetailInventoryMoveRequested(string inventoryId, Vector2I fromSlot, Vector2I toSlot)
+    {
+        if (_selectedInteriorStructure is IFactoryStructureDetailProvider detailProvider && detailProvider.TryMoveDetailInventoryItem(inventoryId, fromSlot, toSlot))
+        {
+            UpdateHud();
+        }
+    }
+
+    private void HandleEditorDetailRecipeSelected(string recipeId)
+    {
+        if (_selectedInteriorStructure is IFactoryStructureDetailProvider detailProvider && detailProvider.TrySetDetailRecipe(recipeId))
+        {
+            UpdateHud();
+        }
+    }
+
+    private void HandleEditorDetailClosed()
+    {
+        _selectedInteriorStructure = null;
+        UpdateHud();
+    }
+
     private string GetSelectedInteriorStructureText()
     {
-        if (_selectedInteriorStructure is null || !_selectedInteriorStructure.IsInsideTree())
+        if (_selectedInteriorStructure is null || !GodotObject.IsInstanceValid(_selectedInteriorStructure) || !_selectedInteriorStructure.IsInsideTree())
         {
             return _interiorInteractionMode == FactoryInteractionMode.Build
                 ? "建造预览中"
@@ -1926,6 +1967,7 @@ public partial class MobileFactoryDemo : Node3D
         var viewportSize = GetViewport().GetVisibleRect().Size;
         var rightPaneHover = _hud.IsPointerOverEditor(new Vector2(viewportSize.X - 80.0f, viewportSize.Y * 0.5f));
         var leftPaneHover = !_hud.IsPointerOverEditor(new Vector2(10.0f, 40.0f));
+        var detailWindowInTransit = await RunEditorDetailSmoke();
 
         var placedInterior = _mobileFactory.PlaceInteriorStructure(BuildPrototypeKind.Splitter, new Vector2I(2, 0), FacingDirection.East);
         var interiorPlacedExists = _mobileFactory.TryGetInteriorStructure(new Vector2I(2, 0), out var placedStructure) && placedStructure is SplitterStructure;
@@ -2006,15 +2048,117 @@ public partial class MobileFactoryDemo : Node3D
         await ToSignal(GetTree().CreateTimer(3.5f), SceneTreeTimer.SignalName.Timeout);
         var secondDelivered = _sinkB.DeliveredTotal;
 
-        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !rightPaneHover || !leftPaneHover || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !contextualRotateWorks || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !inputDeliveredWhileDeployed || !turretTrackedThreats || !mobileCombatActive || !recalled || !blockedOutputActive || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0)
+        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !rightPaneHover || !leftPaneHover || !detailWindowInTransit || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !contextualRotateWorks || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !inputDeliveredWhileDeployed || !turretTrackedThreats || !mobileCombatActive || !recalled || !blockedOutputActive || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0)
         {
-            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} rightHover={rightPaneHover} leftHover={leftPaneHover} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} contextualRotateWorks={contextualRotateWorks} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered}");
+            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} rightHover={rightPaneHover} leftHover={leftPaneHover} detailWindow={detailWindowInTransit} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} contextualRotateWorks={contextualRotateWorks} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"MOBILE_FACTORY_SMOKE_OK firstDelivered={firstDelivered} secondDelivered={secondDelivered} turretShots={(escortTurret?.ShotsFired ?? -1)} combatKills={_simulation.DefeatedEnemyCount}");
+        GD.Print($"MOBILE_FACTORY_SMOKE_OK firstDelivered={firstDelivered} secondDelivered={secondDelivered} detailWindow={detailWindowInTransit} turretShots={(escortTurret?.ShotsFired ?? -1)} combatKills={_simulation.DefeatedEnemyCount}");
         GetTree().Quit();
+    }
+
+    private async Task<bool> RunEditorDetailSmoke()
+    {
+        if (_mobileFactory is null || _hud is null || _simulation is null)
+        {
+            return false;
+        }
+
+        var placedRecipeProducer = _mobileFactory.PlaceInteriorStructure(BuildPrototypeKind.Producer, new Vector2I(2, 2), FacingDirection.East);
+        if (!placedRecipeProducer
+            || !_mobileFactory.TryGetInteriorStructure(new Vector2I(2, 2), out var recipeProducerStructure)
+            || recipeProducerStructure is not ProducerStructure recipeProducer
+            || !_mobileFactory.TryGetInteriorStructure(new Vector2I(1, 1), out var storageStructure)
+            || storageStructure is not StorageStructure storage
+            || !_mobileFactory.TryGetInteriorStructure(new Vector2I(3, 0), out var ammoAssemblerStructure)
+            || ammoAssemblerStructure is not AmmoAssemblerStructure ammoAssembler
+            || !_mobileFactory.TryGetInteriorStructure(new Vector2I(4, 0), out var turretStructure)
+            || turretStructure is not GunTurretStructure turret)
+        {
+            return false;
+        }
+
+        var producerRecipeChanged = recipeProducer.TrySetDetailRecipe("machine-parts");
+        var ammoRecipeChanged = ammoAssembler.TrySetDetailRecipe("high-velocity-ammo");
+
+        await ToSignal(GetTree().CreateTimer(2.4f), SceneTreeTimer.SignalName.Timeout);
+
+        _selectedInteriorStructure = storage;
+        UpdateHud();
+        var storageDetailVisible = _hud.IsDetailVisible && _hud.DetailTitleText.Contains("仓储", global::System.StringComparison.Ordinal);
+
+        var storageDetail = storage.GetDetailModel();
+        if (storageDetail.InventorySections.Count == 0)
+        {
+            return false;
+        }
+
+        var occupiedSlot = new Vector2I(-1, -1);
+        var emptySlot = new Vector2I(-1, -1);
+        for (var index = 0; index < storageDetail.InventorySections[0].Slots.Count; index++)
+        {
+            var slot = storageDetail.InventorySections[0].Slots[index];
+            if (slot.HasItem && occupiedSlot.X < 0)
+            {
+                occupiedSlot = slot.Position;
+            }
+            else if (!slot.HasItem && emptySlot.X < 0)
+            {
+                emptySlot = slot.Position;
+            }
+        }
+
+        var inventoryMoveWorked = occupiedSlot.X >= 0
+            && emptySlot.X >= 0
+            && storage.TryMoveDetailInventoryItem("storage-buffer", occupiedSlot, emptySlot);
+
+        var movedDetail = storage.GetDetailModel();
+        var targetNowOccupied = false;
+        for (var index = 0; index < movedDetail.InventorySections[0].Slots.Count; index++)
+        {
+            var slot = movedDetail.InventorySections[0].Slots[index];
+            if (slot.Position == emptySlot && slot.HasItem)
+            {
+                targetNowOccupied = true;
+                break;
+            }
+        }
+
+        _selectedInteriorStructure = recipeProducer;
+        UpdateHud();
+        recipeProducer.TryPeekProvidedItem(new Vector2I(3, 2), _simulation, out var producedItem);
+        var producerRecipeVerified = producerRecipeChanged
+            && _hud.IsDetailVisible
+            && _hud.DetailTitleText.Contains("生产器", global::System.StringComparison.Ordinal)
+            && producedItem?.ItemKind == FactoryItemKind.MachinePart;
+
+        _selectedInteriorStructure = turret;
+        UpdateHud();
+        var turretShowsHighVelocityAmmo = false;
+        var turretDetail = turret.GetDetailModel();
+        if (turretDetail.InventorySections.Count > 0)
+        {
+            for (var index = 0; index < turretDetail.InventorySections[0].Slots.Count; index++)
+            {
+                var slot = turretDetail.InventorySections[0].Slots[index];
+                if (slot.ItemLabel?.Contains("高速弹药", global::System.StringComparison.Ordinal) ?? false)
+                {
+                    turretShowsHighVelocityAmmo = true;
+                    break;
+                }
+            }
+        }
+
+        return storageDetailVisible
+            && inventoryMoveWorked
+            && targetNowOccupied
+            && producerRecipeVerified
+            && ammoRecipeChanged
+            && turret.BufferedAmmo > 0
+            && turretShowsHighVelocityAmmo
+            && _hud.IsEditorVisible;
     }
 
     private async void RunLargeScenarioSmokeChecks()
@@ -2170,7 +2314,7 @@ public partial class MobileFactoryDemo : Node3D
         {
             MobileFactoryControlMode.Observer => "观察模式：WASD/方向键移动相机 | 滚轮缩放 | Tab 返回工厂控制 | F 内部编辑",
             MobileFactoryControlMode.DeployPreview => "部署预览：左键确认 | Q/E/R 旋转朝向 | G/Esc 取消 | F 内部编辑",
-            _ => "工厂控制：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器里和 sandbox 一样，点按钮进建造，Esc 回交互"
+            _ => "工厂控制：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器里和 sandbox 一样，点按钮进建造，右键或 Esc 回交互，Delete 拆除悬停建筑"
         };
     }
 

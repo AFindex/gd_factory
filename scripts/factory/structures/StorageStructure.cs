@@ -3,14 +3,14 @@ using System.Collections.Generic;
 
 public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, IFactoryItemReceiver
 {
-    private readonly FactoryItemBuffer _buffer = new(FactoryConstants.StorageCapacity);
+    private readonly FactorySlottedItemInventory _inventory = new(4, 2);
     private readonly List<MeshInstance3D> _fillIndicators = new();
 
     private double _dispatchCooldown;
     private MeshInstance3D? _statusBeacon;
 
-    public int BufferedCount => _buffer.Count;
-    public int Capacity => _buffer.Capacity;
+    public int BufferedCount => _inventory.Count;
+    public int Capacity => _inventory.Capacity;
     public override string InspectionTitle => $"仓储 ({Cell.X}, {Cell.Y})";
     public override float MaxHealth => 54.0f;
 
@@ -29,7 +29,7 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
 
     public bool CanReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
-        return IsOrthogonallyAdjacent(Cell, sourceCell) && !_buffer.IsFull;
+        return IsOrthogonallyAdjacent(Cell, sourceCell) && !_inventory.IsFull;
     }
 
     public override bool CanAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
@@ -44,7 +44,7 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
             return false;
         }
 
-        return _buffer.TryEnqueue(item);
+        return _inventory.TryAddItem(item);
     }
 
     public override bool TryAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
@@ -61,7 +61,7 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
             return false;
         }
 
-        return _buffer.TryPeek(out item);
+        return _inventory.TryPeekFirst(out item);
     }
 
     public bool TryTakeProvidedItem(Vector2I requesterCell, SimulationController simulation, out FactoryItem? item)
@@ -73,7 +73,7 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
             return false;
         }
 
-        var removed = _buffer.TryDequeue(out item);
+        var removed = _inventory.TryTakeFirst(out item);
         if (removed)
         {
             _dispatchCooldown = FactoryConstants.StorageDispatchSeconds * 0.35f;
@@ -92,8 +92,8 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
         yield return $"容量：{BufferedCount}/{Capacity}";
         yield return $"输出方向：{FactoryDirection.ToLabel(Facing)}";
 
-        var snapshot = _buffer.Snapshot();
-        if (snapshot.Length == 0)
+        var snapshot = _inventory.Snapshot();
+        if (_inventory.IsEmpty)
         {
             yield return "库存为空";
             yield break;
@@ -101,22 +101,49 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
 
         for (var index = 0; index < snapshot.Length; index++)
         {
-            var item = snapshot[index];
-            yield return $"{index + 1}. {FactoryPresentation.GetItemLabel(item)}";
+            var state = snapshot[index];
+            var item = state.Item;
+            if (!state.HasItem || item is null)
+            {
+                continue;
+            }
+
+            yield return $"{index + 1}. {FactoryPresentation.GetItemLabel(item)} @ ({state.Position.X}, {state.Position.Y})";
         }
+    }
+
+    public override FactoryStructureDetailModel GetDetailModel()
+    {
+        var summaryLines = new List<string>();
+        foreach (var line in GetInspectionLines())
+        {
+            summaryLines.Add(line);
+        }
+
+        var inventorySection = CreateInventorySection("storage-buffer", "仓储库存", _inventory, true);
+        return new FactoryStructureDetailModel(
+            InspectionTitle,
+            "缓存物流与机械臂抓取槽位",
+            summaryLines,
+            new[] { inventorySection });
+    }
+
+    public override bool TryMoveDetailInventoryItem(string inventoryId, Vector2I fromSlot, Vector2I toSlot)
+    {
+        return inventoryId == "storage-buffer" && _inventory.TryMoveItem(fromSlot, toSlot);
     }
 
     public override void SimulationStep(SimulationController simulation, double stepSeconds)
     {
         _dispatchCooldown = Mathf.Max(0.0, (float)(_dispatchCooldown - stepSeconds));
-        if (_dispatchCooldown > 0.0f || !_buffer.TryPeek(out var item) || item is null)
+        if (_dispatchCooldown > 0.0f || !_inventory.TryPeekFirst(out var item) || item is null)
         {
             return;
         }
 
         if (simulation.TrySendItem(this, GetOutputCell(), item))
         {
-            _buffer.TryDequeue(out _);
+            _inventory.TryTakeFirst(out _);
             _dispatchCooldown = FactoryConstants.StorageDispatchSeconds;
             if (_statusBeacon is not null)
             {
@@ -136,7 +163,7 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
 
         if (_statusBeacon is not null)
         {
-            var targetScale = _buffer.IsEmpty ? Vector3.One : new Vector3(1.0f, 1.05f + fillRatio * 0.18f, 1.0f);
+            var targetScale = _inventory.IsEmpty ? Vector3.One : new Vector3(1.0f, 1.05f + fillRatio * 0.18f, 1.0f);
             _statusBeacon.Scale = _statusBeacon.Scale.Lerp(targetScale, tickAlpha * 0.45f);
         }
     }

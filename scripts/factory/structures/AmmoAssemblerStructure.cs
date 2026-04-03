@@ -6,10 +6,12 @@ public partial class AmmoAssemblerStructure : FactoryStructure, IFactoryItemProv
     private double _cooldown;
     private FactoryItem? _bufferedAmmo;
     private MeshInstance3D? _indicator;
+    private int _activeRecipeIndex;
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.AmmoAssembler;
     public override string Description => "持续生产弹药并向前方防线补给。";
     public override float MaxHealth => 62.0f;
+    private FactoryRecipeDefinition ActiveRecipe => FactoryRecipeCatalog.AmmoAssemblerRecipes[_activeRecipeIndex];
 
     public override void SimulationStep(SimulationController simulation, double stepSeconds)
     {
@@ -19,11 +21,11 @@ public partial class AmmoAssemblerStructure : FactoryStructure, IFactoryItemProv
             return;
         }
 
-        _bufferedAmmo ??= simulation.CreateItem(Kind, FactoryItemKind.AmmoMagazine);
+        _bufferedAmmo ??= simulation.CreateItem(Kind, ActiveRecipe.OutputItemKind);
         if (simulation.TrySendItem(this, GetOutputCell(), _bufferedAmmo))
         {
             _bufferedAmmo = null;
-            _cooldown = FactoryConstants.AmmoAssemblerSpawnSeconds;
+            _cooldown = ActiveRecipe.CycleSeconds;
             if (_indicator is not null)
             {
                 _indicator.Scale = new Vector3(1.1f, 1.18f, 1.1f);
@@ -53,7 +55,7 @@ public partial class AmmoAssemblerStructure : FactoryStructure, IFactoryItemProv
 
         item = previewItem;
         _bufferedAmmo = null;
-        _cooldown = FactoryConstants.AmmoAssemblerSpawnSeconds;
+        _cooldown = ActiveRecipe.CycleSeconds;
         return true;
     }
 
@@ -64,7 +66,72 @@ public partial class AmmoAssemblerStructure : FactoryStructure, IFactoryItemProv
             yield return line;
         }
 
+        yield return $"配方：{ActiveRecipe.DisplayName}";
+        yield return $"节拍：{ActiveRecipe.CycleSeconds:0.00} 秒/批";
         yield return $"产出：{(_bufferedAmmo is null ? "生产中" : FactoryPresentation.GetItemLabel(_bufferedAmmo))}";
+    }
+
+    public override FactoryStructureDetailModel GetDetailModel()
+    {
+        var summaryLines = new List<string>();
+        foreach (var line in GetInspectionLines())
+        {
+            summaryLines.Add(line);
+        }
+
+        var outputSlot = new FactoryInventorySlotModel(
+            Vector2I.Zero,
+            _bufferedAmmo is null ? null : _bufferedAmmo.Id.ToString(),
+            _bufferedAmmo is null ? null : FactoryPresentation.GetItemLabel(_bufferedAmmo),
+            _bufferedAmmo is null ? "当前缓存：生产中" : "当前缓存：待输出弹药",
+            _bufferedAmmo is null ? new Color("475569") : FactoryPresentation.GetItemAccentColor(_bufferedAmmo.ItemKind));
+
+        var inventorySection = new FactoryInventorySectionModel(
+            "ammo-output",
+            "弹药缓存",
+            new Vector2I(1, 1),
+            new[] { outputSlot },
+            false);
+
+        var recipeOptions = new List<FactoryRecipeOptionModel>();
+        for (var index = 0; index < FactoryRecipeCatalog.AmmoAssemblerRecipes.Count; index++)
+        {
+            var recipe = FactoryRecipeCatalog.AmmoAssemblerRecipes[index];
+            recipeOptions.Add(new FactoryRecipeOptionModel(
+                recipe.Id,
+                recipe.DisplayName,
+                $"{recipe.Summary} | 节拍 {recipe.CycleSeconds:0.00}s",
+                index == _activeRecipeIndex));
+        }
+
+        var recipeSection = new FactoryRecipeSectionModel(
+            "装配配方",
+            "切换当前弹药装配方案。",
+            ActiveRecipe.Id,
+            recipeOptions);
+
+        return new FactoryStructureDetailModel(
+            InspectionTitle,
+            "弹药产线缓存与配方",
+            summaryLines,
+            new[] { inventorySection },
+            recipeSection);
+    }
+
+    public override bool TrySetDetailRecipe(string recipeId)
+    {
+        for (var index = 0; index < FactoryRecipeCatalog.AmmoAssemblerRecipes.Count; index++)
+        {
+            if (FactoryRecipeCatalog.AmmoAssemblerRecipes[index].Id != recipeId)
+            {
+                continue;
+            }
+
+            _activeRecipeIndex = index;
+            return true;
+        }
+
+        return false;
     }
 
     public override void UpdateVisuals(float tickAlpha)

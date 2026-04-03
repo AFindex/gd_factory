@@ -1,7 +1,7 @@
 using Godot;
 using System.Collections.Generic;
 
-public abstract partial class FactoryStructure : Node3D, IFactoryInspectable
+public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IFactoryStructureDetailProvider
 {
     private bool _visualsBuilt;
     private Node3D? _combatOverlayRoot;
@@ -96,6 +96,30 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable
         yield return $"状态：{(IsDestroyed ? "已摧毁" : IsUnderAttack ? "遭受攻击" : "稳定")}";
         yield return $"朝向：{FactoryDirection.ToLabel(Facing)}";
         yield return Description;
+    }
+
+    public virtual FactoryStructureDetailModel GetDetailModel()
+    {
+        var summaryLines = new List<string>();
+        foreach (var line in GetInspectionLines())
+        {
+            summaryLines.Add(line);
+        }
+
+        return new FactoryStructureDetailModel(
+            InspectionTitle,
+            $"{DisplayName} 详情",
+            summaryLines);
+    }
+
+    public virtual bool TryMoveDetailInventoryItem(string inventoryId, Vector2I fromSlot, Vector2I toSlot)
+    {
+        return false;
+    }
+
+    public virtual bool TrySetDetailRecipe(string recipeId)
+    {
+        return false;
     }
 
     public Vector2I GetOutputCell()
@@ -206,6 +230,29 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable
 
         AddChild(mesh);
         return mesh;
+    }
+
+    protected static FactoryInventorySectionModel CreateInventorySection(
+        string inventoryId,
+        string title,
+        FactorySlottedItemInventory inventory,
+        bool allowMove)
+    {
+        var slots = new List<FactoryInventorySlotModel>();
+        var snapshot = inventory.Snapshot();
+        for (var index = 0; index < snapshot.Length; index++)
+        {
+            var state = snapshot[index];
+            var item = state.Item;
+            slots.Add(new FactoryInventorySlotModel(
+                state.Position,
+                item is null ? null : item.Id.ToString(),
+                item is null ? null : FactoryPresentation.GetItemLabel(item),
+                item is null ? "空槽位" : $"槽位 ({state.Position.X}, {state.Position.Y})",
+                item is null ? new Color("475569") : FactoryPresentation.GetItemAccentColor(item.ItemKind)));
+        }
+
+        return new FactoryInventorySectionModel(inventoryId, title, inventory.GridSize, slots, allowMove);
     }
 
     private void BuildCombatVisuals()

@@ -21,3 +21,4 @@ Thumbs.db
 
 # Export/build artifacts
 android/
+factory-smoke.err

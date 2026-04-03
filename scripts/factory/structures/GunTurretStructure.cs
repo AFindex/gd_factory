@@ -13,7 +13,7 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
 
     private readonly List<TracerState> _tracers = new();
 
-    private int _bufferedAmmo;
+    private readonly FactorySlottedItemInventory _ammoInventory = new(5, 2);
     private int _shotsFired;
     private double _attackCooldown;
     private float _targetYaw;
@@ -29,14 +29,14 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
     public override BuildPrototypeKind Kind => BuildPrototypeKind.GunTurret;
     public override string Description => "消耗弹药攻击靠近的敌人，没有补给时停止射击。";
     public override float MaxHealth => 82.0f;
-    public int BufferedAmmo => _bufferedAmmo;
+    public int BufferedAmmo => _ammoInventory.Count;
     public int ShotsFired => _shotsFired;
 
     public bool CanReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
-        return item.ItemKind == FactoryItemKind.AmmoMagazine
+        return FactoryPresentation.IsAmmoItem(item.ItemKind)
             && IsOrthogonallyAdjacent(Cell, sourceCell)
-            && _bufferedAmmo < FactoryConstants.GunTurretAmmoCapacity;
+            && !_ammoInventory.IsFull;
     }
 
     public bool TryReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
@@ -46,15 +46,14 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
             return false;
         }
 
-        _bufferedAmmo++;
-        return true;
+        return _ammoInventory.TryAddItem(item);
     }
 
     public override bool CanAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
-        return item.ItemKind == FactoryItemKind.AmmoMagazine
+        return FactoryPresentation.IsAmmoItem(item.ItemKind)
             && IsOrthogonallyAdjacent(Cell, sourceCell)
-            && _bufferedAmmo < FactoryConstants.GunTurretAmmoCapacity;
+            && !_ammoInventory.IsFull;
     }
 
     public override bool TryAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
@@ -78,7 +77,7 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
             _targetYaw = 0.0f;
         }
 
-        if (_bufferedAmmo <= 0 || _attackCooldown > 0.0 || target is null)
+        if (_ammoInventory.IsEmpty || _attackCooldown > 0.0 || target is null)
         {
             return;
         }
@@ -89,7 +88,7 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
         }
 
         target.ApplyDamage(FactoryConstants.GunTurretDamage, simulation);
-        _bufferedAmmo--;
+        _ammoInventory.TryTakeFirst(out _);
         _shotsFired++;
         _attackCooldown = FactoryConstants.GunTurretCooldownSeconds;
         _muzzleFlashRemaining = FactoryConstants.GunTurretMuzzleFlashLifetime;
@@ -112,10 +111,31 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
             yield return line;
         }
 
-        yield return $"弹药：{_bufferedAmmo}/{FactoryConstants.GunTurretAmmoCapacity}";
+        yield return $"弹药：{BufferedAmmo}/{FactoryConstants.GunTurretAmmoCapacity}";
         yield return $"射击：{_shotsFired}";
         yield return $"射程：{FactoryConstants.GunTurretRange:0.0}";
         yield return $"炮塔朝向：{Mathf.RadToDeg(_currentYaw):0}°";
+    }
+
+    public override FactoryStructureDetailModel GetDetailModel()
+    {
+        var summaryLines = new List<string>();
+        foreach (var line in GetInspectionLines())
+        {
+            summaryLines.Add(line);
+        }
+
+        var inventorySection = CreateInventorySection("turret-ammo", "弹药架", _ammoInventory, true);
+        return new FactoryStructureDetailModel(
+            InspectionTitle,
+            "炮塔弹药库存与火力状态",
+            summaryLines,
+            new[] { inventorySection });
+    }
+
+    public override bool TryMoveDetailInventoryItem(string inventoryId, Vector2I fromSlot, Vector2I toSlot)
+    {
+        return inventoryId == "turret-ammo" && _ammoInventory.TryMoveItem(fromSlot, toSlot);
     }
 
     public override void _Process(double delta)
@@ -149,7 +169,7 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
 
         if (_ammoIndicator is not null)
         {
-            var ratio = Mathf.Clamp((float)_bufferedAmmo / FactoryConstants.GunTurretAmmoCapacity, 0.0f, 1.0f);
+            var ratio = Mathf.Clamp((float)BufferedAmmo / FactoryConstants.GunTurretAmmoCapacity, 0.0f, 1.0f);
             _ammoIndicator.Scale = new Vector3(1.0f, Mathf.Max(0.15f, ratio), 1.0f);
         }
 

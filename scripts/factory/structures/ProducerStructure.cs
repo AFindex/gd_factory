@@ -1,12 +1,15 @@
 using Godot;
+using System.Collections.Generic;
 
 public partial class ProducerStructure : FactoryStructure, IFactoryItemProvider
 {
     private double _cooldown;
     private MeshInstance3D? _indicator;
     private FactoryItem? _bufferedItem;
+    private int _activeRecipeIndex;
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.Producer;
+    private FactoryRecipeDefinition ActiveRecipe => FactoryRecipeCatalog.ProducerRecipes[_activeRecipeIndex];
 
     public override string Description => "Spawner feeding one item forward every few ticks.";
 
@@ -19,11 +22,11 @@ public partial class ProducerStructure : FactoryStructure, IFactoryItemProvider
             return;
         }
 
-        _bufferedItem ??= simulation.CreateItem(Kind);
+        _bufferedItem ??= simulation.CreateItem(Kind, ActiveRecipe.OutputItemKind);
         if (simulation.TrySendItem(this, GetOutputCell(), _bufferedItem))
         {
             _bufferedItem = null;
-            _cooldown = FactoryConstants.ProducerSpawnSeconds;
+            _cooldown = ActiveRecipe.CycleSeconds;
             if (_indicator is not null)
             {
                 _indicator.Scale = new Vector3(1.0f, 1.2f, 1.0f);
@@ -55,8 +58,83 @@ public partial class ProducerStructure : FactoryStructure, IFactoryItemProvider
 
         item = previewItem;
         _bufferedItem = null;
-        _cooldown = FactoryConstants.ProducerSpawnSeconds;
+        _cooldown = ActiveRecipe.CycleSeconds;
         return true;
+    }
+
+    public override IEnumerable<string> GetInspectionLines()
+    {
+        foreach (var line in base.GetInspectionLines())
+        {
+            yield return line;
+        }
+
+        yield return $"配方：{ActiveRecipe.DisplayName}";
+        yield return $"节拍：{ActiveRecipe.CycleSeconds:0.00} 秒/件";
+        yield return $"产出：{(_bufferedItem is null ? "生产中" : FactoryPresentation.GetItemLabel(_bufferedItem))}";
+    }
+
+    public override FactoryStructureDetailModel GetDetailModel()
+    {
+        var summaryLines = new List<string>();
+        foreach (var line in GetInspectionLines())
+        {
+            summaryLines.Add(line);
+        }
+
+        var outputSlot = new FactoryInventorySlotModel(
+            Vector2I.Zero,
+            _bufferedItem is null ? null : _bufferedItem.Id.ToString(),
+            _bufferedItem is null ? null : FactoryPresentation.GetItemLabel(_bufferedItem),
+            _bufferedItem is null ? "当前缓存：空" : "当前缓存：待输出物料",
+            _bufferedItem is null ? new Color("475569") : FactoryPresentation.GetItemAccentColor(_bufferedItem.ItemKind));
+
+        var inventorySection = new FactoryInventorySectionModel(
+            "producer-output",
+            "输出缓存",
+            new Vector2I(1, 1),
+            new[] { outputSlot },
+            false);
+
+        var recipeOptions = new List<FactoryRecipeOptionModel>();
+        for (var index = 0; index < FactoryRecipeCatalog.ProducerRecipes.Count; index++)
+        {
+            var recipe = FactoryRecipeCatalog.ProducerRecipes[index];
+            recipeOptions.Add(new FactoryRecipeOptionModel(
+                recipe.Id,
+                recipe.DisplayName,
+                $"{recipe.Summary} | 节拍 {recipe.CycleSeconds:0.00}s",
+                index == _activeRecipeIndex));
+        }
+
+        var recipeSection = new FactoryRecipeSectionModel(
+            "生产配方",
+            "切换生产器当前输出类型。",
+            ActiveRecipe.Id,
+            recipeOptions);
+
+        return new FactoryStructureDetailModel(
+            InspectionTitle,
+            "生产缓存与配方切换",
+            summaryLines,
+            new[] { inventorySection },
+            recipeSection);
+    }
+
+    public override bool TrySetDetailRecipe(string recipeId)
+    {
+        for (var index = 0; index < FactoryRecipeCatalog.ProducerRecipes.Count; index++)
+        {
+            if (FactoryRecipeCatalog.ProducerRecipes[index].Id != recipeId)
+            {
+                continue;
+            }
+
+            _activeRecipeIndex = index;
+            return true;
+        }
+
+        return false;
     }
 
     public override void UpdateVisuals(float tickAlpha)

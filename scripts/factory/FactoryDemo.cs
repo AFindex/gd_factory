@@ -139,6 +139,9 @@ public partial class FactoryDemo : Node3D
 
         _hud = new FactoryHud();
         _hud.SelectionChanged += SelectBuildKind;
+        _hud.DetailInventoryMoveRequested += HandleDetailInventoryMoveRequested;
+        _hud.DetailRecipeSelected += HandleDetailRecipeSelected;
+        _hud.DetailClosed += HandleDetailWindowClosed;
         AddChild(_hud);
 
         AddChild(new LauncherNavigationOverlay());
@@ -655,6 +658,15 @@ public partial class FactoryDemo : Node3D
             _hud.SetInspection(null, null);
         }
 
+        if (_selectedStructure is not null && GodotObject.IsInstanceValid(_selectedStructure) && _selectedStructure.IsInsideTree() && _selectedStructure is IFactoryStructureDetailProvider detailProvider)
+        {
+            _hud.SetStructureDetails(detailProvider.GetDetailModel());
+        }
+        else
+        {
+            _hud.SetStructureDetails(null);
+        }
+
         var sinkStats = CollectSinkStats();
         _hud.SetSinkStats(sinkStats.deliveredTotal, sinkStats.deliveredRate, sinkStats.sinkCount);
         _hud.SetProfilerStats(
@@ -671,14 +683,14 @@ public partial class FactoryDemo : Node3D
             _simulation?.DestroyedStructureCount ?? 0);
 
         var modeNote = _interactionMode == FactoryInteractionMode.Build
-            ? "建造模式：左键放置，右键或 Delete 拆除，Esc 返回交互。"
+            ? "建造模式：左键放置，右键或 Esc 返回交互，Delete 拆除悬停建筑。"
             : "交互模式：左键查看建筑，数字键或按钮切换到对应建造工具。";
         _hud.SetNote(modeNote);
     }
 
     private string GetSelectedStructureText()
     {
-        if (_selectedStructure is null || !_selectedStructure.IsInsideTree())
+        if (_selectedStructure is null || !GodotObject.IsInstanceValid(_selectedStructure) || !_selectedStructure.IsInsideTree())
         {
             return "未选中建筑";
         }
@@ -781,15 +793,33 @@ public partial class FactoryDemo : Node3D
 
         if (_interactionMode == FactoryInteractionMode.Build)
         {
-            if (_hoveredStructure is not null)
-            {
-                RemoveStructure(_hoveredCell);
-            }
-
+            EnterInteractionMode();
             return;
         }
 
         _selectedStructure = null;
+    }
+
+    private void HandleDetailInventoryMoveRequested(string inventoryId, Vector2I fromSlot, Vector2I toSlot)
+    {
+        if (_selectedStructure is IFactoryStructureDetailProvider detailProvider && detailProvider.TryMoveDetailInventoryItem(inventoryId, fromSlot, toSlot))
+        {
+            UpdateHud();
+        }
+    }
+
+    private void HandleDetailRecipeSelected(string recipeId)
+    {
+        if (_selectedStructure is IFactoryStructureDetailProvider detailProvider && detailProvider.TrySetDetailRecipe(recipeId))
+        {
+            UpdateHud();
+        }
+    }
+
+    private void HandleDetailWindowClosed()
+    {
+        _selectedStructure = null;
+        UpdateHud();
     }
 
     private bool IsPointerOverUi()
@@ -999,6 +1029,7 @@ public partial class FactoryDemo : Node3D
         var bridgeLaneRecovered = await RunBridgeLaneIndependenceSmoke();
         var storageFlowVerified = await RunStorageInserterSmoke();
         var inspectionVerified = VerifyStorageInspectionPanel();
+        var detailWindowVerified = await RunStructureDetailSmoke();
         var combatVerified = await VerifyCombatScenarios();
 
         if (!placed
@@ -1011,14 +1042,15 @@ public partial class FactoryDemo : Node3D
             || !bridgeLaneRecovered
             || !storageFlowVerified
             || !inspectionVerified
+            || !detailWindowVerified
             || !combatVerified)
         {
-            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} structures={initialStructureCount} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} combat={combatVerified}");
+            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} structures={initialStructureCount} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} combat={combatVerified}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} combat={combatVerified}");
+        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} combat={combatVerified}");
         GetTree().Quit();
     }
 
@@ -1180,7 +1212,133 @@ public partial class FactoryDemo : Node3D
         UpdateHud();
 
         return _hud.InspectionTitleText.Contains("仓储", global::System.StringComparison.Ordinal)
-            && _hud.InspectionBodyText.Contains("容量", global::System.StringComparison.Ordinal);
+            && _hud.InspectionBodyText.Contains("容量", global::System.StringComparison.Ordinal)
+            && _hud.IsDetailVisible
+            && _hud.DetailTitleText.Contains("仓储", global::System.StringComparison.Ordinal);
+    }
+
+    private async Task<bool> RunStructureDetailSmoke()
+    {
+        if (_grid is null || _hud is null)
+        {
+            return false;
+        }
+
+        var requiredCells = new[]
+        {
+            new Vector2I(12, 12),
+            new Vector2I(13, 12),
+            new Vector2I(12, 14),
+            new Vector2I(12, 16),
+            new Vector2I(13, 16)
+        };
+
+        foreach (var cell in requiredCells)
+        {
+            if (!_grid.CanPlace(cell))
+            {
+                return false;
+            }
+        }
+
+        var feederProducer = PlaceStructure(BuildPrototypeKind.Producer, 12, 12, FacingDirection.East) as ProducerStructure;
+        var storage = PlaceStructure(BuildPrototypeKind.Storage, 13, 12, FacingDirection.East) as StorageStructure;
+        var recipeProducer = PlaceStructure(BuildPrototypeKind.Producer, 12, 14, FacingDirection.East) as ProducerStructure;
+        var ammoAssembler = PlaceStructure(BuildPrototypeKind.AmmoAssembler, 12, 16, FacingDirection.East) as AmmoAssemblerStructure;
+        var turret = PlaceStructure(BuildPrototypeKind.GunTurret, 13, 16, FacingDirection.East) as GunTurretStructure;
+
+        if (feederProducer is null || storage is null || recipeProducer is null || ammoAssembler is null || turret is null)
+        {
+            return false;
+        }
+
+        var producerRecipeChanged = recipeProducer.TrySetDetailRecipe("machine-parts");
+        var ammoRecipeChanged = ammoAssembler.TrySetDetailRecipe("high-velocity-ammo");
+
+        await ToSignal(GetTree().CreateTimer(3.0f), SceneTreeTimer.SignalName.Timeout);
+
+        if (turret.BufferedAmmo <= 0)
+        {
+            var injectedAmmo = _simulation!.CreateItem(BuildPrototypeKind.AmmoAssembler, FactoryItemKind.HighVelocityAmmo);
+            turret.TryReceiveProvidedItem(injectedAmmo, ammoAssembler.Cell, _simulation);
+        }
+
+        _selectedStructure = storage;
+        UpdateHud();
+        var storageDetailVisible = _hud.IsDetailVisible && _hud.DetailTitleText.Contains("仓储", global::System.StringComparison.Ordinal);
+
+        var storageDetail = storage.GetDetailModel();
+        var storageSection = storageDetail.InventorySections.Count > 0 ? storageDetail.InventorySections[0] : null;
+        var occupiedSlot = new Vector2I(-1, -1);
+        var emptySlot = new Vector2I(-1, -1);
+        if (storageSection is null)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < storageSection.Slots.Count; index++)
+        {
+            var slot = storageSection.Slots[index];
+            if (slot.HasItem && occupiedSlot.X < 0)
+            {
+                occupiedSlot = slot.Position;
+            }
+            else if (!slot.HasItem && emptySlot.X < 0)
+            {
+                emptySlot = slot.Position;
+            }
+        }
+
+        var storageMoved = occupiedSlot.X >= 0
+            && emptySlot.X >= 0
+            && storage.TryMoveDetailInventoryItem("storage-buffer", occupiedSlot, emptySlot);
+
+        var movedDetail = storage.GetDetailModel();
+        var movedSection = movedDetail.InventorySections[0];
+        var movedTargetOccupied = false;
+        for (var index = 0; index < movedSection.Slots.Count; index++)
+        {
+            var slot = movedSection.Slots[index];
+            if (slot.Position == emptySlot && slot.HasItem)
+            {
+                movedTargetOccupied = true;
+                break;
+            }
+        }
+
+        _selectedStructure = recipeProducer;
+        UpdateHud();
+        recipeProducer.TryPeekProvidedItem(new Vector2I(13, 14), _simulation!, out var producedItem);
+        var producerRecipeVerified = producerRecipeChanged
+            && _hud.IsDetailVisible
+            && _hud.DetailTitleText.Contains("生产器", global::System.StringComparison.Ordinal)
+            && producedItem?.ItemKind == FactoryItemKind.MachinePart;
+
+        _selectedStructure = turret;
+        UpdateHud();
+        var turretDetail = turret.GetDetailModel();
+        var turretHasAmmo = turret.BufferedAmmo > 0;
+        var turretShowsHighVelocityAmmo = false;
+        if (turretDetail.InventorySections.Count > 0)
+        {
+            var ammoSlots = turretDetail.InventorySections[0].Slots;
+            for (var index = 0; index < ammoSlots.Count; index++)
+            {
+                if (ammoSlots[index].ItemLabel?.Contains("高速弹药", global::System.StringComparison.Ordinal) ?? false)
+                {
+                    turretShowsHighVelocityAmmo = true;
+                    break;
+                }
+            }
+        }
+
+        return storageDetailVisible
+            && storageMoved
+            && movedTargetOccupied
+            && producerRecipeVerified
+            && ammoRecipeChanged
+            && turretHasAmmo
+            && turretShowsHighVelocityAmmo;
     }
 
     private async Task<bool> VerifyCombatScenarios()

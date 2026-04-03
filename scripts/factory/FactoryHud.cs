@@ -23,12 +23,18 @@ public partial class FactoryHud : CanvasLayer
     private PanelContainer? _inspectionPanel;
     private Label? _inspectionTitleLabel;
     private Label? _inspectionBodyLabel;
+    private FactoryStructureDetailWindow? _detailWindow;
 
     public event Action<BuildPrototypeKind?>? SelectionChanged;
+    public event Action<string, Vector2I, Vector2I>? DetailInventoryMoveRequested;
+    public event Action<string>? DetailRecipeSelected;
+    public event Action? DetailClosed;
 
     public string ProfilerText => _profilerLabel?.Text ?? string.Empty;
     public string InspectionTitleText => _inspectionTitleLabel?.Text ?? string.Empty;
     public string InspectionBodyText => _inspectionBodyLabel?.Text ?? string.Empty;
+    public bool IsDetailVisible => _detailWindow?.IsShowing ?? false;
+    public string DetailTitleText => _detailWindow?.CurrentTitleText ?? string.Empty;
 
     public override void _Ready()
     {
@@ -139,7 +145,13 @@ public partial class FactoryHud : CanvasLayer
         body.AddChild(_profilerLabel);
 
         body.AddChild(CreateDivider());
-        body.AddChild(CreateValueLabel("镜头 WASD/方向键 | 缩放 滚轮 | 朝向 Q/E | 数字键或面板按钮进建造 | Esc 返回交互 | 交互模式左键选中 | 建造模式左键放置 / 右键或 Delete 拆除", new Color("8EA4B8")));
+        body.AddChild(CreateValueLabel("镜头 WASD/方向键 | 缩放 滚轮 | 朝向 Q/E | 数字键或面板按钮进建造 | Esc 返回交互 | 交互模式左键选中 | 建造模式左键放置 / 右键退出建造 / Delete 拆除", new Color("8EA4B8")));
+
+        _detailWindow = new FactoryStructureDetailWindow();
+        _detailWindow.InventoryMoveRequested += (inventoryId, fromSlot, toSlot) => DetailInventoryMoveRequested?.Invoke(inventoryId, fromSlot, toSlot);
+        _detailWindow.RecipeSelected += recipeId => DetailRecipeSelected?.Invoke(recipeId);
+        _detailWindow.CloseRequested += () => DetailClosed?.Invoke();
+        root.AddChild(_detailWindow);
 
         SetMode(FactoryInteractionMode.Interact);
         SetBuildSelection(null, null);
@@ -288,6 +300,11 @@ public partial class FactoryHud : CanvasLayer
 
     public bool BlocksWorldInput(Control? control)
     {
+        if (_detailWindow?.BlocksInput(control) ?? false)
+        {
+            return true;
+        }
+
         if (control is null || _panel is null)
         {
             return false;
@@ -310,6 +327,23 @@ public partial class FactoryHud : CanvasLayer
         }
 
         return false;
+    }
+
+    public void SetStructureDetails(FactoryStructureDetailModel? model)
+    {
+        if (_detailWindow is null || _panel is null)
+        {
+            return;
+        }
+
+        if (model is null)
+        {
+            _detailWindow.HideWindow();
+            return;
+        }
+
+        var defaultPosition = new Vector2(_panel.Position.X + _panel.Size.X + 18.0f, 18.0f);
+        _detailWindow.ShowDetails(model, defaultPosition);
     }
 
     private bool IsInsidePanel(Control control)
@@ -351,6 +385,7 @@ public partial class FactoryHud : CanvasLayer
         _panel.Size = new Vector2(panelWidth, targetHeight);
         _chrome.Size = _panel.Size;
         _body.CustomMinimumSize = new Vector2(innerWidth, 0.0f);
+        _detailWindow?.SetDragBounds(new Rect2(Vector2.Zero, viewportSize));
     }
 
     private void CreateSelectionButton(Container parent, BuildPrototypeKind kind, string text)
