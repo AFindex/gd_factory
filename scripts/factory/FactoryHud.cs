@@ -423,7 +423,7 @@ public partial class FactoryHud : CanvasLayer
         _body.CustomMinimumSize = new Vector2(innerWidth, 0.0f);
         _detailWindow?.SetDragBounds(new Rect2(Vector2.Zero, viewportSize));
         var blueprintWidth = Mathf.Clamp(viewportSize.X * 0.24f, 260.0f, 340.0f);
-        var blueprintHeight = Mathf.Clamp(viewportSize.Y * 0.38f, 220.0f, viewportSize.Y - outerMargin * 2.0f);
+        var blueprintHeight = Mathf.Clamp(viewportSize.Y * 0.76f, 440.0f, viewportSize.Y - outerMargin * 2.0f);
         _blueprintPanel?.SetPanelRect(new Rect2(
             new Vector2(_panel.Position.X + _panel.Size.X + 18.0f, outerMargin),
             new Vector2(blueprintWidth, blueprintHeight)));

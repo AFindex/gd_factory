@@ -636,7 +636,7 @@ public partial class MobileFactoryHud : CanvasLayer
 
         _detailWindow?.SetDragBounds(new Rect2(_editorPanel.Position, _editorPanel.Size));
         var blueprintWidth = Mathf.Min(274.0f, EditorSidebarWidth - 18.0f);
-        var blueprintHeight = Mathf.Clamp(viewportSize.Y * 0.34f, 210.0f, viewportSize.Y - 120.0f);
+        var blueprintHeight = Mathf.Clamp(viewportSize.Y * 0.68f, 420.0f, viewportSize.Y - 28.0f);
         _blueprintPanel?.SetPanelRect(new Rect2(
             new Vector2(_editorPanel.Position.X + _editorPanel.Size.X - blueprintWidth - 14.0f, viewportSize.Y - blueprintHeight - 14.0f),
             new Vector2(blueprintWidth, blueprintHeight)));

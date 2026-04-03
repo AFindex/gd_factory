@@ -169,7 +169,7 @@ public partial class FactoryBlueprintPanel : PanelContainer
         {
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
             SizeFlagsVertical = Control.SizeFlags.ExpandFill,
-            CustomMinimumSize = new Vector2(0.0f, 108.0f),
+            CustomMinimumSize = new Vector2(0.0f, 216.0f),
             MouseFilter = Control.MouseFilterEnum.Stop
         };
         _blueprintList.ItemSelected += index =>

@@ -774,6 +774,7 @@ public sealed class MobileFactoryInstance
             new Vector3(0.0f, 0.18f, 0.0f),
             visibleInInterior: true,
             visibleInWorld: true));
+        root.AddChild(CreateInteriorGridLines(profile, interiorFloorLocalOffset));
 
         for (var i = 0; i < profile.AttachmentMounts.Count; i++)
         {
@@ -801,6 +802,59 @@ public sealed class MobileFactoryInstance
         mesh.SetLayerMaskValue(InteriorRenderLayer, visibleInInterior);
         mesh.SetLayerMaskValue(HullRenderLayer, visibleInWorld);
         return mesh;
+    }
+
+    private static Node3D CreateInteriorGridLines(MobileFactoryProfile profile, Vector3 interiorFloorLocalOffset)
+    {
+        var gridRoot = new Node3D
+        {
+            Name = "InteriorGridLines"
+        };
+        var lineThickness = Mathf.Max(0.018f, profile.InteriorCellSize * 0.035f);
+        var lineHeight = 0.014f;
+        var lineY = profile.InteriorFloorHeight + (lineHeight * 0.5f) + 0.006f;
+        var minX = interiorFloorLocalOffset.X + ((profile.InteriorMinCell.X - 0.5f) * profile.InteriorCellSize);
+        var maxX = interiorFloorLocalOffset.X + ((profile.InteriorMaxCell.X + 0.5f) * profile.InteriorCellSize);
+        var minZ = interiorFloorLocalOffset.Z + ((profile.InteriorMinCell.Y - 0.5f) * profile.InteriorCellSize);
+        var maxZ = interiorFloorLocalOffset.Z + ((profile.InteriorMaxCell.Y + 0.5f) * profile.InteriorCellSize);
+        var lineLengthX = maxX - minX;
+        var lineLengthZ = maxZ - minZ;
+        var lineMaterial = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.35f, 0.43f, 0.53f, 0.72f),
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            Roughness = 1.0f
+        };
+
+        for (var x = profile.InteriorMinCell.X; x <= profile.InteriorMaxCell.X + 1; x++)
+        {
+            var vertical = new MeshInstance3D
+            {
+                Name = $"InteriorGridV_{x}",
+                Mesh = new BoxMesh { Size = new Vector3(lineThickness, lineHeight, lineLengthZ) },
+                Position = new Vector3(interiorFloorLocalOffset.X + ((x - 0.5f) * profile.InteriorCellSize), lineY, (minZ + maxZ) * 0.5f),
+                MaterialOverride = lineMaterial
+            };
+            vertical.SetLayerMaskValue(InteriorRenderLayer, true);
+            vertical.SetLayerMaskValue(HullRenderLayer, false);
+            gridRoot.AddChild(vertical);
+        }
+
+        for (var y = profile.InteriorMinCell.Y; y <= profile.InteriorMaxCell.Y + 1; y++)
+        {
+            var horizontal = new MeshInstance3D
+            {
+                Name = $"InteriorGridH_{y}",
+                Mesh = new BoxMesh { Size = new Vector3(lineLengthX, lineHeight, lineThickness) },
+                Position = new Vector3((minX + maxX) * 0.5f, lineY, interiorFloorLocalOffset.Z + ((y - 0.5f) * profile.InteriorCellSize)),
+                MaterialOverride = lineMaterial
+            };
+            horizontal.SetLayerMaskValue(InteriorRenderLayer, true);
+            horizontal.SetLayerMaskValue(HullRenderLayer, false);
+            gridRoot.AddChild(horizontal);
+        }
+
+        return gridRoot;
     }
 
     private static MeshInstance3D CreateAttachmentMountMarker(MobileFactoryProfile profile, Vector3 interiorFloorLocalOffset, MobileFactoryAttachmentMount mount)
