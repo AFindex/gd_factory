@@ -57,6 +57,13 @@ public enum FactoryInteractionMode
     Delete
 }
 
+public enum FactoryBlueprintWorkflowMode
+{
+    None,
+    CaptureSelection,
+    ApplyPreview
+}
+
 public enum MobileFactoryInteractionPattern
 {
     None,

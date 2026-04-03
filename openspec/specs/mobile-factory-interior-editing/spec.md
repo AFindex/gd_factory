@@ -39,6 +39,17 @@ The game SHALL provide interior building controls that mirror the existing facto
 - **WHEN** the player is inside the mobile factory editor and chooses a boundary attachment, rotates it, and clicks a valid boundary mount
 - **THEN** the attachment is previewed and placed using the same style of build controls used for ordinary internal structures while still respecting its cross-boundary shape rules
 
+### Requirement: Interior interaction mode opens independent structure detail windows
+The game SHALL let the player inspect internal structures from the mobile factory editor by opening an independent detail window while the editor remains in interaction mode.
+
+#### Scenario: Left click opens details during interaction mode
+- **WHEN** the player is in the mobile factory interior editor interaction mode and left-clicks an existing internal structure
+- **THEN** the editor opens or focuses that structure's detail window and does not switch to build placement
+
+#### Scenario: Build mode still prioritizes placement actions
+- **WHEN** the player has selected an interior build tool and left-clicks inside the mobile factory editor
+- **THEN** the editor continues to treat the click as a build interaction and does not open a structure detail window
+
 ### Requirement: Interior editor shows ports and their external state
 The game SHALL display mobile factory boundary attachments inside the editor along with their direction, cross-boundary shape, and external connection state.
 
@@ -70,4 +81,3 @@ The game SHALL ensure the authored interior test layouts used in the large-scale
 #### Scenario: Interior layouts include recovery or consumption paths
 - **WHEN** the player inspects a mobile factory interior layout that is meant to run continuously in the large-scale scenario
 - **THEN** that layout includes sink, recycler, recirculation, or equivalent recovery structures that prevent the test case from depending on permanent belt blockage as its steady state
-

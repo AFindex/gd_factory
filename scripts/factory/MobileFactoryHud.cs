@@ -48,6 +48,7 @@ public partial class MobileFactoryHud : CanvasLayer
     private Label? _inspectionBodyLabel;
     private Label? _focusLabel;
     private FactoryStructureDetailWindow? _detailWindow;
+    private FactoryBlueprintPanel? _blueprintPanel;
     private Button? _observerButton;
     private Button? _deployButton;
     private readonly Dictionary<BuildPrototypeKind, Button> _paletteButtons = new();
@@ -71,6 +72,13 @@ public partial class MobileFactoryHud : CanvasLayer
     public event Action<string, Vector2I, Vector2I>? EditorDetailInventoryMoveRequested;
     public event Action<string>? EditorDetailRecipeSelected;
     public event Action? EditorDetailClosed;
+    public event Action? BlueprintCaptureFullRequested;
+    public event Action<string>? BlueprintSaveRequested;
+    public event Action<string>? BlueprintSelected;
+    public event Action? BlueprintApplyRequested;
+    public event Action? BlueprintConfirmRequested;
+    public event Action<string>? BlueprintDeleteRequested;
+    public event Action? BlueprintCancelRequested;
 
     public override void _Ready()
     {
@@ -369,6 +377,11 @@ public partial class MobileFactoryHud : CanvasLayer
         _detailWindow.ShowDetails(model, _editorPanel.Position + new Vector2(28.0f, 24.0f));
     }
 
+    public void SetBlueprintState(FactoryBlueprintPanelState state)
+    {
+        _blueprintPanel?.SetState(state);
+    }
+
     private void BuildInfoPanel()
     {
         var worldFocusFrame = new PanelContainer();
@@ -548,6 +561,17 @@ public partial class MobileFactoryHud : CanvasLayer
         _detailWindow.RecipeSelected += recipeId => EditorDetailRecipeSelected?.Invoke(recipeId);
         _detailWindow.CloseRequested += () => EditorDetailClosed?.Invoke();
         _overlayRoot?.AddChild(_detailWindow);
+
+        _blueprintPanel = new FactoryBlueprintPanel();
+        _blueprintPanel.CaptureSelectionRequested += () => { };
+        _blueprintPanel.CaptureFullRequested += () => BlueprintCaptureFullRequested?.Invoke();
+        _blueprintPanel.BlueprintSelected += blueprintId => BlueprintSelected?.Invoke(blueprintId);
+        _blueprintPanel.SaveCaptureRequested += name => BlueprintSaveRequested?.Invoke(name);
+        _blueprintPanel.ApplyActiveRequested += () => BlueprintApplyRequested?.Invoke();
+        _blueprintPanel.ConfirmApplyRequested += () => BlueprintConfirmRequested?.Invoke();
+        _blueprintPanel.DeleteSelectedRequested += blueprintId => BlueprintDeleteRequested?.Invoke(blueprintId);
+        _blueprintPanel.CancelRequested += () => BlueprintCancelRequested?.Invoke();
+        _overlayRoot?.AddChild(_blueprintPanel);
     }
 
     private void UpdateLayout()
@@ -589,6 +613,11 @@ public partial class MobileFactoryHud : CanvasLayer
         }
 
         _detailWindow?.SetDragBounds(new Rect2(_editorPanel.Position, _editorPanel.Size));
+        var blueprintWidth = Mathf.Min(274.0f, EditorSidebarWidth - 18.0f);
+        var blueprintHeight = Mathf.Clamp(viewportSize.Y * 0.34f, 210.0f, viewportSize.Y - 120.0f);
+        _blueprintPanel?.SetPanelRect(new Rect2(
+            new Vector2(_editorPanel.Position.X + _editorPanel.Size.X - blueprintWidth - 14.0f, viewportSize.Y - blueprintHeight - 14.0f),
+            new Vector2(blueprintWidth, blueprintHeight)));
         RefreshFocusVisuals();
     }
 

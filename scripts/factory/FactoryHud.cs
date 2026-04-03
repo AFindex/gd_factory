@@ -24,11 +24,19 @@ public partial class FactoryHud : CanvasLayer
     private Label? _inspectionTitleLabel;
     private Label? _inspectionBodyLabel;
     private FactoryStructureDetailWindow? _detailWindow;
+    private FactoryBlueprintPanel? _blueprintPanel;
 
     public event Action<BuildPrototypeKind?>? SelectionChanged;
     public event Action<string, Vector2I, Vector2I>? DetailInventoryMoveRequested;
     public event Action<string>? DetailRecipeSelected;
     public event Action? DetailClosed;
+    public event Action? BlueprintCaptureRequested;
+    public event Action<string>? BlueprintSaveRequested;
+    public event Action<string>? BlueprintSelected;
+    public event Action? BlueprintApplyRequested;
+    public event Action? BlueprintConfirmRequested;
+    public event Action<string>? BlueprintDeleteRequested;
+    public event Action? BlueprintCancelRequested;
 
     public string ProfilerText => _profilerLabel?.Text ?? string.Empty;
     public string InspectionTitleText => _inspectionTitleLabel?.Text ?? string.Empty;
@@ -145,13 +153,23 @@ public partial class FactoryHud : CanvasLayer
         body.AddChild(_profilerLabel);
 
         body.AddChild(CreateDivider());
-        body.AddChild(CreateValueLabel("镜头 WASD/方向键 | 缩放 滚轮 | 朝向 Q/E | 数字键或面板按钮进建造 | X 删除模式 | Esc 返回交互 | 交互模式左键选中 | 建造模式左键放置 / 右键退出建造 / Delete 拆除", new Color("8EA4B8")));
+        body.AddChild(CreateValueLabel("镜头 WASD/方向键 | 缩放 滚轮 | 朝向 Q/E | 数字键或面板按钮进建造 | X 删除模式 | Esc 返回交互 | 交互模式左键选中 / Shift+左键框选蓝图 | 建造模式左键放置 / 右键退出建造 / Delete 拆除", new Color("8EA4B8")));
 
         _detailWindow = new FactoryStructureDetailWindow();
         _detailWindow.InventoryMoveRequested += (inventoryId, fromSlot, toSlot) => DetailInventoryMoveRequested?.Invoke(inventoryId, fromSlot, toSlot);
         _detailWindow.RecipeSelected += recipeId => DetailRecipeSelected?.Invoke(recipeId);
         _detailWindow.CloseRequested += () => DetailClosed?.Invoke();
         root.AddChild(_detailWindow);
+
+        _blueprintPanel = new FactoryBlueprintPanel();
+        _blueprintPanel.CaptureSelectionRequested += () => BlueprintCaptureRequested?.Invoke();
+        _blueprintPanel.BlueprintSelected += blueprintId => BlueprintSelected?.Invoke(blueprintId);
+        _blueprintPanel.SaveCaptureRequested += name => BlueprintSaveRequested?.Invoke(name);
+        _blueprintPanel.ApplyActiveRequested += () => BlueprintApplyRequested?.Invoke();
+        _blueprintPanel.ConfirmApplyRequested += () => BlueprintConfirmRequested?.Invoke();
+        _blueprintPanel.DeleteSelectedRequested += blueprintId => BlueprintDeleteRequested?.Invoke(blueprintId);
+        _blueprintPanel.CancelRequested += () => BlueprintCancelRequested?.Invoke();
+        root.AddChild(_blueprintPanel);
 
         SetMode(FactoryInteractionMode.Interact);
         SetBuildSelection(null, null);
@@ -313,6 +331,11 @@ public partial class FactoryHud : CanvasLayer
             return true;
         }
 
+        if (_blueprintPanel?.BlocksInput(control) ?? false)
+        {
+            return true;
+        }
+
         if (control is null || _panel is null)
         {
             return false;
@@ -352,6 +375,11 @@ public partial class FactoryHud : CanvasLayer
 
         var defaultPosition = new Vector2(_panel.Position.X + _panel.Size.X + 18.0f, 18.0f);
         _detailWindow.ShowDetails(model, defaultPosition);
+    }
+
+    public void SetBlueprintState(FactoryBlueprintPanelState state)
+    {
+        _blueprintPanel?.SetState(state);
     }
 
     private bool IsInsidePanel(Control control)
@@ -394,6 +422,11 @@ public partial class FactoryHud : CanvasLayer
         _chrome.Size = _panel.Size;
         _body.CustomMinimumSize = new Vector2(innerWidth, 0.0f);
         _detailWindow?.SetDragBounds(new Rect2(Vector2.Zero, viewportSize));
+        var blueprintWidth = Mathf.Clamp(viewportSize.X * 0.24f, 260.0f, 340.0f);
+        var blueprintHeight = Mathf.Clamp(viewportSize.Y * 0.38f, 220.0f, viewportSize.Y - outerMargin * 2.0f);
+        _blueprintPanel?.SetPanelRect(new Rect2(
+            new Vector2(_panel.Position.X + _panel.Size.X + 18.0f, outerMargin),
+            new Vector2(blueprintWidth, blueprintHeight)));
     }
 
     private void CreateSelectionButton(Container parent, BuildPrototypeKind kind, string text)

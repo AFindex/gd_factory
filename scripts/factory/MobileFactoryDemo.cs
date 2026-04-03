@@ -75,6 +75,7 @@ public partial class MobileFactoryDemo : Node3D
     private Node3D? _enemyRoot;
     private Node3D? _worldPreviewRoot;
     private Node3D? _interiorPreviewRoot;
+    private Node3D? _interiorBlueprintPreviewRoot;
     private Camera3D? _editorCamera;
     private FactoryCombatDirector? _combatDirector;
     private readonly List<MeshInstance3D> _worldPreviewFootprintMeshes = new();
@@ -84,6 +85,8 @@ public partial class MobileFactoryDemo : Node3D
     private MeshInstance3D? _interiorPreviewArrow;
     private readonly List<MeshInstance3D> _interiorPreviewBoundaryMeshes = new();
     private readonly List<MeshInstance3D> _interiorPreviewExteriorMeshes = new();
+    private readonly List<MeshInstance3D> _interiorBlueprintPreviewMeshes = new();
+    private FactoryBlueprintSiteAdapter? _interiorBlueprintSite;
 
     private MobileFactoryInstance? _mobileFactory;
     private readonly List<MobileFactoryInstance> _backgroundFactories = new();
@@ -116,6 +119,9 @@ public partial class MobileFactoryDemo : Node3D
     private bool _deleteInteriorDragActive;
     private Vector2I _deleteInteriorDragStartCell;
     private Vector2I _deleteInteriorDragCurrentCell;
+    private FactoryBlueprintWorkflowMode _blueprintMode;
+    private FactoryBlueprintRecord? _pendingBlueprintCapture;
+    private FactoryBlueprintApplyPlan? _interiorBlueprintPlan;
     private string _interiorPreviewMessage = "按 F 展开内部编辑区，然后把鼠标移入右侧区域开始调整移动工厂内部布局。";
     private bool _editorOpen;
     private bool _hoveringEditorPane;
@@ -194,6 +200,28 @@ public partial class MobileFactoryDemo : Node3D
         if (@event is not InputEventMouseButton mouseButton)
         {
             return;
+        }
+
+        if (_blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && CanUseEditorInput())
+        {
+            if (!mouseButton.Pressed)
+            {
+                return;
+            }
+
+            if (mouseButton.ButtonIndex == MouseButton.Left)
+            {
+                ConfirmInteriorBlueprintApply();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (mouseButton.ButtonIndex == MouseButton.Right)
+            {
+                CancelInteriorBlueprintWorkflow();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
         }
 
         if (CanUseEditorViewportInput())
@@ -299,6 +327,9 @@ public partial class MobileFactoryDemo : Node3D
         AddChild(_interiorPreviewRoot);
         CreateInteriorPreviewVisuals();
 
+        _interiorBlueprintPreviewRoot = new Node3D { Name = "InteriorBlueprintPreviewRoot", Visible = false };
+        AddChild(_interiorBlueprintPreviewRoot);
+
         _simulation = new SimulationController { Name = "SimulationController" };
         AddChild(_simulation);
 
@@ -316,6 +347,13 @@ public partial class MobileFactoryDemo : Node3D
         _hud.EditorDetailInventoryMoveRequested += HandleEditorDetailInventoryMoveRequested;
         _hud.EditorDetailRecipeSelected += HandleEditorDetailRecipeSelected;
         _hud.EditorDetailClosed += HandleEditorDetailClosed;
+        _hud.BlueprintCaptureFullRequested += CaptureCurrentInteriorBlueprint;
+        _hud.BlueprintSaveRequested += HandleInteriorBlueprintSaveRequested;
+        _hud.BlueprintSelected += HandleInteriorBlueprintSelected;
+        _hud.BlueprintApplyRequested += EnterInteriorBlueprintApplyMode;
+        _hud.BlueprintConfirmRequested += ConfirmInteriorBlueprintApply;
+        _hud.BlueprintDeleteRequested += HandleInteriorBlueprintDeleteRequested;
+        _hud.BlueprintCancelRequested += CancelInteriorBlueprintWorkflow;
         AddChild(_hud);
 
         AddChild(new LauncherNavigationOverlay());
@@ -401,6 +439,7 @@ public partial class MobileFactoryDemo : Node3D
                 _mobileFactory.Profile.FootprintOffsetsEast.Count,
                 Mathf.Max(1, _mobileFactory.Profile.AttachmentMounts.Count));
             UpdateInteriorPreviewSizing();
+            _interiorBlueprintSite = CreateInteriorBlueprintSiteAdapter();
         }
     }
 
@@ -820,6 +859,17 @@ public partial class MobileFactoryDemo : Node3D
             return false;
         }
 
+        if (_blueprintMode != FactoryBlueprintWorkflowMode.None)
+        {
+            if (keyEvent.Keycode == Key.Escape)
+            {
+                CancelInteriorBlueprintWorkflow();
+                return true;
+            }
+
+            return false;
+        }
+
         if (keyEvent.Keycode == Key.X)
         {
             if (_interiorInteractionMode == FactoryInteractionMode.Delete)
@@ -938,7 +988,10 @@ public partial class MobileFactoryDemo : Node3D
         _canPlaceInteriorCell = false;
         _canDeleteInteriorCell = false;
         _hoveredInteriorStructure = null;
-        _interiorPreviewMessage = _interiorInteractionMode switch
+        _interiorBlueprintPlan = null;
+        _interiorPreviewMessage = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview
+            ? "蓝图预览：确认后将当前蓝图应用到内部布局。"
+            : _interiorInteractionMode switch
         {
             FactoryInteractionMode.Build => "把鼠标移入右侧编辑区，可直接调整移动工厂内部布局。",
             FactoryInteractionMode.Delete => "删除模式：左键删除内部建筑，按住 Shift 左键拖拽可框选删除。",
@@ -947,6 +1000,10 @@ public partial class MobileFactoryDemo : Node3D
 
         if (!_editorOpen || !_hoveringEditorViewport || _mobileFactory is null || _editorCamera is null)
         {
+            if (_blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview)
+            {
+                UpdateInteriorBlueprintPlan();
+            }
             return;
         }
 
@@ -962,6 +1019,16 @@ public partial class MobileFactoryDemo : Node3D
         if (!_hasHoveredInteriorCell)
         {
             _interiorPreviewMessage = "当前鼠标不在移动工厂内部可编辑网格上。";
+            if (_blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview)
+            {
+                UpdateInteriorBlueprintPlan();
+            }
+            return;
+        }
+
+        if (_blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview)
+        {
+            UpdateInteriorBlueprintPlan();
             return;
         }
 
@@ -1092,6 +1159,14 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
+        UpdateInteriorBlueprintPreview();
+
+        if (_blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview)
+        {
+            _interiorPreviewRoot.Visible = false;
+            return;
+        }
+
         _interiorPreviewRoot.Visible = _editorOpen
             && _hoveringEditorViewport
             && _hasHoveredInteriorCell
@@ -1185,6 +1260,37 @@ public partial class MobileFactoryDemo : Node3D
             mesh.Visible = true;
             mesh.GlobalPosition = _mobileFactory.InteriorSite.CellToWorld(exteriorCells[i]) + new Vector3(0.0f, 0.08f, 0.0f);
             ApplyPreviewColor(mesh, tint.Lightened(0.1f));
+        }
+    }
+
+    private void UpdateInteriorBlueprintPreview()
+    {
+        if (_mobileFactory is null || _interiorBlueprintPreviewRoot is null)
+        {
+            return;
+        }
+
+        foreach (var mesh in _interiorBlueprintPreviewMeshes)
+        {
+            mesh.Visible = false;
+        }
+
+        _interiorBlueprintPreviewRoot.Visible = _editorOpen && _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && _interiorBlueprintPlan is not null;
+        if (!_interiorBlueprintPreviewRoot.Visible || _interiorBlueprintPlan is null)
+        {
+            return;
+        }
+
+        EnsureInteriorBlueprintPreviewCapacity(_interiorBlueprintPlan.Entries.Count);
+        for (var index = 0; index < _interiorBlueprintPlan.Entries.Count; index++)
+        {
+            var entry = _interiorBlueprintPlan.Entries[index];
+            var mesh = _interiorBlueprintPreviewMeshes[index];
+            mesh.Visible = true;
+            mesh.Position = _mobileFactory.InteriorSite.CellToWorld(entry.TargetCell) + new Vector3(0.0f, 0.06f, 0.0f);
+            ApplyPreviewColor(mesh, entry.IsValid
+                ? new Color(0.35f, 0.95f, 0.55f, 0.36f)
+                : new Color(1.0f, 0.35f, 0.35f, 0.36f));
         }
     }
 
@@ -1369,6 +1475,43 @@ public partial class MobileFactoryDemo : Node3D
 
         _hud.SetEditorState(_editorOpen, _mobileFactory.State, CountEditableInteriorStructures(), _interiorInteractionMode);
         _hud.SetHintText(GetHintText());
+        _hud.SetBlueprintState(BuildInteriorBlueprintPanelState());
+    }
+
+    private FactoryBlueprintPanelState BuildInteriorBlueprintPanelState()
+    {
+        var activeBlueprint = FactoryBlueprintLibrary.GetActive();
+        var modeText = _blueprintMode switch
+        {
+            FactoryBlueprintWorkflowMode.ApplyPreview => "蓝图模式：内部应用预览",
+            _ => "蓝图模式：待命"
+        };
+        var activeText = activeBlueprint is null
+            ? "当前蓝图：未选择"
+            : $"当前蓝图：{activeBlueprint.DisplayName} ({activeBlueprint.GetSummaryText()})";
+        var captureSummary = _pendingBlueprintCapture is null
+            ? "可将当前内部布局保存为蓝图。"
+            : $"待保存：{_pendingBlueprintCapture.DisplayName} | {_pendingBlueprintCapture.GetSummaryText()}";
+        var issueText = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && _interiorBlueprintPlan is not null
+            ? _interiorBlueprintPlan.GetIssueSummary()
+            : "保存当前布局，或从蓝图库选择一个内部蓝图进行预览。";
+
+        return new FactoryBlueprintPanelState
+        {
+            IsVisible = _editorOpen,
+            ModeText = modeText,
+            ActiveBlueprintText = activeText,
+            CaptureSummaryText = captureSummary,
+            IssueText = issueText,
+            SuggestedName = _pendingBlueprintCapture?.DisplayName ?? string.Empty,
+            PendingCaptureId = _pendingBlueprintCapture?.Id,
+            ActiveBlueprintId = activeBlueprint?.Id,
+            AllowSelectionCapture = false,
+            AllowFullCapture = true,
+            CanSaveCapture = _pendingBlueprintCapture is not null,
+            CanConfirmApply = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && _interiorBlueprintPlan?.IsValid == true,
+            Blueprints = FactoryBlueprintLibrary.GetAll()
+        };
     }
 
     private void ToggleObserverMode()
@@ -1703,6 +1846,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private void SelectInteriorBuildKind(BuildPrototypeKind? kind)
     {
+        CancelInteriorBlueprintWorkflow(clearActiveBlueprint: false);
         if (!kind.HasValue)
         {
             EnterInteriorInteractionMode();
@@ -1722,6 +1866,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private void EnterInteriorDeleteMode()
     {
+        CancelInteriorBlueprintWorkflow(clearActiveBlueprint: false);
         _selectedInteriorStructure = null;
         _interiorInteractionMode = FactoryInteractionMode.Delete;
         _deleteInteriorDragActive = false;
@@ -1849,6 +1994,225 @@ public partial class MobileFactoryDemo : Node3D
         {
             _hoveredInteriorCell = cellsToDelete[index];
             RemoveInteriorStructure();
+        }
+    }
+
+    private void UpdateInteriorBlueprintPlan()
+    {
+        if (_interiorBlueprintSite is null)
+        {
+            _interiorPreviewMessage = "蓝图预览不可用：缺少内部站点。";
+            _interiorBlueprintPlan = null;
+            return;
+        }
+
+        var activeBlueprint = FactoryBlueprintLibrary.GetActive();
+        if (activeBlueprint is null)
+        {
+            _interiorPreviewMessage = "请先从蓝图库中选择一个内部蓝图。";
+            _interiorBlueprintPlan = null;
+            return;
+        }
+
+        var anchor = _interiorBlueprintSite.GetDefaultApplyAnchor(activeBlueprint);
+        _interiorBlueprintPlan = FactoryBlueprintPlanner.CreatePlan(activeBlueprint, _interiorBlueprintSite, anchor);
+        _interiorPreviewMessage = _interiorBlueprintPlan.IsValid
+            ? $"蓝图 {activeBlueprint.DisplayName} 可应用到当前内部布局。"
+            : _interiorBlueprintPlan.GetIssueSummary();
+    }
+
+    private void EnsureInteriorBlueprintPreviewCapacity(int count)
+    {
+        if (_interiorBlueprintPreviewRoot is null)
+        {
+            return;
+        }
+
+        while (_interiorBlueprintPreviewMeshes.Count < count)
+        {
+            var mesh = new MeshInstance3D
+            {
+                Name = $"InteriorBlueprintPreview_{_interiorBlueprintPreviewMeshes.Count}",
+                Visible = false,
+                Mesh = new BoxMesh
+                {
+                    Size = new Vector3(_mobileFactory?.InteriorSite.CellSize * 0.82f ?? 0.82f, 0.08f, _mobileFactory?.InteriorSite.CellSize * 0.82f ?? 0.82f)
+                }
+            };
+            _interiorBlueprintPreviewRoot.AddChild(mesh);
+            _interiorBlueprintPreviewMeshes.Add(mesh);
+        }
+    }
+
+    private FactoryBlueprintSiteAdapter CreateInteriorBlueprintSiteAdapter()
+    {
+        return new FactoryBlueprintSiteAdapter(
+            FactoryBlueprintSiteKind.MobileInterior,
+            _mobileFactory!.InteriorSite.SiteId,
+            "移动工厂内部",
+            _mobileFactory.InteriorMinCell,
+            _mobileFactory.InteriorMaxCell,
+            () => _mobileFactory.InteriorSite.GetStructures(),
+            ValidateInteriorBlueprintPlacement,
+            (kind, cell, facing) =>
+            {
+                if (!_mobileFactory.PlaceInteriorStructure(kind, cell, facing))
+                {
+                    return null;
+                }
+
+                _mobileFactory.TryGetInteriorStructure(cell, out var structure);
+                return structure;
+            },
+            cell => _mobileFactory.RemoveInteriorStructure(cell),
+            defaultApplyAnchor: record =>
+            {
+                var anchor = record.SuggestedAnchorCell;
+                if (_mobileFactory.InteriorSite.IsInBounds(anchor))
+                {
+                    return anchor;
+                }
+
+                return _mobileFactory.InteriorMinCell;
+            },
+            validateCompatibility: record =>
+            {
+                if (record.BoundsSize.X > _mobileFactory.Profile.InteriorWidth || record.BoundsSize.Y > _mobileFactory.Profile.InteriorHeight)
+                {
+                    return "该蓝图尺寸超过当前移动工厂内部可用边界。";
+                }
+
+                return null;
+            });
+    }
+
+    private string? ValidateInteriorBlueprintPlacement(FactoryBlueprintStructureEntry entry, Vector2I targetCell, FacingDirection targetFacing)
+    {
+        if (_mobileFactory is null)
+        {
+            return "移动工厂内部不可用。";
+        }
+
+        var definition = FactoryStructureFactory.GetDefinition(entry.Kind);
+        if (!definition.AllowMobileInterior)
+        {
+            return $"{FactoryPresentation.GetKindLabel(entry.Kind)} 不能放在移动工厂内部。";
+        }
+
+        if (!_mobileFactory.InteriorSite.IsInBounds(targetCell))
+        {
+            return "目标格超出内部编辑范围。";
+        }
+
+        if (!_mobileFactory.CanPlaceInterior(entry.Kind, targetCell, targetFacing))
+        {
+            return MobileFactoryBoundaryAttachmentCatalog.IsAttachmentKind(entry.Kind)
+                ? "该蓝图需要的边界 attachment 挂点在当前内部不可用。"
+                : "目标格已被占用。";
+        }
+
+        return null;
+    }
+
+    private void CaptureCurrentInteriorBlueprint()
+    {
+        if (_interiorBlueprintSite is null)
+        {
+            return;
+        }
+
+        _pendingBlueprintCapture = FactoryBlueprintCaptureService.CaptureFullSite(
+            _interiorBlueprintSite,
+            $"内部蓝图 {CountEditableInteriorStructures()} 件");
+    }
+
+    private void HandleInteriorBlueprintSaveRequested(string name)
+    {
+        if (_pendingBlueprintCapture is null)
+        {
+            return;
+        }
+
+        var displayName = string.IsNullOrWhiteSpace(name)
+            ? _pendingBlueprintCapture.DisplayName
+            : name.Trim();
+        var savedRecord = new FactoryBlueprintRecord(
+            _pendingBlueprintCapture.Id,
+            displayName,
+            _pendingBlueprintCapture.SourceSiteKind,
+            _pendingBlueprintCapture.SuggestedAnchorCell,
+            _pendingBlueprintCapture.BoundsSize,
+            _pendingBlueprintCapture.Entries,
+            _pendingBlueprintCapture.RequiredAttachments);
+        FactoryBlueprintLibrary.AddOrUpdate(savedRecord);
+        FactoryBlueprintLibrary.SelectActive(savedRecord.Id);
+        _pendingBlueprintCapture = null;
+        _blueprintMode = FactoryBlueprintWorkflowMode.None;
+        _interiorPreviewMessage = $"已保存蓝图：{savedRecord.DisplayName}";
+    }
+
+    private void HandleInteriorBlueprintSelected(string blueprintId)
+    {
+        FactoryBlueprintLibrary.SelectActive(blueprintId);
+        if (_blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview)
+        {
+            UpdateInteriorBlueprintPlan();
+        }
+    }
+
+    private void EnterInteriorBlueprintApplyMode()
+    {
+        if (!_editorOpen || FactoryBlueprintLibrary.GetActive() is null)
+        {
+            return;
+        }
+
+        EnterInteriorInteractionMode();
+        _pendingBlueprintCapture = null;
+        _blueprintMode = FactoryBlueprintWorkflowMode.ApplyPreview;
+        UpdateInteriorBlueprintPlan();
+    }
+
+    private void ConfirmInteriorBlueprintApply()
+    {
+        if (_interiorBlueprintSite is null || _interiorBlueprintPlan is null)
+        {
+            return;
+        }
+
+        if (!FactoryBlueprintPlanner.CommitPlan(_interiorBlueprintPlan, _interiorBlueprintSite))
+        {
+            _interiorPreviewMessage = "内部蓝图应用失败，请先清理冲突格或边界挂点。";
+            return;
+        }
+
+        _selectedInteriorStructure = null;
+        _interiorPreviewMessage = $"已应用蓝图：{_interiorBlueprintPlan.Blueprint.DisplayName}";
+    }
+
+    private void HandleInteriorBlueprintDeleteRequested(string blueprintId)
+    {
+        FactoryBlueprintLibrary.Remove(blueprintId);
+        if (FactoryBlueprintLibrary.GetActive() is null)
+        {
+            _interiorBlueprintPlan = null;
+        }
+    }
+
+    private void CancelInteriorBlueprintWorkflow()
+    {
+        CancelInteriorBlueprintWorkflow(clearActiveBlueprint: false);
+    }
+
+    private void CancelInteriorBlueprintWorkflow(bool clearActiveBlueprint)
+    {
+        _blueprintMode = FactoryBlueprintWorkflowMode.None;
+        _pendingBlueprintCapture = null;
+        _interiorBlueprintPlan = null;
+
+        if (clearActiveBlueprint)
+        {
+            FactoryBlueprintLibrary.ClearActive();
         }
     }
 
@@ -2192,6 +2556,13 @@ public partial class MobileFactoryDemo : Node3D
         var rightPaneHover = _hud.IsPointerOverEditor(new Vector2(viewportSize.X - 80.0f, viewportSize.Y * 0.5f));
         var leftPaneHover = !_hud.IsPointerOverEditor(new Vector2(10.0f, 40.0f));
         var detailWindowInTransit = await RunEditorDetailSmoke();
+        var blueprintWorkflowInTransit = await RunInteriorBlueprintSmoke();
+        _mobileFactory.TryGetInteriorStructure(new Vector2I(1, 3), out presetInputSinkStructure);
+        inputSinkInTransit = presetInputSinkStructure as SinkStructure;
+        inputSinkTransitBaseline = inputSinkInTransit?.DeliveredTotal ?? 0;
+        _mobileFactory.TryGetInteriorStructure(new Vector2I(4, 0), out escortTurretStructure);
+        escortTurret = escortTurretStructure as GunTurretStructure;
+        turretShotsBeforeDeploy = escortTurret?.ShotsFired ?? 0;
 
         var placedInterior = _mobileFactory.PlaceInteriorStructure(BuildPrototypeKind.Splitter, new Vector2I(2, 0), FacingDirection.East);
         var interiorPlacedExists = _mobileFactory.TryGetInteriorStructure(new Vector2I(2, 0), out var placedStructure) && placedStructure is SplitterStructure;
@@ -2242,7 +2613,7 @@ public partial class MobileFactoryDemo : Node3D
         var miniatureSyncedDeployed = placedStructure is not null
             && placedStructure.GlobalPosition.DistanceTo(_mobileFactory.InteriorSite.CellToWorld(new Vector2I(2, 0))) < 0.05f;
         var firstDelivered = _sinkA.DeliveredTotal;
-        await ToSignal(GetTree().CreateTimer(2.0f), SceneTreeTimer.SignalName.Timeout);
+        await ToSignal(GetTree().CreateTimer(4.0f), SceneTreeTimer.SignalName.Timeout);
         var inputAttachmentTransit = _mobileFactory.CountAttachmentTransitItems(BuildPrototypeKind.InputPort);
         var inputDeliveredWhileDeployed = (inputSinkInTransit?.DeliveredTotal ?? 0) > inputSinkTransitBaseline;
         var turretTrackedThreats = (escortTurret?.ShotsFired ?? 0) > turretShotsBeforeDeploy;
@@ -2272,14 +2643,14 @@ public partial class MobileFactoryDemo : Node3D
         await ToSignal(GetTree().CreateTimer(3.5f), SceneTreeTimer.SignalName.Timeout);
         var secondDelivered = _sinkB.DeliveredTotal;
 
-        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !rightPaneHover || !leftPaneHover || !detailWindowInTransit || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !contextualRotateWorks || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !inputDeliveredWhileDeployed || !turretTrackedThreats || !mobileCombatActive || !recalled || !blockedOutputActive || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0)
+        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !rightPaneHover || !leftPaneHover || !detailWindowInTransit || !blueprintWorkflowInTransit || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !contextualRotateWorks || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !inputDeliveredWhileDeployed || !turretTrackedThreats || !mobileCombatActive || !recalled || !blockedOutputActive || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0)
         {
-            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} rightHover={rightPaneHover} leftHover={leftPaneHover} detailWindow={detailWindowInTransit} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} contextualRotateWorks={contextualRotateWorks} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered}");
+            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} rightHover={rightPaneHover} leftHover={leftPaneHover} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} contextualRotateWorks={contextualRotateWorks} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"MOBILE_FACTORY_SMOKE_OK firstDelivered={firstDelivered} secondDelivered={secondDelivered} detailWindow={detailWindowInTransit} turretShots={(escortTurret?.ShotsFired ?? -1)} combatKills={_simulation.DefeatedEnemyCount}");
+        GD.Print($"MOBILE_FACTORY_SMOKE_OK firstDelivered={firstDelivered} secondDelivered={secondDelivered} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} turretShots={(escortTurret?.ShotsFired ?? -1)} combatKills={_simulation.DefeatedEnemyCount}");
         GetTree().Quit();
     }
 
@@ -2383,6 +2754,152 @@ public partial class MobileFactoryDemo : Node3D
             && turret.BufferedAmmo > 0
             && turretShowsHighVelocityAmmo
             && _hud.IsEditorVisible;
+    }
+
+    private async Task<bool> RunInteriorBlueprintSmoke()
+    {
+        if (_mobileFactory is null || _interiorBlueprintSite is null)
+        {
+            return false;
+        }
+
+        if (!_mobileFactory.TryGetInteriorStructure(new Vector2I(2, 2), out var producerStructure)
+            || producerStructure is not ProducerStructure producer
+            || !_mobileFactory.TryGetInteriorStructure(new Vector2I(3, 0), out var ammoAssemblerStructure)
+            || ammoAssemblerStructure is not AmmoAssemblerStructure ammoAssembler)
+        {
+            return false;
+        }
+
+        if (!producer.TrySetDetailRecipe("machine-parts") || !ammoAssembler.TrySetDetailRecipe("high-velocity-ammo"))
+        {
+            return false;
+        }
+
+        var captured = FactoryBlueprintCaptureService.CaptureFullSite(
+            _interiorBlueprintSite,
+            "Smoke Interior Blueprint");
+        if (captured is null || captured.StructureCount == 0 || captured.RequiredAttachments.Count == 0)
+        {
+            return false;
+        }
+
+        var savedRecord = new FactoryBlueprintRecord(
+            captured.Id,
+            "Smoke Interior Blueprint",
+            captured.SourceSiteKind,
+            captured.SuggestedAnchorCell,
+            captured.BoundsSize,
+            captured.Entries,
+            captured.RequiredAttachments);
+        FactoryBlueprintLibrary.AddOrUpdate(savedRecord);
+        FactoryBlueprintLibrary.SelectActive(savedRecord.Id);
+
+        var storedBlueprint = FactoryBlueprintLibrary.FindById(savedRecord.Id);
+        var activeBlueprint = FactoryBlueprintLibrary.GetActive();
+        var expectedStructureCount = CountEditableInteriorStructures();
+        if (storedBlueprint is null || activeBlueprint?.Id != savedRecord.Id || expectedStructureCount != savedRecord.StructureCount)
+        {
+            return false;
+        }
+
+        var oversizeRecord = new FactoryBlueprintRecord(
+            $"{savedRecord.Id}-oversize",
+            "Oversize Smoke Interior Blueprint",
+            savedRecord.SourceSiteKind,
+            savedRecord.SuggestedAnchorCell,
+            new Vector2I(_mobileFactory.Profile.InteriorWidth + 1, savedRecord.BoundsSize.Y),
+            savedRecord.Entries,
+            savedRecord.RequiredAttachments);
+        var defaultAnchor = _interiorBlueprintSite.GetDefaultApplyAnchor(savedRecord);
+        var invalidBoundsPlan = FactoryBlueprintPlanner.CreatePlan(oversizeRecord, _interiorBlueprintSite, defaultAnchor);
+        var boundsRejected = !invalidBoundsPlan.IsValid
+            && invalidBoundsPlan.GetIssueSummary().Contains("尺寸", global::System.StringComparison.Ordinal);
+
+        if (!ClearInteriorStructuresForBlueprintSmoke())
+        {
+            return false;
+        }
+
+        await ToSignal(GetTree().CreateTimer(0.1f), SceneTreeTimer.SignalName.Timeout);
+
+        var invalidAttachmentPlan = FactoryBlueprintPlanner.CreatePlan(
+            savedRecord,
+            _interiorBlueprintSite,
+            defaultAnchor + Vector2I.Right);
+        var attachmentRejected = !invalidAttachmentPlan.IsValid
+            && invalidAttachmentPlan.GetIssueSummary().Contains("挂点", global::System.StringComparison.Ordinal);
+
+        var validPlan = FactoryBlueprintPlanner.CreatePlan(savedRecord, _interiorBlueprintSite, defaultAnchor);
+        if (!validPlan.IsValid || !FactoryBlueprintPlanner.CommitPlan(validPlan, _interiorBlueprintSite))
+        {
+            return false;
+        }
+
+        await ToSignal(GetTree().CreateTimer(2.5f), SceneTreeTimer.SignalName.Timeout);
+
+        var structureCountRestored = CountEditableInteriorStructures() == savedRecord.StructureCount;
+        var attachmentsRestored = true;
+        for (var index = 0; index < savedRecord.RequiredAttachments.Count; index++)
+        {
+            var attachment = savedRecord.RequiredAttachments[index];
+            var targetCell = defaultAnchor + attachment.LocalCell;
+            if (!_mobileFactory.TryGetInteriorStructure(targetCell, out var restoredAttachment)
+                || restoredAttachment is null
+                || restoredAttachment.Kind != attachment.Kind
+                || restoredAttachment.Facing != attachment.Facing)
+            {
+                attachmentsRestored = false;
+                break;
+            }
+        }
+
+        var producerRecipeRestored =
+            _mobileFactory.TryGetInteriorStructure(new Vector2I(2, 2), out var restoredProducerStructure)
+            && restoredProducerStructure is ProducerStructure restoredProducer
+            && restoredProducer.CaptureBlueprintConfiguration().TryGetValue("recipe_id", out var restoredProducerRecipe)
+            && restoredProducerRecipe == "machine-parts";
+        var ammoRecipeRestored =
+            _mobileFactory.TryGetInteriorStructure(new Vector2I(3, 0), out var restoredAmmoAssemblerStructure)
+            && restoredAmmoAssemblerStructure is AmmoAssemblerStructure restoredAmmoAssembler
+            && restoredAmmoAssembler.CaptureBlueprintConfiguration().TryGetValue("recipe_id", out var restoredAmmoRecipe)
+            && restoredAmmoRecipe == "high-velocity-ammo";
+        var turretPrimed =
+            _mobileFactory.TryGetInteriorStructure(new Vector2I(4, 0), out var restoredTurretStructure)
+            && restoredTurretStructure is GunTurretStructure restoredTurret
+            && restoredTurret.BufferedAmmo > 0;
+
+        return boundsRejected
+            && attachmentRejected
+            && structureCountRestored
+            && attachmentsRestored
+            && producerRecipeRestored
+            && ammoRecipeRestored
+            && turretPrimed;
+    }
+
+    private bool ClearInteriorStructuresForBlueprintSmoke()
+    {
+        if (_mobileFactory is null)
+        {
+            return false;
+        }
+
+        var cells = new List<Vector2I>();
+        foreach (var structure in _mobileFactory.InteriorSite.GetStructures())
+        {
+            cells.Add(structure.Cell);
+        }
+
+        for (var index = 0; index < cells.Count; index++)
+        {
+            if (!_mobileFactory.RemoveInteriorStructure(cells[index]))
+            {
+                return false;
+            }
+        }
+
+        return CountEditableInteriorStructures() == 0;
     }
 
     private async void RunLargeScenarioSmokeChecks()

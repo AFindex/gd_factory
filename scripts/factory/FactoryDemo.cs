@@ -29,9 +29,12 @@ public partial class FactoryDemo : Node3D
     private Node3D? _structureRoot;
     private Node3D? _enemyRoot;
     private Node3D? _previewRoot;
+    private Node3D? _blueprintPreviewRoot;
     private MeshInstance3D? _previewCell;
     private MeshInstance3D? _previewArrow;
+    private readonly List<MeshInstance3D> _blueprintPreviewMeshes = new();
     private FactoryCombatDirector? _combatDirector;
+    private FactoryBlueprintSiteAdapter? _blueprintSite;
     private double _averageFrameMilliseconds;
     private double _averageVisualSyncMilliseconds;
     private BuildPrototypeKind? _selectedBuildKind;
@@ -46,7 +49,15 @@ public partial class FactoryDemo : Node3D
     private bool _deleteDragActive;
     private Vector2I _deleteDragStartCell;
     private Vector2I _deleteDragCurrentCell;
-    private string _previewMessage = "交互模式：点击建筑查看；按数字键选择建筑后进入建造。";
+    private FactoryBlueprintWorkflowMode _blueprintMode;
+    private bool _blueprintSelectionDragActive;
+    private bool _hasBlueprintSelectionRect;
+    private Vector2I _blueprintSelectionStartCell;
+    private Vector2I _blueprintSelectionCurrentCell;
+    private Rect2I _blueprintSelectionRect;
+    private FactoryBlueprintRecord? _pendingBlueprintCapture;
+    private FactoryBlueprintApplyPlan? _blueprintApplyPlan;
+    private string _previewMessage = "交互模式：点击建筑查看；按数字键选择建筑后进入建造，或按住 Shift 左键框选蓝图。";
 
     public override void _Ready()
     {
@@ -87,6 +98,17 @@ public partial class FactoryDemo : Node3D
 
         if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
         {
+            if (_blueprintMode != FactoryBlueprintWorkflowMode.None)
+            {
+                if (keyEvent.Keycode == Key.Escape)
+                {
+                    CancelBlueprintWorkflow();
+                    GetViewport().SetInputAsHandled();
+                }
+
+                return;
+            }
+
             if (keyEvent.Keycode == Key.X)
             {
                 if (_interactionMode == FactoryInteractionMode.Delete)
@@ -115,7 +137,6 @@ public partial class FactoryDemo : Node3D
                 GetViewport().SetInputAsHandled();
                 return;
             }
-
             if (keyEvent.Keycode == Key.Escape)
             {
                 EnterInteractionMode();
@@ -126,6 +147,65 @@ public partial class FactoryDemo : Node3D
 
         if (@event is not InputEventMouseButton mouseButton)
         {
+            return;
+        }
+
+        if (_blueprintMode == FactoryBlueprintWorkflowMode.CaptureSelection)
+        {
+            if (mouseButton.ButtonIndex == MouseButton.Right && mouseButton.Pressed)
+            {
+                CancelBlueprintWorkflow();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (mouseButton.ButtonIndex == MouseButton.Left)
+            {
+                if (mouseButton.Pressed)
+                {
+                    BeginBlueprintSelection();
+                }
+                else
+                {
+                    CompleteBlueprintSelection();
+                }
+
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+        }
+
+        if (_blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview)
+        {
+            if (!mouseButton.Pressed)
+            {
+                return;
+            }
+
+            if (mouseButton.ButtonIndex == MouseButton.Left)
+            {
+                ConfirmBlueprintApply();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (mouseButton.ButtonIndex == MouseButton.Right)
+            {
+                CancelBlueprintWorkflow(clearActiveBlueprint: false);
+                EnterInteractionMode();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+        }
+
+        if (_interactionMode == FactoryInteractionMode.Interact
+            && mouseButton.ButtonIndex == MouseButton.Left
+            && mouseButton.Pressed
+            && mouseButton.ShiftPressed)
+        {
+            StartBlueprintCapture();
+            BeginBlueprintSelection();
+            GetViewport().SetInputAsHandled();
             return;
         }
 
@@ -190,6 +270,9 @@ public partial class FactoryDemo : Node3D
         AddChild(_previewRoot);
         CreatePreviewVisuals();
 
+        _blueprintPreviewRoot = new Node3D { Name = "BlueprintPreviewRoot", Visible = false };
+        AddChild(_blueprintPreviewRoot);
+
         _simulation = new SimulationController { Name = "SimulationController" };
         AddChild(_simulation);
 
@@ -204,6 +287,13 @@ public partial class FactoryDemo : Node3D
         _hud.DetailInventoryMoveRequested += HandleDetailInventoryMoveRequested;
         _hud.DetailRecipeSelected += HandleDetailRecipeSelected;
         _hud.DetailClosed += HandleDetailWindowClosed;
+        _hud.BlueprintCaptureRequested += StartBlueprintCapture;
+        _hud.BlueprintSaveRequested += HandleBlueprintSaveRequested;
+        _hud.BlueprintSelected += HandleBlueprintSelected;
+        _hud.BlueprintApplyRequested += EnterBlueprintApplyMode;
+        _hud.BlueprintConfirmRequested += ConfirmBlueprintApply;
+        _hud.BlueprintDeleteRequested += HandleBlueprintDeleteRequested;
+        _hud.BlueprintCancelRequested += CancelBlueprintWorkflow;
         AddChild(_hud);
 
         AddChild(new LauncherNavigationOverlay());
@@ -219,11 +309,21 @@ public partial class FactoryDemo : Node3D
         _simulation!.Configure(_grid);
         _combatDirector?.Configure(_simulation, _enemyRoot!);
         _cameraRig!.ConfigureBounds(_grid.GetWorldMin() + Vector2.One * 4.0f, _grid.GetWorldMax() - Vector2.One * 4.0f);
+        _blueprintSite = CreateBlueprintSiteAdapter();
         EnterInteractionMode();
     }
 
     private void HandleHotkeys()
     {
+        if (_blueprintMode != FactoryBlueprintWorkflowMode.None)
+        {
+            if (Input.IsActionJustPressed("build_cancel"))
+            {
+                CancelBlueprintWorkflow();
+            }
+            return;
+        }
+
         HandleBuildShortcut("select_producer", BuildPrototypeKind.Producer);
         HandleBuildShortcut("select_belt", BuildPrototypeKind.Belt);
         HandleBuildShortcut("select_sink", BuildPrototypeKind.Sink);
@@ -266,6 +366,7 @@ public partial class FactoryDemo : Node3D
 
     private void SelectBuildKind(BuildPrototypeKind? kind)
     {
+        CancelBlueprintWorkflow(clearActiveBlueprint: false);
         _selectedBuildKind = kind;
         _interactionMode = kind.HasValue ? FactoryInteractionMode.Build : FactoryInteractionMode.Interact;
         _deleteDragActive = false;
@@ -285,6 +386,7 @@ public partial class FactoryDemo : Node3D
 
     private void EnterDeleteMode()
     {
+        CancelBlueprintWorkflow(clearActiveBlueprint: false);
         _selectedBuildKind = null;
         _selectedStructure = null;
         _interactionMode = FactoryInteractionMode.Delete;
@@ -616,11 +718,17 @@ public partial class FactoryDemo : Node3D
         _hoveredStructure = null;
         _canPlaceCurrentCell = false;
         _canDeleteCurrentCell = false;
-        _previewMessage = _interactionMode switch
+        _blueprintApplyPlan = null;
+        _previewMessage = _blueprintMode switch
         {
-            FactoryInteractionMode.Build => "把鼠标移到地面网格上选择格子。",
-            FactoryInteractionMode.Delete => "删除模式：点击建筑删除，按住 Shift 左键拖拽可框选删除。",
-            _ => "交互模式：点击建筑查看；按快捷键或左侧按钮选择建筑后进入建造。"
+            FactoryBlueprintWorkflowMode.CaptureSelection => "蓝图框选：拖拽选择一片现有布局，然后在右侧面板保存。",
+            FactoryBlueprintWorkflowMode.ApplyPreview => "蓝图预览：移动鼠标选择锚点，确认后应用当前蓝图。",
+            _ => _interactionMode switch
+            {
+                FactoryInteractionMode.Build => "把鼠标移到地面网格上选择格子。",
+                FactoryInteractionMode.Delete => "删除模式：点击建筑删除，按住 Shift 左键拖拽可框选删除。",
+                _ => "交互模式：点击建筑查看；按快捷键或左侧按钮选择建筑后进入建造，或按住 Shift 左键直接框选蓝图。"
+            }
         };
 
         if (_grid is null || _cameraRig is null)
@@ -643,6 +751,50 @@ public partial class FactoryDemo : Node3D
         }
 
         _grid.TryGetStructure(cell, out _hoveredStructure);
+        if (_blueprintMode == FactoryBlueprintWorkflowMode.CaptureSelection)
+        {
+            if (_blueprintSelectionDragActive)
+            {
+                _blueprintSelectionCurrentCell = cell;
+                var rect = GetDeleteRect(_blueprintSelectionStartCell, _blueprintSelectionCurrentCell);
+                var selectedCount = CountStructuresInBlueprintRect(rect);
+                _previewMessage = $"蓝图框选：[{rect.Position.X},{rect.Position.Y}] - [{rect.End.X - 1},{rect.End.Y - 1}]，当前覆盖 {selectedCount} 个建筑。";
+                return;
+            }
+
+            if (_hasBlueprintSelectionRect)
+            {
+                var selectedCount = CountStructuresInBlueprintRect(_blueprintSelectionRect);
+                _previewMessage = $"蓝图框选已完成：覆盖 {selectedCount} 个建筑，填写名称后保存。";
+                return;
+            }
+
+            _previewMessage = "蓝图框选：左键按下并拖拽选择一片现有布局。";
+            return;
+        }
+
+        if (_blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview)
+        {
+            if (_blueprintSite is null)
+            {
+                _previewMessage = "蓝图预览不可用：缺少目标站点。";
+                return;
+            }
+
+            var activeBlueprint = FactoryBlueprintLibrary.GetActive();
+            if (activeBlueprint is null)
+            {
+                _previewMessage = "请先在蓝图库里选择一个蓝图。";
+                return;
+            }
+
+            _blueprintApplyPlan = FactoryBlueprintPlanner.CreatePlan(activeBlueprint, _blueprintSite, cell);
+            _previewMessage = _blueprintApplyPlan.IsValid
+                ? $"蓝图 {activeBlueprint.DisplayName} 可应用到锚点 ({cell.X}, {cell.Y})。"
+                : _blueprintApplyPlan.GetIssueSummary();
+            return;
+        }
+
         if (_interactionMode == FactoryInteractionMode.Build && _selectedBuildKind.HasValue)
         {
             _canPlaceCurrentCell = _grid.CanPlace(cell);
@@ -672,8 +824,8 @@ public partial class FactoryDemo : Node3D
         }
 
         _previewMessage = _hoveredStructure is null
-            ? $"交互模式：空地 ({cell.X}, {cell.Y})，点击可清除当前选中。"
-            : $"交互模式：点击选中 {_hoveredStructure.DisplayName} ({cell.X}, {cell.Y})。";
+            ? $"交互模式：空地 ({cell.X}, {cell.Y})，点击可清除当前选中，Shift+左键可开始蓝图框选。"
+            : $"交互模式：点击选中 {_hoveredStructure.DisplayName} ({cell.X}, {cell.Y})，Shift+左键可开始蓝图框选。";
     }
 
     private void UpdatePreview()
@@ -683,13 +835,47 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        var showPreview = _hasHoveredCell
+        UpdateBlueprintPreview();
+
+        if (_blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview)
+        {
+            _previewRoot.Visible = false;
+            return;
+        }
+
+        var showCapturePreview = _blueprintMode == FactoryBlueprintWorkflowMode.CaptureSelection
+            && (_blueprintSelectionDragActive || _hasBlueprintSelectionRect);
+        var showPreview = showCapturePreview || (_hasHoveredCell
             && ((_interactionMode == FactoryInteractionMode.Build && _selectedBuildKind.HasValue)
-                || _interactionMode == FactoryInteractionMode.Delete);
+                || _interactionMode == FactoryInteractionMode.Delete));
         _previewRoot.Visible = showPreview;
         if (!showPreview)
         {
             _previewArrow.Visible = false;
+            return;
+        }
+
+        if (showCapturePreview)
+        {
+            var rect = _blueprintSelectionDragActive
+                ? GetDeleteRect(_blueprintSelectionStartCell, _blueprintSelectionCurrentCell)
+                : _blueprintSelectionRect;
+            var minCell = rect.Position;
+            var maxCell = rect.End - Vector2I.One;
+            var minWorld = _grid.CellToWorld(minCell);
+            var maxWorld = _grid.CellToWorld(maxCell);
+            _previewRoot.Position = (minWorld + maxWorld) * 0.5f;
+            _previewRoot.Rotation = Vector3.Zero;
+            _previewCell.Mesh = new BoxMesh
+            {
+                Size = new Vector3(
+                    FactoryConstants.CellSize * rect.Size.X - (FactoryConstants.CellSize * 0.08f),
+                    0.08f,
+                    FactoryConstants.CellSize * rect.Size.Y - (FactoryConstants.CellSize * 0.08f))
+            };
+            _previewCell.Position = new Vector3(0.0f, 0.05f, 0.0f);
+            _previewArrow.Visible = false;
+            ApplyPreviewColor(_previewCell, new Color(0.35f, 0.75f, 1.0f, 0.34f));
             return;
         }
 
@@ -727,6 +913,38 @@ public partial class FactoryDemo : Node3D
         var tint = _canPlaceCurrentCell ? new Color(0.35f, 0.95f, 0.55f, 0.45f) : new Color(1.0f, 0.35f, 0.35f, 0.45f);
         ApplyPreviewColor(_previewCell, tint);
         ApplyPreviewColor(_previewArrow, tint.Lightened(0.1f));
+    }
+
+    private void UpdateBlueprintPreview()
+    {
+        if (_grid is null || _blueprintPreviewRoot is null)
+        {
+            return;
+        }
+
+        foreach (var mesh in _blueprintPreviewMeshes)
+        {
+            mesh.Visible = false;
+        }
+
+        var plan = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview ? _blueprintApplyPlan : null;
+        _blueprintPreviewRoot.Visible = plan is not null && _hasHoveredCell;
+        if (!_blueprintPreviewRoot.Visible || plan is null)
+        {
+            return;
+        }
+
+        EnsureBlueprintPreviewCapacity(plan.Entries.Count);
+        for (var index = 0; index < plan.Entries.Count; index++)
+        {
+            var entry = plan.Entries[index];
+            var mesh = _blueprintPreviewMeshes[index];
+            mesh.Visible = true;
+            mesh.Position = _grid.CellToWorld(entry.TargetCell) + new Vector3(0.0f, 0.06f, 0.0f);
+            ApplyPreviewColor(mesh, entry.IsValid
+                ? new Color(0.35f, 0.95f, 0.55f, 0.42f)
+                : new Color(1.0f, 0.35f, 0.35f, 0.42f));
+        }
     }
 
     private void UpdateStructureVisuals()
@@ -818,8 +1036,48 @@ public partial class FactoryDemo : Node3D
             ? "建造模式：左键放置，右键或 Esc 返回交互，Delete 拆除悬停建筑。"
             : _interactionMode == FactoryInteractionMode.Delete
                 ? "删除模式：左键删除悬停建筑，Shift+左键拖拽框选删除，右键或 Esc 返回交互。"
-            : "交互模式：左键查看建筑，数字键或按钮切换到对应建造工具。";
+                : "交互模式：左键查看建筑，Shift+左键拖拽可直接框选蓝图，数字键或按钮切换到对应建造工具。";
         _hud.SetNote(modeNote);
+        _hud.SetBlueprintState(BuildBlueprintPanelState());
+    }
+
+    private FactoryBlueprintPanelState BuildBlueprintPanelState()
+    {
+        var activeBlueprint = FactoryBlueprintLibrary.GetActive();
+        var modeText = _blueprintMode switch
+        {
+            FactoryBlueprintWorkflowMode.CaptureSelection => "蓝图模式：框选保存",
+            FactoryBlueprintWorkflowMode.ApplyPreview => "蓝图模式：应用预览",
+            _ => "蓝图模式：待命"
+        };
+        var activeText = activeBlueprint is null
+            ? "当前蓝图：未选择"
+            : $"当前蓝图：{activeBlueprint.DisplayName} ({activeBlueprint.GetSummaryText()})";
+        var captureSummary = _pendingBlueprintCapture is null
+            ? "未捕获待保存蓝图。点击“框选保存”或在交互模式按住 Shift 左键拖拽选择。"
+            : $"待保存：{_pendingBlueprintCapture.DisplayName} | {_pendingBlueprintCapture.GetSummaryText()}";
+        var issueText = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && _blueprintApplyPlan is not null
+            ? _blueprintApplyPlan.GetIssueSummary()
+            : _blueprintMode == FactoryBlueprintWorkflowMode.CaptureSelection
+                ? "框选完成后在这里输入名称并保存。"
+                : "选择库中的蓝图后进入预览，再移动鼠标选择落点。";
+
+        return new FactoryBlueprintPanelState
+        {
+            IsVisible = true,
+            ModeText = modeText,
+            ActiveBlueprintText = activeText,
+            CaptureSummaryText = captureSummary,
+            IssueText = issueText,
+            SuggestedName = _pendingBlueprintCapture?.DisplayName ?? string.Empty,
+            PendingCaptureId = _pendingBlueprintCapture?.Id,
+            ActiveBlueprintId = activeBlueprint?.Id,
+            AllowSelectionCapture = true,
+            AllowFullCapture = false,
+            CanSaveCapture = _pendingBlueprintCapture is not null,
+            CanConfirmApply = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && _blueprintApplyPlan?.IsValid == true,
+            Blueprints = FactoryBlueprintLibrary.GetAll()
+        };
     }
 
     private string GetSelectedStructureText()
@@ -1027,6 +1285,249 @@ public partial class FactoryDemo : Node3D
         for (var index = 0; index < cellsToDelete.Count; index++)
         {
             RemoveStructure(cellsToDelete[index]);
+        }
+    }
+
+    private int CountStructuresInBlueprintRect(Rect2I rect)
+    {
+        if (_blueprintSite is null)
+        {
+            return 0;
+        }
+
+        var seen = new HashSet<ulong>();
+        foreach (var structure in _blueprintSite.EnumerateStructures())
+        {
+            foreach (var occupiedCell in structure.GetOccupiedCells())
+            {
+                if (!rect.HasPoint(occupiedCell))
+                {
+                    continue;
+                }
+
+                seen.Add(structure.GetInstanceId());
+                break;
+            }
+        }
+
+        return seen.Count;
+    }
+
+    private void EnsureBlueprintPreviewCapacity(int count)
+    {
+        if (_blueprintPreviewRoot is null)
+        {
+            return;
+        }
+
+        while (_blueprintPreviewMeshes.Count < count)
+        {
+            var mesh = new MeshInstance3D
+            {
+                Name = $"BlueprintPreview_{_blueprintPreviewMeshes.Count}",
+                Visible = false,
+                Mesh = new BoxMesh
+                {
+                    Size = new Vector3(FactoryConstants.CellSize * 0.84f, 0.10f, FactoryConstants.CellSize * 0.84f)
+                }
+            };
+            _blueprintPreviewRoot.AddChild(mesh);
+            _blueprintPreviewMeshes.Add(mesh);
+        }
+    }
+
+    private FactoryBlueprintSiteAdapter CreateBlueprintSiteAdapter()
+    {
+        return new FactoryBlueprintSiteAdapter(
+            FactoryBlueprintSiteKind.WorldGrid,
+            _grid!.SiteId,
+            "世界沙盒",
+            _grid.MinCell,
+            _grid.MaxCell,
+            () => _grid.GetStructures(),
+            ValidateBlueprintPlacement,
+            (kind, cell, facing) => PlaceStructure(kind, cell, facing),
+            cell =>
+            {
+                if (_grid.TryGetStructure(cell, out var structure) && structure is not null)
+                {
+                    RemoveStructure(cell);
+                    return true;
+                }
+
+                return false;
+            });
+    }
+
+    private string? ValidateBlueprintPlacement(FactoryBlueprintStructureEntry entry, Vector2I targetCell, FacingDirection targetFacing)
+    {
+        if (_grid is null)
+        {
+            return "世界网格不可用。";
+        }
+
+        var definition = FactoryStructureFactory.GetDefinition(entry.Kind);
+        if (!definition.AllowWorldPlacement)
+        {
+            return $"{FactoryPresentation.GetKindLabel(entry.Kind)} 只能放在移动工厂内部。";
+        }
+
+        if (!_grid.IsInBounds(targetCell))
+        {
+            return "目标格超出世界建造范围。";
+        }
+
+        if (!_grid.CanPlace(targetCell))
+        {
+            return "目标格已被占用。";
+        }
+
+        return null;
+    }
+
+    private void StartBlueprintCapture()
+    {
+        EnterInteractionMode();
+        _blueprintMode = FactoryBlueprintWorkflowMode.CaptureSelection;
+        _blueprintApplyPlan = null;
+        _pendingBlueprintCapture = null;
+        _hasBlueprintSelectionRect = false;
+        _blueprintSelectionDragActive = false;
+    }
+
+    private void BeginBlueprintSelection()
+    {
+        if (!_hasHoveredCell)
+        {
+            return;
+        }
+
+        _blueprintSelectionDragActive = true;
+        _blueprintSelectionStartCell = _hoveredCell;
+        _blueprintSelectionCurrentCell = _hoveredCell;
+        _hasBlueprintSelectionRect = false;
+        _pendingBlueprintCapture = null;
+    }
+
+    private void CompleteBlueprintSelection()
+    {
+        if (!_blueprintSelectionDragActive)
+        {
+            return;
+        }
+
+        _blueprintSelectionDragActive = false;
+        _blueprintSelectionRect = GetDeleteRect(_blueprintSelectionStartCell, _blueprintSelectionCurrentCell);
+        _hasBlueprintSelectionRect = true;
+
+        if (_blueprintSite is null)
+        {
+            return;
+        }
+
+        var suggestedName = $"沙盒蓝图 {CountStructuresInBlueprintRect(_blueprintSelectionRect)} 件";
+        _pendingBlueprintCapture = FactoryBlueprintCaptureService.CaptureSelection(_blueprintSite, _blueprintSelectionRect, suggestedName);
+        if (_pendingBlueprintCapture is null)
+        {
+            _previewMessage = "框选区域内没有可保存的建筑。";
+            _hasBlueprintSelectionRect = false;
+        }
+    }
+
+    private void HandleBlueprintSaveRequested(string name)
+    {
+        if (_pendingBlueprintCapture is null)
+        {
+            return;
+        }
+
+        var displayName = string.IsNullOrWhiteSpace(name)
+            ? _pendingBlueprintCapture.DisplayName
+            : name.Trim();
+        var savedRecord = new FactoryBlueprintRecord(
+            _pendingBlueprintCapture.Id,
+            displayName,
+            _pendingBlueprintCapture.SourceSiteKind,
+            _pendingBlueprintCapture.SuggestedAnchorCell,
+            _pendingBlueprintCapture.BoundsSize,
+            _pendingBlueprintCapture.Entries,
+            _pendingBlueprintCapture.RequiredAttachments);
+        FactoryBlueprintLibrary.AddOrUpdate(savedRecord);
+        FactoryBlueprintLibrary.SelectActive(savedRecord.Id);
+        _pendingBlueprintCapture = null;
+        _hasBlueprintSelectionRect = false;
+        _blueprintMode = FactoryBlueprintWorkflowMode.None;
+        _previewMessage = $"已保存蓝图：{savedRecord.DisplayName}";
+    }
+
+    private void HandleBlueprintSelected(string blueprintId)
+    {
+        FactoryBlueprintLibrary.SelectActive(blueprintId);
+        if (_blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && _hasHoveredCell && _blueprintSite is not null)
+        {
+            var activeBlueprint = FactoryBlueprintLibrary.GetActive();
+            _blueprintApplyPlan = activeBlueprint is null
+                ? null
+                : FactoryBlueprintPlanner.CreatePlan(activeBlueprint, _blueprintSite, _hoveredCell);
+        }
+    }
+
+    private void EnterBlueprintApplyMode()
+    {
+        if (FactoryBlueprintLibrary.GetActive() is null)
+        {
+            return;
+        }
+
+        EnterInteractionMode();
+        _pendingBlueprintCapture = null;
+        _hasBlueprintSelectionRect = false;
+        _blueprintMode = FactoryBlueprintWorkflowMode.ApplyPreview;
+    }
+
+    private void ConfirmBlueprintApply()
+    {
+        if (_blueprintSite is null || _blueprintApplyPlan is null)
+        {
+            return;
+        }
+
+        if (!FactoryBlueprintPlanner.CommitPlan(_blueprintApplyPlan, _blueprintSite))
+        {
+            _previewMessage = "蓝图应用失败，请检查预览中的阻塞原因。";
+            return;
+        }
+
+        _selectedStructure = null;
+        RefreshAllTopology();
+        _previewMessage = $"已应用蓝图：{_blueprintApplyPlan.Blueprint.DisplayName}";
+    }
+
+    private void HandleBlueprintDeleteRequested(string blueprintId)
+    {
+        FactoryBlueprintLibrary.Remove(blueprintId);
+        if (FactoryBlueprintLibrary.GetActive() is null)
+        {
+            _blueprintApplyPlan = null;
+        }
+    }
+
+    private void CancelBlueprintWorkflow()
+    {
+        CancelBlueprintWorkflow(clearActiveBlueprint: false);
+    }
+
+    private void CancelBlueprintWorkflow(bool clearActiveBlueprint)
+    {
+        _blueprintMode = FactoryBlueprintWorkflowMode.None;
+        _blueprintSelectionDragActive = false;
+        _hasBlueprintSelectionRect = false;
+        _pendingBlueprintCapture = null;
+        _blueprintApplyPlan = null;
+
+        if (clearActiveBlueprint)
+        {
+            FactoryBlueprintLibrary.ClearActive();
         }
     }
 
@@ -1267,6 +1768,7 @@ public partial class FactoryDemo : Node3D
         var storageFlowVerified = await RunStorageInserterSmoke();
         var inspectionVerified = VerifyStorageInspectionPanel();
         var detailWindowVerified = await RunStructureDetailSmoke();
+        var blueprintVerified = RunBlueprintWorkflowSmoke();
         var combatVerified = await VerifyCombatScenarios();
 
         if (!placed
@@ -1280,15 +1782,92 @@ public partial class FactoryDemo : Node3D
             || !storageFlowVerified
             || !inspectionVerified
             || !detailWindowVerified
+            || !blueprintVerified
             || !combatVerified)
         {
-            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} structures={initialStructureCount} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} combat={combatVerified}");
+            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} structures={initialStructureCount} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} combat={combatVerified}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} combat={combatVerified}");
+        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} combat={combatVerified}");
         GetTree().Quit();
+    }
+
+    private bool RunBlueprintWorkflowSmoke()
+    {
+        if (_blueprintSite is null || _grid is null || _simulation is null)
+        {
+            return false;
+        }
+
+        var captured = FactoryBlueprintCaptureService.CaptureSelection(
+            _blueprintSite,
+            new Rect2I(-8, 2, 8, 1),
+            "Smoke Sandbox Blueprint");
+        if (captured is null || captured.StructureCount < 8)
+        {
+            return false;
+        }
+
+        FactoryBlueprintLibrary.AddOrUpdate(captured);
+        FactoryBlueprintLibrary.SelectActive(captured.Id);
+
+        var invalidPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintSite, captured.SuggestedAnchorCell);
+        var structureCountBefore = _simulation.RegisteredStructureCount;
+        if (!TryFindBlueprintAnchor(captured, out var validAnchor))
+        {
+            return false;
+        }
+
+        var validPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintSite, validAnchor);
+        var committed = validPlan.IsValid && FactoryBlueprintPlanner.CommitPlan(validPlan, _blueprintSite);
+        if (!committed)
+        {
+            return false;
+        }
+
+        var placedEntries = 0;
+        for (var index = 0; index < captured.Entries.Count; index++)
+        {
+            var targetCell = validAnchor + captured.Entries[index].LocalCell;
+            if (_grid.TryGetStructure(targetCell, out var structure) && structure is not null && structure.Kind == captured.Entries[index].Kind)
+            {
+                placedEntries++;
+            }
+        }
+
+        return !invalidPlan.IsValid
+            && validPlan.IsValid
+            && placedEntries == captured.Entries.Count
+            && _simulation.RegisteredStructureCount >= structureCountBefore + captured.Entries.Count;
+    }
+
+    private bool TryFindBlueprintAnchor(FactoryBlueprintRecord blueprint, out Vector2I anchor)
+    {
+        anchor = Vector2I.Zero;
+        if (_blueprintSite is null || _grid is null)
+        {
+            return false;
+        }
+
+        for (var y = _grid.MinCell.Y; y <= _grid.MaxCell.Y; y++)
+        {
+            for (var x = _grid.MinCell.X; x <= _grid.MaxCell.X; x++)
+            {
+                var candidate = new Vector2I(x, y);
+                var plan = FactoryBlueprintPlanner.CreatePlan(blueprint, _blueprintSite, candidate);
+                if (!plan.IsValid)
+                {
+                    continue;
+                }
+
+                anchor = candidate;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private async Task<bool> RunSplitterFallbackSmoke()

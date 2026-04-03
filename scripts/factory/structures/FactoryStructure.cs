@@ -122,6 +122,16 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
         return false;
     }
 
+    public virtual IReadOnlyDictionary<string, string> CaptureBlueprintConfiguration()
+    {
+        return new Dictionary<string, string>();
+    }
+
+    public virtual bool ApplyBlueprintConfiguration(IReadOnlyDictionary<string, string> configuration)
+    {
+        return configuration.Count == 0;
+    }
+
     public Vector2I GetOutputCell()
     {
         return Cell + FactoryDirection.ToCellOffset(Facing);

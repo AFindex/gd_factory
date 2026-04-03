@@ -137,6 +137,24 @@ public partial class ProducerStructure : FactoryStructure, IFactoryItemProvider
         return false;
     }
 
+    public override IReadOnlyDictionary<string, string> CaptureBlueprintConfiguration()
+    {
+        return new Dictionary<string, string>
+        {
+            ["recipe_id"] = ActiveRecipe.Id
+        };
+    }
+
+    public override bool ApplyBlueprintConfiguration(IReadOnlyDictionary<string, string> configuration)
+    {
+        if (!configuration.TryGetValue("recipe_id", out var recipeId))
+        {
+            return configuration.Count == 0;
+        }
+
+        return TrySetDetailRecipe(recipeId);
+    }
+
     public override void UpdateVisuals(float tickAlpha)
     {
         if (_indicator is not null)

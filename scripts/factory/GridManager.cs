@@ -84,6 +84,23 @@ public sealed class GridManager : IFactorySite
         return _reservations.TryGetValue(cell, out reservation);
     }
 
+    public IEnumerable<FactoryStructure> GetStructures()
+    {
+        var seen = new HashSet<ulong>();
+        foreach (var reservation in _reservations.Values)
+        {
+            if (reservation.Structure is null)
+            {
+                continue;
+            }
+
+            if (seen.Add(reservation.Structure.GetInstanceId()))
+            {
+                yield return reservation.Structure;
+            }
+        }
+    }
+
     public void PlaceStructure(FactoryStructure structure)
     {
         ReserveCells(structure.GetOccupiedCells(), structure.ReservationOwnerId, GridReservationKind.StaticStructure, structure);

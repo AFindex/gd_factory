@@ -56,6 +56,11 @@ public sealed class MobileFactorySite : IFactorySite
         return _structures.TryGetValue(cell, out structure);
     }
 
+    public IEnumerable<FactoryStructure> GetStructures()
+    {
+        return _structures.Values;
+    }
+
     public void AddStructure(FactoryStructure structure)
     {
         _structures[structure.Cell] = structure;
