@@ -27,6 +27,11 @@ public static class FactoryStructureFactory
     private static readonly Dictionary<BuildPrototypeKind, FactoryStructureDefinition> Definitions = new()
     {
         [BuildPrototypeKind.Producer] = new FactoryStructureDefinition(BuildPrototypeKind.Producer, () => new ProducerStructure(), true, true),
+        [BuildPrototypeKind.MiningDrill] = new FactoryStructureDefinition(BuildPrototypeKind.MiningDrill, () => new MiningDrillStructure(), true, false),
+        [BuildPrototypeKind.Generator] = new FactoryStructureDefinition(BuildPrototypeKind.Generator, () => new GeneratorStructure(), true, false),
+        [BuildPrototypeKind.PowerPole] = new FactoryStructureDefinition(BuildPrototypeKind.PowerPole, () => new PowerPoleStructure(), true, false),
+        [BuildPrototypeKind.Smelter] = new FactoryStructureDefinition(BuildPrototypeKind.Smelter, () => new SmelterStructure(), true, false),
+        [BuildPrototypeKind.Assembler] = new FactoryStructureDefinition(BuildPrototypeKind.Assembler, () => new AssemblerStructure(), true, false),
         [BuildPrototypeKind.Belt] = new FactoryStructureDefinition(BuildPrototypeKind.Belt, () => new BeltStructure(), true, true),
         [BuildPrototypeKind.Sink] = new FactoryStructureDefinition(BuildPrototypeKind.Sink, () => new SinkStructure(), true, true),
         [BuildPrototypeKind.Splitter] = new FactoryStructureDefinition(BuildPrototypeKind.Splitter, () => new SplitterStructure(), true, true),

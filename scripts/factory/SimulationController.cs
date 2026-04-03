@@ -4,11 +4,33 @@ using System.Collections.Generic;
 
 public partial class SimulationController : Node
 {
+    private sealed class PowerNodeRuntime
+    {
+        public required FactoryStructure Structure { get; init; }
+        public required IFactoryPowerNode Node { get; init; }
+    }
+
+    private sealed class PowerNetworkRuntime
+    {
+        public PowerNetworkRuntime(int id)
+        {
+            Id = id;
+        }
+
+        public int Id { get; }
+        public List<PowerNodeRuntime> Nodes { get; } = new();
+        public float Supply { get; set; }
+        public float Demand { get; set; }
+        public float Satisfaction { get; set; }
+        public bool HasProducer { get; set; }
+    }
+
     private readonly List<FactoryStructure> _structures = new();
     private readonly List<IFactoryCombatSystem> _combatSystems = new();
     private readonly List<FactoryEnemyActor> _hostiles = new();
     private readonly HashSet<FactoryStructure> _destroyedStructures = new();
     private readonly HashSet<FactoryEnemyActor> _defeatedHostiles = new();
+    private readonly List<PowerNetworkRuntime> _powerNetworks = new();
     private double _accumulator;
     private double _averageStepMilliseconds;
     private double _lastTopologyRebuildMilliseconds;
@@ -241,6 +263,7 @@ public partial class SimulationController : Node
             }
         }
 
+        RebuildPowerTopology();
         _lastTopologyRebuildMilliseconds = Stopwatch.GetElapsedTime(startTicks).TotalMilliseconds;
     }
 
@@ -251,6 +274,7 @@ public partial class SimulationController : Node
         while (_accumulator >= FactoryConstants.SimulationStepSeconds)
         {
             var stepStartTicks = Stopwatch.GetTimestamp();
+            ApplyPowerStates();
             for (var i = 0; i < _structures.Count; i++)
             {
                 if (_structures[i].IsDestroyed || !_structures[i].Site.IsSimulationActive)
@@ -340,6 +364,124 @@ public partial class SimulationController : Node
         }
 
         return total;
+    }
+
+    private void RebuildPowerTopology()
+    {
+        _powerNetworks.Clear();
+
+        var nodes = new List<PowerNodeRuntime>();
+        for (var i = 0; i < _structures.Count; i++)
+        {
+            var structure = _structures[i];
+            if (structure.IsDestroyed || !structure.Site.IsSimulationActive || structure is not IFactoryPowerNode powerNode || powerNode.PowerConnectionRangeCells <= 0)
+            {
+                continue;
+            }
+
+            nodes.Add(new PowerNodeRuntime
+            {
+                Structure = structure,
+                Node = powerNode
+            });
+        }
+
+        var visited = new bool[nodes.Count];
+        var networkId = 1;
+        for (var i = 0; i < nodes.Count; i++)
+        {
+            if (visited[i])
+            {
+                continue;
+            }
+
+            var network = new PowerNetworkRuntime(networkId++);
+            var queue = new Queue<int>();
+            queue.Enqueue(i);
+            visited[i] = true;
+
+            while (queue.Count > 0)
+            {
+                var currentIndex = queue.Dequeue();
+                var current = nodes[currentIndex];
+                network.Nodes.Add(current);
+
+                for (var candidateIndex = 0; candidateIndex < nodes.Count; candidateIndex++)
+                {
+                    if (visited[candidateIndex] || !ArePowerNodesConnected(current, nodes[candidateIndex]))
+                    {
+                        continue;
+                    }
+
+                    visited[candidateIndex] = true;
+                    queue.Enqueue(candidateIndex);
+                }
+            }
+
+            _powerNetworks.Add(network);
+        }
+    }
+
+    private void ApplyPowerStates()
+    {
+        for (var i = 0; i < _structures.Count; i++)
+        {
+            if (_structures[i] is IFactoryPowerConsumer disconnectedConsumer)
+            {
+                disconnectedConsumer.SetPowerState(FactoryPowerStatus.Disconnected, 0.0f, -1);
+            }
+        }
+
+        for (var i = 0; i < _powerNetworks.Count; i++)
+        {
+            var network = _powerNetworks[i];
+            network.Supply = 0.0f;
+            network.Demand = 0.0f;
+            network.HasProducer = false;
+
+            for (var nodeIndex = 0; nodeIndex < network.Nodes.Count; nodeIndex++)
+            {
+                var runtime = network.Nodes[nodeIndex];
+                if (runtime.Node is IFactoryPowerProducer producer)
+                {
+                    network.Supply += producer.GetAvailablePower(this);
+                    network.HasProducer = true;
+                }
+
+                if (runtime.Node is IFactoryPowerConsumer consumer && consumer.WantsPower(this))
+                {
+                    network.Demand += consumer.GetRequestedPower(this);
+                }
+            }
+
+            network.Satisfaction = network.Demand <= 0.001f
+                ? (network.Supply > 0.001f ? 1.0f : 0.0f)
+                : Mathf.Clamp(network.Supply / network.Demand, 0.0f, 1.0f);
+
+            for (var nodeIndex = 0; nodeIndex < network.Nodes.Count; nodeIndex++)
+            {
+                var runtime = network.Nodes[nodeIndex];
+                if (runtime.Node is not IFactoryPowerConsumer consumer)
+                {
+                    continue;
+                }
+
+                var status = !network.HasProducer
+                    ? FactoryPowerStatus.Disconnected
+                    : network.Satisfaction >= 0.999f
+                        ? FactoryPowerStatus.Powered
+                        : FactoryPowerStatus.Underpowered;
+                consumer.SetPowerState(status, network.Satisfaction, network.Id);
+            }
+        }
+    }
+
+    private static bool ArePowerNodesConnected(PowerNodeRuntime a, PowerNodeRuntime b)
+    {
+        var maxDistance = a.Node.PowerConnectionRangeCells + b.Node.PowerConnectionRangeCells;
+        var aCell = new Vector2(a.Structure.Cell.X, a.Structure.Cell.Y);
+        var bCell = new Vector2(b.Structure.Cell.X, b.Structure.Cell.Y);
+        return aCell.DistanceTo(bCell) <= maxDistance;
     }
 
     private static double SmoothMetric(double current, double sample, double weight)

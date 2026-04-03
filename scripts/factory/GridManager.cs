@@ -4,6 +4,8 @@ using System.Collections.Generic;
 public sealed class GridManager : IFactorySite
 {
     private readonly Dictionary<Vector2I, GridReservation> _reservations = new();
+    private readonly Dictionary<Vector2I, FactoryResourceDepositDefinition> _resourceCells = new();
+    private readonly List<FactoryResourceDepositDefinition> _resourceDeposits = new();
 
     public GridManager(Vector2I minCell, Vector2I maxCell, float cellSize)
     {
@@ -41,6 +43,41 @@ public sealed class GridManager : IFactorySite
     public bool CanPlace(Vector2I cell)
     {
         return CanReserve(cell);
+    }
+
+    public bool CanPlaceStructure(BuildPrototypeKind kind, Vector2I cell, out string reason)
+    {
+        reason = string.Empty;
+        if (!CanPlace(cell))
+        {
+            reason = $"格子 ({cell.X}, {cell.Y}) 已被现有结构占用。";
+            return false;
+        }
+
+        if (_resourceCells.TryGetValue(cell, out var deposit))
+        {
+            if (kind == BuildPrototypeKind.MiningDrill)
+            {
+                if (!FactoryResourceCatalog.SupportsExtractor(kind, deposit.ResourceKind))
+                {
+                    reason = $"{deposit.DisplayName} 不能由当前建筑开采。";
+                    return false;
+                }
+
+                return true;
+            }
+
+            reason = $"{deposit.DisplayName} 上只能放置匹配的采矿机。";
+            return false;
+        }
+
+        if (kind == BuildPrototypeKind.MiningDrill)
+        {
+            reason = "采矿机必须放在矿点上。";
+            return false;
+        }
+
+        return true;
     }
 
     public bool CanReserve(Vector2I cell, string? ownerId = null)
@@ -99,6 +136,31 @@ public sealed class GridManager : IFactorySite
                 yield return reservation.Structure;
             }
         }
+    }
+
+    public void SetResourceDeposits(IEnumerable<FactoryResourceDepositDefinition> deposits)
+    {
+        _resourceCells.Clear();
+        _resourceDeposits.Clear();
+
+        foreach (var deposit in deposits)
+        {
+            _resourceDeposits.Add(deposit);
+            for (var index = 0; index < deposit.Cells.Count; index++)
+            {
+                _resourceCells[deposit.Cells[index]] = deposit;
+            }
+        }
+    }
+
+    public IReadOnlyList<FactoryResourceDepositDefinition> GetResourceDeposits()
+    {
+        return _resourceDeposits;
+    }
+
+    public bool TryGetResourceDeposit(Vector2I cell, out FactoryResourceDepositDefinition? deposit)
+    {
+        return _resourceCells.TryGetValue(cell, out deposit);
     }
 
     public void PlaceStructure(FactoryStructure structure)

@@ -88,7 +88,12 @@ public partial class FactoryHud : CanvasLayer
         buttonGrid.AddThemeConstantOverride("v_separation", 6);
         body.AddChild(buttonGrid);
 
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Producer, "1 生产器");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Producer, "1 兼容生产器");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.MiningDrill, "采矿机");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Generator, "发电机");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.PowerPole, "电线杆");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Smelter, "熔炉");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Assembler, "组装机");
         CreateSelectionButton(buttonGrid, BuildPrototypeKind.Belt, "2 传送带");
         CreateSelectionButton(buttonGrid, BuildPrototypeKind.Sink, "3 回收站");
         CreateSelectionButton(buttonGrid, BuildPrototypeKind.Splitter, "4 分流器");
@@ -180,7 +185,7 @@ public partial class FactoryHud : CanvasLayer
         SetSinkStats(0, 0, 0);
         SetProfilerStats(0, 0.0, 0, 0, 0.0, 0.0, 0.0);
         SetCombatStats(0, 0, 0);
-        SetNote("默认场景已扩展仓储、机械臂与塔防补给链路，右上角仍保留 smoke 回归探针空区。");
+        SetNote("默认场景包含采矿、电力与制造主循环，同时保留一部分 legacy 回归线用于 smoke 和蓝图验证。");
         SetInspection(null, null);
         UpdateLayout();
         GetViewport().SizeChanged += UpdateLayout;

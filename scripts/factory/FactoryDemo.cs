@@ -7,7 +7,12 @@ public partial class FactoryDemo : Node3D
 {
     private readonly Dictionary<BuildPrototypeKind, BuildPrototypeDefinition> _definitions = new()
     {
-        [BuildPrototypeKind.Producer] = new BuildPrototypeDefinition(BuildPrototypeKind.Producer, "生产器", new Color("9DC08B"), "持续向前方投放原料。"),
+        [BuildPrototypeKind.Producer] = new BuildPrototypeDefinition(BuildPrototypeKind.Producer, "兼容生产器", new Color("9DC08B"), "兼容型占位产物流，仅用于 legacy 回归线。"),
+        [BuildPrototypeKind.MiningDrill] = new BuildPrototypeDefinition(BuildPrototypeKind.MiningDrill, "采矿机", new Color("FBBF24"), "只能放在矿点上，通电后持续采出资源。"),
+        [BuildPrototypeKind.Generator] = new BuildPrototypeDefinition(BuildPrototypeKind.Generator, "发电机", new Color("FB923C"), "消耗煤炭发电，为周边电网提供基础供给。"),
+        [BuildPrototypeKind.PowerPole] = new BuildPrototypeDefinition(BuildPrototypeKind.PowerPole, "电线杆", new Color("FDE68A"), "延伸电网覆盖，把发电机接到更远的机器。"),
+        [BuildPrototypeKind.Smelter] = new BuildPrototypeDefinition(BuildPrototypeKind.Smelter, "熔炉", new Color("CBD5E1"), "消耗电力把矿石炼成铁板。"),
+        [BuildPrototypeKind.Assembler] = new BuildPrototypeDefinition(BuildPrototypeKind.Assembler, "组装机", new Color("67E8F9"), "消耗中间品和电力，组装高阶产物。"),
         [BuildPrototypeKind.Belt] = new BuildPrototypeDefinition(BuildPrototypeKind.Belt, "传送带", new Color("7DD3FC"), "将物品沿直线向前输送。"),
         [BuildPrototypeKind.Sink] = new BuildPrototypeDefinition(BuildPrototypeKind.Sink, "回收站", new Color("FDE68A"), "接收物品并统计送达数量。"),
         [BuildPrototypeKind.Splitter] = new BuildPrototypeDefinition(BuildPrototypeKind.Splitter, "分流器", new Color("C4B5FD"), "将后方输入分到左右两路。"),
@@ -29,6 +34,7 @@ public partial class FactoryDemo : Node3D
     private Node3D? _structureRoot;
     private Node3D? _enemyRoot;
     private Node3D? _previewRoot;
+    private Node3D? _resourceOverlayRoot;
     private Node3D? _blueprintPreviewRoot;
     private Node3D? _blueprintGhostPreviewRoot;
     private MeshInstance3D? _previewCell;
@@ -268,6 +274,9 @@ public partial class FactoryDemo : Node3D
         AddChild(CreateFloor());
         AddChild(CreateGridLines());
 
+        _resourceOverlayRoot = new Node3D { Name = "ResourceOverlayRoot" };
+        AddChild(_resourceOverlayRoot);
+
         _structureRoot = new Node3D { Name = "StructureRoot" };
         AddChild(_structureRoot);
 
@@ -320,6 +329,8 @@ public partial class FactoryDemo : Node3D
         _simulation!.Configure(_grid);
         _combatDirector?.Configure(_simulation, _enemyRoot!);
         _cameraRig!.ConfigureBounds(_grid.GetWorldMin() + Vector2.One * 4.0f, _grid.GetWorldMax() - Vector2.One * 4.0f);
+        SeedWorldResourceDeposits();
+        RebuildResourceOverlayVisuals();
         _blueprintSite = CreateBlueprintSiteAdapter();
         EnterInteractionMode();
     }
@@ -419,24 +430,143 @@ public partial class FactoryDemo : Node3D
 
     private void CreateStarterLayout()
     {
-        AddSouthThroughputCorridor();
-        AddWestSplitterFanout();
-        AddCentralBridgeCrossing();
-        AddUpperSplitMergeLoop();
-        AddRelayLoaderUnloaderChain();
+        AddPoweredBootstrapDistrict();
+        AddPoweredManufacturingDistrict();
         AddStorageOutputCorridor();
         AddBeltToStorageTransferLine();
-        AddInserterYard();
-        AddNorthWarehouseBus();
-        AddEastBridgeDepot();
-        AddSouthCrossDock();
-        AddSharedPickupTestYard();
-        AddSharedDropoffTestYard();
+        AddWestSplitterFanout();
+        AddCentralBridgeCrossing();
         AddAmmoFedDefenseLane();
         AddAmmoStarvedBreachLane();
         AddMixedPressureLane();
         RefreshAllTopology();
         ConfigureCombatScenarios();
+    }
+
+    private void SeedWorldResourceDeposits()
+    {
+        if (_grid is null)
+        {
+            return;
+        }
+
+        var deposits = new List<FactoryResourceDepositDefinition>
+        {
+            new FactoryResourceDepositDefinition(
+                "coal_patch_bootstrap",
+                FactoryResourceKind.Coal,
+                "北西煤层",
+                new Color("8B5A2B"),
+                BuildRectCells(new Vector2I(-39, -31), new Vector2I(2, 2))),
+            new FactoryResourceDepositDefinition(
+                "iron_patch_main",
+                FactoryResourceKind.IronOre,
+                "北西铁矿区",
+                new Color("64748B"),
+                BuildRectCells(new Vector2I(-39, -23), new Vector2I(2, 2)))
+        };
+
+        _grid.SetResourceDeposits(deposits);
+    }
+
+    private void RebuildResourceOverlayVisuals()
+    {
+        if (_resourceOverlayRoot is null || _grid is null)
+        {
+            return;
+        }
+
+        foreach (var child in _resourceOverlayRoot.GetChildren())
+        {
+            if (child is Node node)
+            {
+                node.QueueFree();
+            }
+        }
+
+        var deposits = _grid.GetResourceDeposits();
+        for (var depositIndex = 0; depositIndex < deposits.Count; depositIndex++)
+        {
+            var deposit = deposits[depositIndex];
+            for (var cellIndex = 0; cellIndex < deposit.Cells.Count; cellIndex++)
+            {
+                var cell = deposit.Cells[cellIndex];
+                var mesh = new MeshInstance3D
+                {
+                    Name = $"Resource_{deposit.Id}_{cell.X}_{cell.Y}",
+                    Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.88f, 0.06f, FactoryConstants.CellSize * 0.88f) },
+                    Position = _grid.CellToWorld(cell) + new Vector3(0.0f, 0.03f, 0.0f),
+                    MaterialOverride = new StandardMaterial3D
+                    {
+                        AlbedoColor = deposit.Tint,
+                        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                        Roughness = 1.0f
+                    }
+                };
+                _resourceOverlayRoot.AddChild(mesh);
+
+                var chip = new MeshInstance3D
+                {
+                    Name = $"ResourceChip_{deposit.Id}_{cell.X}_{cell.Y}",
+                    Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.20f, 0.14f, FactoryConstants.CellSize * 0.20f) },
+                    Position = _grid.CellToWorld(cell) + new Vector3(0.0f, 0.10f, 0.0f),
+                    MaterialOverride = new StandardMaterial3D
+                    {
+                        AlbedoColor = deposit.Tint.Lightened(0.18f),
+                        Roughness = 0.85f
+                    }
+                };
+                _resourceOverlayRoot.AddChild(chip);
+            }
+        }
+    }
+
+    private void AddPoweredBootstrapDistrict()
+    {
+        PlaceStructure(BuildPrototypeKind.MiningDrill, -38, -30, FacingDirection.East);
+        PlaceBeltRun(new Vector2I(-37, -30), FacingDirection.East, 6);
+        var generator = PlaceStructure(BuildPrototypeKind.Generator, -31, -30, FacingDirection.East) as GeneratorStructure;
+        if (generator is not null && _simulation is not null)
+        {
+            generator.TryAcceptItem(_simulation.CreateItem(BuildPrototypeKind.MiningDrill, FactoryItemKind.Coal), generator.Cell + Vector2I.Left, _simulation);
+            generator.TryAcceptItem(_simulation.CreateItem(BuildPrototypeKind.MiningDrill, FactoryItemKind.Coal), generator.Cell + Vector2I.Left, _simulation);
+        }
+
+        PlaceStructure(BuildPrototypeKind.PowerPole, -34, -27, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.PowerPole, -31, -24, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.PowerPole, -28, -21, FacingDirection.East);
+    }
+
+    private void AddPoweredManufacturingDistrict()
+    {
+        PlaceStructure(BuildPrototypeKind.MiningDrill, -38, -22, FacingDirection.East);
+        PlaceBeltRun(new Vector2I(-37, -22), FacingDirection.East, 7);
+        PlaceStructure(BuildPrototypeKind.Smelter, -30, -22, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, -29, -22, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Storage, -28, -22, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Inserter, -27, -22, FacingDirection.East);
+        var assembler = PlaceStructure(BuildPrototypeKind.Assembler, -26, -22, FacingDirection.East) as AssemblerStructure;
+        assembler?.TrySetDetailRecipe("standard-ammo");
+        PlaceStructure(BuildPrototypeKind.Belt, -25, -22, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, -24, -22, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Sink, -23, -22, FacingDirection.East);
+
+        PlaceStructure(BuildPrototypeKind.PowerPole, -26, -20, FacingDirection.East);
+    }
+
+    private static Vector2I[] BuildRectCells(Vector2I origin, Vector2I size)
+    {
+        var cells = new Vector2I[size.X * size.Y];
+        var index = 0;
+        for (var y = 0; y < size.Y; y++)
+        {
+            for (var x = 0; x < size.X; x++)
+            {
+                cells[index++] = origin + new Vector2I(x, y);
+            }
+        }
+
+        return cells;
     }
 
     private void AddSouthThroughputCorridor()
@@ -821,10 +951,10 @@ public partial class FactoryDemo : Node3D
 
         if (_interactionMode == FactoryInteractionMode.Build && _selectedBuildKind.HasValue)
         {
-            _canPlaceCurrentCell = _grid.CanPlace(cell);
+            _canPlaceCurrentCell = TryValidateWorldPlacement(_selectedBuildKind.Value, cell, out var placementIssue);
             _previewMessage = _canPlaceCurrentCell
                 ? $"可在 ({cell.X}, {cell.Y}) 放置{_definitions[_selectedBuildKind.Value].DisplayName}，朝向 {FactoryDirection.ToLabel(_selectedFacing)}"
-                : $"格子 ({cell.X}, {cell.Y}) 已被 {_hoveredStructure?.DisplayName ?? "占用结构"} 占用。";
+                : placementIssue;
             return;
         }
 
@@ -1171,7 +1301,7 @@ public partial class FactoryDemo : Node3D
 
     private FactoryStructure? PlaceStructure(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
     {
-        if (_grid is null || _structureRoot is null || _simulation is null || !_grid.CanPlace(cell))
+        if (_grid is null || _structureRoot is null || _simulation is null || !TryValidateWorldPlacement(kind, cell, out _))
         {
             return null;
         }
@@ -1468,6 +1598,11 @@ public partial class FactoryDemo : Node3D
         if (!_grid.CanPlace(targetCell))
         {
             return "目标格已被占用。";
+        }
+
+        if (!TryValidateWorldPlacement(entry.Kind, targetCell, out var placementIssue))
+        {
+            return placementIssue;
         }
 
         return null;
@@ -1867,8 +2002,7 @@ public partial class FactoryDemo : Node3D
         var removed = _grid.CanPlace(probeCell);
 
         var initialStructureCount = _simulation.RegisteredStructureCount;
-        await ToSignal(GetTree().CreateTimer(3.2f), SceneTreeTimer.SignalName.Timeout);
-
+        var poweredFactoryVerified = await RunPoweredFactorySmoke();
         var sinkStats = CollectSinkStats();
         var profilerText = _hud?.ProfilerText ?? string.Empty;
         var splitterFallbackRecovered = await RunSplitterFallbackSmoke();
@@ -1881,7 +2015,8 @@ public partial class FactoryDemo : Node3D
 
         if (!placed
             || !removed
-            || initialStructureCount < 65
+            || initialStructureCount < 40
+            || !poweredFactoryVerified
             || sinkStats.deliveredTotal <= 0
             || string.IsNullOrWhiteSpace(profilerText)
             || !profilerText.Contains("FPS", global::System.StringComparison.Ordinal)
@@ -1893,13 +2028,42 @@ public partial class FactoryDemo : Node3D
             || !blueprintVerified
             || !combatVerified)
         {
-            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} structures={initialStructureCount} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} combat={combatVerified}");
+            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} combat={combatVerified}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} combat={combatVerified}");
+        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} combat={combatVerified}");
         GetTree().Quit();
+    }
+
+    private async Task<bool> RunPoweredFactorySmoke()
+    {
+        if (_grid is null)
+        {
+            return false;
+        }
+
+        if (!_grid.TryGetStructure(new Vector2I(-38, -30), out var coalDrillStructure) || coalDrillStructure is not MiningDrillStructure coalDrill
+            || !_grid.TryGetStructure(new Vector2I(-31, -30), out var generatorStructure) || generatorStructure is not GeneratorStructure generator
+            || !_grid.TryGetStructure(new Vector2I(-38, -22), out var ironDrillStructure) || ironDrillStructure is not MiningDrillStructure ironDrill
+            || !_grid.TryGetStructure(new Vector2I(-30, -22), out var smelterStructure) || smelterStructure is not SmelterStructure smelter
+            || !_grid.TryGetStructure(new Vector2I(-28, -22), out var storageStructure) || storageStructure is not StorageStructure storage
+            || !_grid.TryGetStructure(new Vector2I(-26, -22), out var assemblerStructure) || assemblerStructure is not AssemblerStructure assembler
+            || !_grid.TryGetStructure(new Vector2I(-23, -22), out var sinkStructure) || sinkStructure is not SinkStructure sink)
+        {
+            return false;
+        }
+
+        await ToSignal(GetTree().CreateTimer(14.0f), SceneTreeTimer.SignalName.Timeout);
+        var verified = coalDrill.ResourceKind == FactoryResourceKind.Coal
+            && ironDrill.ResourceKind == FactoryResourceKind.IronOre
+            && sink.DeliveredTotal > 0
+            && (generator.IsGenerating || generator.HasFuelBuffered)
+            && smelter.GetDetailModel().SummaryLines.Count > 0
+            && assembler.GetDetailModel().SummaryLines.Count > 0;
+
+        return verified;
     }
 
     private bool RunBlueprintWorkflowSmoke()
@@ -2158,11 +2322,11 @@ public partial class FactoryDemo : Node3D
 
         var requiredCells = new[]
         {
-            new Vector2I(12, 12),
-            new Vector2I(13, 12),
-            new Vector2I(12, 14),
-            new Vector2I(12, 16),
-            new Vector2I(13, 16)
+            new Vector2I(26, 26),
+            new Vector2I(27, 26),
+            new Vector2I(26, 28),
+            new Vector2I(26, 30),
+            new Vector2I(27, 30)
         };
 
         foreach (var cell in requiredCells)
@@ -2173,11 +2337,11 @@ public partial class FactoryDemo : Node3D
             }
         }
 
-        var feederProducer = PlaceStructure(BuildPrototypeKind.Producer, 12, 12, FacingDirection.East) as ProducerStructure;
-        var storage = PlaceStructure(BuildPrototypeKind.Storage, 13, 12, FacingDirection.East) as StorageStructure;
-        var recipeProducer = PlaceStructure(BuildPrototypeKind.Producer, 12, 14, FacingDirection.East) as ProducerStructure;
-        var ammoAssembler = PlaceStructure(BuildPrototypeKind.AmmoAssembler, 12, 16, FacingDirection.East) as AmmoAssemblerStructure;
-        var turret = PlaceStructure(BuildPrototypeKind.GunTurret, 13, 16, FacingDirection.East) as GunTurretStructure;
+        var feederProducer = PlaceStructure(BuildPrototypeKind.Producer, 26, 26, FacingDirection.East) as ProducerStructure;
+        var storage = PlaceStructure(BuildPrototypeKind.Storage, 27, 26, FacingDirection.East) as StorageStructure;
+        var recipeProducer = PlaceStructure(BuildPrototypeKind.Producer, 26, 28, FacingDirection.East) as ProducerStructure;
+        var ammoAssembler = PlaceStructure(BuildPrototypeKind.AmmoAssembler, 26, 30, FacingDirection.East) as AmmoAssemblerStructure;
+        var turret = PlaceStructure(BuildPrototypeKind.GunTurret, 27, 30, FacingDirection.East) as GunTurretStructure;
 
         if (feederProducer is null || storage is null || recipeProducer is null || ammoAssembler is null || turret is null)
         {
@@ -2240,7 +2404,7 @@ public partial class FactoryDemo : Node3D
 
         _selectedStructure = recipeProducer;
         UpdateHud();
-        recipeProducer.TryPeekProvidedItem(new Vector2I(13, 14), _simulation!, out var producedItem);
+        recipeProducer.TryPeekProvidedItem(new Vector2I(27, 28), _simulation!, out var producedItem);
         var producerRecipeVerified = producerRecipeChanged
             && _hud.IsDetailVisible
             && _hud.DetailTitleText.Contains("生产器", global::System.StringComparison.Ordinal)
@@ -2316,5 +2480,22 @@ public partial class FactoryDemo : Node3D
         return current <= 0.0
             ? sample
             : current + ((sample - current) * weight);
+    }
+
+    private bool TryValidateWorldPlacement(BuildPrototypeKind kind, Vector2I cell, out string message)
+    {
+        message = "世界网格不可用。";
+        if (_grid is null)
+        {
+            return false;
+        }
+
+        if (!_grid.IsInBounds(cell))
+        {
+            message = "超出可建造范围。";
+            return false;
+        }
+
+        return _grid.CanPlaceStructure(kind, cell, out message);
     }
 }

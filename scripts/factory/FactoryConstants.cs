@@ -4,8 +4,8 @@ public static class FactoryConstants
 {
     public const float CellSize = 2.0f;
     public const float HalfCell = CellSize * 0.5f;
-    public const int GridMin = -16;
-    public const int GridMax = 16;
+    public const int GridMin = -48;
+    public const int GridMax = 48;
     public const float SimulationStepSeconds = 0.05f;
     public const float ProducerSpawnSeconds = 0.8f;
     public const float BeltItemsPerSecond = 1.6f;
@@ -35,6 +35,6 @@ public static class FactoryConstants
     public const float EnemyAttackTracerLifetime = 0.18f;
     public const float CameraPitchDegrees = -55.0f;
     public const float CameraMinZoom = 15.0f;
-    public const float CameraMaxZoom = 34.0f;
-    public const float CameraDefaultZoom = 22.0f;
+    public const float CameraMaxZoom = 58.0f;
+    public const float CameraDefaultZoom = 28.0f;
 }

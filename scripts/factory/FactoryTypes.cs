@@ -3,6 +3,11 @@ using Godot;
 public enum BuildPrototypeKind
 {
     Producer,
+    MiningDrill,
+    Generator,
+    PowerPole,
+    Smelter,
+    Assembler,
     Belt,
     Sink,
     Splitter,
@@ -22,6 +27,9 @@ public enum BuildPrototypeKind
 public enum FactoryItemKind
 {
     GenericCargo,
+    Coal,
+    IronOre,
+    IronPlate,
     MachinePart,
     AmmoMagazine,
     HighVelocityAmmo
@@ -120,6 +128,11 @@ public static class FactoryPresentation
         return kind switch
         {
             BuildPrototypeKind.Producer => "生产器",
+            BuildPrototypeKind.MiningDrill => "采矿机",
+            BuildPrototypeKind.Generator => "发电机",
+            BuildPrototypeKind.PowerPole => "电线杆",
+            BuildPrototypeKind.Smelter => "熔炉",
+            BuildPrototypeKind.Assembler => "组装机",
             BuildPrototypeKind.Belt => "传送带",
             BuildPrototypeKind.Sink => "回收站",
             BuildPrototypeKind.Splitter => "分流器",
@@ -142,6 +155,9 @@ public static class FactoryPresentation
     {
         return item.ItemKind switch
         {
+            FactoryItemKind.Coal => $"煤矿 #{item.Id}",
+            FactoryItemKind.IronOre => $"铁矿石 #{item.Id}",
+            FactoryItemKind.IronPlate => $"铁板 #{item.Id}",
             FactoryItemKind.MachinePart => $"机加工件 #{item.Id}",
             FactoryItemKind.AmmoMagazine => $"弹药 #{item.Id}",
             FactoryItemKind.HighVelocityAmmo => $"高速弹药 #{item.Id}",
@@ -153,6 +169,9 @@ public static class FactoryPresentation
     {
         return itemKind switch
         {
+            FactoryItemKind.Coal => new Color("78350F"),
+            FactoryItemKind.IronOre => new Color("B45309"),
+            FactoryItemKind.IronPlate => new Color("CBD5E1"),
             FactoryItemKind.MachinePart => new Color("8B5CF6"),
             FactoryItemKind.AmmoMagazine => new Color("FACC15"),
             FactoryItemKind.HighVelocityAmmo => new Color("F97316"),

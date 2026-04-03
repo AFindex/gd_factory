@@ -8,6 +8,11 @@ public partial class DemoLauncher : Control
         MouseFilter = MouseFilterEnum.Stop;
         SetAnchorsPreset(LayoutPreset.FullRect);
         BuildScene();
+
+        if (HasUserArg("--factory-smoke-test"))
+        {
+            CallDeferred(nameof(OpenFactorySmokeScene));
+        }
     }
 
     private void BuildScene()
@@ -185,6 +190,24 @@ public partial class DemoLauncher : Control
         {
             GD.PushError($"Unable to open demo scene '{scenePath}': {error}");
         }
+    }
+
+    private void OpenFactorySmokeScene()
+    {
+        OpenDemo("res://scenes/factory_demo.tscn");
+    }
+
+    private static bool HasUserArg(string argText)
+    {
+        foreach (var arg in OS.GetCmdlineUserArgs())
+        {
+            if (string.Equals(arg, argText, System.StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void AddGlow(Control parent, Vector2 anchor, Vector2 size, Color color)

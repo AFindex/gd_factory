@@ -26,7 +26,7 @@ public static class DemoCatalog
         new(
             "factory-demo",
             "Factory Sandbox",
-            "静态工厂演示，包含传送带、分流/合流、仓储与机械臂物流回路。",
+            "静态工厂 sandbox，现已包含矿点、发电、真实制造链，以及保留的仓储/蓝图/战斗回归线。",
             "res://scenes/factory_demo.tscn"),
         new(
             "mobile-factory-demo",

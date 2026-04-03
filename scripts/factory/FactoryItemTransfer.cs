@@ -211,6 +211,37 @@ public sealed class FactorySlottedItemInventory
         return false;
     }
 
+    public bool TryPeekFirstMatching(FactoryItemKind itemKind, out FactoryItem? item)
+    {
+        for (var index = 0; index < _slotOrder.Count; index++)
+        {
+            var slot = _slotOrder[index];
+            if (_items.TryGetValue(slot, out item) && item.ItemKind == itemKind)
+            {
+                return true;
+            }
+        }
+
+        item = null;
+        return false;
+    }
+
+    public bool TryTakeFirstMatching(FactoryItemKind itemKind, out FactoryItem? item)
+    {
+        for (var index = 0; index < _slotOrder.Count; index++)
+        {
+            var slot = _slotOrder[index];
+            if (_items.TryGetValue(slot, out item) && item.ItemKind == itemKind)
+            {
+                _items.Remove(slot);
+                return true;
+            }
+        }
+
+        item = null;
+        return false;
+    }
+
     public FactoryInventorySlotState[] Snapshot()
     {
         var snapshot = new FactoryInventorySlotState[_slotOrder.Count];
