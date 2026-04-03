@@ -172,6 +172,11 @@ public sealed class MobileFactoryInstance
             {
                 return false;
             }
+
+            if (!projection.Attachment.CanBindToWorld(worldGrid, projection, out _))
+            {
+                return false;
+            }
         }
 
         return true;
@@ -479,25 +484,28 @@ public sealed class MobileFactoryInstance
         for (var i = 0; i < _attachments.Count; i++)
         {
             var attachment = _attachments[i];
-            var channelLabel = attachment.ChannelType == MobileFactoryAttachmentChannelType.ItemOutput ? "输出" : "输入";
             var stateLabel = attachment.ConnectionStateLabel;
+            var displayLabel = attachment.AttachmentDefinition.DisplayName;
 
             if (attachment.IsConnectedToWorld)
             {
                 var portCell = attachment.WorldPortCell;
-                lines.Add($"{channelLabel}端口 {i + 1}：朝{FactoryDirection.ToLabel(attachment.WorldFacing)}，{stateLabel} ({portCell.X}, {portCell.Y})");
+                var footprintSuffix = attachment.Projection is { } projection && projection.WorldCells.Count > 1
+                    ? $"，占地 {projection.WorldCells.Count} 格"
+                    : string.Empty;
+                lines.Add($"{displayLabel} {i + 1}：朝{FactoryDirection.ToLabel(attachment.WorldFacing)}，{stateLabel} ({portCell.X}, {portCell.Y}){footprintSuffix}");
             }
             else if (State == MobileFactoryLifecycleState.AutoDeploying && AnchorCell is null && _pendingDeployTarget is DeployTarget target)
             {
                 var projection = TryGetAttachmentProjection(attachment, target.AnchorCell, target.Facing);
                 if (projection is not null)
                 {
-                    lines.Add($"{channelLabel}端口 {i + 1}：目标朝{FactoryDirection.ToLabel(projection.WorldFacing)}，准备连接 ({projection.WorldPortCell.X}, {projection.WorldPortCell.Y})");
+                    lines.Add($"{displayLabel} {i + 1}：目标朝{FactoryDirection.ToLabel(projection.WorldFacing)}，准备连接 ({projection.WorldPortCell.X}, {projection.WorldPortCell.Y})");
                 }
             }
             else
             {
-                lines.Add($"{channelLabel}端口 {i + 1}：朝{FactoryDirection.ToLabel(attachment.Facing)}，当前{stateLabel}");
+                lines.Add($"{displayLabel} {i + 1}：朝{FactoryDirection.ToLabel(attachment.Facing)}，当前{stateLabel}");
             }
         }
 
@@ -683,7 +691,8 @@ public sealed class MobileFactoryInstance
 
         foreach (var projection in GetAttachmentProjections(anchorCell, facing))
         {
-            if (!worldGrid.CanReserveAll(projection.WorldCells, ReservationOwnerId))
+            if (!worldGrid.CanReserveAll(projection.WorldCells, ReservationOwnerId)
+                || !projection.Attachment.CanBindToWorld(worldGrid, projection, out _))
             {
                 continue;
             }
@@ -909,7 +918,10 @@ public sealed class MobileFactoryInstance
             }
             else
             {
-                _worldAttachmentVisualRoot.AddChild(CreateWorldAttachmentVisual(worldGrid, projection, 0.0f));
+                var newConnectorRoot = CreateWorldAttachmentVisual(worldGrid, projection, 0.0f);
+                _worldAttachmentVisualRoot.AddChild(newConnectorRoot);
+                ConfigureWorldAttachmentVisual(newConnectorRoot, worldGrid, projection);
+                ApplySingleAttachmentVisualProgress(newConnectorRoot, EaseAttachmentVisual(0.0f));
             }
         }
 
@@ -975,8 +987,8 @@ public sealed class MobileFactoryInstance
         };
         root.AddChild(mouth);
 
-        ConfigureWorldAttachmentVisual(root, worldGrid, projection);
-        ApplySingleAttachmentVisualProgress(root, EaseAttachmentVisual(initialProgress));
+        projection.Attachment.BuildWorldPayload(root, worldGrid, projection);
+
         return root;
     }
 
@@ -1009,6 +1021,8 @@ public sealed class MobileFactoryInstance
         {
             mouth.Rotation = new Vector3(0.0f, endpointYaw, 0.0f);
         }
+
+        projection.Attachment.ConfigureWorldPayload(root, worldGrid, projection);
     }
 
     private static Vector3 GetAttachmentConnectorStartWorld(MobileFactoryBoundaryAttachmentStructure attachment)
@@ -1181,6 +1195,15 @@ public sealed class MobileFactoryInstance
             mouth.Position = new Vector3(0.0f, 0.20f, (fullLength + mouthExtension) * eased);
             mouth.Visible = eased > 0.001f;
         }
+
+        var payloadRoot = connectorRoot.GetNodeOrNull<Node3D>("WorldPayloadRoot");
+        if (payloadRoot is not null)
+        {
+            var targetPosition = payloadRoot.GetMeta("payload_target_position", Vector3.Zero).AsVector3();
+            payloadRoot.Position = targetPosition * eased;
+            payloadRoot.Scale = Vector3.One * Mathf.Max(0.001f, eased);
+            payloadRoot.Visible = eased > 0.001f;
+        }
     }
 
     private bool CanPlaceAttachment(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
@@ -1209,8 +1232,10 @@ public sealed class MobileFactoryInstance
             }
 
             var projection = MobileFactoryBoundaryAttachmentGeometry.CreateProjection(previewStructure, mount, anchorCell, DeploymentFacing);
+            var canBind = previewStructure.CanBindToWorld(_deployedGrid, projection, out _);
             previewStructure.QueueFree();
-            return _deployedGrid.CanReserveAll(projection.WorldCells, ReservationOwnerId);
+            return _deployedGrid.CanReserveAll(projection.WorldCells, ReservationOwnerId)
+                && canBind;
         }
 
         return true;

@@ -3,6 +3,30 @@ using System.Collections.Generic;
 
 public static class MobileFactoryScenarioLibrary
 {
+    private static Vector2I[] CreateRectOffsets(int width, int height)
+    {
+        var offsets = new Vector2I[width * height];
+        var index = 0;
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                offsets[index++] = new Vector2I(x, y);
+            }
+        }
+
+        return offsets;
+    }
+
+    private static Vector2I[] CreateFootprintOffsets(int interiorWidth, int interiorHeight, float interiorCellSize, float interiorPlatformBorder)
+    {
+        var hullWidth = interiorWidth * interiorCellSize + interiorPlatformBorder;
+        var hullHeight = interiorHeight * interiorCellSize + interiorPlatformBorder;
+        var footprintWidth = Mathf.Max(2, Mathf.CeilToInt(hullWidth / FactoryConstants.CellSize));
+        var footprintHeight = Mathf.Max(2, Mathf.CeilToInt(hullHeight / FactoryConstants.CellSize));
+        return CreateRectOffsets(footprintWidth, footprintHeight);
+    }
+
     private static MobileFactoryAttachmentMount CreateAttachmentMount(
         string id,
         Vector2I cell,
@@ -23,13 +47,7 @@ public static class MobileFactoryScenarioLibrary
             interiorCellSize: 0.72f,
             interiorFloorHeight: 0.36f,
             interiorPlatformBorder: 0.18f,
-            footprintOffsetsEast: new[]
-            {
-                new Vector2I(0, 0),
-                new Vector2I(1, 0),
-                new Vector2I(0, 1),
-                new Vector2I(1, 1)
-            },
+            footprintOffsetsEast: CreateFootprintOffsets(8, 8, 0.72f, 0.18f),
             portOffsetsEast: new[]
             {
                 new Vector2I(2, 0)
@@ -43,9 +61,9 @@ public static class MobileFactoryScenarioLibrary
             portColor: new Color("FB923C"),
             attachmentMounts: new[]
             {
-                CreateAttachmentMount("west-input-main", new Vector2I(0, 3), FacingDirection.West, new Vector2I(-1, 1), BuildPrototypeKind.InputPort),
-                CreateAttachmentMount("east-output-main", new Vector2I(7, 1), FacingDirection.East, new Vector2I(2, 0), BuildPrototypeKind.OutputPort),
-                CreateAttachmentMount("east-output-aux", new Vector2I(7, 4), FacingDirection.East, new Vector2I(2, 1), BuildPrototypeKind.OutputPort)
+                CreateAttachmentMount("west-input-main", new Vector2I(0, 3), FacingDirection.West, new Vector2I(-1, 1), BuildPrototypeKind.InputPort, BuildPrototypeKind.MiningInputPort),
+                CreateAttachmentMount("east-output-main", new Vector2I(7, 1), FacingDirection.East, new Vector2I(3, 0), BuildPrototypeKind.OutputPort),
+                CreateAttachmentMount("east-output-aux", new Vector2I(7, 4), FacingDirection.East, new Vector2I(3, 1), BuildPrototypeKind.OutputPort)
             });
     }
 
@@ -59,13 +77,7 @@ public static class MobileFactoryScenarioLibrary
             interiorCellSize: 0.68f,
             interiorFloorHeight: 0.34f,
             interiorPlatformBorder: 0.16f,
-            footprintOffsetsEast: new[]
-            {
-                new Vector2I(0, 0),
-                new Vector2I(1, 0),
-                new Vector2I(0, 1),
-                new Vector2I(1, 1)
-            },
+            footprintOffsetsEast: CreateFootprintOffsets(5, 5, 0.68f, 0.16f),
             portOffsetsEast: new[]
             {
                 new Vector2I(2, 0)
@@ -79,7 +91,7 @@ public static class MobileFactoryScenarioLibrary
             portColor: new Color("5EEAD4"),
             attachmentMounts: new[]
             {
-                CreateAttachmentMount("west-input-main", new Vector2I(0, 3), FacingDirection.West, new Vector2I(-1, 1), BuildPrototypeKind.InputPort),
+                CreateAttachmentMount("west-input-main", new Vector2I(0, 3), FacingDirection.West, new Vector2I(-1, 1), BuildPrototypeKind.InputPort, BuildPrototypeKind.MiningInputPort),
                 CreateAttachmentMount("east-output-main", new Vector2I(4, 2), FacingDirection.East, new Vector2I(2, 0), BuildPrototypeKind.OutputPort),
                 CreateAttachmentMount("east-output-aux", new Vector2I(4, 3), FacingDirection.East, new Vector2I(2, 1), BuildPrototypeKind.OutputPort)
             });
@@ -95,15 +107,7 @@ public static class MobileFactoryScenarioLibrary
             interiorCellSize: 0.74f,
             interiorFloorHeight: 0.37f,
             interiorPlatformBorder: 0.18f,
-            footprintOffsetsEast: new[]
-            {
-                new Vector2I(0, 0),
-                new Vector2I(1, 0),
-                new Vector2I(2, 0),
-                new Vector2I(0, 1),
-                new Vector2I(1, 1),
-                new Vector2I(2, 1)
-            },
+            footprintOffsetsEast: CreateFootprintOffsets(6, 5, 0.74f, 0.18f),
             portOffsetsEast: new[]
             {
                 new Vector2I(3, 0)
@@ -117,7 +121,7 @@ public static class MobileFactoryScenarioLibrary
             portColor: new Color("BFDBFE"),
             attachmentMounts: new[]
             {
-                CreateAttachmentMount("west-input-main", new Vector2I(0, 3), FacingDirection.West, new Vector2I(-1, 1), BuildPrototypeKind.InputPort),
+                CreateAttachmentMount("west-input-main", new Vector2I(0, 3), FacingDirection.West, new Vector2I(-1, 1), BuildPrototypeKind.InputPort, BuildPrototypeKind.MiningInputPort),
                 CreateAttachmentMount("east-output-main", new Vector2I(5, 2), FacingDirection.East, new Vector2I(3, 0), BuildPrototypeKind.OutputPort),
                 CreateAttachmentMount("east-output-aux", new Vector2I(5, 3), FacingDirection.East, new Vector2I(3, 1), BuildPrototypeKind.OutputPort)
             });
@@ -133,17 +137,7 @@ public static class MobileFactoryScenarioLibrary
             interiorCellSize: 0.76f,
             interiorFloorHeight: 0.39f,
             interiorPlatformBorder: 0.20f,
-            footprintOffsetsEast: new[]
-            {
-                new Vector2I(0, 0),
-                new Vector2I(1, 0),
-                new Vector2I(2, 0),
-                new Vector2I(3, 0),
-                new Vector2I(0, 1),
-                new Vector2I(1, 1),
-                new Vector2I(2, 1),
-                new Vector2I(3, 1)
-            },
+            footprintOffsetsEast: CreateFootprintOffsets(7, 6, 0.76f, 0.20f),
             portOffsetsEast: new[]
             {
                 new Vector2I(4, 0)
@@ -157,9 +151,9 @@ public static class MobileFactoryScenarioLibrary
             portColor: new Color("FED7AA"),
             attachmentMounts: new[]
             {
-                CreateAttachmentMount("west-input-main", new Vector2I(0, 4), FacingDirection.West, new Vector2I(-1, 1), BuildPrototypeKind.InputPort),
-                CreateAttachmentMount("east-output-main", new Vector2I(6, 3), FacingDirection.East, new Vector2I(4, 0), BuildPrototypeKind.OutputPort),
-                CreateAttachmentMount("east-output-aux", new Vector2I(6, 4), FacingDirection.East, new Vector2I(4, 1), BuildPrototypeKind.OutputPort)
+                CreateAttachmentMount("west-input-main", new Vector2I(0, 4), FacingDirection.West, new Vector2I(-1, 1), BuildPrototypeKind.InputPort, BuildPrototypeKind.MiningInputPort),
+                CreateAttachmentMount("east-output-main", new Vector2I(6, 3), FacingDirection.East, new Vector2I(3, 0), BuildPrototypeKind.OutputPort),
+                CreateAttachmentMount("east-output-aux", new Vector2I(6, 4), FacingDirection.East, new Vector2I(3, 1), BuildPrototypeKind.OutputPort)
             });
     }
 

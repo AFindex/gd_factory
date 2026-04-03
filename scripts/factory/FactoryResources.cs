@@ -52,7 +52,7 @@ public static class FactoryResourceCatalog
 
     public static bool SupportsExtractor(BuildPrototypeKind kind, FactoryResourceKind resourceKind)
     {
-        return kind == BuildPrototypeKind.MiningDrill
+        return (kind == BuildPrototypeKind.MiningDrill || kind == BuildPrototypeKind.MiningInputPort)
             && (resourceKind == FactoryResourceKind.Coal || resourceKind == FactoryResourceKind.IronOre);
     }
 }

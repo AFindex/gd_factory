@@ -145,7 +145,23 @@ public static class MobileFactoryBoundaryAttachmentCatalog
             new Color("BFDBFE"),
             new[] { Vector2I.Zero },
             new[] { Vector2I.Right },
-            new[] { new Vector2I(2, 0) })
+            new[] { new Vector2I(2, 0) }),
+        [BuildPrototypeKind.MiningInputPort] = new MobileFactoryBoundaryAttachmentDefinition(
+            BuildPrototypeKind.MiningInputPort,
+            "采矿输入端口",
+            "在部署后把世界侧矿区直接接成移动工厂的采矿入口。",
+            MobileFactoryAttachmentChannelType.ItemInput,
+            new Color("34D399"),
+            new Color("A7F3D0"),
+            new[] { Vector2I.Zero },
+            new[] { Vector2I.Right },
+            new[]
+            {
+                new Vector2I(2, 1),
+                new Vector2I(3, 1),
+                new Vector2I(2, 2),
+                new Vector2I(3, 2)
+            })
     };
 
     public static bool IsAttachmentKind(BuildPrototypeKind kind)

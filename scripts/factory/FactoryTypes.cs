@@ -21,7 +21,8 @@ public enum BuildPrototypeKind
     AmmoAssembler,
     GunTurret,
     OutputPort,
-    InputPort
+    InputPort,
+    MiningInputPort
 }
 
 public enum FactoryItemKind
@@ -147,6 +148,7 @@ public static class FactoryPresentation
             BuildPrototypeKind.GunTurret => "机枪炮塔",
             BuildPrototypeKind.OutputPort => "输出端口",
             BuildPrototypeKind.InputPort => "输入端口",
+            BuildPrototypeKind.MiningInputPort => "采矿输入端口",
             _ => kind.ToString()
         };
     }

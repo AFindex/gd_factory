@@ -45,7 +45,8 @@ public static class FactoryStructureFactory
         [BuildPrototypeKind.AmmoAssembler] = new FactoryStructureDefinition(BuildPrototypeKind.AmmoAssembler, () => new AmmoAssemblerStructure(), true, true),
         [BuildPrototypeKind.GunTurret] = new FactoryStructureDefinition(BuildPrototypeKind.GunTurret, () => new GunTurretStructure(), true, true),
         [BuildPrototypeKind.OutputPort] = new FactoryStructureDefinition(BuildPrototypeKind.OutputPort, () => new MobileFactoryOutputPortStructure(), false, true),
-        [BuildPrototypeKind.InputPort] = new FactoryStructureDefinition(BuildPrototypeKind.InputPort, () => new MobileFactoryInputPortStructure(), false, true)
+        [BuildPrototypeKind.InputPort] = new FactoryStructureDefinition(BuildPrototypeKind.InputPort, () => new MobileFactoryInputPortStructure(), false, true),
+        [BuildPrototypeKind.MiningInputPort] = new FactoryStructureDefinition(BuildPrototypeKind.MiningInputPort, () => new MobileFactoryMiningInputPortStructure(), false, true)
     };
 
     public static FactoryStructure Create(BuildPrototypeKind kind, FactoryStructurePlacement placement)
