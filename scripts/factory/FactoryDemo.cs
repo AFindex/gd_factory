@@ -76,6 +76,11 @@ public partial class FactoryDemo : Node3D
     public override void _Process(double delta)
     {
         _averageFrameMilliseconds = SmoothMetric(_averageFrameMilliseconds, delta * 1000.0, 0.1);
+        if (_cameraRig is not null)
+        {
+            _cameraRig.AllowZoomInput = !IsPointerOverUi();
+        }
+
         UpdateHoveredCell();
         UpdatePreview();
         UpdateStructureVisuals();

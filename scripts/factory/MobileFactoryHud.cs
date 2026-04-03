@@ -72,6 +72,7 @@ public partial class MobileFactoryHud : CanvasLayer
     public event Action<string, Vector2I, Vector2I>? EditorDetailInventoryMoveRequested;
     public event Action<string>? EditorDetailRecipeSelected;
     public event Action? EditorDetailClosed;
+    public event Action? BlueprintCaptureSelectionRequested;
     public event Action? BlueprintCaptureFullRequested;
     public event Action<string>? BlueprintSaveRequested;
     public event Action<string>? BlueprintSelected;
@@ -382,6 +383,27 @@ public partial class MobileFactoryHud : CanvasLayer
         _blueprintPanel?.SetState(state);
     }
 
+    public bool BlocksInput(Control? control)
+    {
+        if (_detailWindow?.BlocksInput(control) ?? false)
+        {
+            return true;
+        }
+
+        if (_blueprintPanel?.BlocksInput(control) ?? false)
+        {
+            return true;
+        }
+
+        if (control is null)
+        {
+            return false;
+        }
+
+        return IsInside(control, _infoPanel)
+            || IsInside(control, _editorPanel);
+    }
+
     private void BuildInfoPanel()
     {
         var worldFocusFrame = new PanelContainer();
@@ -563,7 +585,7 @@ public partial class MobileFactoryHud : CanvasLayer
         _overlayRoot?.AddChild(_detailWindow);
 
         _blueprintPanel = new FactoryBlueprintPanel();
-        _blueprintPanel.CaptureSelectionRequested += () => { };
+        _blueprintPanel.CaptureSelectionRequested += () => BlueprintCaptureSelectionRequested?.Invoke();
         _blueprintPanel.CaptureFullRequested += () => BlueprintCaptureFullRequested?.Invoke();
         _blueprintPanel.BlueprintSelected += blueprintId => BlueprintSelected?.Invoke(blueprintId);
         _blueprintPanel.SaveCaptureRequested += name => BlueprintSaveRequested?.Invoke(name);
@@ -646,6 +668,27 @@ public partial class MobileFactoryHud : CanvasLayer
         label.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         parent.AddChild(label);
         return label;
+    }
+
+    private static bool IsInside(Control control, Control? container)
+    {
+        if (container is null)
+        {
+            return false;
+        }
+
+        var current = control;
+        while (current is not null)
+        {
+            if (current == container)
+            {
+                return true;
+            }
+
+            current = current.GetParent() as Control;
+        }
+
+        return false;
     }
 
     private static Label CreateEditorLabel(Container parent, int fontSize = 13, Color? color = null)

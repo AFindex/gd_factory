@@ -120,6 +120,11 @@ public partial class MobileFactoryDemo : Node3D
     private Vector2I _deleteInteriorDragStartCell;
     private Vector2I _deleteInteriorDragCurrentCell;
     private FactoryBlueprintWorkflowMode _blueprintMode;
+    private bool _interiorBlueprintSelectionDragActive;
+    private bool _hasInteriorBlueprintSelectionRect;
+    private Vector2I _interiorBlueprintSelectionStartCell;
+    private Vector2I _interiorBlueprintSelectionCurrentCell;
+    private Rect2I _interiorBlueprintSelectionRect;
     private FactoryBlueprintRecord? _pendingBlueprintCapture;
     private FactoryBlueprintApplyPlan? _interiorBlueprintPlan;
     private string _interiorPreviewMessage = "按 F 展开内部编辑区，然后把鼠标移入右侧区域开始调整移动工厂内部布局。";
@@ -184,6 +189,11 @@ public partial class MobileFactoryDemo : Node3D
         {
             _deleteInteriorDragCurrentCell = _hoveredInteriorCell;
         }
+
+        if (_editorOpen && _blueprintMode == FactoryBlueprintWorkflowMode.CaptureSelection && _interiorBlueprintSelectionDragActive && _hasHoveredInteriorCell)
+        {
+            _interiorBlueprintSelectionCurrentCell = _hoveredInteriorCell;
+        }
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -200,6 +210,31 @@ public partial class MobileFactoryDemo : Node3D
         if (@event is not InputEventMouseButton mouseButton)
         {
             return;
+        }
+
+        if (_blueprintMode == FactoryBlueprintWorkflowMode.CaptureSelection && CanUseEditorInput())
+        {
+            if (mouseButton.ButtonIndex == MouseButton.Right && mouseButton.Pressed)
+            {
+                CancelInteriorBlueprintWorkflow();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (mouseButton.ButtonIndex == MouseButton.Left)
+            {
+                if (mouseButton.Pressed)
+                {
+                    BeginInteriorBlueprintSelection();
+                }
+                else
+                {
+                    CompleteInteriorBlueprintSelection();
+                }
+
+                GetViewport().SetInputAsHandled();
+                return;
+            }
         }
 
         if (_blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && CanUseEditorInput())
@@ -222,6 +257,18 @@ public partial class MobileFactoryDemo : Node3D
                 GetViewport().SetInputAsHandled();
                 return;
             }
+        }
+
+        if (_interiorInteractionMode == FactoryInteractionMode.Interact
+            && CanUseEditorViewportInput()
+            && mouseButton.ButtonIndex == MouseButton.Left
+            && mouseButton.Pressed
+            && mouseButton.ShiftPressed)
+        {
+            StartInteriorBlueprintCapture();
+            BeginInteriorBlueprintSelection();
+            GetViewport().SetInputAsHandled();
+            return;
         }
 
         if (CanUseEditorViewportInput())
@@ -347,6 +394,7 @@ public partial class MobileFactoryDemo : Node3D
         _hud.EditorDetailInventoryMoveRequested += HandleEditorDetailInventoryMoveRequested;
         _hud.EditorDetailRecipeSelected += HandleEditorDetailRecipeSelected;
         _hud.EditorDetailClosed += HandleEditorDetailClosed;
+        _hud.BlueprintCaptureSelectionRequested += StartInteriorBlueprintCapture;
         _hud.BlueprintCaptureFullRequested += CaptureCurrentInteriorBlueprint;
         _hud.BlueprintSaveRequested += HandleInteriorBlueprintSaveRequested;
         _hud.BlueprintSelected += HandleInteriorBlueprintSelected;
@@ -941,11 +989,12 @@ public partial class MobileFactoryDemo : Node3D
     {
         _hoveringEditorPane = _editorOpen && (_hud?.IsPointerOverEditor(_mousePosition) ?? false);
         _hoveringEditorViewport = _editorOpen && (_hud?.IsPointerOverEditorViewport(_mousePosition) ?? false);
+        var hoveringUi = IsPointerOverUi();
 
         if (_cameraRig is not null)
         {
-            _cameraRig.AllowPanInput = CanUseWorldInput() && _controlMode == MobileFactoryControlMode.Observer;
-            _cameraRig.AllowZoomInput = CanUseWorldInput();
+            _cameraRig.AllowPanInput = !hoveringUi && CanUseWorldInput() && _controlMode == MobileFactoryControlMode.Observer;
+            _cameraRig.AllowZoomInput = !hoveringUi && CanUseWorldInput();
         }
 
         _hud?.SetPaneFocus(_editorOpen, _hoveringEditorPane);
@@ -989,13 +1038,16 @@ public partial class MobileFactoryDemo : Node3D
         _canDeleteInteriorCell = false;
         _hoveredInteriorStructure = null;
         _interiorBlueprintPlan = null;
-        _interiorPreviewMessage = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview
-            ? "蓝图预览：确认后将当前蓝图应用到内部布局。"
-            : _interiorInteractionMode switch
+        _interiorPreviewMessage = _blueprintMode switch
         {
-            FactoryInteractionMode.Build => "把鼠标移入右侧编辑区，可直接调整移动工厂内部布局。",
-            FactoryInteractionMode.Delete => "删除模式：左键删除内部建筑，按住 Shift 左键拖拽可框选删除。",
-            _ => "交互模式：把鼠标移入右侧编辑区，点击内部建筑查看状态。"
+            FactoryBlueprintWorkflowMode.CaptureSelection => "蓝图框选：按住左键拖拽选择一片内部布局，松开后可保存。",
+            FactoryBlueprintWorkflowMode.ApplyPreview => "蓝图预览：移动鼠标选择内部锚点，确认后将当前蓝图应用到内部布局。",
+            _ => _interiorInteractionMode switch
+            {
+                FactoryInteractionMode.Build => "把鼠标移入右侧编辑区，可直接调整移动工厂内部布局。",
+                FactoryInteractionMode.Delete => "删除模式：左键删除内部建筑，按住 Shift 左键拖拽可框选删除。",
+                _ => "交互模式：把鼠标移入右侧编辑区，点击内部建筑查看状态，或按住 Shift 左键直接框选蓝图。"
+            }
         };
 
         if (!_editorOpen || !_hoveringEditorViewport || _mobileFactory is null || _editorCamera is null)
@@ -1023,6 +1075,28 @@ public partial class MobileFactoryDemo : Node3D
             {
                 UpdateInteriorBlueprintPlan();
             }
+            return;
+        }
+
+        if (_blueprintMode == FactoryBlueprintWorkflowMode.CaptureSelection)
+        {
+            if (_interiorBlueprintSelectionDragActive)
+            {
+                _interiorBlueprintSelectionCurrentCell = cell;
+                var rect = GetDeleteRect(_interiorBlueprintSelectionStartCell, _interiorBlueprintSelectionCurrentCell);
+                var selectedCount = CountInteriorStructuresInDeleteRect(_interiorBlueprintSelectionStartCell, _interiorBlueprintSelectionCurrentCell);
+                _interiorPreviewMessage = $"蓝图框选：[{rect.Position.X},{rect.Position.Y}] - [{rect.End.X - 1},{rect.End.Y - 1}]，当前覆盖 {selectedCount} 个内部建筑。";
+                return;
+            }
+
+            if (_hasInteriorBlueprintSelectionRect)
+            {
+                var selectedCount = CountInteriorStructuresInDeleteRect(_interiorBlueprintSelectionRect.Position, _interiorBlueprintSelectionRect.End - Vector2I.One);
+                _interiorPreviewMessage = $"蓝图框选已完成：覆盖 {selectedCount} 个内部建筑，填写名称后保存。";
+                return;
+            }
+
+            _interiorPreviewMessage = "蓝图框选：按住左键拖拽选择一片内部布局。";
             return;
         }
 
@@ -1169,8 +1243,11 @@ public partial class MobileFactoryDemo : Node3D
 
         _interiorPreviewRoot.Visible = _editorOpen
             && _hoveringEditorViewport
-            && _hasHoveredInteriorCell
-            && (_interiorInteractionMode == FactoryInteractionMode.Build || _interiorInteractionMode == FactoryInteractionMode.Delete);
+            && ((_blueprintMode == FactoryBlueprintWorkflowMode.CaptureSelection
+                    && (_interiorBlueprintSelectionDragActive || _hasInteriorBlueprintSelectionRect || _hasHoveredInteriorCell))
+                || (_hasHoveredInteriorCell
+                    && (_interiorInteractionMode == FactoryInteractionMode.Build
+                        || _interiorInteractionMode == FactoryInteractionMode.Delete)));
         if (!_interiorPreviewRoot.Visible)
         {
             return;
@@ -1184,6 +1261,39 @@ public partial class MobileFactoryDemo : Node3D
         for (var i = 0; i < _interiorPreviewExteriorMeshes.Count; i++)
         {
             _interiorPreviewExteriorMeshes[i].Visible = false;
+        }
+
+        if (_blueprintMode == FactoryBlueprintWorkflowMode.CaptureSelection)
+        {
+            var start = _interiorBlueprintSelectionDragActive
+                ? _interiorBlueprintSelectionStartCell
+                : _hasInteriorBlueprintSelectionRect
+                    ? _interiorBlueprintSelectionRect.Position
+                    : _hoveredInteriorCell;
+            var end = _interiorBlueprintSelectionDragActive
+                ? _interiorBlueprintSelectionCurrentCell
+                : _hasInteriorBlueprintSelectionRect
+                    ? _interiorBlueprintSelectionRect.End - Vector2I.One
+                    : _hoveredInteriorCell;
+            var rect = GetDeleteRect(start, end);
+            var minCell = rect.Position;
+            var maxCell = rect.End - Vector2I.One;
+            var minWorld = _mobileFactory.InteriorSite.CellToWorld(minCell);
+            var maxWorld = _mobileFactory.InteriorSite.CellToWorld(maxCell);
+            _interiorPreviewRoot.Position = (minWorld + maxWorld) * 0.5f;
+            _interiorPreviewRoot.Rotation = new Vector3(0.0f, _mobileFactory.InteriorSite.WorldRotationRadians, 0.0f);
+            _interiorPreviewCell.Mesh = new BoxMesh
+            {
+                Size = new Vector3(
+                    _mobileFactory.InteriorSite.CellSize * rect.Size.X - (_mobileFactory.InteriorSite.CellSize * 0.22f),
+                    0.06f,
+                    _mobileFactory.InteriorSite.CellSize * rect.Size.Y - (_mobileFactory.InteriorSite.CellSize * 0.22f))
+            };
+            _interiorPreviewCell.Position = new Vector3(0.0f, 0.04f, 0.0f);
+            _interiorPreviewArrow.Visible = false;
+            var selectionTint = new Color(0.35f, 0.95f, 0.55f, 0.30f);
+            ApplyPreviewColor(_interiorPreviewCell, selectionTint);
+            return;
         }
 
         if (_interiorInteractionMode == FactoryInteractionMode.Delete)
@@ -1281,13 +1391,22 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
+        _interiorBlueprintPreviewRoot.GlobalPosition = _mobileFactory.InteriorSite.WorldOrigin;
+        _interiorBlueprintPreviewRoot.Rotation = new Vector3(
+            0.0f,
+            _mobileFactory.InteriorSite.WorldRotationRadians,
+            0.0f);
+
         EnsureInteriorBlueprintPreviewCapacity(_interiorBlueprintPlan.Entries.Count);
         for (var index = 0; index < _interiorBlueprintPlan.Entries.Count; index++)
         {
             var entry = _interiorBlueprintPlan.Entries[index];
             var mesh = _interiorBlueprintPreviewMeshes[index];
             mesh.Visible = true;
-            mesh.Position = _mobileFactory.InteriorSite.CellToWorld(entry.TargetCell) + new Vector3(0.0f, 0.06f, 0.0f);
+            mesh.Position = new Vector3(
+                entry.TargetCell.X * _mobileFactory.InteriorSite.CellSize,
+                0.06f,
+                entry.TargetCell.Y * _mobileFactory.InteriorSite.CellSize);
             ApplyPreviewColor(mesh, entry.IsValid
                 ? new Color(0.35f, 0.95f, 0.55f, 0.36f)
                 : new Color(1.0f, 0.35f, 0.35f, 0.36f));
@@ -1483,6 +1602,7 @@ public partial class MobileFactoryDemo : Node3D
         var activeBlueprint = FactoryBlueprintLibrary.GetActive();
         var modeText = _blueprintMode switch
         {
+            FactoryBlueprintWorkflowMode.CaptureSelection => "蓝图模式：内部框选保存",
             FactoryBlueprintWorkflowMode.ApplyPreview => "蓝图模式：内部应用预览",
             _ => "蓝图模式：待命"
         };
@@ -1490,11 +1610,13 @@ public partial class MobileFactoryDemo : Node3D
             ? "当前蓝图：未选择"
             : $"当前蓝图：{activeBlueprint.DisplayName} ({activeBlueprint.GetSummaryText()})";
         var captureSummary = _pendingBlueprintCapture is null
-            ? "可将当前内部布局保存为蓝图。"
+            ? "可框选当前内部布局保存为蓝图，也可一键保存整个内部布局。"
             : $"待保存：{_pendingBlueprintCapture.DisplayName} | {_pendingBlueprintCapture.GetSummaryText()}";
         var issueText = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && _interiorBlueprintPlan is not null
             ? _interiorBlueprintPlan.GetIssueSummary()
-            : "保存当前布局，或从蓝图库选择一个内部蓝图进行预览。";
+            : _blueprintMode == FactoryBlueprintWorkflowMode.CaptureSelection
+                ? "框选完成后在这里输入名称并保存。"
+                : "保存当前布局，或从蓝图库选择一个内部蓝图进行预览。";
 
         return new FactoryBlueprintPanelState
         {
@@ -1506,7 +1628,7 @@ public partial class MobileFactoryDemo : Node3D
             SuggestedName = _pendingBlueprintCapture?.DisplayName ?? string.Empty,
             PendingCaptureId = _pendingBlueprintCapture?.Id,
             ActiveBlueprintId = activeBlueprint?.Id,
-            AllowSelectionCapture = false,
+            AllowSelectionCapture = true,
             AllowFullCapture = true,
             CanSaveCapture = _pendingBlueprintCapture is not null,
             CanConfirmApply = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && _interiorBlueprintPlan?.IsValid == true,
@@ -1768,6 +1890,11 @@ public partial class MobileFactoryDemo : Node3D
         return _editorOpen && _hoveringEditorViewport;
     }
 
+    private bool IsPointerOverUi()
+    {
+        return _hud?.BlocksInput(GetViewport().GuiGetHoveredControl()) ?? false;
+    }
+
     private void OnEditorPaletteSelected(BuildPrototypeKind kind)
     {
         SelectInteriorBuildKind(_selectedInteriorKind == kind && _interiorInteractionMode == FactoryInteractionMode.Build
@@ -2014,10 +2141,12 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        var anchor = _interiorBlueprintSite.GetDefaultApplyAnchor(activeBlueprint);
+        var anchor = _hasHoveredInteriorCell
+            ? _hoveredInteriorCell
+            : _interiorBlueprintSite.GetDefaultApplyAnchor(activeBlueprint);
         _interiorBlueprintPlan = FactoryBlueprintPlanner.CreatePlan(activeBlueprint, _interiorBlueprintSite, anchor);
         _interiorPreviewMessage = _interiorBlueprintPlan.IsValid
-            ? $"蓝图 {activeBlueprint.DisplayName} 可应用到当前内部布局。"
+            ? $"蓝图 {activeBlueprint.DisplayName} 可应用到内部锚点 ({anchor.X}, {anchor.Y})。"
             : _interiorBlueprintPlan.GetIssueSummary();
     }
 
@@ -2114,6 +2243,58 @@ public partial class MobileFactoryDemo : Node3D
         return null;
     }
 
+    private void StartInteriorBlueprintCapture()
+    {
+        EnterInteriorInteractionMode();
+        _blueprintMode = FactoryBlueprintWorkflowMode.CaptureSelection;
+        _interiorBlueprintPlan = null;
+        _pendingBlueprintCapture = null;
+        _hasInteriorBlueprintSelectionRect = false;
+        _interiorBlueprintSelectionDragActive = false;
+    }
+
+    private void BeginInteriorBlueprintSelection()
+    {
+        if (!_hasHoveredInteriorCell)
+        {
+            return;
+        }
+
+        _interiorBlueprintSelectionDragActive = true;
+        _interiorBlueprintSelectionStartCell = _hoveredInteriorCell;
+        _interiorBlueprintSelectionCurrentCell = _hoveredInteriorCell;
+        _hasInteriorBlueprintSelectionRect = false;
+        _pendingBlueprintCapture = null;
+    }
+
+    private void CompleteInteriorBlueprintSelection()
+    {
+        if (!_interiorBlueprintSelectionDragActive)
+        {
+            return;
+        }
+
+        _interiorBlueprintSelectionDragActive = false;
+        _interiorBlueprintSelectionRect = GetDeleteRect(_interiorBlueprintSelectionStartCell, _interiorBlueprintSelectionCurrentCell);
+        _hasInteriorBlueprintSelectionRect = true;
+
+        if (_interiorBlueprintSite is null)
+        {
+            return;
+        }
+
+        var suggestedName = $"内部框选蓝图 {CountInteriorStructuresInDeleteRect(_interiorBlueprintSelectionStartCell, _interiorBlueprintSelectionCurrentCell)} 件";
+        _pendingBlueprintCapture = FactoryBlueprintCaptureService.CaptureSelection(
+            _interiorBlueprintSite,
+            _interiorBlueprintSelectionRect,
+            suggestedName);
+        if (_pendingBlueprintCapture is null)
+        {
+            _interiorPreviewMessage = "框选区域内没有可保存的内部建筑。";
+            _hasInteriorBlueprintSelectionRect = false;
+        }
+    }
+
     private void CaptureCurrentInteriorBlueprint()
     {
         if (_interiorBlueprintSite is null)
@@ -2121,6 +2302,8 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
+        _hasInteriorBlueprintSelectionRect = false;
+        _interiorBlueprintSelectionDragActive = false;
         _pendingBlueprintCapture = FactoryBlueprintCaptureService.CaptureFullSite(
             _interiorBlueprintSite,
             $"内部蓝图 {CountEditableInteriorStructures()} 件");
@@ -2147,6 +2330,7 @@ public partial class MobileFactoryDemo : Node3D
         FactoryBlueprintLibrary.AddOrUpdate(savedRecord);
         FactoryBlueprintLibrary.SelectActive(savedRecord.Id);
         _pendingBlueprintCapture = null;
+        _hasInteriorBlueprintSelectionRect = false;
         _blueprintMode = FactoryBlueprintWorkflowMode.None;
         _interiorPreviewMessage = $"已保存蓝图：{savedRecord.DisplayName}";
     }
@@ -2169,6 +2353,7 @@ public partial class MobileFactoryDemo : Node3D
 
         EnterInteriorInteractionMode();
         _pendingBlueprintCapture = null;
+        _hasInteriorBlueprintSelectionRect = false;
         _blueprintMode = FactoryBlueprintWorkflowMode.ApplyPreview;
         UpdateInteriorBlueprintPlan();
     }
@@ -2207,6 +2392,8 @@ public partial class MobileFactoryDemo : Node3D
     private void CancelInteriorBlueprintWorkflow(bool clearActiveBlueprint)
     {
         _blueprintMode = FactoryBlueprintWorkflowMode.None;
+        _interiorBlueprintSelectionDragActive = false;
+        _hasInteriorBlueprintSelectionRect = false;
         _pendingBlueprintCapture = null;
         _interiorBlueprintPlan = null;
 
@@ -2218,6 +2405,12 @@ public partial class MobileFactoryDemo : Node3D
 
     private void UpdateCursorShape()
     {
+        if (_editorOpen && _hoveringEditorViewport && _blueprintMode == FactoryBlueprintWorkflowMode.CaptureSelection)
+        {
+            Input.SetDefaultCursorShape(Input.CursorShape.Cross);
+            return;
+        }
+
         if (_editorOpen && _hoveringEditorViewport && _interiorInteractionMode == FactoryInteractionMode.Delete)
         {
             Input.SetDefaultCursorShape(Input.CursorShape.Cross);
