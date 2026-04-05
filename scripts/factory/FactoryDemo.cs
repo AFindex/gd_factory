@@ -1616,13 +1616,27 @@ public partial class FactoryDemo : Node3D
 
     private void HandleHudWorkspaceSelected(string workspaceId)
     {
+        if (workspaceId != BlueprintWorkspaceId && HasActiveBlueprintWorkspaceState())
+        {
+            CancelBlueprintWorkflow(clearActiveBlueprint: true);
+            _previewMessage = "已切换离开蓝图工作区，并清除当前蓝图选择。";
+            return;
+        }
+
         if (workspaceId == BlueprintWorkspaceId
-            && _blueprintMode == FactoryBlueprintWorkflowMode.None
-            && _pendingBlueprintCapture is null
-            && FactoryBlueprintLibrary.GetActive() is null)
+            && !HasActiveBlueprintWorkspaceState())
         {
             _previewMessage = "蓝图工作区已打开：按住 Shift 左键拖拽框选保存，或先在库里准备一个蓝图。";
         }
+    }
+
+    private bool HasActiveBlueprintWorkspaceState()
+    {
+        return _blueprintMode != FactoryBlueprintWorkflowMode.None
+            || _pendingBlueprintCapture is not null
+            || _blueprintApplyPlan is not null
+            || _hasBlueprintSelectionRect
+            || FactoryBlueprintLibrary.GetActive() is not null;
     }
 
     private FactoryBlueprintPanelState BuildBlueprintPanelState()

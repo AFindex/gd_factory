@@ -9,6 +9,42 @@ public partial class FactoryHud : CanvasLayer
     private const string TelemetryWorkspaceId = "telemetry";
     private const string CombatWorkspaceId = "combat";
     private const string TestingWorkspaceId = "testing";
+    private const int CompactTabFontSize = 10;
+    private static readonly (string Title, BuildPrototypeKind[] Kinds)[] BuildPaletteCategories =
+    {
+        ("物流与缓存", new[]
+        {
+            BuildPrototypeKind.Belt,
+            BuildPrototypeKind.Splitter,
+            BuildPrototypeKind.Merger,
+            BuildPrototypeKind.Bridge,
+            BuildPrototypeKind.Storage,
+            BuildPrototypeKind.LargeStorageDepot,
+            BuildPrototypeKind.Inserter,
+            BuildPrototypeKind.Sink
+        }),
+        ("生产与电力", new[]
+        {
+            BuildPrototypeKind.MiningDrill,
+            BuildPrototypeKind.Generator,
+            BuildPrototypeKind.PowerPole,
+            BuildPrototypeKind.Smelter,
+            BuildPrototypeKind.Assembler
+        }),
+        ("防御与设施", new[]
+        {
+            BuildPrototypeKind.Wall,
+            BuildPrototypeKind.GunTurret,
+            BuildPrototypeKind.HeavyGunTurret
+        }),
+        ("测试建筑", new[]
+        {
+            BuildPrototypeKind.Loader,
+            BuildPrototypeKind.Unloader,
+            BuildPrototypeKind.Producer,
+            BuildPrototypeKind.AmmoAssembler
+        })
+    };
 
     private readonly Dictionary<BuildPrototypeKind, Button> _selectionButtons = new();
     private readonly Dictionary<string, Control> _workspacePanels = new();
@@ -395,33 +431,8 @@ public partial class FactoryHud : CanvasLayer
 
         body.AddChild(CreateDivider());
         body.AddChild(CreateSectionLabel("建造面板", 12, new Color("F8FAFC")));
-        var buttonGrid = new GridContainer();
-        buttonGrid.Columns = 2;
-        buttonGrid.MouseFilter = Control.MouseFilterEnum.Ignore;
-        buttonGrid.AddThemeConstantOverride("h_separation", 6);
-        buttonGrid.AddThemeConstantOverride("v_separation", 6);
-        body.AddChild(buttonGrid);
-
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Producer, "1 兼容生产器");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.MiningDrill, "采矿机");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Generator, "发电机");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.PowerPole, "电线杆");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Smelter, "熔炉");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Assembler, "组装机");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Belt, "2 传送带");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Sink, "3 回收站");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Splitter, "4 分流器");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Merger, "5 合并器");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Bridge, "6 跨桥");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Loader, "7 装载器");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Unloader, "8 卸载器");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Storage, "9 仓储");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.LargeStorageDepot, "大型仓储");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Inserter, "0 机械臂");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.Wall, "墙体");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.AmmoAssembler, "弹药组装器");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.GunTurret, "机枪炮塔");
-        CreateSelectionButton(buttonGrid, BuildPrototypeKind.HeavyGunTurret, "重型炮塔");
+        body.AddChild(CreateValueLabel("按功能拆成页签；多格建筑会保留在各自所属功能分类中。", new Color("8EA4B8")));
+        BuildSelectionCategories(body);
 
         body.AddChild(CreateDivider());
         body.AddChild(CreateSectionLabel("快速观察", 12, new Color("F8FAFC")));
@@ -652,6 +663,69 @@ public partial class FactoryHud : CanvasLayer
         };
         parent.AddChild(button);
         _selectionButtons[kind] = button;
+    }
+
+    private void BuildSelectionCategories(Container parent)
+    {
+        var tabs = new TabContainer();
+        tabs.MouseFilter = Control.MouseFilterEnum.Ignore;
+        tabs.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        tabs.AddThemeFontSizeOverride("font_size", CompactTabFontSize);
+        tabs.AddThemeConstantOverride("side_margin", 2);
+        parent.AddChild(tabs);
+
+        for (var index = 0; index < BuildPaletteCategories.Length; index++)
+        {
+            var category = BuildPaletteCategories[index];
+            var section = new VBoxContainer();
+            section.Name = category.Title;
+            section.MouseFilter = Control.MouseFilterEnum.Ignore;
+            section.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            section.AddThemeConstantOverride("separation", 4);
+            tabs.AddChild(section);
+
+            var buttonGrid = new GridContainer();
+            buttonGrid.Columns = 2;
+            buttonGrid.MouseFilter = Control.MouseFilterEnum.Ignore;
+            buttonGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            buttonGrid.AddThemeConstantOverride("h_separation", 6);
+            buttonGrid.AddThemeConstantOverride("v_separation", 6);
+            section.AddChild(buttonGrid);
+
+            for (var kindIndex = 0; kindIndex < category.Kinds.Length; kindIndex++)
+            {
+                var kind = category.Kinds[kindIndex];
+                CreateSelectionButton(buttonGrid, kind, GetBuildPaletteLabel(kind));
+            }
+        }
+    }
+
+    private static string GetBuildPaletteLabel(BuildPrototypeKind kind)
+    {
+        return kind switch
+        {
+            BuildPrototypeKind.Producer => "1 兼容生产器",
+            BuildPrototypeKind.Belt => "2 传送带",
+            BuildPrototypeKind.Sink => "3 回收站",
+            BuildPrototypeKind.Splitter => "4 分流器",
+            BuildPrototypeKind.Merger => "5 合并器",
+            BuildPrototypeKind.Bridge => "6 跨桥",
+            BuildPrototypeKind.Loader => "7 装载器",
+            BuildPrototypeKind.Unloader => "8 卸载器",
+            BuildPrototypeKind.Storage => "9 仓储",
+            BuildPrototypeKind.Inserter => "0 机械臂",
+            BuildPrototypeKind.MiningDrill => "采矿机",
+            BuildPrototypeKind.Generator => "发电机",
+            BuildPrototypeKind.PowerPole => "电线杆",
+            BuildPrototypeKind.Smelter => "熔炉",
+            BuildPrototypeKind.Assembler => "组装机",
+            BuildPrototypeKind.LargeStorageDepot => "大型仓储",
+            BuildPrototypeKind.Wall => "墙体",
+            BuildPrototypeKind.AmmoAssembler => "弹药组装器",
+            BuildPrototypeKind.GunTurret => "机枪炮塔",
+            BuildPrototypeKind.HeavyGunTurret => "重型炮塔",
+            _ => FactoryPresentation.GetKindLabel(kind)
+        };
     }
 
     private static bool BlocksInteractiveInput(Control? control, Control? container)

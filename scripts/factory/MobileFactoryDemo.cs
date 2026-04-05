@@ -43,6 +43,7 @@ public partial class MobileFactoryDemo : Node3D
         BuildPrototypeKind.Wall,
         BuildPrototypeKind.AmmoAssembler,
         BuildPrototypeKind.GunTurret,
+        BuildPrototypeKind.HeavyGunTurret,
         BuildPrototypeKind.OutputPort,
         BuildPrototypeKind.InputPort,
         BuildPrototypeKind.MiningInputPort,
@@ -87,6 +88,7 @@ public partial class MobileFactoryDemo : Node3D
         [BuildPrototypeKind.Wall] = new BuildPrototypeDefinition(BuildPrototypeKind.Wall, "墙体", new Color("D1D5DB"), "给移动工厂的前缘补上一段高耐久掩体。"),
         [BuildPrototypeKind.AmmoAssembler] = new BuildPrototypeDefinition(BuildPrototypeKind.AmmoAssembler, "弹药组装器", new Color("FB923C"), "在内部持续生产弹药，直接喂给炮塔。"),
         [BuildPrototypeKind.GunTurret] = new BuildPrototypeDefinition(BuildPrototypeKind.GunTurret, "机枪炮塔", new Color("CBD5E1"), "会跟随移动工厂整体旋转，对世界中的敌人自动转向并射击。"),
+        [BuildPrototypeKind.HeavyGunTurret] = new BuildPrototypeDefinition(BuildPrototypeKind.HeavyGunTurret, "重型炮塔", new Color("E2E8F0"), "占据 2x2 内部格子，消耗高速弹药并发射独立炮弹。"),
         [BuildPrototypeKind.OutputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.OutputPort, "输出端口", new Color("FB923C"), "将移动工厂内部物流送往世界网格。"),
         [BuildPrototypeKind.InputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.InputPort, "输入端口", new Color("60A5FA"), "把世界侧物流导入移动工厂内部。"),
         [BuildPrototypeKind.MiningInputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.MiningInputPort, "采矿输入端口", new Color("34D399"), "部署后会在工厂外侧展开完整采矿预览；有矿位会部署蓝色采矿桩，无矿位会保留黄色标记。"),
@@ -2355,6 +2357,12 @@ public partial class MobileFactoryDemo : Node3D
 
     private void HandleHudWorkspaceSelected(string workspaceId)
     {
+        if (workspaceId != BlueprintWorkspaceId && HasActiveInteriorBlueprintWorkspaceState())
+        {
+            CancelInteriorBlueprintWorkflow(clearActiveBlueprint: true);
+            _interiorPreviewMessage = "已切换离开蓝图工作区，并清除当前蓝图选择。";
+        }
+
         if (workspaceId == BlueprintWorkspaceId || workspaceId == GetHudBuildWorkspaceId())
         {
             if (!_editorOpen)
@@ -2363,6 +2371,15 @@ public partial class MobileFactoryDemo : Node3D
                 FocusFactoryForCurrentMode();
             }
         }
+    }
+
+    private bool HasActiveInteriorBlueprintWorkspaceState()
+    {
+        return _blueprintMode != FactoryBlueprintWorkflowMode.None
+            || _pendingBlueprintCapture is not null
+            || _interiorBlueprintPlan is not null
+            || _hasInteriorBlueprintSelectionRect
+            || FactoryBlueprintLibrary.GetActive() is not null;
     }
 
     private string BuildFactoryDetailText()
@@ -3950,8 +3967,19 @@ public partial class MobileFactoryDemo : Node3D
         var removedFromSecondaryCell = _mobileFactory.RemoveInteriorStructure(secondaryCell);
         var cleared = !_mobileFactory.TryGetInteriorStructure(anchorCell, out _)
             && !_mobileFactory.TryGetInteriorStructure(secondaryCell, out _);
+        var heavyTurretPlaced = _mobileFactory.PlaceInteriorStructure(BuildPrototypeKind.HeavyGunTurret, anchorCell, FacingDirection.East);
+        var heavyTurretResolves = _mobileFactory.TryGetInteriorStructure(anchorCell + Vector2I.Right, out var heavyTurretStructure)
+            && heavyTurretStructure is HeavyGunTurretStructure;
+        var heavyTurretRemoved = _mobileFactory.RemoveInteriorStructure(anchorCell + Vector2I.Right);
         var replaced = _mobileFactory.PlaceInteriorStructure(BuildPrototypeKind.LargeStorageDepot, anchorCell, FacingDirection.East);
-        return resolvesFromSecondaryCell && blockedAtEdge && removedFromSecondaryCell && cleared && replaced;
+        return resolvesFromSecondaryCell
+            && blockedAtEdge
+            && removedFromSecondaryCell
+            && cleared
+            && heavyTurretPlaced
+            && heavyTurretResolves
+            && heavyTurretRemoved
+            && replaced;
     }
 
     private async Task<bool> RunWorkspaceNavigationSmoke()

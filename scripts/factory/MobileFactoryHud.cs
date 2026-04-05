@@ -12,14 +12,46 @@ public partial class MobileFactoryHud : CanvasLayer
     private const string BuildTestWorkspaceId = "build-test";
     private const string DiagnosticsWorkspaceId = "diagnostics";
     private const float EditorSidebarWidth = 292.0f;
-
-    private static readonly BuildPrototypeKind[] EditorPalette =
+    private const int CompactTabFontSize = 10;
+    private static readonly (string Title, BuildPrototypeKind[] Kinds)[] EditorPaletteCategories =
     {
-        BuildPrototypeKind.Producer, BuildPrototypeKind.Belt, BuildPrototypeKind.Splitter, BuildPrototypeKind.Merger,
-        BuildPrototypeKind.Bridge, BuildPrototypeKind.Loader, BuildPrototypeKind.Unloader, BuildPrototypeKind.Sink,
-        BuildPrototypeKind.Storage, BuildPrototypeKind.LargeStorageDepot, BuildPrototypeKind.Inserter, BuildPrototypeKind.Wall, BuildPrototypeKind.AmmoAssembler,
-        BuildPrototypeKind.GunTurret, BuildPrototypeKind.OutputPort, BuildPrototypeKind.InputPort, BuildPrototypeKind.MiningInputPort,
-        BuildPrototypeKind.Generator, BuildPrototypeKind.PowerPole, BuildPrototypeKind.Smelter, BuildPrototypeKind.Assembler
+        ("物流", new[]
+        {
+            BuildPrototypeKind.Belt,
+            BuildPrototypeKind.Splitter,
+            BuildPrototypeKind.Merger,
+            BuildPrototypeKind.Bridge,
+            BuildPrototypeKind.Storage,
+            BuildPrototypeKind.LargeStorageDepot,
+            BuildPrototypeKind.Inserter,
+            BuildPrototypeKind.Sink
+        }),
+        ("生产电力", new[]
+        {
+            BuildPrototypeKind.Generator,
+            BuildPrototypeKind.PowerPole,
+            BuildPrototypeKind.Smelter,
+            BuildPrototypeKind.Assembler
+        }),
+        ("防御", new[]
+        {
+            BuildPrototypeKind.Wall,
+            BuildPrototypeKind.GunTurret,
+            BuildPrototypeKind.HeavyGunTurret
+        }),
+        ("测试建筑", new[]
+        {
+            BuildPrototypeKind.Loader,
+            BuildPrototypeKind.Unloader,
+            BuildPrototypeKind.Producer,
+            BuildPrototypeKind.AmmoAssembler
+        }),
+        ("边界接口", new[]
+        {
+            BuildPrototypeKind.OutputPort,
+            BuildPrototypeKind.InputPort,
+            BuildPrototypeKind.MiningInputPort
+        })
     };
 
     private static readonly Color EditorFocusColor = new("7DD3FC");

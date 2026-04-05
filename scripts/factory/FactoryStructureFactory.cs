@@ -60,7 +60,7 @@ public static class FactoryStructureFactory
             BuildPrototypeKind.HeavyGunTurret,
             () => new HeavyGunTurretStructure(),
             true,
-            false,
+            true,
             new FactoryStructureFootprint(
                 new[] { Vector2I.Zero, Vector2I.Right, Vector2I.Down, Vector2I.Right + Vector2I.Down })),
         [BuildPrototypeKind.OutputPort] = new FactoryStructureDefinition(BuildPrototypeKind.OutputPort, () => new MobileFactoryOutputPortStructure(), false, true),

@@ -332,6 +332,7 @@ public partial class MobileFactoryHud
         inspectionBody.AddChild(_inspectionTitleLabel);
         inspectionBody.AddChild(_inspectionBodyLabel);
 
+        body.AddChild(CreateEditorLabel("建造分类", 12, new Color("BFDBFE")));
         BuildEditorToolbar(body);
         body.AddChild(CreateDivider());
         _editorPreviewLabel = CreateEditorLabel("内部预览：等待状态更新。", 12, new Color("D7E6F2"));
@@ -499,19 +500,47 @@ public partial class MobileFactoryHud
 
     private void BuildEditorToolbar(Container parent)
     {
-        var paletteGrid = new GridContainer();
-        paletteGrid.Columns = 3;
-        paletteGrid.AddThemeConstantOverride("h_separation", 6);
-        paletteGrid.AddThemeConstantOverride("v_separation", 6);
-        parent.AddChild(paletteGrid);
+        var tabs = new TabContainer();
+        tabs.MouseFilter = Control.MouseFilterEnum.Ignore;
+        tabs.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        tabs.AddThemeFontSizeOverride("font_size", CompactTabFontSize);
+        tabs.AddThemeConstantOverride("side_margin", 2);
+        parent.AddChild(tabs);
 
-        foreach (var kind in EditorPalette)
+        for (var categoryIndex = 0; categoryIndex < EditorPaletteCategories.Length; categoryIndex++)
         {
-            var button = new Button { Text = GetKindLabel(kind), ToggleMode = true, MouseFilter = Control.MouseFilterEnum.Stop, CustomMinimumSize = new Vector2(82.0f, 28.0f) };
-            button.AddThemeFontSizeOverride("font_size", 11);
-            button.Pressed += () => EditorPaletteSelected?.Invoke(kind);
-            paletteGrid.AddChild(button);
-            _paletteButtons[kind] = button;
+            var category = EditorPaletteCategories[categoryIndex];
+            var section = new VBoxContainer();
+            section.Name = category.Title;
+            section.MouseFilter = Control.MouseFilterEnum.Ignore;
+            section.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            section.AddThemeConstantOverride("separation", 4);
+            tabs.AddChild(section);
+
+            var paletteGrid = new GridContainer();
+            paletteGrid.Columns = 2;
+            paletteGrid.MouseFilter = Control.MouseFilterEnum.Ignore;
+            paletteGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            paletteGrid.AddThemeConstantOverride("h_separation", 6);
+            paletteGrid.AddThemeConstantOverride("v_separation", 6);
+            section.AddChild(paletteGrid);
+
+            for (var kindIndex = 0; kindIndex < category.Kinds.Length; kindIndex++)
+            {
+                var kind = category.Kinds[kindIndex];
+                var button = new Button
+                {
+                    Text = GetKindLabel(kind),
+                    ToggleMode = true,
+                    MouseFilter = Control.MouseFilterEnum.Stop,
+                    SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+                    CustomMinimumSize = new Vector2(0.0f, 28.0f)
+                };
+                button.AddThemeFontSizeOverride("font_size", 11);
+                button.Pressed += () => EditorPaletteSelected?.Invoke(kind);
+                paletteGrid.AddChild(button);
+                _paletteButtons[kind] = button;
+            }
         }
 
         var rotateRow = new HBoxContainer();
@@ -663,6 +692,7 @@ public partial class MobileFactoryHud
             BuildPrototypeKind.Wall => "墙体",
             BuildPrototypeKind.AmmoAssembler => "弹药组装器",
             BuildPrototypeKind.GunTurret => "机枪炮塔",
+            BuildPrototypeKind.HeavyGunTurret => "重型炮塔",
             BuildPrototypeKind.OutputPort => "输出端口",
             BuildPrototypeKind.InputPort => "输入端口",
             BuildPrototypeKind.MiningInputPort => "采矿输入端口",
