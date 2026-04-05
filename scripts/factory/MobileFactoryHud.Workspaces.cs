@@ -223,7 +223,7 @@ public partial class MobileFactoryHud
         AddChild(viewport);
 
         _detailWindow = new FactoryStructureDetailWindow();
-        _detailWindow.InventoryMoveRequested += (inventoryId, fromSlot, toSlot) => EditorDetailInventoryMoveRequested?.Invoke(inventoryId, fromSlot, toSlot);
+        _detailWindow.InventoryMoveRequested += (inventoryId, fromSlot, toSlot, splitStack) => EditorDetailInventoryMoveRequested?.Invoke(inventoryId, fromSlot, toSlot, splitStack);
         _detailWindow.RecipeSelected += recipeId => EditorDetailRecipeSelected?.Invoke(recipeId);
         _detailWindow.DetailActionRequested += actionId => EditorDetailActionRequested?.Invoke(actionId);
         _detailWindow.CloseRequested += () => EditorDetailClosed?.Invoke();

@@ -5,7 +5,7 @@ using System.Text;
 public interface IFactoryStructureDetailProvider
 {
     FactoryStructureDetailModel GetDetailModel();
-    bool TryMoveDetailInventoryItem(string inventoryId, Vector2I fromSlot, Vector2I toSlot);
+    bool TryMoveDetailInventoryItem(string inventoryId, Vector2I fromSlot, Vector2I toSlot, bool splitStack = false);
     bool TrySetDetailRecipe(string recipeId);
     bool TryInvokeDetailAction(string actionId);
 }

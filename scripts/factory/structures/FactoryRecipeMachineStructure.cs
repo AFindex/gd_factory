@@ -232,10 +232,10 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
             recipeSection);
     }
 
-    public override bool TryMoveDetailInventoryItem(string inventoryId, Vector2I fromSlot, Vector2I toSlot)
+    public override bool TryMoveDetailInventoryItem(string inventoryId, Vector2I fromSlot, Vector2I toSlot, bool splitStack = false)
     {
-        return (inventoryId == InputInventoryId && _inputInventory.TryMoveItem(fromSlot, toSlot))
-            || (inventoryId == OutputInventoryId && _outputInventory.TryMoveItem(fromSlot, toSlot));
+        return (inventoryId == InputInventoryId && _inputInventory.TryMoveItem(fromSlot, toSlot, splitStack))
+            || (inventoryId == OutputInventoryId && _outputInventory.TryMoveItem(fromSlot, toSlot, splitStack));
     }
 
     public override bool TrySetDetailRecipe(string recipeId)

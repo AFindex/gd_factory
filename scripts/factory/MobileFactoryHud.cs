@@ -112,7 +112,7 @@ public partial class MobileFactoryHud : CanvasLayer
     public event Action<int>? EditorRotateRequested;
     public event Action? ObserverModeToggleRequested;
     public event Action? DeployModeToggleRequested;
-    public event Action<string, Vector2I, Vector2I>? EditorDetailInventoryMoveRequested;
+    public event Action<string, Vector2I, Vector2I, bool>? EditorDetailInventoryMoveRequested;
     public event Action<string>? EditorDetailRecipeSelected;
     public event Action<string>? EditorDetailActionRequested;
     public event Action? EditorDetailClosed;

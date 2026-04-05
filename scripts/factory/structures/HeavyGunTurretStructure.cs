@@ -125,9 +125,9 @@ public partial class HeavyGunTurretStructure : FactoryStructure, IFactoryItemRec
             new[] { inventorySection });
     }
 
-    public override bool TryMoveDetailInventoryItem(string inventoryId, Vector2I fromSlot, Vector2I toSlot)
+    public override bool TryMoveDetailInventoryItem(string inventoryId, Vector2I fromSlot, Vector2I toSlot, bool splitStack = false)
     {
-        return inventoryId == "heavy-turret-ammo" && _ammoInventory.TryMoveItem(fromSlot, toSlot);
+        return inventoryId == "heavy-turret-ammo" && _ammoInventory.TryMoveItem(fromSlot, toSlot, splitStack);
     }
 
     public override void _Process(double delta)

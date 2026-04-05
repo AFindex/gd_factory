@@ -118,7 +118,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
             summaryLines);
     }
 
-    public virtual bool TryMoveDetailInventoryItem(string inventoryId, Vector2I fromSlot, Vector2I toSlot)
+    public virtual bool TryMoveDetailInventoryItem(string inventoryId, Vector2I fromSlot, Vector2I toSlot, bool splitStack = false)
     {
         return false;
     }

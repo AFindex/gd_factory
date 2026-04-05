@@ -133,9 +133,9 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
             new[] { inventorySection });
     }
 
-    public override bool TryMoveDetailInventoryItem(string inventoryId, Vector2I fromSlot, Vector2I toSlot)
+    public override bool TryMoveDetailInventoryItem(string inventoryId, Vector2I fromSlot, Vector2I toSlot, bool splitStack = false)
     {
-        return inventoryId == "turret-ammo" && _ammoInventory.TryMoveItem(fromSlot, toSlot);
+        return inventoryId == "turret-ammo" && _ammoInventory.TryMoveItem(fromSlot, toSlot, splitStack);
     }
 
     public override void _Process(double delta)

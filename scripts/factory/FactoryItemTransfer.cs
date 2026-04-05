@@ -123,6 +123,7 @@ internal sealed class FactoryInventoryItemStack
     public FactoryItemKind ItemKind => _items[0].ItemKind;
     public int Count => _items.Count;
     public int MaxStackSize => FactoryItemCatalog.GetMaxStackSize(ItemKind);
+    public int SpaceLeft => Mathf.Max(0, MaxStackSize - Count);
     public bool IsEmpty => _items.Count == 0;
     public bool IsFull => _items.Count >= MaxStackSize;
     public FactoryItem PeekFirst() => _items[0];
@@ -171,6 +172,33 @@ internal sealed class FactoryInventoryItemStack
         }
 
         return moved;
+    }
+
+    public List<FactoryItem> TakeUpTo(int count)
+    {
+        var result = new List<FactoryItem>(Mathf.Max(0, count));
+        while (result.Count < count && TryTakeFirst(out var item) && item is not null)
+        {
+            result.Add(item);
+        }
+
+        return result;
+    }
+
+    public static FactoryInventoryItemStack? CreateFromItems(IReadOnlyList<FactoryItem> items)
+    {
+        if (items.Count == 0)
+        {
+            return null;
+        }
+
+        var stack = new FactoryInventoryItemStack(items[0]);
+        for (var index = 1; index < items.Count; index++)
+        {
+            stack.TryAddItem(items[index]);
+        }
+
+        return stack;
     }
 }
 
@@ -272,7 +300,7 @@ public sealed class FactorySlottedItemInventory
         return false;
     }
 
-    public bool TryMoveItem(Vector2I fromSlot, Vector2I toSlot)
+    public bool TryMoveItem(Vector2I fromSlot, Vector2I toSlot, bool splitStack = false)
     {
         if (!IsValidSlot(fromSlot)
             || !IsValidSlot(toSlot)
@@ -282,10 +310,32 @@ public sealed class FactorySlottedItemInventory
             return false;
         }
 
+        var requestedCount = splitStack && fromStack.Count > 1
+            ? Mathf.Max(1, Mathf.CeilToInt(fromStack.Count * 0.5f))
+            : fromStack.Count;
+
         if (!_items.TryGetValue(toSlot, out var toStack))
         {
-            _items.Remove(fromSlot);
-            _items[toSlot] = fromStack;
+            if (requestedCount >= fromStack.Count)
+            {
+                _items.Remove(fromSlot);
+                _items[toSlot] = fromStack;
+                return true;
+            }
+
+            var movedItems = fromStack.TakeUpTo(requestedCount);
+            var movedStack = FactoryInventoryItemStack.CreateFromItems(movedItems);
+            if (movedStack is null)
+            {
+                return false;
+            }
+
+            _items[toSlot] = movedStack;
+            if (fromStack.IsEmpty)
+            {
+                _items.Remove(fromSlot);
+            }
+
             return true;
         }
 
@@ -294,7 +344,17 @@ public sealed class FactorySlottedItemInventory
             return false;
         }
 
-        var moved = toStack.MergeFrom(fromStack);
+        var moved = 0;
+        var maxToMove = Mathf.Min(requestedCount, toStack.SpaceLeft);
+        var movedItemsToStack = fromStack.TakeUpTo(maxToMove);
+        for (var index = 0; index < movedItemsToStack.Count; index++)
+        {
+            if (toStack.TryAddItem(movedItemsToStack[index]))
+            {
+                moved++;
+            }
+        }
+
         if (fromStack.IsEmpty)
         {
             _items.Remove(fromSlot);

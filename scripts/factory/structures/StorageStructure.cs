@@ -129,9 +129,9 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
             new[] { inventorySection });
     }
 
-    public override bool TryMoveDetailInventoryItem(string inventoryId, Vector2I fromSlot, Vector2I toSlot)
+    public override bool TryMoveDetailInventoryItem(string inventoryId, Vector2I fromSlot, Vector2I toSlot, bool splitStack = false)
     {
-        return inventoryId == "storage-buffer" && _inventory.TryMoveItem(fromSlot, toSlot);
+        return inventoryId == "storage-buffer" && _inventory.TryMoveItem(fromSlot, toSlot, splitStack);
     }
 
     public override void SimulationStep(SimulationController simulation, double stepSeconds)

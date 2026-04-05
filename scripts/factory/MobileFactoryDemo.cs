@@ -3343,9 +3343,9 @@ public partial class MobileFactoryDemo : Node3D
         Input.SetDefaultCursorShape(Input.CursorShape.Arrow);
     }
 
-    private void HandleEditorDetailInventoryMoveRequested(string inventoryId, Vector2I fromSlot, Vector2I toSlot)
+    private void HandleEditorDetailInventoryMoveRequested(string inventoryId, Vector2I fromSlot, Vector2I toSlot, bool splitStack)
     {
-        if (_selectedInteriorStructure is IFactoryStructureDetailProvider detailProvider && detailProvider.TryMoveDetailInventoryItem(inventoryId, fromSlot, toSlot))
+        if (_selectedInteriorStructure is IFactoryStructureDetailProvider detailProvider && detailProvider.TryMoveDetailInventoryItem(inventoryId, fromSlot, toSlot, splitStack))
         {
             UpdateHud();
         }
@@ -4467,6 +4467,8 @@ public partial class MobileFactoryDemo : Node3D
         var movedDetail = storage.GetDetailModel();
         var targetStackAfterMove = 0;
         var totalStackCountAfterMove = 0;
+        var splitSourceSlot = new Vector2I(-1, -1);
+        var splitSourceCountBefore = 0;
         for (var index = 0; index < movedDetail.InventorySections[0].Slots.Count; index++)
         {
             var slot = movedDetail.InventorySections[0].Slots[index];
@@ -4474,6 +4476,34 @@ public partial class MobileFactoryDemo : Node3D
             if (slot.Position == mergeTargetSlot)
             {
                 targetStackAfterMove = slot.StackCount;
+            }
+
+            if (slot.HasItem && slot.StackCount > 1 && slot.Position != emptySlot && splitSourceSlot.X < 0)
+            {
+                splitSourceSlot = slot.Position;
+                splitSourceCountBefore = slot.StackCount;
+            }
+        }
+
+        var splitMoveWorked = splitSourceSlot.X >= 0
+            && emptySlot.X >= 0
+            && storage.TryMoveDetailInventoryItem("storage-buffer", splitSourceSlot, emptySlot, true);
+
+        var splitDetail = storage.GetDetailModel();
+        var splitTotalStackCount = 0;
+        var splitTargetCount = 0;
+        var splitSourceCountAfter = 0;
+        for (var index = 0; index < splitDetail.InventorySections[0].Slots.Count; index++)
+        {
+            var slot = splitDetail.InventorySections[0].Slots[index];
+            splitTotalStackCount += slot.StackCount;
+            if (slot.Position == emptySlot)
+            {
+                splitTargetCount = slot.StackCount;
+            }
+            else if (slot.Position == splitSourceSlot)
+            {
+                splitSourceCountAfter = slot.StackCount;
             }
         }
 
@@ -4508,6 +4538,11 @@ public partial class MobileFactoryDemo : Node3D
             && inventoryMoveWorked
             && targetStackAfterMove > targetStackBeforeMove
             && totalStackCountAfterMove == totalStackCountBeforeMove
+            && splitMoveWorked
+            && splitTargetCount > 0
+            && splitTargetCount < splitSourceCountBefore
+            && splitSourceCountAfter > 0
+            && splitTotalStackCount == totalStackCountBeforeMove
             && producerRecipeVerified
             && turret.BufferedAmmo > 0
             && turretShowsHighVelocityAmmo

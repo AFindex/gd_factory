@@ -73,7 +73,7 @@ public partial class FactoryHud : CanvasLayer
     private FactoryBlueprintPanel? _blueprintPanel;
 
     public event Action<BuildPrototypeKind?>? SelectionChanged;
-    public event Action<string, Vector2I, Vector2I>? DetailInventoryMoveRequested;
+    public event Action<string, Vector2I, Vector2I, bool>? DetailInventoryMoveRequested;
     public event Action<string>? DetailRecipeSelected;
     public event Action? DetailClosed;
     public event Action? BlueprintCaptureRequested;
@@ -162,7 +162,7 @@ public partial class FactoryHud : CanvasLayer
         ApplyWorkspaceVisibility();
 
         _detailWindow = new FactoryStructureDetailWindow();
-        _detailWindow.InventoryMoveRequested += (inventoryId, fromSlot, toSlot) => DetailInventoryMoveRequested?.Invoke(inventoryId, fromSlot, toSlot);
+        _detailWindow.InventoryMoveRequested += (inventoryId, fromSlot, toSlot, splitStack) => DetailInventoryMoveRequested?.Invoke(inventoryId, fromSlot, toSlot, splitStack);
         _detailWindow.RecipeSelected += recipeId => DetailRecipeSelected?.Invoke(recipeId);
         _detailWindow.CloseRequested += () => DetailClosed?.Invoke();
         root.AddChild(_detailWindow);

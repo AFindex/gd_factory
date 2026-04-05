@@ -4,6 +4,9 @@ using System.Collections.Generic;
 
 public partial class FactoryStructureDetailWindow : PanelContainer
 {
+    private const double InventoryDragHoldSeconds = 0.18;
+    private static readonly Vector2 DragPreviewOffset = new(18.0f, 18.0f);
+
     private sealed class InventorySlotWidget
     {
         public required PanelContainer Panel { get; init; }
@@ -38,6 +41,20 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         }
     }
 
+    private readonly struct InventorySlotReference
+    {
+        public InventorySlotReference(string inventoryId, Vector2I slotPosition, FactoryItemKind? itemKind)
+        {
+            InventoryId = inventoryId;
+            SlotPosition = slotPosition;
+            ItemKind = itemKind;
+        }
+
+        public string InventoryId { get; }
+        public Vector2I SlotPosition { get; }
+        public FactoryItemKind? ItemKind { get; }
+    }
+
     private PanelContainer? _titleBar;
     private Label? _titleLabel;
     private Label? _subtitleLabel;
@@ -51,16 +68,23 @@ public partial class FactoryStructureDetailWindow : PanelContainer
     private PanelContainer? _recipePickerPanel;
     private VBoxContainer? _recipePickerList;
     private Label? _dragStateLabel;
+    private PanelContainer? _dragPreview;
+    private TextureRect? _dragPreviewIcon;
+    private Label? _dragPreviewTitle;
+    private Label? _dragPreviewCount;
     private readonly List<InventorySlotWidget> _slotWidgets = new();
     private Rect2 _dragBounds = new(Vector2.Zero, new Vector2(900.0f, 600.0f));
     private bool _draggingWindow;
     private bool _windowMovedByUser;
     private Vector2 _windowDragOffset;
+    private InventorySlotWidget? _pendingDragSourceSlot;
+    private double _pendingDragElapsed;
     private InventorySlotWidget? _dragSourceSlot;
     private InventorySlotWidget? _hoveredSlot;
     private string? _modelSignature;
+    private bool _leftMouseHeld;
 
-    public event Action<string, Vector2I, Vector2I>? InventoryMoveRequested;
+    public event Action<string, Vector2I, Vector2I, bool>? InventoryMoveRequested;
     public event Action<string>? RecipeSelected;
     public event Action<string>? DetailActionRequested;
     public event Action? CloseRequested;
@@ -72,7 +96,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         Name = "FactoryStructureDetailWindow";
         Visible = false;
         MouseFilter = MouseFilterEnum.Stop;
-        CustomMinimumSize = new Vector2(522.0f, 280.0f);
+        CustomMinimumSize = new Vector2(522.0f, 560.0f);
         Size = CustomMinimumSize;
         AddThemeStyleboxOverride("panel", CreatePanelStyle(new Color("0F172A"), new Color("60A5FA"), 2));
 
@@ -167,16 +191,82 @@ public partial class FactoryStructureDetailWindow : PanelContainer
 
         _dragStateLabel = CreateTextLabel(11, new Color("FDE68A"));
         body.AddChild(_dragStateLabel);
+
+        var dragPreview = new PanelContainer
+        {
+            Visible = false,
+            MouseFilter = MouseFilterEnum.Ignore,
+            TopLevel = true,
+            CustomMinimumSize = new Vector2(170.0f, 52.0f),
+            ZIndex = 128
+        };
+        dragPreview.AddThemeStyleboxOverride("panel", CreatePanelStyle(new Color(0.03f, 0.07f, 0.11f, 0.92f), new Color("38BDF8"), 2));
+        AddChild(dragPreview);
+        _dragPreview = dragPreview;
+
+        var dragPreviewMargin = new MarginContainer();
+        dragPreviewMargin.AddThemeConstantOverride("margin_left", 8);
+        dragPreviewMargin.AddThemeConstantOverride("margin_top", 6);
+        dragPreviewMargin.AddThemeConstantOverride("margin_right", 8);
+        dragPreviewMargin.AddThemeConstantOverride("margin_bottom", 6);
+        dragPreview.AddChild(dragPreviewMargin);
+
+        var dragPreviewRow = new HBoxContainer();
+        dragPreviewRow.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        dragPreviewRow.AddThemeConstantOverride("separation", 8);
+        dragPreviewMargin.AddChild(dragPreviewRow);
+
+        var dragPreviewIcon = new TextureRect
+        {
+            MouseFilter = MouseFilterEnum.Ignore,
+            CustomMinimumSize = new Vector2(28.0f, 28.0f),
+            SizeFlagsVertical = SizeFlags.ShrinkCenter,
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered
+        };
+        dragPreviewRow.AddChild(dragPreviewIcon);
+        _dragPreviewIcon = dragPreviewIcon;
+
+        var dragPreviewText = new VBoxContainer();
+        dragPreviewText.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        dragPreviewText.AddThemeConstantOverride("separation", 2);
+        dragPreviewRow.AddChild(dragPreviewText);
+
+        _dragPreviewTitle = CreatePreviewTextLabel(11, Colors.White);
+        _dragPreviewCount = CreatePreviewTextLabel(10, new Color("FDE68A"));
+        dragPreviewText.AddChild(_dragPreviewTitle);
+        dragPreviewText.AddChild(_dragPreviewCount);
+
         UpdateDragStateLabel();
     }
 
     public override void _Process(double delta)
     {
-        if (_dragSourceSlot is not null && !Input.IsMouseButtonPressed(MouseButton.Left))
+        UpdateHoveredSlotFromPointer();
+
+        if (_pendingDragSourceSlot is not null)
         {
-            _dragSourceSlot = null;
-            RefreshSlotVisuals();
-            UpdateDragStateLabel();
+            if (!_leftMouseHeld)
+            {
+                ClearPendingDrag();
+            }
+            else
+            {
+                _pendingDragElapsed += delta;
+                if (_pendingDragElapsed >= InventoryDragHoldSeconds)
+                {
+                    BeginInventoryDrag(_pendingDragSourceSlot);
+                }
+            }
+        }
+
+        if (_dragSourceSlot is not null)
+        {
+            UpdateDragPreview();
+            if (!_leftMouseHeld)
+            {
+                FinalizeInventoryDrag();
+            }
         }
 
         if (Visible)
@@ -184,6 +274,17 @@ public partial class FactoryStructureDetailWindow : PanelContainer
             SyncContentWidth();
             ClampToBounds();
         }
+    }
+
+    public override void _Input(InputEvent @event)
+    {
+        if (@event is not InputEventMouseButton mouseButton
+            || mouseButton.ButtonIndex != MouseButton.Left)
+        {
+            return;
+        }
+
+        _leftMouseHeld = mouseButton.Pressed;
     }
 
     public void SetDragBounds(Rect2 bounds)
@@ -229,7 +330,8 @@ public partial class FactoryStructureDetailWindow : PanelContainer
     {
         Visible = false;
         _modelSignature = null;
-        _dragSourceSlot = null;
+        _leftMouseHeld = false;
+        CancelInventoryDrag();
         _hoveredSlot = null;
         _recipePickerPanel = null;
         _recipePickerList = null;
@@ -281,6 +383,11 @@ public partial class FactoryStructureDetailWindow : PanelContainer
             return;
         }
 
+        var pendingDragReference = CaptureSlotReference(_pendingDragSourceSlot);
+        var dragReference = CaptureSlotReference(_dragSourceSlot);
+        var hoveredReference = CaptureSlotReference(_hoveredSlot);
+        var pendingDragElapsed = _pendingDragElapsed;
+
         foreach (var child in _inventorySections.GetChildren())
         {
             child.QueueFree();
@@ -307,53 +414,56 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                 var slot = section.Slots[slotIndex];
                 var slotPanel = new PanelContainer();
                 slotPanel.MouseFilter = MouseFilterEnum.Stop;
-                slotPanel.CustomMinimumSize = new Vector2(90.0f, 110.0f);
+                slotPanel.CustomMinimumSize = new Vector2(72.0f, 72.0f);
                 grid.AddChild(slotPanel);
 
                 var margin = new MarginContainer();
-                margin.AddThemeConstantOverride("margin_left", 6);
-                margin.AddThemeConstantOverride("margin_top", 6);
-                margin.AddThemeConstantOverride("margin_right", 6);
-                margin.AddThemeConstantOverride("margin_bottom", 6);
+                margin.MouseFilter = MouseFilterEnum.Ignore;
+                margin.AddThemeConstantOverride("margin_left", 5);
+                margin.AddThemeConstantOverride("margin_top", 5);
+                margin.AddThemeConstantOverride("margin_right", 5);
+                margin.AddThemeConstantOverride("margin_bottom", 5);
                 slotPanel.AddChild(margin);
 
                 var body = new VBoxContainer();
-                body.AddThemeConstantOverride("separation", 2);
+                body.MouseFilter = MouseFilterEnum.Ignore;
+                body.AddThemeConstantOverride("separation", 1);
                 margin.AddChild(body);
 
                 var iconFrame = new PanelContainer();
-                iconFrame.CustomMinimumSize = new Vector2(34.0f, 34.0f);
+                iconFrame.MouseFilter = MouseFilterEnum.Ignore;
+                iconFrame.CustomMinimumSize = new Vector2(28.0f, 28.0f);
                 iconFrame.SizeFlagsHorizontal = SizeFlags.ShrinkBegin;
                 body.AddChild(iconFrame);
 
                 var iconMargin = new MarginContainer();
+                iconMargin.MouseFilter = MouseFilterEnum.Ignore;
                 iconMargin.SetAnchorsPreset(LayoutPreset.FullRect);
-                iconMargin.AddThemeConstantOverride("margin_left", 4);
-                iconMargin.AddThemeConstantOverride("margin_top", 4);
-                iconMargin.AddThemeConstantOverride("margin_right", 4);
-                iconMargin.AddThemeConstantOverride("margin_bottom", 4);
+                iconMargin.AddThemeConstantOverride("margin_left", 3);
+                iconMargin.AddThemeConstantOverride("margin_top", 3);
+                iconMargin.AddThemeConstantOverride("margin_right", 3);
+                iconMargin.AddThemeConstantOverride("margin_bottom", 3);
                 iconFrame.AddChild(iconMargin);
 
                 var iconRect = new TextureRect();
                 iconRect.MouseFilter = MouseFilterEnum.Ignore;
                 iconRect.ExpandMode = TextureRect.ExpandModeEnum.FitWidthProportional;
                 iconRect.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
-                iconRect.CustomMinimumSize = new Vector2(24.0f, 24.0f);
+                iconRect.CustomMinimumSize = new Vector2(20.0f, 20.0f);
                 iconRect.Texture = slot.IconTexture;
                 iconRect.Visible = slot.IconTexture is not null;
                 iconMargin.AddChild(iconRect);
 
-                var itemLabel = CreateTextLabel(11, slot.HasItem ? Colors.White : new Color("7B8DA1"));
+                var itemLabel = CreateTextLabel(10, slot.HasItem ? Colors.White : new Color("7B8DA1"));
                 itemLabel.Text = slot.HasItem ? slot.ItemLabel ?? string.Empty : "空槽位";
                 body.AddChild(itemLabel);
 
-                var stackLabel = CreateTextLabel(10, slot.HasItem ? new Color("FDE68A") : new Color("64748B"));
+                var stackLabel = CreateTextLabel(9, slot.HasItem ? new Color("FDE68A") : new Color("64748B"));
                 stackLabel.Text = slot.HasItem ? $"x{slot.StackCount}/{slot.MaxStackSize}" : "--";
                 body.AddChild(stackLabel);
 
-                var posLabel = CreateTextLabel(10, new Color("9FB6C9"));
-                posLabel.Text = $"({slot.Position.X}, {slot.Position.Y})";
-                body.AddChild(posLabel);
+                var posLabel = CreateTextLabel(1, new Color("9FB6C9"));
+                posLabel.Visible = false;
 
                 slotPanel.TooltipText = slot.ItemDescription ?? string.Empty;
 
@@ -374,25 +484,11 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                 };
 
                 slotPanel.GuiInput += @event => HandleSlotGuiInput(widget, section.AllowItemMove, @event);
-                slotPanel.MouseEntered += () =>
-                {
-                    _hoveredSlot = widget;
-                    RefreshSlotVisuals();
-                    UpdateDragStateLabel();
-                };
-                slotPanel.MouseExited += () =>
-                {
-                    if (_hoveredSlot == widget)
-                    {
-                        _hoveredSlot = null;
-                        RefreshSlotVisuals();
-                        UpdateDragStateLabel();
-                    }
-                };
                 _slotWidgets.Add(widget);
             }
         }
 
+        RestoreInventoryInteractionState(pendingDragReference, dragReference, hoveredReference, pendingDragElapsed);
         RefreshSlotVisuals();
     }
 
@@ -714,27 +810,13 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                 return;
             }
 
-            _dragSourceSlot = widget;
-            MoveToFront();
+            _pendingDragSourceSlot = widget;
+            _pendingDragElapsed = 0.0;
+            _hoveredSlot = widget;
             RefreshSlotVisuals();
             UpdateDragStateLabel();
             return;
         }
-
-        if (_dragSourceSlot is null)
-        {
-            return;
-        }
-
-        if (_dragSourceSlot.InventoryId == widget.InventoryId
-            && widget.CanAcceptFrom(_dragSourceSlot))
-        {
-            InventoryMoveRequested?.Invoke(widget.InventoryId, _dragSourceSlot.SlotPosition, widget.SlotPosition);
-        }
-
-        _dragSourceSlot = null;
-        RefreshSlotVisuals();
-        UpdateDragStateLabel();
     }
 
     private void RefreshSlotVisuals()
@@ -750,6 +832,12 @@ public partial class FactoryStructureDetailWindow : PanelContainer
             {
                 borderColor = new Color("38BDF8");
                 backgroundColor = new Color("10243C");
+                borderWidth = 2;
+            }
+            else if (_pendingDragSourceSlot is not null && widget == _pendingDragSourceSlot)
+            {
+                borderColor = new Color("7DD3FC");
+                backgroundColor = new Color("12253A");
                 borderWidth = 2;
             }
             else if (_dragSourceSlot is not null
@@ -780,9 +868,16 @@ public partial class FactoryStructureDetailWindow : PanelContainer
             return;
         }
 
+        if (_pendingDragSourceSlot is not null)
+        {
+            var splitText = IsSplitModifierHeld() ? "当前为半堆拖拽" : "当前为整堆拖拽";
+            _dragStateLabel.Text = $"长按左键开始拖拽；按住 Ctrl 可拖出一半。源槽位 ({_pendingDragSourceSlot.SlotPosition.X}, {_pendingDragSourceSlot.SlotPosition.Y})，{splitText}";
+            return;
+        }
+
         if (_dragSourceSlot is null)
         {
-            _dragStateLabel.Text = "拖动窗口标题可移动位置；按住已占用槽位并释放到空槽位或同类未满堆叠可移动物品。";
+            _dragStateLabel.Text = "拖动窗口标题可移动位置；长按左键拖动物品到空槽位或同类未满堆叠，按住 Ctrl 可拖出一半。";
             return;
         }
 
@@ -793,11 +888,199 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                     ? "并入目标堆叠"
                     : "移动到空槽位"
                 : "目标无效";
-            _dragStateLabel.Text = $"正在拖动物品：从 ({_dragSourceSlot.SlotPosition.X}, {_dragSourceSlot.SlotPosition.Y}) 移向 ({_hoveredSlot.SlotPosition.X}, {_hoveredSlot.SlotPosition.Y})，{action}";
+            var splitText = IsSplitModifierHeld() ? $"半堆 x{GetRequestedMoveCount(_dragSourceSlot)}" : $"整堆 x{GetRequestedMoveCount(_dragSourceSlot)}";
+            _dragStateLabel.Text = $"正在拖动物品：从 ({_dragSourceSlot.SlotPosition.X}, {_dragSourceSlot.SlotPosition.Y}) 移向 ({_hoveredSlot.SlotPosition.X}, {_hoveredSlot.SlotPosition.Y})，{action}，{splitText}";
             return;
         }
 
-        _dragStateLabel.Text = $"正在拖动物品：源槽位 ({_dragSourceSlot.SlotPosition.X}, {_dragSourceSlot.SlotPosition.Y})";
+        _dragStateLabel.Text = $"正在拖动物品：源槽位 ({_dragSourceSlot.SlotPosition.X}, {_dragSourceSlot.SlotPosition.Y})，数量 x{GetRequestedMoveCount(_dragSourceSlot)}";
+    }
+
+    private void BeginInventoryDrag(InventorySlotWidget source)
+    {
+        _pendingDragSourceSlot = null;
+        _pendingDragElapsed = 0.0;
+        _dragSourceSlot = source;
+        MoveToFront();
+        RefreshSlotVisuals();
+        UpdateDragPreview();
+        UpdateDragStateLabel();
+    }
+
+    private void FinalizeInventoryDrag()
+    {
+        if (_dragSourceSlot is not null
+            && _hoveredSlot is not null
+            && _hoveredSlot.CanAcceptFrom(_dragSourceSlot))
+        {
+            InventoryMoveRequested?.Invoke(
+                _hoveredSlot.InventoryId,
+                _dragSourceSlot.SlotPosition,
+                _hoveredSlot.SlotPosition,
+                IsSplitModifierHeld());
+        }
+
+        CancelInventoryDrag();
+    }
+
+    private void ClearPendingDrag()
+    {
+        _pendingDragSourceSlot = null;
+        _pendingDragElapsed = 0.0;
+        UpdateHoveredSlotFromPointer();
+        RefreshSlotVisuals();
+        UpdateDragStateLabel();
+    }
+
+    private void CancelInventoryDrag()
+    {
+        _pendingDragSourceSlot = null;
+        _pendingDragElapsed = 0.0;
+        _dragSourceSlot = null;
+        if (_dragPreview is not null)
+        {
+            _dragPreview.Visible = false;
+        }
+
+        UpdateHoveredSlotFromPointer();
+        RefreshSlotVisuals();
+        UpdateDragStateLabel();
+    }
+
+    private void UpdateDragPreview()
+    {
+        if (_dragPreview is null || _dragPreviewIcon is null || _dragPreviewTitle is null || _dragPreviewCount is null || _dragSourceSlot is null)
+        {
+            return;
+        }
+
+        _dragPreview.Visible = true;
+        _dragPreview.Position = GetGlobalMousePosition() + DragPreviewOffset;
+        _dragPreviewIcon.Texture = _dragSourceSlot.Icon.Texture;
+        _dragPreviewIcon.Modulate = _dragSourceSlot.Icon.Texture is null ? _dragSourceSlot.AccentColor : Colors.White;
+        _dragPreviewTitle.Text = _dragSourceSlot.Label.Text;
+        _dragPreviewCount.Text = IsSplitModifierHeld()
+            ? $"分半拖拽 x{GetRequestedMoveCount(_dragSourceSlot)}"
+            : $"整堆拖拽 x{GetRequestedMoveCount(_dragSourceSlot)}";
+    }
+
+    private void UpdateHoveredSlotFromPointer()
+    {
+        var hoveredSlot = GetSlotUnderPointer();
+        if (_hoveredSlot == hoveredSlot)
+        {
+            return;
+        }
+
+        _hoveredSlot = hoveredSlot;
+        RefreshSlotVisuals();
+        UpdateDragStateLabel();
+    }
+
+    private InventorySlotWidget? GetSlotUnderPointer()
+    {
+        if (!Visible)
+        {
+            return null;
+        }
+
+        var pointer = GetGlobalMousePosition();
+        for (var index = 0; index < _slotWidgets.Count; index++)
+        {
+            var widget = _slotWidgets[index];
+            if (widget.Panel.GetGlobalRect().HasPoint(pointer))
+            {
+                return widget;
+            }
+        }
+
+        return null;
+    }
+
+    private InventorySlotReference? CaptureSlotReference(InventorySlotWidget? widget)
+    {
+        if (widget is null)
+        {
+            return null;
+        }
+
+        return new InventorySlotReference(widget.InventoryId, widget.SlotPosition, widget.ItemKind);
+    }
+
+    private InventorySlotWidget? ResolveSlotReference(InventorySlotReference? slotReference, bool requireMatchingItem)
+    {
+        if (slotReference is null)
+        {
+            return null;
+        }
+
+        for (var index = 0; index < _slotWidgets.Count; index++)
+        {
+            var widget = _slotWidgets[index];
+            if (widget.InventoryId != slotReference.Value.InventoryId || widget.SlotPosition != slotReference.Value.SlotPosition)
+            {
+                continue;
+            }
+
+            if (!requireMatchingItem)
+            {
+                return widget;
+            }
+
+            if (!widget.HasItem || widget.ItemKind != slotReference.Value.ItemKind)
+            {
+                return null;
+            }
+
+            return widget;
+        }
+
+        return null;
+    }
+
+    private void RestoreInventoryInteractionState(
+        InventorySlotReference? pendingDragReference,
+        InventorySlotReference? dragReference,
+        InventorySlotReference? hoveredReference,
+        double pendingDragElapsed)
+    {
+        _pendingDragSourceSlot = ResolveSlotReference(pendingDragReference, requireMatchingItem: true);
+        _dragSourceSlot = ResolveSlotReference(dragReference, requireMatchingItem: true);
+        _hoveredSlot = ResolveSlotReference(hoveredReference, requireMatchingItem: false) ?? GetSlotUnderPointer();
+        _pendingDragElapsed = _pendingDragSourceSlot is null ? 0.0 : pendingDragElapsed;
+
+        if (_dragSourceSlot is null && _dragPreview is not null)
+        {
+            _dragPreview.Visible = false;
+        }
+
+        if (_dragSourceSlot is null && dragReference is not null)
+        {
+            _pendingDragSourceSlot = null;
+            _pendingDragElapsed = 0.0;
+        }
+
+        UpdateDragStateLabel();
+    }
+
+    private static bool IsSplitModifierHeld()
+    {
+        return Input.IsKeyPressed(Key.Ctrl);
+    }
+
+    private static int GetRequestedMoveCount(InventorySlotWidget widget)
+    {
+        if (!widget.HasItem)
+        {
+            return 0;
+        }
+
+        if (!IsSplitModifierHeld() || widget.StackCount <= 1)
+        {
+            return widget.StackCount;
+        }
+
+        return Mathf.Max(1, Mathf.CeilToInt(widget.StackCount * 0.5f));
     }
 
     private void ClampToBounds()
@@ -834,6 +1117,16 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         label.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         label.AddThemeFontSizeOverride("font_size", fontSize);
         label.Modulate = color;
+        return label;
+    }
+
+    private static Label CreatePreviewTextLabel(int fontSize, Color color)
+    {
+        var label = CreateTextLabel(fontSize, color);
+        label.AutowrapMode = TextServer.AutowrapMode.Off;
+        label.ClipText = true;
+        label.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
+        label.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         return label;
     }
 

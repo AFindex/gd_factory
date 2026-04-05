@@ -87,9 +87,9 @@ public partial class GeneratorStructure : FactoryStructure, IFactoryItemReceiver
             new[] { CreateInventorySection("generator-fuel", "燃料仓", _fuelInventory, true) });
     }
 
-    public override bool TryMoveDetailInventoryItem(string inventoryId, Vector2I fromSlot, Vector2I toSlot)
+    public override bool TryMoveDetailInventoryItem(string inventoryId, Vector2I fromSlot, Vector2I toSlot, bool splitStack = false)
     {
-        return inventoryId == "generator-fuel" && _fuelInventory.TryMoveItem(fromSlot, toSlot);
+        return inventoryId == "generator-fuel" && _fuelInventory.TryMoveItem(fromSlot, toSlot, splitStack);
     }
 
     public override void UpdateVisuals(float tickAlpha)
