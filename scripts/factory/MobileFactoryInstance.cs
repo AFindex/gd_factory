@@ -68,7 +68,8 @@ public sealed class MobileFactoryInstance
             $"mobile-site:{factoryId}",
             Profile.InteriorMinCell,
             Profile.InteriorMaxCell,
-            Profile.InteriorCellSize);
+            Profile.InteriorCellSize,
+            this);
         _interiorFloorLocalOffset = CalculateInteriorFloorLocalOffset(Profile);
 
         _hullRoot = CreateHullRoot(Profile, _interiorFloorLocalOffset);
@@ -446,15 +447,16 @@ public sealed class MobileFactoryInstance
 
         InteriorSite.RemoveStructure(structure);
         _simulation.UnregisterStructure(structure);
-        if (structure is MobileFactoryBoundaryAttachmentStructure attachment)
-        {
-            _attachments.Remove(attachment);
-            attachment.ClearBinding();
-        }
-
+        DetachAttachmentIfNeeded(structure);
         structure.QueueFree();
         RefreshRuntimeAfterInteriorChange();
         return true;
+    }
+
+    public void HandleDestroyedInteriorStructure(FactoryStructure structure, bool rebuildTopology = true)
+    {
+        DetachAttachmentIfNeeded(structure);
+        RefreshRuntimeAfterInteriorChange(rebuildTopology);
     }
 
     public Vector3 GetEditorFocusWorldCenter()
@@ -711,7 +713,7 @@ public sealed class MobileFactoryInstance
         _simulation.RegisterStructure(structure);
     }
 
-    private void RefreshRuntimeAfterInteriorChange()
+    private void RefreshRuntimeAfterInteriorChange(bool rebuildTopology = true)
     {
         if (State == MobileFactoryLifecycleState.Deployed && _deployedGrid is not null && AnchorCell is Vector2I anchorCell)
         {
@@ -727,7 +729,21 @@ public sealed class MobileFactoryInstance
             ClearAttachmentBindings();
         }
 
-        _simulation.RebuildTopology();
+        if (rebuildTopology)
+        {
+            _simulation.RebuildTopology();
+        }
+    }
+
+    private void DetachAttachmentIfNeeded(FactoryStructure structure)
+    {
+        if (structure is not MobileFactoryBoundaryAttachmentStructure attachment)
+        {
+            return;
+        }
+
+        _attachments.Remove(attachment);
+        attachment.ClearBinding();
     }
 
     private void MoveToTransitParking()

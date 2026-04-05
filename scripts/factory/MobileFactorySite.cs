@@ -7,17 +7,19 @@ public sealed class MobileFactorySite : IFactorySite
     private Vector3 _worldOrigin;
     private float _worldRotationRadians;
 
-    public MobileFactorySite(string siteId, Vector2I minCell, Vector2I maxCell, float cellSize)
+    public MobileFactorySite(string siteId, Vector2I minCell, Vector2I maxCell, float cellSize, MobileFactoryInstance owner)
     {
         SiteId = siteId;
         MinCell = minCell;
         MaxCell = maxCell;
         CellSize = cellSize;
+        Owner = owner;
         IsVisible = false;
         IsSimulationActive = false;
     }
 
     public string SiteId { get; }
+    public MobileFactoryInstance Owner { get; }
     public Vector2I MinCell { get; }
     public Vector2I MaxCell { get; }
     public float CellSize { get; }

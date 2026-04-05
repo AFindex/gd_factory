@@ -325,6 +325,11 @@ public partial class SimulationController : Node
 
                 UnregisterStructure(structure);
                 structure.Site.RemoveStructure(structure);
+                if (structure.Site is MobileFactorySite mobileSite)
+                {
+                    mobileSite.Owner.HandleDestroyedInteriorStructure(structure, rebuildTopology: false);
+                }
+
                 structure.QueueFree();
                 DestroyedStructureCount++;
             }

@@ -46,13 +46,6 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
     {
     }
 
-    public override void ApplyDamage(float damage, SimulationController simulation)
-    {
-        // Boundary attachments are modular deployment equipment on the mobile factory.
-        // They can be pressured in combat, but should not be permanently deleted by stray hits.
-        base.ApplyDamage(0.0f, simulation);
-    }
-
     public virtual Vector3 GetWorldConnectorEndWorld(GridManager worldGrid, MobileFactoryAttachmentProjection projection)
     {
         var cellCenter = worldGrid.CellToWorld(projection.WorldPortCell);
