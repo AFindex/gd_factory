@@ -23,15 +23,19 @@ The game SHALL allow an open structure detail window to be repositioned independ
 - **THEN** the window moves with the pointer and remains clamped to the visible viewport
 
 ### Requirement: Inventory-bearing structures expose positioned slot grids
-The game SHALL represent internal storage in the detail window as a slot grid with explicit slot positions rather than as text-only inspection lines.
+The game SHALL represent internal storage in the detail window as a slot grid with explicit slot positions, visible stack counts, and stack-aware drag targets rather than as text-only inspection lines.
 
-#### Scenario: Storage-bearing structures show occupied slots
+#### Scenario: Storage-bearing structures show occupied slots with stack counts
 - **WHEN** the player opens the detail window for a structure with internal storage such as storage or a gun turret ammo rack
-- **THEN** the detail window shows a grid of slots, marks which slots are occupied, and displays the items at their current slot coordinates
+- **THEN** the detail window shows a grid of slots, marks which slots are occupied, and displays each occupied slot's item and current stack count at its slot coordinates
 
-#### Scenario: Moving an inventory item updates its slot position
+#### Scenario: Moving an inventory item updates slot position or merges a stack
 - **WHEN** the player drags an item from one valid inventory slot to another within the selected structure's grid
-- **THEN** the structure updates the item's stored slot position and the detail window reflects the new arrangement without losing the item
+- **THEN** the structure updates the stored slot arrangement by moving the stack into an empty slot or merging it into a compatible non-full stack without losing the buffered items
+
+#### Scenario: Empty slots cannot start a drag interaction
+- **WHEN** the player presses on an inventory slot that currently has no item
+- **THEN** the detail window does not enter an item-drag state and does not emit an inventory move request
 
 ### Requirement: Recipe-capable structures expose recipe details and recipe selection
 The game SHALL show recipe information for recipe-capable production structures and allow the player to switch the active recipe from the detail window.

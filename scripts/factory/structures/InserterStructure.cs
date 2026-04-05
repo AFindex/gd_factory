@@ -2,13 +2,15 @@ using Godot;
 
 public partial class InserterStructure : FactoryStructure
 {
+    private const float HeldVisualScale = 0.72f;
     private FactoryItem? _heldItem;
     private float _swingProgress;
     private bool _isReturning;
     private Node3D? _shoulderPivot;
     private Node3D? _elbowPivot;
     private MeshInstance3D? _claw;
-    private MeshInstance3D? _heldVisual;
+    private Node3D? _heldVisualAnchor;
+    private Node3D? _heldVisual;
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.Inserter;
     public override string Description => "从后方抓取物品并向前方投送，适配传送带、仓储和其他缓冲结构。";
@@ -43,10 +45,7 @@ public partial class InserterStructure : FactoryStructure
             _heldItem = takenItem;
             _swingProgress = 0.0f;
             _isReturning = false;
-            if (_heldVisual is not null)
-            {
-                _heldVisual.Visible = true;
-            }
+            RebuildHeldVisual();
 
             return;
         }
@@ -65,10 +64,7 @@ public partial class InserterStructure : FactoryStructure
 
         _heldItem = null;
         _isReturning = true;
-        if (_heldVisual is not null)
-        {
-            _heldVisual.Visible = false;
-        }
+        ClearHeldVisual();
     }
 
     public override void UpdateVisuals(float tickAlpha)
@@ -123,13 +119,12 @@ public partial class InserterStructure : FactoryStructure
             new Color("FCD34D"),
             new Vector3(CellSize * 0.30f, 0.0f, 0.0f));
 
-        _heldVisual = CreateArmMesh(
-            _elbowPivot,
-            "HeldItem",
-            new Vector3(CellSize * 0.14f, CellSize * 0.14f, CellSize * 0.14f),
-            new Color("FDE68A"),
-            new Vector3(CellSize * 0.30f, CellSize * 0.10f, 0.0f));
-        _heldVisual.Visible = false;
+        _heldVisualAnchor = new Node3D
+        {
+            Name = "HeldItemAnchor",
+            Position = new Vector3(CellSize * 0.30f, CellSize * 0.11f, 0.0f)
+        };
+        _elbowPivot.AddChild(_heldVisualAnchor);
 
         UpdateArmPose(0.0f);
     }
@@ -153,6 +148,42 @@ public partial class InserterStructure : FactoryStructure
         {
             _claw.Rotation = new Vector3(0.0f, 0.0f, Mathf.Lerp(-0.35f, 0.2f, eased));
         }
+
+        if (_heldVisualAnchor is not null)
+        {
+            _heldVisualAnchor.Rotation = new Vector3(
+                Mathf.Lerp(-0.12f, 0.10f, eased),
+                Mathf.Lerp(0.55f, -0.18f, eased),
+                Mathf.Lerp(0.08f, -0.08f, eased));
+        }
+    }
+
+    private void RebuildHeldVisual()
+    {
+        ClearHeldVisual();
+
+        if (_heldItem is null || _heldVisualAnchor is null)
+        {
+            return;
+        }
+
+        var visual = FactoryTransportVisualFactory.CreateVisual(_heldItem, CellSize);
+        visual.Name = $"Held_{_heldItem.ItemKind}";
+        visual.Scale = Vector3.One * HeldVisualScale;
+        visual.Position = Vector3.Zero;
+        _heldVisualAnchor.AddChild(visual);
+        _heldVisual = visual;
+    }
+
+    private void ClearHeldVisual()
+    {
+        if (_heldVisual is null)
+        {
+            return;
+        }
+
+        _heldVisual.QueueFree();
+        _heldVisual = null;
     }
 
     private static MeshInstance3D CreateArmMesh(Node3D parent, string name, Vector3 size, Color color, Vector3 localPosition)
