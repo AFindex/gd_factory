@@ -21,8 +21,10 @@ public sealed class FactoryBlueprintPanelState
 
 public partial class FactoryBlueprintPanel : PanelContainer
 {
+    private PanelContainer? _headerPanel;
     private ScrollContainer? _scrollContainer;
     private Control? _dragHandle;
+    private Label? _dragHintLabel;
     private Label? _modeLabel;
     private Label? _activeLabel;
     private Label? _captureSummaryLabel;
@@ -39,6 +41,7 @@ public partial class FactoryBlueprintPanel : PanelContainer
     private string? _lastPendingCaptureId;
     private bool _draggingPanel;
     private bool _panelMovedByUser;
+    private bool _docked;
     private Rect2 _defaultRect;
     private Vector2 _dragOffset;
 
@@ -79,6 +82,7 @@ public partial class FactoryBlueprintPanel : PanelContainer
         header.MouseFilter = Control.MouseFilterEnum.Stop;
         header.AddThemeStyleboxOverride("panel", CreateHeaderStyle());
         root.AddChild(header);
+        _headerPanel = header;
 
         _dragHandle = new Control
         {
@@ -108,6 +112,7 @@ public partial class FactoryBlueprintPanel : PanelContainer
         dragHint.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         dragHint.HorizontalAlignment = HorizontalAlignment.Right;
         headerRow.AddChild(dragHint);
+        _dragHintLabel = dragHint;
 
         _scrollContainer = new ScrollContainer
         {
@@ -216,11 +221,12 @@ public partial class FactoryBlueprintPanel : PanelContainer
         body.AddChild(_issueLabel);
 
         RefreshSelectionActions();
+        UpdatePresentationMode();
     }
 
     public override void _Process(double delta)
     {
-        if (!_draggingPanel)
+        if (_docked || !_draggingPanel)
         {
             return;
         }
@@ -260,6 +266,11 @@ public partial class FactoryBlueprintPanel : PanelContainer
 
     public void SetPanelRect(Rect2 rect)
     {
+        if (_docked)
+        {
+            return;
+        }
+
         _defaultRect = rect;
         Size = rect.Size;
         if (!_panelMovedByUser)
@@ -270,9 +281,15 @@ public partial class FactoryBlueprintPanel : PanelContainer
         ClampToViewport();
     }
 
+    public void SetDocked(bool docked)
+    {
+        _docked = docked;
+        UpdatePresentationMode();
+    }
+
     public void SetState(FactoryBlueprintPanelState state)
     {
-        Visible = state.IsVisible;
+        Visible = _docked || state.IsVisible;
         if (!Visible)
         {
             return;
@@ -447,6 +464,11 @@ public partial class FactoryBlueprintPanel : PanelContainer
 
     private void HandleDragHandleGuiInput(InputEvent @event)
     {
+        if (_docked)
+        {
+            return;
+        }
+
         if (@event is InputEventMouseButton mouseButton && mouseButton.ButtonIndex == MouseButton.Left)
         {
             if (mouseButton.Pressed)
@@ -476,10 +498,66 @@ public partial class FactoryBlueprintPanel : PanelContainer
 
     private void ClampToViewport()
     {
+        if (_docked)
+        {
+            return;
+        }
+
         var viewportSize = GetViewport().GetVisibleRect().Size;
         var clampedX = Mathf.Clamp(Position.X, 6.0f, Mathf.Max(6.0f, viewportSize.X - Size.X - 6.0f));
         var clampedY = Mathf.Clamp(Position.Y, 6.0f, Mathf.Max(6.0f, viewportSize.Y - Size.Y - 6.0f));
         Position = new Vector2(clampedX, clampedY);
+    }
+
+    private void UpdatePresentationMode()
+    {
+        if (!IsInsideTree())
+        {
+            return;
+        }
+
+        _draggingPanel = false;
+        if (_dragHandle is not null)
+        {
+            _dragHandle.Visible = !_docked;
+        }
+
+        if (_dragHintLabel is not null)
+        {
+            _dragHintLabel.Text = _docked ? "作为当前工作区内容显示" : "拖动标题栏可移动窗口";
+        }
+
+        SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        SizeFlagsVertical = _docked ? SizeFlags.ExpandFill : SizeFlags.ShrinkBegin;
+        CustomMinimumSize = _docked ? new Vector2(0.0f, 0.0f) : new Vector2(220.0f, 0.0f);
+        MouseFilter = Control.MouseFilterEnum.Stop;
+
+        if (_headerPanel is not null)
+        {
+            _headerPanel.Visible = !_docked;
+        }
+
+        if (_scrollContainer is not null)
+        {
+            _scrollContainer.CustomMinimumSize = _docked
+                ? new Vector2(220.0f, 0.0f)
+                : new Vector2(220.0f, 0.0f);
+        }
+
+        if (_docked)
+        {
+            Position = Vector2.Zero;
+        }
+        else
+        {
+            Size = _defaultRect.Size;
+            if (!_panelMovedByUser)
+            {
+                Position = _defaultRect.Position;
+            }
+
+            ClampToViewport();
+        }
     }
 
     private static Button CreateActionButton(string text)

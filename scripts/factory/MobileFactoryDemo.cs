@@ -4,6 +4,13 @@ using System.Threading.Tasks;
 
 public partial class MobileFactoryDemo : Node3D
 {
+    private const string CommandWorkspaceId = "command";
+    private const string EditorWorkspaceId = "editor";
+    private const string BlueprintWorkspaceId = "blueprints";
+    private const string DetailsWorkspaceId = "details";
+    private const string OverviewWorkspaceId = "overview";
+    private const string BuildTestWorkspaceId = "build-test";
+    private const string DiagnosticsWorkspaceId = "diagnostics";
     private const int InteriorRenderLayer = 1;
     private const int HullRenderLayer = 2;
     private const float PowerDashBaseLength = FactoryConstants.CellSize * 0.52f;
@@ -435,7 +442,10 @@ public partial class MobileFactoryDemo : Node3D
         _cameraRig = new FactoryCameraRig();
         AddChild(_cameraRig);
 
-        _hud = new MobileFactoryHud();
+        _hud = new MobileFactoryHud
+        {
+            UseLargeScenarioWorkspaces = UseLargeTestScenario
+        };
         _hud.EditorPaletteSelected += OnEditorPaletteSelected;
         _hud.EditorRotateRequested += OnEditorRotateRequested;
         _hud.ObserverModeToggleRequested += ToggleObserverMode;
@@ -452,6 +462,7 @@ public partial class MobileFactoryDemo : Node3D
         _hud.BlueprintConfirmRequested += ConfirmInteriorBlueprintApply;
         _hud.BlueprintDeleteRequested += HandleInteriorBlueprintDeleteRequested;
         _hud.BlueprintCancelRequested += CancelInteriorBlueprintWorkflow;
+        _hud.WorkspaceSelected += HandleHudWorkspaceSelected;
         AddChild(_hud);
 
         AddChild(new LauncherNavigationOverlay());
@@ -2282,6 +2293,15 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
+        if (_blueprintMode != FactoryBlueprintWorkflowMode.None || _pendingBlueprintCapture is not null)
+        {
+            _hud.SelectWorkspace(BlueprintWorkspaceId);
+        }
+        else if (_editorOpen && (_interiorInteractionMode == FactoryInteractionMode.Build || _interiorInteractionMode == FactoryInteractionMode.Delete))
+        {
+            _hud.SelectWorkspace(GetHudBuildWorkspaceId());
+        }
+
         _hud.SetControlMode(_controlMode, _mobileFactory.State, _mobileFactory.TransitFacing, _selectedDeployFacing);
         _hud.SetState(_mobileFactory.State, _mobileFactory.AnchorCell);
         _hud.SetHoverAnchor(_hoveredAnchor, _controlMode == MobileFactoryControlMode.DeployPreview && _hasHoveredAnchor);
@@ -2318,7 +2338,52 @@ public partial class MobileFactoryDemo : Node3D
 
         _hud.SetEditorState(_editorOpen, _mobileFactory.State, CountEditableInteriorStructures(), _interiorInteractionMode);
         _hud.SetHintText(GetHintText());
+        _hud.SetFactoryDetails(BuildFactoryDetailText());
         _hud.SetBlueprintState(BuildInteriorBlueprintPanelState());
+    }
+
+    private void HandleHudWorkspaceSelected(string workspaceId)
+    {
+        if (workspaceId == BlueprintWorkspaceId || workspaceId == GetHudBuildWorkspaceId())
+        {
+            if (!_editorOpen)
+            {
+                SetEditorOpenState(true);
+                FocusFactoryForCurrentMode();
+            }
+        }
+    }
+
+    private string BuildFactoryDetailText()
+    {
+        if (_mobileFactory is null)
+        {
+            return "等待工厂状态更新。";
+        }
+
+        var anchorText = _mobileFactory.AnchorCell is Vector2I anchorCell
+            ? $"({anchorCell.X}, {anchorCell.Y})"
+            : "未部署";
+        var stateText = _mobileFactory.State switch
+        {
+            MobileFactoryLifecycleState.Deployed => "已部署",
+            MobileFactoryLifecycleState.AutoDeploying => "自动部署中",
+            MobileFactoryLifecycleState.Recalling => "回收中",
+            _ => "运输中"
+        };
+
+        return
+            $"Profile: {_mobileFactory.Profile.Id}\n" +
+            $"Preset: {_mobileFactory.InteriorPreset.Id}\n" +
+            $"State: {stateText} | Anchor: {anchorText}\n" +
+            $"Interior structures: {CountEditableInteriorStructures()}\n" +
+            $"Connected input ports: {CountConnectedAttachments(BuildPrototypeKind.InputPort)} | Mining inputs: {CountConnectedAttachments(BuildPrototypeKind.MiningInputPort)}\n" +
+            $"Connected output ports: {CountConnectedAttachments(BuildPrototypeKind.OutputPort)}";
+    }
+
+    private string GetHudBuildWorkspaceId()
+    {
+        return UseLargeTestScenario ? BuildTestWorkspaceId : EditorWorkspaceId;
     }
 
     private FactoryBlueprintPanelState BuildInteriorBlueprintPanelState()
@@ -3630,6 +3695,7 @@ public partial class MobileFactoryDemo : Node3D
         await ToSignal(GetTree().CreateTimer(0.35f), SceneTreeTimer.SignalName.Timeout);
 
         var openedInTransit = _hud.IsEditorVisible;
+        var workspaceNavigationVerified = await RunWorkspaceNavigationSmoke();
         var viewportSize = GetViewport().GetVisibleRect().Size;
         var rightPaneHover = _hud.IsPointerOverEditor(new Vector2(viewportSize.X - 80.0f, viewportSize.Y * 0.5f));
         var leftPaneHover = !_hud.IsPointerOverEditor(new Vector2(10.0f, 40.0f));
@@ -3838,15 +3904,82 @@ public partial class MobileFactoryDemo : Node3D
             }
         }
 
-        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !rightPaneHover || !leftPaneHover || !detailWindowInTransit || !blueprintWorkflowInTransit || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !contextualRotateWorks || !previewArrowTracksFacing || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !inputDeliveredWhileDeployed || !turretTrackedThreats || !mobileCombatActive || !recalled || !blockedOutputActive || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0 || !miningSecondRecall || !miningAttachmentSwapped || !miningWarningAnchorFound || !miningWarningPreview || !miningWarningDeploy || miningWarningConnected || miningWarningPayloadVisible || miningWarningDelivered || !miningWarningPayloadRetracted || !miningDeploy || !miningAttachmentConnected || !miningPayloadVisible || !miningSinkDelivered || !miningPayloadRetracted)
+        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !workspaceNavigationVerified || !rightPaneHover || !leftPaneHover || !detailWindowInTransit || !blueprintWorkflowInTransit || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !contextualRotateWorks || !previewArrowTracksFacing || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !inputDeliveredWhileDeployed || !turretTrackedThreats || !mobileCombatActive || !recalled || !blockedOutputActive || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0 || !miningSecondRecall || !miningAttachmentSwapped || !miningWarningAnchorFound || !miningWarningPreview || !miningWarningDeploy || miningWarningConnected || miningWarningPayloadVisible || miningWarningDelivered || !miningWarningPayloadRetracted || !miningDeploy || !miningAttachmentConnected || !miningPayloadVisible || !miningSinkDelivered || !miningPayloadRetracted)
         {
-            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} rightHover={rightPaneHover} leftHover={leftPaneHover} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} contextualRotateWorks={contextualRotateWorks} previewArrowTracksFacing={previewArrowTracksFacing} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered} miningSecondRecall={miningSecondRecall} miningAttachmentSwapped={miningAttachmentSwapped} miningWarningAnchorFound={miningWarningAnchorFound} miningWarningPreview={miningWarningPreview} miningWarningDeploy={miningWarningDeploy} miningWarningConnected={miningWarningConnected} miningWarningPayloadVisible={miningWarningPayloadVisible} miningWarningDelivered={miningWarningDelivered} miningWarningPayloadRetracted={miningWarningPayloadRetracted} miningDeploy={miningDeploy} miningAttachmentConnected={miningAttachmentConnected} miningPayloadVisible={miningPayloadVisible} miningSinkDelivered={miningSinkDelivered} miningPayloadRetracted={miningPayloadRetracted}");
+            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} workspaceNavigation={workspaceNavigationVerified} rightHover={rightPaneHover} leftHover={leftPaneHover} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} contextualRotateWorks={contextualRotateWorks} previewArrowTracksFacing={previewArrowTracksFacing} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered} miningSecondRecall={miningSecondRecall} miningAttachmentSwapped={miningAttachmentSwapped} miningWarningAnchorFound={miningWarningAnchorFound} miningWarningPreview={miningWarningPreview} miningWarningDeploy={miningWarningDeploy} miningWarningConnected={miningWarningConnected} miningWarningPayloadVisible={miningWarningPayloadVisible} miningWarningDelivered={miningWarningDelivered} miningWarningPayloadRetracted={miningWarningPayloadRetracted} miningDeploy={miningDeploy} miningAttachmentConnected={miningAttachmentConnected} miningPayloadVisible={miningPayloadVisible} miningSinkDelivered={miningSinkDelivered} miningPayloadRetracted={miningPayloadRetracted}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"MOBILE_FACTORY_SMOKE_OK firstDelivered={firstDelivered} secondDelivered={secondDelivered} miningDelivered={miningSinkDelivered} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} turretShots={(escortTurret?.ShotsFired ?? -1)} combatKills={_simulation.DefeatedEnemyCount}");
+        GD.Print($"MOBILE_FACTORY_SMOKE_OK firstDelivered={firstDelivered} secondDelivered={secondDelivered} miningDelivered={miningSinkDelivered} workspaceNavigation={workspaceNavigationVerified} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} turretShots={(escortTurret?.ShotsFired ?? -1)} combatKills={_simulation.DefeatedEnemyCount}");
         GetTree().Quit();
+    }
+
+    private async Task<bool> RunWorkspaceNavigationSmoke()
+    {
+        if (_hud is null)
+        {
+            return false;
+        }
+
+        var workspaceIds = _hud.GetWorkspaceIds();
+        var required = UseLargeTestScenario
+            ? new[] { OverviewWorkspaceId, BuildTestWorkspaceId, BlueprintWorkspaceId, DiagnosticsWorkspaceId, DetailsWorkspaceId }
+            : new[] { CommandWorkspaceId, EditorWorkspaceId, BlueprintWorkspaceId, DetailsWorkspaceId };
+
+        for (var index = 0; index < required.Length; index++)
+        {
+            if (!HasWorkspace(required[index], workspaceIds))
+            {
+                return false;
+            }
+        }
+
+        var editorWasOpen = _editorOpen;
+        _hud.SelectWorkspace(BlueprintWorkspaceId);
+        await ToSignal(GetTree().CreateTimer(0.05f), SceneTreeTimer.SignalName.Timeout);
+        var blueprintReady = _hud.ActiveWorkspaceId == BlueprintWorkspaceId && _hud.IsWorkspaceVisible(BlueprintWorkspaceId) && _editorOpen;
+
+        var buildWorkspaceId = GetHudBuildWorkspaceId();
+        _hud.SelectWorkspace(buildWorkspaceId);
+        await ToSignal(GetTree().CreateTimer(0.05f), SceneTreeTimer.SignalName.Timeout);
+        var buildReady = _hud.ActiveWorkspaceId == buildWorkspaceId && _hud.IsWorkspaceVisible(buildWorkspaceId) && _editorOpen;
+
+        _hud.SelectWorkspace(DetailsWorkspaceId);
+        await ToSignal(GetTree().CreateTimer(0.05f), SceneTreeTimer.SignalName.Timeout);
+        var detailsReady = _hud.ActiveWorkspaceId == DetailsWorkspaceId && _hud.IsWorkspaceVisible(DetailsWorkspaceId) && _editorOpen;
+
+        var worldWorkspaceId = UseLargeTestScenario ? DiagnosticsWorkspaceId : CommandWorkspaceId;
+        _hud.SelectWorkspace(worldWorkspaceId);
+        await ToSignal(GetTree().CreateTimer(0.05f), SceneTreeTimer.SignalName.Timeout);
+        var worldReady = _hud.ActiveWorkspaceId == worldWorkspaceId && _hud.IsWorkspaceVisible(worldWorkspaceId) && _editorOpen;
+
+        if (UseLargeTestScenario)
+        {
+            _hud.SelectWorkspace(OverviewWorkspaceId);
+            await ToSignal(GetTree().CreateTimer(0.05f), SceneTreeTimer.SignalName.Timeout);
+            worldReady &= _hud.ActiveWorkspaceId == OverviewWorkspaceId && _hud.IsWorkspaceVisible(OverviewWorkspaceId);
+        }
+
+        if (!editorWasOpen)
+        {
+            SetEditorOpenState(false);
+        }
+
+        return blueprintReady && buildReady && detailsReady && worldReady;
+    }
+
+    private static bool HasWorkspace(string workspaceId, IReadOnlyList<string> workspaceIds)
+    {
+        for (var index = 0; index < workspaceIds.Count; index++)
+        {
+            if (string.Equals(workspaceIds[index], workspaceId, global::System.StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private async void RunMiningPortSmokeChecks()
@@ -4626,6 +4759,7 @@ public partial class MobileFactoryDemo : Node3D
         var playerStartPosition = _mobileFactory.WorldFocusPoint;
         _mobileFactory.ApplyTransitInput(_grid, 1.0f, -1.0f, 0.5);
         var playerMoved = _mobileFactory.WorldFocusPoint.DistanceTo(playerStartPosition) > 0.05f;
+        var workspaceNavigationVerified = await RunWorkspaceNavigationSmoke();
 
         SetEditorOpenState(true);
         await ToSignal(GetTree().CreateTimer(0.35f), SceneTreeTimer.SignalName.Timeout);
@@ -4672,14 +4806,14 @@ public partial class MobileFactoryDemo : Node3D
             }
         }
 
-        if (!mixedStates || !variedProfiles || !variedPresets || !playerMoved || !editorVisible || !playerDeployed || !backgroundMoved || !deliveredDuringRun || !inputDeliveredDuringRun || !anyConnectedBridge || !playerTurretTrackedThreats || !worldCombatActive)
+        if (!mixedStates || !variedProfiles || !variedPresets || !playerMoved || !workspaceNavigationVerified || !editorVisible || !playerDeployed || !backgroundMoved || !deliveredDuringRun || !inputDeliveredDuringRun || !anyConnectedBridge || !playerTurretTrackedThreats || !worldCombatActive)
         {
-            GD.PushError($"MOBILE_FACTORY_LARGE_SMOKE_FAILED mixedStates={mixedStates} variedProfiles={variedProfiles} variedPresets={variedPresets} playerMoved={playerMoved} editorVisible={editorVisible} playerDeployed={playerDeployed} backgroundMoved={backgroundMoved} deliveredDuringRun={deliveredDuringRun} inputDeliveredDuringRun={inputDeliveredDuringRun} anyConnectedBridge={anyConnectedBridge} deployedCount={deployedCount} inTransitCount={inTransitCount} playerInputDelivered={playerInputSink?.DeliveredTotal ?? -1} mobileTurretShots={CountMobileTurretShots()} heavyEnemyCount={heavyEnemyCount} activeEnemies={_simulation.ActiveEnemyCount} defeatedEnemies={_simulation.DefeatedEnemyCount}");
+            GD.PushError($"MOBILE_FACTORY_LARGE_SMOKE_FAILED mixedStates={mixedStates} variedProfiles={variedProfiles} variedPresets={variedPresets} playerMoved={playerMoved} workspaceNavigation={workspaceNavigationVerified} editorVisible={editorVisible} playerDeployed={playerDeployed} backgroundMoved={backgroundMoved} deliveredDuringRun={deliveredDuringRun} inputDeliveredDuringRun={inputDeliveredDuringRun} anyConnectedBridge={anyConnectedBridge} deployedCount={deployedCount} inTransitCount={inTransitCount} playerInputDelivered={playerInputSink?.DeliveredTotal ?? -1} mobileTurretShots={CountMobileTurretShots()} heavyEnemyCount={heavyEnemyCount} activeEnemies={_simulation.ActiveEnemyCount} defeatedEnemies={_simulation.DefeatedEnemyCount}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"MOBILE_FACTORY_LARGE_SMOKE_OK deployed={deployedCount} inTransit={inTransitCount} delivered={GetPrimaryDeliveryTotal() + GetSecondaryDeliveryTotal()} heavyEnemies={heavyEnemyCount} mobileTurretShots={CountMobileTurretShots()}");
+        GD.Print($"MOBILE_FACTORY_LARGE_SMOKE_OK deployed={deployedCount} inTransit={inTransitCount} workspaceNavigation={workspaceNavigationVerified} delivered={GetPrimaryDeliveryTotal() + GetSecondaryDeliveryTotal()} heavyEnemies={heavyEnemyCount} mobileTurretShots={CountMobileTurretShots()}");
         GetTree().Quit();
     }
 

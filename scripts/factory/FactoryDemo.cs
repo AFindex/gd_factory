@@ -5,6 +5,11 @@ using System.Threading.Tasks;
 
 public partial class FactoryDemo : Node3D
 {
+    private const string BuildWorkspaceId = "build";
+    private const string BlueprintWorkspaceId = "blueprints";
+    private const string TelemetryWorkspaceId = "telemetry";
+    private const string CombatWorkspaceId = "combat";
+    private const string TestingWorkspaceId = "testing";
     private const float PowerDashBaseLength = FactoryConstants.CellSize * 0.52f;
     private const float PowerDashGapLength = FactoryConstants.CellSize * 0.28f;
     private const float PowerDashThickness = 0.08f;
@@ -322,6 +327,7 @@ public partial class FactoryDemo : Node3D
         _hud.DetailInventoryMoveRequested += HandleDetailInventoryMoveRequested;
         _hud.DetailRecipeSelected += HandleDetailRecipeSelected;
         _hud.DetailClosed += HandleDetailWindowClosed;
+        _hud.WorkspaceSelected += HandleHudWorkspaceSelected;
         _hud.BlueprintCaptureRequested += StartBlueprintCapture;
         _hud.BlueprintSaveRequested += HandleBlueprintSaveRequested;
         _hud.BlueprintSelected += HandleBlueprintSelected;
@@ -1455,6 +1461,15 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
+        if (_blueprintMode != FactoryBlueprintWorkflowMode.None || _pendingBlueprintCapture is not null)
+        {
+            _hud.SelectWorkspace(BlueprintWorkspaceId);
+        }
+        else if (_interactionMode == FactoryInteractionMode.Build || _interactionMode == FactoryInteractionMode.Delete)
+        {
+            _hud.SelectWorkspace(BuildWorkspaceId);
+        }
+
         _hud.SetMode(_interactionMode);
 
         if (_selectedBuildKind.HasValue)
@@ -1518,6 +1533,17 @@ public partial class FactoryDemo : Node3D
                 : "交互模式：左键查看建筑，Shift+左键拖拽可直接框选蓝图，数字键或按钮切换到对应建造工具。";
         _hud.SetNote(modeNote);
         _hud.SetBlueprintState(BuildBlueprintPanelState());
+    }
+
+    private void HandleHudWorkspaceSelected(string workspaceId)
+    {
+        if (workspaceId == BlueprintWorkspaceId
+            && _blueprintMode == FactoryBlueprintWorkflowMode.None
+            && _pendingBlueprintCapture is null
+            && FactoryBlueprintLibrary.GetActive() is null)
+        {
+            _previewMessage = "蓝图工作区已打开：按住 Shift 左键拖拽框选保存，或先在库里准备一个蓝图。";
+        }
     }
 
     private FactoryBlueprintPanelState BuildBlueprintPanelState()
@@ -2313,6 +2339,7 @@ public partial class FactoryDemo : Node3D
         var inspectionVerified = VerifyStorageInspectionPanel();
         var detailWindowVerified = await RunStructureDetailSmoke();
         var blueprintVerified = RunBlueprintWorkflowSmoke();
+        var workspaceVerified = RunWorkspaceNavigationSmoke();
         var combatVerified = await VerifyCombatScenarios();
 
         if (!placed
@@ -2328,16 +2355,71 @@ public partial class FactoryDemo : Node3D
             || !inspectionVerified
             || !detailWindowVerified
             || !blueprintVerified
+            || !workspaceVerified
             || !combatVerified
             || !previewArrowReady)
         {
-            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
+            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
+        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
         GetTree().Quit();
+    }
+
+    private bool RunWorkspaceNavigationSmoke()
+    {
+        if (_hud is null)
+        {
+            return false;
+        }
+
+        var workspaceIds = _hud.GetWorkspaceIds();
+        var hasBuild = HasWorkspace(workspaceIds, BuildWorkspaceId);
+        var hasBlueprints = HasWorkspace(workspaceIds, BlueprintWorkspaceId);
+        var hasTelemetry = HasWorkspace(workspaceIds, TelemetryWorkspaceId);
+        var hasCombat = HasWorkspace(workspaceIds, CombatWorkspaceId);
+        var hasTesting = HasWorkspace(workspaceIds, TestingWorkspaceId);
+
+        _hud.SelectWorkspace(BlueprintWorkspaceId);
+        var blueprintVisible = _hud.ActiveWorkspaceId == BlueprintWorkspaceId && _hud.IsWorkspaceVisible(BlueprintWorkspaceId);
+
+        _hud.SelectWorkspace(TelemetryWorkspaceId);
+        var telemetryVisible = _hud.ActiveWorkspaceId == TelemetryWorkspaceId && _hud.IsWorkspaceVisible(TelemetryWorkspaceId);
+
+        _hud.SelectWorkspace(CombatWorkspaceId);
+        var combatVisible = _hud.ActiveWorkspaceId == CombatWorkspaceId && _hud.IsWorkspaceVisible(CombatWorkspaceId);
+
+        _hud.SelectWorkspace(TestingWorkspaceId);
+        var testingVisible = _hud.ActiveWorkspaceId == TestingWorkspaceId && _hud.IsWorkspaceVisible(TestingWorkspaceId);
+
+        _hud.SelectWorkspace(BuildWorkspaceId);
+        var buildVisible = _hud.ActiveWorkspaceId == BuildWorkspaceId && _hud.IsWorkspaceVisible(BuildWorkspaceId);
+
+        return hasBuild
+            && hasBlueprints
+            && hasTelemetry
+            && hasCombat
+            && hasTesting
+            && blueprintVisible
+            && telemetryVisible
+            && combatVisible
+            && testingVisible
+            && buildVisible;
+    }
+
+    private static bool HasWorkspace(IReadOnlyList<string> workspaceIds, string workspaceId)
+    {
+        for (var index = 0; index < workspaceIds.Count; index++)
+        {
+            if (string.Equals(workspaceIds[index], workspaceId, global::System.StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private async Task<bool> RunPoweredFactorySmoke()
