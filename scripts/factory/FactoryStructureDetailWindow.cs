@@ -10,10 +10,32 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         public required string InventoryId { get; init; }
         public required Vector2I SlotPosition { get; init; }
         public required bool HasItem { get; init; }
+        public required FactoryItemKind? ItemKind { get; init; }
+        public required int StackCount { get; init; }
+        public required int MaxStackSize { get; init; }
         public required TextureRect Icon { get; init; }
         public required Label Label { get; init; }
+        public required Label StackLabel { get; init; }
         public required Label SubLabel { get; init; }
         public required Color AccentColor { get; init; }
+
+        public bool CanAcceptFrom(InventorySlotWidget source)
+        {
+            if (InventoryId != source.InventoryId || SlotPosition == source.SlotPosition)
+            {
+                return false;
+            }
+
+            if (!HasItem)
+            {
+                return true;
+            }
+
+            return ItemKind.HasValue
+                && source.ItemKind.HasValue
+                && ItemKind == source.ItemKind
+                && StackCount < MaxStackSize;
+        }
     }
 
     private PanelContainer? _titleBar;
@@ -285,7 +307,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                 var slot = section.Slots[slotIndex];
                 var slotPanel = new PanelContainer();
                 slotPanel.MouseFilter = MouseFilterEnum.Stop;
-                slotPanel.CustomMinimumSize = new Vector2(90.0f, 96.0f);
+                slotPanel.CustomMinimumSize = new Vector2(90.0f, 110.0f);
                 grid.AddChild(slotPanel);
 
                 var margin = new MarginContainer();
@@ -325,6 +347,10 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                 itemLabel.Text = slot.HasItem ? slot.ItemLabel ?? string.Empty : "空槽位";
                 body.AddChild(itemLabel);
 
+                var stackLabel = CreateTextLabel(10, slot.HasItem ? new Color("FDE68A") : new Color("64748B"));
+                stackLabel.Text = slot.HasItem ? $"x{slot.StackCount}/{slot.MaxStackSize}" : "--";
+                body.AddChild(stackLabel);
+
                 var posLabel = CreateTextLabel(10, new Color("9FB6C9"));
                 posLabel.Text = $"({slot.Position.X}, {slot.Position.Y})";
                 body.AddChild(posLabel);
@@ -337,8 +363,12 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                     InventoryId = section.InventoryId,
                     SlotPosition = slot.Position,
                     HasItem = slot.HasItem,
+                    ItemKind = slot.ItemKind,
+                    StackCount = slot.StackCount,
+                    MaxStackSize = slot.MaxStackSize,
                     Icon = iconRect,
                     Label = itemLabel,
+                    StackLabel = stackLabel,
                     SubLabel = posLabel,
                     AccentColor = slot.AccentColor
                 };
@@ -697,8 +727,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         }
 
         if (_dragSourceSlot.InventoryId == widget.InventoryId
-            && _dragSourceSlot.SlotPosition != widget.SlotPosition
-            && !widget.HasItem)
+            && widget.CanAcceptFrom(_dragSourceSlot))
         {
             InventoryMoveRequested?.Invoke(widget.InventoryId, _dragSourceSlot.SlotPosition, widget.SlotPosition);
         }
@@ -724,9 +753,8 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                 borderWidth = 2;
             }
             else if (_dragSourceSlot is not null
-                && _dragSourceSlot.InventoryId == widget.InventoryId
                 && _hoveredSlot == widget
-                && !widget.HasItem)
+                && widget.CanAcceptFrom(_dragSourceSlot))
             {
                 borderColor = new Color("4ADE80");
                 backgroundColor = new Color("122A23");
@@ -739,6 +767,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
 
             widget.Panel.AddThemeStyleboxOverride("panel", CreatePanelStyle(backgroundColor, borderColor, borderWidth));
             widget.Label.Modulate = widget.HasItem ? Colors.White : new Color("7B8DA1");
+            widget.StackLabel.Modulate = widget.HasItem ? new Color("FDE68A") : new Color("64748B");
             widget.SubLabel.Modulate = new Color("9FB6C9");
             widget.Icon.Modulate = widget.HasItem ? Colors.White : new Color(0.55f, 0.62f, 0.70f, 0.72f);
         }
@@ -753,13 +782,22 @@ public partial class FactoryStructureDetailWindow : PanelContainer
 
         if (_dragSourceSlot is null)
         {
-            _dragStateLabel.Text = "拖动窗口标题可移动位置；按住已占用槽位并释放到空槽位可移动物品。";
+            _dragStateLabel.Text = "拖动窗口标题可移动位置；按住已占用槽位并释放到空槽位或同类未满堆叠可移动物品。";
             return;
         }
 
-        _dragStateLabel.Text = _hoveredSlot is not null
-            ? $"正在拖动物品：从 ({_dragSourceSlot.SlotPosition.X}, {_dragSourceSlot.SlotPosition.Y}) 移向 ({_hoveredSlot.SlotPosition.X}, {_hoveredSlot.SlotPosition.Y})"
-            : $"正在拖动物品：源槽位 ({_dragSourceSlot.SlotPosition.X}, {_dragSourceSlot.SlotPosition.Y})";
+        if (_hoveredSlot is not null)
+        {
+            var action = _hoveredSlot.CanAcceptFrom(_dragSourceSlot)
+                ? _hoveredSlot.HasItem
+                    ? "并入目标堆叠"
+                    : "移动到空槽位"
+                : "目标无效";
+            _dragStateLabel.Text = $"正在拖动物品：从 ({_dragSourceSlot.SlotPosition.X}, {_dragSourceSlot.SlotPosition.Y}) 移向 ({_hoveredSlot.SlotPosition.X}, {_hoveredSlot.SlotPosition.Y})，{action}";
+            return;
+        }
+
+        _dragStateLabel.Text = $"正在拖动物品：源槽位 ({_dragSourceSlot.SlotPosition.X}, {_dragSourceSlot.SlotPosition.Y})";
     }
 
     private void ClampToBounds()

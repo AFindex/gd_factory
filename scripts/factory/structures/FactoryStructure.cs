@@ -331,10 +331,15 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
             var item = state.Item;
             slots.Add(new FactoryInventorySlotModel(
                 state.Position,
+                item?.ItemKind,
                 item is null ? null : item.Id.ToString(),
-                item is null ? null : FactoryPresentation.GetItemLabel(item),
-                item is null ? "空槽位" : $"槽位 ({state.Position.X}, {state.Position.Y})",
+                item is null ? null : FactoryPresentation.GetItemKindLabel(item.ItemKind),
+                item is null
+                    ? "空槽位"
+                    : $"{FactoryPresentation.GetItemKindLabel(item.ItemKind)} x{state.StackCount}/{state.MaxStackSize} | 首件 #{item.Id} | 槽位 ({state.Position.X}, {state.Position.Y})",
                 item is null ? new Color("475569") : FactoryPresentation.GetItemAccentColor(item.ItemKind),
+                state.StackCount,
+                state.MaxStackSize,
                 item is null ? null : FactoryPresentation.GetItemIcon(item.ItemKind)));
         }
 

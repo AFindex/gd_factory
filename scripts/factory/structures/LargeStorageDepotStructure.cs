@@ -10,6 +10,7 @@ public partial class LargeStorageDepotStructure : FactoryStructure, IFactoryItem
 
     public int BufferedCount => _inventory.Count;
     public int Capacity => _inventory.Capacity;
+    public int OccupiedSlotCount => _inventory.OccupiedSlotCount;
     public override string InspectionTitle => $"大型仓储 ({Cell.X}, {Cell.Y})";
     public override float MaxHealth => 110.0f;
 
@@ -28,7 +29,7 @@ public partial class LargeStorageDepotStructure : FactoryStructure, IFactoryItem
 
     public bool CanReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
-        return IsAdjacentToFootprint(sourceCell) && !_inventory.IsFull;
+        return IsAdjacentToFootprint(sourceCell) && _inventory.CanAcceptItem(item);
     }
 
     public override bool CanAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
@@ -86,7 +87,7 @@ public partial class LargeStorageDepotStructure : FactoryStructure, IFactoryItem
             yield return line;
         }
 
-        yield return $"容量：{BufferedCount}/{Capacity}";
+        yield return $"容量：{BufferedCount} 件 | 槽位：{OccupiedSlotCount}/{Capacity}";
         yield return $"输出方向：{FactoryDirection.ToLabel(Facing)}";
     }
 
@@ -132,7 +133,7 @@ public partial class LargeStorageDepotStructure : FactoryStructure, IFactoryItem
 
     public override void UpdateVisuals(float tickAlpha)
     {
-        var fillRatio = (float)BufferedCount / Capacity;
+        var fillRatio = Capacity <= 0 ? 0.0f : (float)OccupiedSlotCount / Capacity;
         for (var index = 0; index < _fillIndicators.Count; index++)
         {
             var threshold = (index + 1.0f) / _fillIndicators.Count;

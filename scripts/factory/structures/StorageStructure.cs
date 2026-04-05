@@ -11,6 +11,7 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
 
     public int BufferedCount => _inventory.Count;
     public int Capacity => _inventory.Capacity;
+    public int OccupiedSlotCount => _inventory.OccupiedSlotCount;
     public override string InspectionTitle => $"仓储 ({Cell.X}, {Cell.Y})";
     public override float MaxHealth => 54.0f;
 
@@ -29,7 +30,7 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
 
     public bool CanReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
-        return IsOrthogonallyAdjacent(Cell, sourceCell) && !_inventory.IsFull;
+        return IsOrthogonallyAdjacent(Cell, sourceCell) && _inventory.CanAcceptItem(item);
     }
 
     public override bool CanAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
@@ -89,7 +90,7 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
             yield return line;
         }
 
-        yield return $"容量：{BufferedCount}/{Capacity}";
+        yield return $"容量：{BufferedCount} 件 | 槽位：{OccupiedSlotCount}/{Capacity}";
         yield return $"输出方向：{FactoryDirection.ToLabel(Facing)}";
 
         var snapshot = _inventory.Snapshot();
@@ -108,7 +109,7 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
                 continue;
             }
 
-            yield return $"{index + 1}. {FactoryPresentation.GetItemLabel(item)} @ ({state.Position.X}, {state.Position.Y})";
+            yield return $"{index + 1}. {FactoryPresentation.GetItemKindLabel(item.ItemKind)} x{state.StackCount}/{state.MaxStackSize} @ ({state.Position.X}, {state.Position.Y})";
         }
     }
 
@@ -154,7 +155,7 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
 
     public override void UpdateVisuals(float tickAlpha)
     {
-        var fillRatio = (float)BufferedCount / Capacity;
+        var fillRatio = Capacity <= 0 ? 0.0f : (float)OccupiedSlotCount / Capacity;
         for (var index = 0; index < _fillIndicators.Count; index++)
         {
             var threshold = (index + 1.0f) / _fillIndicators.Count;

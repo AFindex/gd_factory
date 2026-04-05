@@ -4389,34 +4389,91 @@ public partial class MobileFactoryDemo : Node3D
             return false;
         }
 
-        var occupiedSlot = new Vector2I(-1, -1);
-        var emptySlot = new Vector2I(-1, -1);
-        for (var index = 0; index < storageDetail.InventorySections[0].Slots.Count; index++)
+        var stackLimit = FactoryItemCatalog.GetMaxStackSize(FactoryItemKind.GenericCargo);
+        for (var index = 0; index < stackLimit + 2; index++)
         {
-            var slot = storageDetail.InventorySections[0].Slots[index];
-            if (slot.HasItem && occupiedSlot.X < 0)
+            var seededCargo = _simulation.CreateItem(BuildPrototypeKind.Producer, FactoryItemKind.GenericCargo);
+            if (!storage.TryReceiveProvidedItem(seededCargo, storage.Cell + Vector2I.Left, _simulation))
             {
-                occupiedSlot = slot.Position;
-            }
-            else if (!slot.HasItem && emptySlot.X < 0)
-            {
-                emptySlot = slot.Position;
+                return false;
             }
         }
 
-        var inventoryMoveWorked = occupiedSlot.X >= 0
+        storageDetail = storage.GetDetailModel();
+
+        var mergeSourceSlot = new Vector2I(-1, -1);
+        var mergeTargetSlot = new Vector2I(-1, -1);
+        var emptySlot = new Vector2I(-1, -1);
+        var targetStackBeforeMove = 0;
+        var totalStackCountBeforeMove = 0;
+        var stackCountsVisible = false;
+        for (var index = 0; index < storageDetail.InventorySections[0].Slots.Count; index++)
+        {
+            var slot = storageDetail.InventorySections[0].Slots[index];
+            totalStackCountBeforeMove += slot.StackCount;
+            if (slot.StackCount > 1)
+            {
+                stackCountsVisible = true;
+            }
+
+            if (!slot.HasItem && emptySlot.X < 0)
+            {
+                emptySlot = slot.Position;
+            }
+
+            if (!slot.HasItem)
+            {
+                continue;
+            }
+
+            if (slot.StackCount < slot.MaxStackSize && mergeTargetSlot.X < 0)
+            {
+                mergeTargetSlot = slot.Position;
+                targetStackBeforeMove = slot.StackCount;
+                continue;
+            }
+
+            if (mergeTargetSlot.X >= 0
+                && slot.ItemKind == FactoryItemKind.GenericCargo
+                && slot.Position != mergeTargetSlot
+                && mergeSourceSlot.X < 0)
+            {
+                mergeSourceSlot = slot.Position;
+            }
+        }
+
+        if (mergeTargetSlot.X >= 0 && mergeSourceSlot.X < 0)
+        {
+            for (var index = 0; index < storageDetail.InventorySections[0].Slots.Count; index++)
+            {
+                var slot = storageDetail.InventorySections[0].Slots[index];
+                if (slot.HasItem
+                    && slot.ItemKind == FactoryItemKind.GenericCargo
+                    && slot.Position != mergeTargetSlot)
+                {
+                    mergeSourceSlot = slot.Position;
+                    break;
+                }
+            }
+        }
+
+        var emptyDragRejected = mergeTargetSlot.X >= 0
             && emptySlot.X >= 0
-            && storage.TryMoveDetailInventoryItem("storage-buffer", occupiedSlot, emptySlot);
+            && !storage.TryMoveDetailInventoryItem("storage-buffer", emptySlot, mergeTargetSlot);
+        var inventoryMoveWorked = mergeSourceSlot.X >= 0
+            && mergeTargetSlot.X >= 0
+            && storage.TryMoveDetailInventoryItem("storage-buffer", mergeSourceSlot, mergeTargetSlot);
 
         var movedDetail = storage.GetDetailModel();
-        var targetNowOccupied = false;
+        var targetStackAfterMove = 0;
+        var totalStackCountAfterMove = 0;
         for (var index = 0; index < movedDetail.InventorySections[0].Slots.Count; index++)
         {
             var slot = movedDetail.InventorySections[0].Slots[index];
-            if (slot.Position == emptySlot && slot.HasItem)
+            totalStackCountAfterMove += slot.StackCount;
+            if (slot.Position == mergeTargetSlot)
             {
-                targetNowOccupied = true;
-                break;
+                targetStackAfterMove = slot.StackCount;
             }
         }
 
@@ -4446,8 +4503,11 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         return storageDetailVisible
+            && stackCountsVisible
+            && emptyDragRejected
             && inventoryMoveWorked
-            && targetNowOccupied
+            && targetStackAfterMove > targetStackBeforeMove
+            && totalStackCountAfterMove == totalStackCountBeforeMove
             && producerRecipeVerified
             && turret.BufferedAmmo > 0
             && turretShowsHighVelocityAmmo

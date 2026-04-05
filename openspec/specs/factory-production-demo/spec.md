@@ -4,15 +4,15 @@
 TBD - created by archiving change add-3d-factory-core-demo. Update Purpose after archive.
 ## Requirements
 ### Requirement: Demo includes an observable automation loop
-The game SHALL include a playable static factory demo whose default startup layout contains multiple authored districts that together form a powered input -> production -> output chain, including resource extraction, fuel supply, power generation and distribution, intermediate manufacturing, buffering, and final delivery, so automation can be observed under sustained throughput, localized congestion, and power-state changes instead of only fixed producer-to-sink chains.
+The game SHALL include a playable static factory demo whose default startup layout contains multiple authored districts that together form a powered input -> production -> output chain, including at least a branching iron/copper resource ladder, shared intermediate manufacturing, and a final multi-input crafted output, so automation can be observed under sustained throughput, localized congestion, and recipe-state changes instead of only a short linear chain.
 
-#### Scenario: Startup layout exercises powered extraction and manufacturing
+#### Scenario: Startup layout exercises branching resource production
 - **WHEN** the player starts the default static factory demo
-- **THEN** the scene already contains authored mining, power, smelting, assembly, storage, and delivery segments that demonstrate the full chain without requiring manual building
+- **THEN** the scene already contains authored mining, smelting, intermediate assembly, and final-output segments that demonstrate at least two raw-resource branches converging into downstream production without requiring manual building
 
-#### Scenario: Mined resources reach outputs through the powered chain
+#### Scenario: Multiple resource branches reach a shared crafted output
 - **WHEN** the demo scene runs with its authored starter layout
-- **THEN** items extracted from resource deposits flow through powered manufacturing and are registered as delivered by at least one destination structure in the scene
+- **THEN** items extracted from more than one raw-resource family flow through powered manufacturing and contribute to at least one shared crafted output that can be delivered in the scene
 
 ### Requirement: Demo sandbox spans multiple authored districts
 The game SHALL expand the static sandbox world to roughly three times its current footprint so mining, power, manufacturing, combat, and regression lanes can coexist on one readable map.
@@ -31,6 +31,28 @@ The game SHALL include authored starter-layout use cases and smoke coverage that
 #### Scenario: Smoke flow validates the powered factory chain
 - **WHEN** the static sandbox smoke test runs against the default starter layout
 - **THEN** it verifies that resource extraction, generator-powered production, recipe progression, and final delivery all succeed without manual intervention
+
+### Requirement: Demo showcases differentiated logistics item visuals
+The game SHALL render moving logistics items in the static sandbox using their configured visual profiles so different item kinds are readable during normal play.
+
+#### Scenario: Existing items receive immediate color differentiation
+- **WHEN** the starter layout is running with the current baseline item set
+- **THEN** coal, ore, plates, parts, and ammo payloads each appear with distinct first-pass colors while moving through the logistics network
+
+#### Scenario: Configured billboard or model items appear in the authored layout
+- **WHEN** the starter layout includes an item kind configured with a billboard sprite or 3D model transport profile
+- **THEN** that moving item appears in the authored logistics line using its configured representation instead of the generic placeholder cube
+
+### Requirement: Demo verification covers richer chain readability
+The game SHALL include authored use cases or smoke coverage that verify both the expanded production ladder and the visibility of differentiated moving items in the default sandbox.
+
+#### Scenario: Smoke flow validates expanded crafted output chain
+- **WHEN** the static sandbox smoke test runs against the default starter layout
+- **THEN** it verifies that at least one multi-stage crafted output depending on more than one resource branch is produced and delivered without manual intervention
+
+#### Scenario: Visual readability checks do not require identical meshes
+- **WHEN** smoke or regression verification inspects the authored starter layout after item-visual profiles are enabled
+- **THEN** it confirms that moving payloads remain visible and distinguishable by profile configuration without depending on every item using the same geometry
 
 ### Requirement: Prototype logistics update on a deterministic simulation step
 The game SHALL advance factory entities on a controlled simulation cadence so prototype production behavior is predictable and testable.

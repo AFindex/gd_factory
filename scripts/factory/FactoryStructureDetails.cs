@@ -67,9 +67,15 @@ public sealed class FactoryStructureDetailModel
                     .Append(',')
                     .Append(slot.Position.Y)
                     .Append(':')
+                    .Append(slot.ItemKind?.ToString() ?? "-")
+                    .Append(':')
                     .Append(slot.ItemId ?? "-")
                     .Append(':')
-                    .Append(slot.ItemLabel ?? "-");
+                    .Append(slot.ItemLabel ?? "-")
+                    .Append(':')
+                    .Append(slot.StackCount)
+                    .Append('/')
+                    .Append(slot.MaxStackSize);
             }
         }
 
@@ -156,27 +162,37 @@ public sealed class FactoryInventorySlotModel
 {
     public FactoryInventorySlotModel(
         Vector2I position,
+        FactoryItemKind? itemKind,
         string? itemId,
         string? itemLabel,
         string? itemDescription,
         Color accentColor,
+        int stackCount = 0,
+        int maxStackSize = 0,
         Texture2D? iconTexture = null)
     {
         Position = position;
+        ItemKind = itemKind;
         ItemId = itemId;
         ItemLabel = itemLabel;
         ItemDescription = itemDescription;
         AccentColor = accentColor;
+        StackCount = itemKind.HasValue ? Mathf.Max(1, stackCount) : 0;
+        MaxStackSize = itemKind.HasValue ? Mathf.Max(StackCount, maxStackSize) : 0;
         IconTexture = iconTexture;
     }
 
     public Vector2I Position { get; }
+    public FactoryItemKind? ItemKind { get; }
     public string? ItemId { get; }
     public string? ItemLabel { get; }
     public string? ItemDescription { get; }
     public Color AccentColor { get; }
+    public int StackCount { get; }
+    public int MaxStackSize { get; }
     public Texture2D? IconTexture { get; }
-    public bool HasItem => !string.IsNullOrWhiteSpace(ItemId);
+    public bool HasItem => ItemKind.HasValue;
+    public bool IsFullStack => HasItem && StackCount >= MaxStackSize;
 }
 
 public sealed class FactoryRecipeSectionModel

@@ -170,8 +170,8 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
         yield return $"需求：{FormatIngredientSummary(ActiveRecipe.Inputs)}";
         yield return $"产出：{FormatOutputSummary(ActiveRecipe.Outputs)}";
         yield return $"节拍：{ActiveRecipe.CycleSeconds:0.00} 秒";
-        yield return $"输入缓存：{_inputInventory.Count}";
-        yield return $"输出缓存：{_outputInventory.Count}";
+        yield return $"输入缓存：{_inputInventory.Count} 件 | 槽位：{_inputInventory.OccupiedSlotCount}/{_inputInventory.Capacity}";
+        yield return $"输出缓存：{_outputInventory.Count} 件 | 槽位：{_outputInventory.OccupiedSlotCount}/{_outputInventory.Capacity}";
         yield return _isProcessing
             ? $"进度：{ProcessRatio * 100.0f:0}%"
             : HasBufferedOutput
@@ -316,7 +316,9 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
 
     private bool CanAcceptInput(FactoryItem item, Vector2I sourceCell)
     {
-        if (!IsOrthogonallyAdjacent(Cell, sourceCell) || ActiveRecipe.Inputs.Count == 0 || _inputInventory.IsFull)
+        if (!IsOrthogonallyAdjacent(Cell, sourceCell)
+            || ActiveRecipe.Inputs.Count == 0
+            || !_inputInventory.CanAcceptItem(item))
         {
             return false;
         }
@@ -356,14 +358,16 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
 
     private bool CanStoreAllOutputs()
     {
-        var freeSlots = _outputInventory.Capacity - _outputInventory.Count;
-        var neededSlots = 0;
+        var outputKinds = new List<FactoryItemKind>();
         for (var index = 0; index < ActiveRecipe.Outputs.Count; index++)
         {
-            neededSlots += ActiveRecipe.Outputs[index].Amount;
+            for (var amountIndex = 0; amountIndex < ActiveRecipe.Outputs[index].Amount; amountIndex++)
+            {
+                outputKinds.Add(ActiveRecipe.Outputs[index].ItemKind);
+            }
         }
 
-        return freeSlots >= neededSlots;
+        return _outputInventory.CanFitItems(outputKinds);
     }
 
     private void ConsumeInputs()

@@ -2891,7 +2891,7 @@ public partial class FactoryDemo : Node3D
 
     private async Task<bool> RunStorageInserterSmoke()
     {
-        if (_grid is null)
+        if (_grid is null || _simulation is null)
         {
             return false;
         }
@@ -2925,6 +2925,37 @@ public partial class FactoryDemo : Node3D
             return false;
         }
 
+        var injectedItems = new List<FactoryItem>();
+        for (var index = 0; index < 3; index++)
+        {
+            var injectedItem = _simulation.CreateItem(BuildPrototypeKind.Producer, FactoryItemKind.GenericCargo);
+            if (!storage.TryReceiveProvidedItem(injectedItem, storage.Cell + Vector2I.Left, _simulation))
+            {
+                return false;
+            }
+
+            injectedItems.Add(injectedItem);
+        }
+
+        var deterministicPeek = storage.TryPeekProvidedItem(storage.GetOutputCell(), _simulation, out var peekedItem)
+            && peekedItem?.Id == injectedItems[0].Id;
+        var deterministicTake = storage.TryTakeProvidedItem(storage.GetOutputCell(), _simulation, out var takenItem)
+            && takenItem?.Id == injectedItems[0].Id;
+
+        var stackedBuffered = false;
+        var storageDetail = storage.GetDetailModel();
+        if (storageDetail.InventorySections.Count > 0)
+        {
+            for (var index = 0; index < storageDetail.InventorySections[0].Slots.Count; index++)
+            {
+                if (storageDetail.InventorySections[0].Slots[index].StackCount > 1)
+                {
+                    stackedBuffered = true;
+                    break;
+                }
+            }
+        }
+
         await ToSignal(GetTree().CreateTimer(3.5f), SceneTreeTimer.SignalName.Timeout);
         var bufferedBefore = storage.BufferedCount;
         var deliveredBefore = sink.DeliveredTotal;
@@ -2932,7 +2963,11 @@ public partial class FactoryDemo : Node3D
         await ToSignal(GetTree().CreateTimer(3.5f), SceneTreeTimer.SignalName.Timeout);
         var deliveredAfter = sink.DeliveredTotal;
 
-        return bufferedBefore >= 0 && deliveredAfter > deliveredBefore;
+        return deterministicPeek
+            && deterministicTake
+            && stackedBuffered
+            && bufferedBefore >= 0
+            && deliveredAfter > deliveredBefore;
     }
 
     private bool VerifyStorageInspectionPanel()
@@ -2959,7 +2994,7 @@ public partial class FactoryDemo : Node3D
 
     private async Task<bool> RunStructureDetailSmoke()
     {
-        if (_grid is null || _hud is null)
+        if (_grid is null || _hud is null || _simulation is null)
         {
             return false;
         }
@@ -2997,9 +3032,19 @@ public partial class FactoryDemo : Node3D
 
         await ToSignal(GetTree().CreateTimer(3.0f), SceneTreeTimer.SignalName.Timeout);
 
+        var stackLimit = FactoryItemCatalog.GetMaxStackSize(FactoryItemKind.GenericCargo);
+        for (var index = 0; index < stackLimit + 2; index++)
+        {
+            var seededCargo = _simulation.CreateItem(BuildPrototypeKind.Producer, FactoryItemKind.GenericCargo);
+            if (!storage.TryReceiveProvidedItem(seededCargo, storage.Cell + Vector2I.Left, _simulation))
+            {
+                return false;
+            }
+        }
+
         if (turret.BufferedAmmo <= 0)
         {
-            var injectedAmmo = _simulation!.CreateItem(BuildPrototypeKind.AmmoAssembler, FactoryItemKind.HighVelocityAmmo);
+            var injectedAmmo = _simulation.CreateItem(BuildPrototypeKind.AmmoAssembler, FactoryItemKind.HighVelocityAmmo);
             turret.TryReceiveProvidedItem(injectedAmmo, ammoAssembler.Cell, _simulation);
         }
 
@@ -3009,8 +3054,12 @@ public partial class FactoryDemo : Node3D
 
         var storageDetail = storage.GetDetailModel();
         var storageSection = storageDetail.InventorySections.Count > 0 ? storageDetail.InventorySections[0] : null;
-        var occupiedSlot = new Vector2I(-1, -1);
+        var mergeSourceSlot = new Vector2I(-1, -1);
+        var mergeTargetSlot = new Vector2I(-1, -1);
         var emptySlot = new Vector2I(-1, -1);
+        var targetStackBeforeMove = 0;
+        var totalStackCountBeforeMove = 0;
+        var stackCountsVisible = false;
         if (storageSection is null)
         {
             return false;
@@ -3019,30 +3068,71 @@ public partial class FactoryDemo : Node3D
         for (var index = 0; index < storageSection.Slots.Count; index++)
         {
             var slot = storageSection.Slots[index];
-            if (slot.HasItem && occupiedSlot.X < 0)
+            totalStackCountBeforeMove += slot.StackCount;
+            if (slot.StackCount > 1)
             {
-                occupiedSlot = slot.Position;
+                stackCountsVisible = true;
             }
-            else if (!slot.HasItem && emptySlot.X < 0)
+
+            if (!slot.HasItem && emptySlot.X < 0)
             {
                 emptySlot = slot.Position;
             }
+
+            if (!slot.HasItem)
+            {
+                continue;
+            }
+
+            if (slot.StackCount < slot.MaxStackSize && mergeTargetSlot.X < 0)
+            {
+                mergeTargetSlot = slot.Position;
+                targetStackBeforeMove = slot.StackCount;
+                continue;
+            }
+
+            if (mergeTargetSlot.X >= 0
+                && slot.ItemKind == FactoryItemKind.GenericCargo
+                && slot.Position != mergeTargetSlot
+                && mergeSourceSlot.X < 0)
+            {
+                mergeSourceSlot = slot.Position;
+            }
         }
 
-        var storageMoved = occupiedSlot.X >= 0
+        if (mergeTargetSlot.X >= 0 && mergeSourceSlot.X < 0)
+        {
+            for (var index = 0; index < storageSection.Slots.Count; index++)
+            {
+                var slot = storageSection.Slots[index];
+                if (slot.HasItem
+                    && slot.ItemKind == FactoryItemKind.GenericCargo
+                    && slot.Position != mergeTargetSlot)
+                {
+                    mergeSourceSlot = slot.Position;
+                    break;
+                }
+            }
+        }
+
+        var emptyDragRejected = mergeTargetSlot.X >= 0
             && emptySlot.X >= 0
-            && storage.TryMoveDetailInventoryItem("storage-buffer", occupiedSlot, emptySlot);
+            && !storage.TryMoveDetailInventoryItem("storage-buffer", emptySlot, mergeTargetSlot);
+        var storageMoved = mergeSourceSlot.X >= 0
+            && mergeTargetSlot.X >= 0
+            && storage.TryMoveDetailInventoryItem("storage-buffer", mergeSourceSlot, mergeTargetSlot);
 
         var movedDetail = storage.GetDetailModel();
         var movedSection = movedDetail.InventorySections[0];
-        var movedTargetOccupied = false;
+        var movedTargetStackCount = 0;
+        var movedTotalStackCount = 0;
         for (var index = 0; index < movedSection.Slots.Count; index++)
         {
             var slot = movedSection.Slots[index];
-            if (slot.Position == emptySlot && slot.HasItem)
+            movedTotalStackCount += slot.StackCount;
+            if (slot.Position == mergeTargetSlot)
             {
-                movedTargetOccupied = true;
-                break;
+                movedTargetStackCount = slot.StackCount;
             }
         }
 
@@ -3073,8 +3163,11 @@ public partial class FactoryDemo : Node3D
         }
 
         return storageDetailVisible
+            && stackCountsVisible
+            && emptyDragRejected
             && storageMoved
-            && movedTargetOccupied
+            && movedTargetStackCount > targetStackBeforeMove
+            && movedTotalStackCount == totalStackCountBeforeMove
             && producerRecipeVerified
             && ammoRecipeChanged
             && turretHasAmmo

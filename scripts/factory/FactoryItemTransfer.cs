@@ -95,21 +95,98 @@ public sealed class FactoryItemBuffer
 
 public sealed class FactoryInventorySlotState
 {
-    public FactoryInventorySlotState(Vector2I position, FactoryItem? item)
+    public FactoryInventorySlotState(Vector2I position, FactoryItem? item, int stackCount = 0, int maxStackSize = 0)
     {
         Position = position;
         Item = item;
+        StackCount = item is null ? 0 : Mathf.Max(1, stackCount);
+        MaxStackSize = item is null ? 0 : Mathf.Max(StackCount, maxStackSize);
     }
 
     public Vector2I Position { get; }
     public FactoryItem? Item { get; }
+    public int StackCount { get; }
+    public int MaxStackSize { get; }
     public bool HasItem => Item is not null;
+    public bool IsFullStack => HasItem && StackCount >= MaxStackSize;
+}
+
+internal sealed class FactoryInventoryItemStack
+{
+    private readonly List<FactoryItem> _items = new();
+
+    public FactoryInventoryItemStack(FactoryItem firstItem)
+    {
+        _items.Add(firstItem);
+    }
+
+    public FactoryItemKind ItemKind => _items[0].ItemKind;
+    public int Count => _items.Count;
+    public int MaxStackSize => FactoryItemCatalog.GetMaxStackSize(ItemKind);
+    public bool IsEmpty => _items.Count == 0;
+    public bool IsFull => _items.Count >= MaxStackSize;
+    public FactoryItem PeekFirst() => _items[0];
+
+    public bool CanAccept(FactoryItem item)
+    {
+        return item.ItemKind == ItemKind && !IsFull;
+    }
+
+    public bool TryAddItem(FactoryItem item)
+    {
+        if (!CanAccept(item))
+        {
+            return false;
+        }
+
+        _items.Add(item);
+        return true;
+    }
+
+    public bool TryTakeFirst(out FactoryItem? item)
+    {
+        if (_items.Count == 0)
+        {
+            item = null;
+            return false;
+        }
+
+        item = _items[0];
+        _items.RemoveAt(0);
+        return true;
+    }
+
+    public int MergeFrom(FactoryInventoryItemStack source)
+    {
+        if (source.ItemKind != ItemKind || IsFull)
+        {
+            return 0;
+        }
+
+        var moved = 0;
+        while (!IsFull && source.TryTakeFirst(out var item) && item is not null)
+        {
+            _items.Add(item);
+            moved++;
+        }
+
+        return moved;
+    }
 }
 
 public sealed class FactorySlottedItemInventory
 {
-    private readonly Dictionary<Vector2I, FactoryItem> _items = new();
+    private readonly Dictionary<Vector2I, FactoryInventoryItemStack> _items = new();
     private readonly List<Vector2I> _slotOrder = new();
+    private int _itemCount;
+
+    private sealed class SimulatedSlotState
+    {
+        public FactoryItemKind? ItemKind { get; set; }
+        public int Count { get; set; }
+        public int MaxStackSize { get; set; }
+        public bool IsEmpty => !ItemKind.HasValue;
+    }
 
     public FactorySlottedItemInventory(int columns, int rows)
     {
@@ -128,9 +205,11 @@ public sealed class FactorySlottedItemInventory
     public int Columns { get; }
     public int Rows { get; }
     public int Capacity => Columns * Rows;
-    public int Count => _items.Count;
-    public bool IsFull => Count >= Capacity;
-    public bool IsEmpty => Count == 0;
+    public int Count => _itemCount;
+    public int OccupiedSlotCount => _items.Count;
+    public int EmptySlotCount => Capacity - OccupiedSlotCount;
+    public bool IsFull => EmptySlotCount == 0;
+    public bool IsEmpty => _itemCount == 0;
     public Vector2I GridSize => new(Columns, Rows);
 
     public bool IsValidSlot(Vector2I slot)
@@ -148,11 +227,35 @@ public sealed class FactorySlottedItemInventory
 
     public FactoryItem? GetItemOrDefault(Vector2I slot)
     {
-        return _items.TryGetValue(slot, out var item) ? item : null;
+        return _items.TryGetValue(slot, out var stack) ? stack.PeekFirst() : null;
+    }
+
+    public bool CanAcceptItem(FactoryItem item)
+    {
+        for (var index = 0; index < _slotOrder.Count; index++)
+        {
+            var slot = _slotOrder[index];
+            if (_items.TryGetValue(slot, out var existingStack) && existingStack.CanAccept(item))
+            {
+                return true;
+            }
+        }
+
+        return EmptySlotCount > 0;
     }
 
     public bool TryAddItem(FactoryItem item)
     {
+        for (var index = 0; index < _slotOrder.Count; index++)
+        {
+            var slot = _slotOrder[index];
+            if (_items.TryGetValue(slot, out var stack) && stack.TryAddItem(item))
+            {
+                _itemCount++;
+                return true;
+            }
+        }
+
         for (var index = 0; index < _slotOrder.Count; index++)
         {
             var slot = _slotOrder[index];
@@ -161,7 +264,8 @@ public sealed class FactorySlottedItemInventory
                 continue;
             }
 
-            _items[slot] = item;
+            _items[slot] = new FactoryInventoryItemStack(item);
+            _itemCount++;
             return true;
         }
 
@@ -170,14 +274,33 @@ public sealed class FactorySlottedItemInventory
 
     public bool TryMoveItem(Vector2I fromSlot, Vector2I toSlot)
     {
-        if (!IsValidSlot(fromSlot) || !IsValidSlot(toSlot) || fromSlot == toSlot || !_items.TryGetValue(fromSlot, out var item) || _items.ContainsKey(toSlot))
+        if (!IsValidSlot(fromSlot)
+            || !IsValidSlot(toSlot)
+            || fromSlot == toSlot
+            || !_items.TryGetValue(fromSlot, out var fromStack))
         {
             return false;
         }
 
-        _items.Remove(fromSlot);
-        _items[toSlot] = item;
-        return true;
+        if (!_items.TryGetValue(toSlot, out var toStack))
+        {
+            _items.Remove(fromSlot);
+            _items[toSlot] = fromStack;
+            return true;
+        }
+
+        if (toStack.ItemKind != fromStack.ItemKind || toStack.IsFull)
+        {
+            return false;
+        }
+
+        var moved = toStack.MergeFrom(fromStack);
+        if (fromStack.IsEmpty)
+        {
+            _items.Remove(fromSlot);
+        }
+
+        return moved > 0;
     }
 
     public bool TryPeekFirst(out FactoryItem? item)
@@ -185,8 +308,9 @@ public sealed class FactorySlottedItemInventory
         for (var index = 0; index < _slotOrder.Count; index++)
         {
             var slot = _slotOrder[index];
-            if (_items.TryGetValue(slot, out item))
+            if (_items.TryGetValue(slot, out var stack))
             {
+                item = stack.PeekFirst();
                 return true;
             }
         }
@@ -200,9 +324,14 @@ public sealed class FactorySlottedItemInventory
         for (var index = 0; index < _slotOrder.Count; index++)
         {
             var slot = _slotOrder[index];
-            if (_items.TryGetValue(slot, out item))
+            if (_items.TryGetValue(slot, out var stack) && stack.TryTakeFirst(out item))
             {
-                _items.Remove(slot);
+                _itemCount--;
+                if (stack.IsEmpty)
+                {
+                    _items.Remove(slot);
+                }
+
                 return true;
             }
         }
@@ -216,8 +345,9 @@ public sealed class FactorySlottedItemInventory
         for (var index = 0; index < _slotOrder.Count; index++)
         {
             var slot = _slotOrder[index];
-            if (_items.TryGetValue(slot, out item) && item.ItemKind == itemKind)
+            if (_items.TryGetValue(slot, out var stack) && stack.ItemKind == itemKind)
             {
+                item = stack.PeekFirst();
                 return true;
             }
         }
@@ -231,9 +361,14 @@ public sealed class FactorySlottedItemInventory
         for (var index = 0; index < _slotOrder.Count; index++)
         {
             var slot = _slotOrder[index];
-            if (_items.TryGetValue(slot, out item) && item.ItemKind == itemKind)
+            if (_items.TryGetValue(slot, out var stack) && stack.ItemKind == itemKind && stack.TryTakeFirst(out item))
             {
-                _items.Remove(slot);
+                _itemCount--;
+                if (stack.IsEmpty)
+                {
+                    _items.Remove(slot);
+                }
+
                 return true;
             }
         }
@@ -248,7 +383,14 @@ public sealed class FactorySlottedItemInventory
         for (var index = 0; index < _slotOrder.Count; index++)
         {
             var slot = _slotOrder[index];
-            snapshot[index] = new FactoryInventorySlotState(slot, GetItemOrDefault(slot));
+            if (_items.TryGetValue(slot, out var stack))
+            {
+                snapshot[index] = new FactoryInventorySlotState(slot, stack.PeekFirst(), stack.Count, stack.MaxStackSize);
+            }
+            else
+            {
+                snapshot[index] = new FactoryInventorySlotState(slot, null);
+            }
         }
 
         return snapshot;
@@ -257,14 +399,72 @@ public sealed class FactorySlottedItemInventory
     public int CountByKind(FactoryItemKind itemKind)
     {
         var total = 0;
-        foreach (var item in _items.Values)
+        foreach (var stack in _items.Values)
         {
-            if (item.ItemKind == itemKind)
+            if (stack.ItemKind == itemKind)
             {
-                total++;
+                total += stack.Count;
             }
         }
 
         return total;
+    }
+
+    public bool CanFitItems(IEnumerable<FactoryItemKind> itemKinds)
+    {
+        var simulation = new SimulatedSlotState[_slotOrder.Count];
+        for (var index = 0; index < _slotOrder.Count; index++)
+        {
+            var slot = _slotOrder[index];
+            simulation[index] = new SimulatedSlotState();
+            if (_items.TryGetValue(slot, out var stack))
+            {
+                simulation[index].ItemKind = stack.ItemKind;
+                simulation[index].Count = stack.Count;
+                simulation[index].MaxStackSize = stack.MaxStackSize;
+            }
+        }
+
+        foreach (var itemKind in itemKinds)
+        {
+            var placed = false;
+            for (var index = 0; index < simulation.Length; index++)
+            {
+                var slot = simulation[index];
+                if (slot.ItemKind == itemKind && slot.Count < slot.MaxStackSize)
+                {
+                    slot.Count++;
+                    placed = true;
+                    break;
+                }
+            }
+
+            if (placed)
+            {
+                continue;
+            }
+
+            for (var index = 0; index < simulation.Length; index++)
+            {
+                var slot = simulation[index];
+                if (!slot.IsEmpty)
+                {
+                    continue;
+                }
+
+                slot.ItemKind = itemKind;
+                slot.Count = 1;
+                slot.MaxStackSize = FactoryItemCatalog.GetMaxStackSize(itemKind);
+                placed = true;
+                break;
+            }
+
+            if (!placed)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

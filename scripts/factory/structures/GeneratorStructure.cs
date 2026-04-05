@@ -23,7 +23,9 @@ public partial class GeneratorStructure : FactoryStructure, IFactoryItemReceiver
 
     public bool CanReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
-        return IsOrthogonallyAdjacent(Cell, sourceCell) && !_fuelInventory.IsFull && FactoryItemCatalog.IsFuel(item.ItemKind);
+        return IsOrthogonallyAdjacent(Cell, sourceCell)
+            && FactoryItemCatalog.IsFuel(item.ItemKind)
+            && _fuelInventory.CanAcceptItem(item);
     }
 
     public bool TryReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
@@ -66,7 +68,7 @@ public partial class GeneratorStructure : FactoryStructure, IFactoryItemReceiver
         }
 
         yield return $"发电：{(IsGenerating ? $"{NominalPowerSupply:0} kW" : "待燃料")}";
-        yield return $"燃料缓存：{_fuelInventory.Count}/{_fuelInventory.Capacity}";
+        yield return $"燃料缓存：{_fuelInventory.Count} 件 | 槽位：{_fuelInventory.OccupiedSlotCount}/{_fuelInventory.Capacity}";
         yield return $"燃烧剩余：{_burnRemaining:0.0} 秒";
     }
 

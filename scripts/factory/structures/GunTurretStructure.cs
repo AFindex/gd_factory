@@ -36,7 +36,7 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
     {
         return FactoryPresentation.IsAmmoItem(item.ItemKind)
             && IsOrthogonallyAdjacent(Cell, sourceCell)
-            && !_ammoInventory.IsFull;
+            && _ammoInventory.CanAcceptItem(item);
     }
 
     public bool TryReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
@@ -53,7 +53,7 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
     {
         return FactoryPresentation.IsAmmoItem(item.ItemKind)
             && IsOrthogonallyAdjacent(Cell, sourceCell)
-            && !_ammoInventory.IsFull;
+            && _ammoInventory.CanAcceptItem(item);
     }
 
     public override bool TryAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
@@ -111,7 +111,7 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
             yield return line;
         }
 
-        yield return $"弹药：{BufferedAmmo}/{FactoryConstants.GunTurretAmmoCapacity}";
+        yield return $"弹药：{BufferedAmmo} 件 | 槽位：{_ammoInventory.OccupiedSlotCount}/{_ammoInventory.Capacity}";
         yield return $"射击：{_shotsFired}";
         yield return $"射程：{FactoryConstants.GunTurretRange:0.0}";
         yield return $"炮塔朝向：{Mathf.RadToDeg(_currentYaw):0}°";
@@ -169,7 +169,9 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
 
         if (_ammoIndicator is not null)
         {
-            var ratio = Mathf.Clamp((float)BufferedAmmo / FactoryConstants.GunTurretAmmoCapacity, 0.0f, 1.0f);
+            var ratio = _ammoInventory.Capacity <= 0
+                ? 0.0f
+                : Mathf.Clamp((float)_ammoInventory.OccupiedSlotCount / _ammoInventory.Capacity, 0.0f, 1.0f);
             _ammoIndicator.Scale = new Vector3(1.0f, Mathf.Max(0.15f, ratio), 1.0f);
         }
 

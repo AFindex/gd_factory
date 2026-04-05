@@ -42,6 +42,7 @@ public sealed class FactoryItemDefinition
         Color accentColor,
         FactoryTransportVisualProfile visualProfile,
         Texture2D? iconTexture = null,
+        int maxStackSize = 1,
         bool isFuel = false,
         float fuelValueSeconds = 0.0f)
     {
@@ -50,6 +51,7 @@ public sealed class FactoryItemDefinition
         AccentColor = accentColor;
         VisualProfile = visualProfile;
         IconTexture = iconTexture ?? visualProfile.Texture;
+        MaxStackSize = Mathf.Max(1, maxStackSize);
         IsFuel = isFuel;
         FuelValueSeconds = Mathf.Max(0.0f, fuelValueSeconds);
     }
@@ -59,6 +61,7 @@ public sealed class FactoryItemDefinition
     public Color AccentColor { get; }
     public FactoryTransportVisualProfile VisualProfile { get; }
     public Texture2D? IconTexture { get; }
+    public int MaxStackSize { get; }
     public bool IsFuel { get; }
     public float FuelValueSeconds { get; }
 }
@@ -95,6 +98,11 @@ public static partial class FactoryItemCatalog
         return GetDefinition(itemKind).IconTexture;
     }
 
+    public static int GetMaxStackSize(FactoryItemKind itemKind)
+    {
+        return GetDefinition(itemKind).MaxStackSize;
+    }
+
     public static bool TryGetFuelValueSeconds(FactoryItemKind itemKind, out float burnSeconds)
     {
         burnSeconds = GetDefinition(itemKind).FuelValueSeconds;
@@ -111,7 +119,8 @@ public static partial class FactoryItemCatalog
                 "基础货物",
                 GenericTint,
                 new FactoryTransportVisualProfile(GenericTint),
-                iconTexture: textures["generic-cargo"]),
+                iconTexture: textures["generic-cargo"],
+                maxStackSize: 8),
             [FactoryItemKind.Coal] = new FactoryItemDefinition(
                 FactoryItemKind.Coal,
                 "煤矿",
@@ -121,6 +130,7 @@ public static partial class FactoryItemCatalog
                     texture: textures["coal"],
                     texturedMeshScale: new Vector3(0.22f, 0.18f, 0.20f)),
                 iconTexture: textures["coal"],
+                maxStackSize: 12,
                 isFuel: true,
                 fuelValueSeconds: 12.0f),
             [FactoryItemKind.IronOre] = new FactoryItemDefinition(
@@ -128,7 +138,8 @@ public static partial class FactoryItemCatalog
                 "铁矿石",
                 new Color("64748B"),
                 new FactoryTransportVisualProfile(new Color("64748B"), placeholderScale: new Vector3(0.20f, 0.18f, 0.20f)),
-                iconTexture: textures["iron-ore"]),
+                iconTexture: textures["iron-ore"],
+                maxStackSize: 12),
             [FactoryItemKind.CopperOre] = new FactoryItemDefinition(
                 FactoryItemKind.CopperOre,
                 "铜矿石",
@@ -137,25 +148,29 @@ public static partial class FactoryItemCatalog
                     new Color("C2410C"),
                     texture: textures["copper-ore"],
                     texturedMeshScale: new Vector3(0.20f, 0.18f, 0.20f)),
-                iconTexture: textures["copper-ore"]),
+                iconTexture: textures["copper-ore"],
+                maxStackSize: 12),
             [FactoryItemKind.IronPlate] = new FactoryItemDefinition(
                 FactoryItemKind.IronPlate,
                 "铁板",
                 new Color("CBD5E1"),
                 new FactoryTransportVisualProfile(new Color("CBD5E1"), placeholderScale: new Vector3(0.24f, 0.08f, 0.18f)),
-                iconTexture: textures["iron-plate"]),
+                iconTexture: textures["iron-plate"],
+                maxStackSize: 10),
             [FactoryItemKind.CopperPlate] = new FactoryItemDefinition(
                 FactoryItemKind.CopperPlate,
                 "铜板",
                 new Color("FB923C"),
                 new FactoryTransportVisualProfile(new Color("FB923C"), placeholderScale: new Vector3(0.24f, 0.08f, 0.18f)),
-                iconTexture: textures["copper-plate"]),
+                iconTexture: textures["copper-plate"],
+                maxStackSize: 10),
             [FactoryItemKind.SteelPlate] = new FactoryItemDefinition(
                 FactoryItemKind.SteelPlate,
                 "钢板",
                 new Color("94A3B8"),
                 new FactoryTransportVisualProfile(new Color("94A3B8"), placeholderScale: new Vector3(0.26f, 0.08f, 0.18f)),
-                iconTexture: textures["steel-plate"]),
+                iconTexture: textures["steel-plate"],
+                maxStackSize: 8),
             [FactoryItemKind.Gear] = new FactoryItemDefinition(
                 FactoryItemKind.Gear,
                 "齿轮",
@@ -164,7 +179,8 @@ public static partial class FactoryItemCatalog
                     new Color("FBBF24"),
                     texture: textures["gear"],
                     modelFactory: FactoryTransportModelLibrary.CreateGearModel),
-                iconTexture: textures["gear"]),
+                iconTexture: textures["gear"],
+                maxStackSize: 8),
             [FactoryItemKind.CopperWire] = new FactoryItemDefinition(
                 FactoryItemKind.CopperWire,
                 "铜线",
@@ -175,7 +191,8 @@ public static partial class FactoryItemCatalog
                     billboardScale: new Vector2(0.30f, 0.30f),
                     allowTexturedMeshFallback: false,
                     allowBillboardFallback: true),
-                iconTexture: textures["copper-wire"]),
+                iconTexture: textures["copper-wire"],
+                maxStackSize: 16),
             [FactoryItemKind.CircuitBoard] = new FactoryItemDefinition(
                 FactoryItemKind.CircuitBoard,
                 "电路板",
@@ -186,7 +203,8 @@ public static partial class FactoryItemCatalog
                     billboardScale: new Vector2(0.32f, 0.28f),
                     allowTexturedMeshFallback: false,
                     allowBillboardFallback: true),
-                iconTexture: textures["circuit-board"]),
+                iconTexture: textures["circuit-board"],
+                maxStackSize: 8),
             [FactoryItemKind.MachinePart] = new FactoryItemDefinition(
                 FactoryItemKind.MachinePart,
                 "机加工件",
@@ -195,7 +213,8 @@ public static partial class FactoryItemCatalog
                     new Color("8B5CF6"),
                     texture: textures["machine-part"],
                     modelFactory: FactoryTransportModelLibrary.CreateMachinePartModel),
-                iconTexture: textures["machine-part"]),
+                iconTexture: textures["machine-part"],
+                maxStackSize: 6),
             [FactoryItemKind.AmmoMagazine] = new FactoryItemDefinition(
                 FactoryItemKind.AmmoMagazine,
                 "弹药",
@@ -204,7 +223,8 @@ public static partial class FactoryItemCatalog
                     new Color("FACC15"),
                     texture: textures["ammo-magazine"],
                     modelFactory: FactoryTransportModelLibrary.CreateAmmoMagazineModel),
-                iconTexture: textures["ammo-magazine"]),
+                iconTexture: textures["ammo-magazine"],
+                maxStackSize: 12),
             [FactoryItemKind.HighVelocityAmmo] = new FactoryItemDefinition(
                 FactoryItemKind.HighVelocityAmmo,
                 "高速弹药",
@@ -214,7 +234,8 @@ public static partial class FactoryItemCatalog
                     texture: textures["high-velocity-ammo"],
                     texturedMeshScale: new Vector3(0.24f, 0.10f, 0.10f),
                     billboardScale: new Vector2(0.34f, 0.24f)),
-                iconTexture: textures["high-velocity-ammo"]),
+                iconTexture: textures["high-velocity-ammo"],
+                maxStackSize: 10),
         };
     }
 }

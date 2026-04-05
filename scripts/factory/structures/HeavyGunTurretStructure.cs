@@ -26,7 +26,7 @@ public partial class HeavyGunTurretStructure : FactoryStructure, IFactoryItemRec
     {
         return FactoryPresentation.IsAmmoItem(item.ItemKind)
             && IsAdjacentToFootprint(sourceCell)
-            && !_ammoInventory.IsFull;
+            && _ammoInventory.CanAcceptItem(item);
     }
 
     public bool TryReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
@@ -104,7 +104,7 @@ public partial class HeavyGunTurretStructure : FactoryStructure, IFactoryItemRec
             yield return line;
         }
 
-        yield return $"弹药：{BufferedAmmo}/{FactoryConstants.HeavyGunTurretAmmoCapacity}";
+        yield return $"弹药：{BufferedAmmo} 件 | 槽位：{_ammoInventory.OccupiedSlotCount}/{_ammoInventory.Capacity}";
         yield return $"齐射：{_shotsFired}";
         yield return $"射程：{FactoryConstants.HeavyGunTurretRange:0.0}";
     }
@@ -161,7 +161,9 @@ public partial class HeavyGunTurretStructure : FactoryStructure, IFactoryItemRec
 
         if (_ammoIndicator is not null)
         {
-            var ratio = Mathf.Clamp((float)BufferedAmmo / FactoryConstants.HeavyGunTurretAmmoCapacity, 0.0f, 1.0f);
+            var ratio = _ammoInventory.Capacity <= 0
+                ? 0.0f
+                : Mathf.Clamp((float)_ammoInventory.OccupiedSlotCount / _ammoInventory.Capacity, 0.0f, 1.0f);
             _ammoIndicator.Scale = new Vector3(1.0f, Mathf.Max(0.12f, ratio), 1.0f);
         }
     }
