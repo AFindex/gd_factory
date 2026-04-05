@@ -163,8 +163,18 @@ public sealed class MobileFactoryInstance
 
     public MobileFactoryDeploymentEvaluation EvaluateDeployment(GridManager worldGrid, Vector2I anchorCell, FacingDirection facing)
     {
+        return EvaluateDeployment(worldGrid, anchorCell, facing, allowWhenAlreadyDeployed: false);
+    }
+
+    private MobileFactoryDeploymentEvaluation EvaluateDeployment(
+        GridManager worldGrid,
+        Vector2I anchorCell,
+        FacingDirection facing,
+        bool allowWhenAlreadyDeployed)
+    {
         var footprintCells = new List<Vector2I>(GetFootprintCells(anchorCell, facing));
-        if (State == MobileFactoryLifecycleState.Deployed || State == MobileFactoryLifecycleState.Recalling)
+        if (!allowWhenAlreadyDeployed
+            && (State == MobileFactoryLifecycleState.Deployed || State == MobileFactoryLifecycleState.Recalling))
         {
             return new MobileFactoryDeploymentEvaluation(
                 MobileFactoryDeployState.Blocked,
@@ -188,7 +198,8 @@ public sealed class MobileFactoryInstance
         foreach (var projection in GetAttachmentProjections(anchorCell, facing))
         {
             var evaluation = projection.Attachment.EvaluateDeployment(worldGrid, projection);
-            if (evaluation.CanDeploy && !worldGrid.CanReserveAll(evaluation.ReservedWorldCells, ReservationOwnerId))
+            var activationReservedCells = evaluation.Attachment.GetActivationReservedWorldCells(evaluation);
+            if (evaluation.CanDeploy && !worldGrid.CanReserveAll(activationReservedCells, ReservationOwnerId))
             {
                 evaluation = new MobileFactoryAttachmentDeploymentEvaluation(
                     projection.Attachment,
@@ -759,7 +770,24 @@ public sealed class MobileFactoryInstance
 
     private void ActivateAttachmentsForDeployment(GridManager worldGrid, MobileFactoryDeploymentEvaluation evaluation)
     {
-        DisconnectAttachmentBindings();
+        var activeEvaluations = new Dictionary<ulong, MobileFactoryAttachmentDeploymentEvaluation>();
+        for (var index = 0; index < evaluation.AttachmentEvaluations.Count; index++)
+        {
+            var attachmentEvaluation = evaluation.AttachmentEvaluations[index];
+            if (attachmentEvaluation.CanDeploy)
+            {
+                activeEvaluations[attachmentEvaluation.Attachment.GetInstanceId()] = attachmentEvaluation;
+            }
+        }
+
+        for (var index = 0; index < _attachments.Count; index++)
+        {
+            var attachment = _attachments[index];
+            if (!activeEvaluations.ContainsKey(attachment.GetInstanceId()))
+            {
+                ClearSingleAttachmentBinding(attachment, clearDeploymentContext: true);
+            }
+        }
 
         for (var index = 0; index < evaluation.AttachmentEvaluations.Count; index++)
         {
@@ -770,14 +798,20 @@ public sealed class MobileFactoryInstance
             }
 
             attachmentEvaluation.Attachment.RecordDeploymentContext(worldGrid, attachmentEvaluation.Projection);
-            if (attachmentEvaluation.ReservedWorldCells.Count > 0)
+            var activationReservedCells = attachmentEvaluation.Attachment.GetActivationReservedWorldCells(attachmentEvaluation);
+            if (activationReservedCells.Count > 0)
             {
-                worldGrid.ReserveCells(attachmentEvaluation.ReservedWorldCells, ReservationOwnerId, GridReservationKind.MobilePort, attachmentEvaluation.Attachment);
+                worldGrid.ReserveCells(activationReservedCells, ReservationOwnerId, GridReservationKind.MobilePort, attachmentEvaluation.Attachment);
             }
 
-            if (attachmentEvaluation.ActiveWorldCells.Count > 0 || attachmentEvaluation.State == MobileFactoryAttachmentDeployState.Connected)
+            var shouldBindToWorld = attachmentEvaluation.ActiveWorldCells.Count > 0 || attachmentEvaluation.State == MobileFactoryAttachmentDeployState.Connected;
+            if (shouldBindToWorld)
             {
                 attachmentEvaluation.Attachment.BindToWorld(worldGrid, attachmentEvaluation.Projection);
+            }
+            else
+            {
+                attachmentEvaluation.Attachment.ClearBinding();
             }
 
             attachmentEvaluation.Attachment.OnDeploymentActivated(
@@ -805,7 +839,9 @@ public sealed class MobileFactoryInstance
             ReleaseDeploymentReservations();
             _deployedGrid = deployedGrid;
             deployedGrid.ReserveCells(GetFootprintCells(anchorCell, DeploymentFacing), ReservationOwnerId, GridReservationKind.MobileFootprint);
-            ActivateAttachmentsForDeployment(deployedGrid, EvaluateDeployment(deployedGrid, anchorCell, DeploymentFacing));
+            ActivateAttachmentsForDeployment(
+                deployedGrid,
+                EvaluateDeployment(deployedGrid, anchorCell, DeploymentFacing, allowWhenAlreadyDeployed: true));
         }
         else
         {
@@ -1167,16 +1203,12 @@ public sealed class MobileFactoryInstance
     {
         for (var i = 0; i < _attachments.Count; i++)
         {
-            _attachments[i].OnDeploymentCleared(_worldChildStructureRoot, _simulation);
-            _attachments[i].ClearBinding();
-            _attachments[i].ClearDeploymentContext();
+            ClearSingleAttachmentBinding(_attachments[i], clearDeploymentContext: true);
         }
     }
 
     private void ClearAttachmentBindings()
     {
-        DisconnectAttachmentBindings();
-
         foreach (var child in _worldAttachmentVisualRoot.GetChildren())
         {
             if (child is Node node)
@@ -1192,6 +1224,16 @@ public sealed class MobileFactoryInstance
             {
                 node.QueueFree();
             }
+        }
+    }
+
+    private void ClearSingleAttachmentBinding(MobileFactoryBoundaryAttachmentStructure attachment, bool clearDeploymentContext)
+    {
+        attachment.OnDeploymentCleared(_worldChildStructureRoot, _simulation);
+        attachment.ClearBinding();
+        if (clearDeploymentContext)
+        {
+            attachment.ClearDeploymentContext();
         }
     }
 

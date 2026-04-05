@@ -118,6 +118,11 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         return projection.WorldCells;
     }
 
+    public virtual IReadOnlyList<Vector2I> GetActivationReservedWorldCells(MobileFactoryAttachmentDeploymentEvaluation evaluation)
+    {
+        return evaluation.ReservedWorldCells;
+    }
+
     public virtual void ApplyWorldPayloadVisualProgress(Node3D root, float progress)
     {
         if (root.GetNodeOrNull<Node3D>("WorldPayloadRoot") is not Node3D payloadRoot)
@@ -487,6 +492,7 @@ public partial class MobileFactoryInputPortStructure : MobileFactoryBoundaryAtta
 public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBoundaryAttachmentStructure
 {
     private const float MiningCycleSeconds = 0.95f;
+    private const float StakeDeployDurationSeconds = 0.28f;
     private const string BuildOneStakeActionId = "build-one-stake";
     private const string BuildAllStakesActionId = "build-all-stakes";
     private static readonly Color MiningHubBaseColor = new("FACC15");
@@ -498,8 +504,11 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
     private int _builtStakeCount = Mathf.Max(0, MobileFactoryBoundaryAttachmentCatalog.Get(BuildPrototypeKind.MiningInputPort).ExteriorStencil.Count - 1);
     private int _eligibleStakeCount;
     private readonly Dictionary<Vector2I, MobileFactoryMiningStakeStructure> _deployedStakes = new();
+    private readonly Dictionary<Vector2I, MobileFactoryMiningStakeStructure> _deployingStakes = new();
+    private readonly List<Vector2I> _pendingStakeCells = new();
     private Node3D? _worldStructureRoot;
     private SimulationController? _worldSimulation;
+    private float _stakeDeployCooldownTimer;
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.MiningInputPort;
     public override MobileFactoryBoundaryAttachmentDefinition AttachmentDefinition => MobileFactoryBoundaryAttachmentCatalog.Get(BuildPrototypeKind.MiningInputPort);
@@ -508,10 +517,13 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
     public int BuiltStakeCount => _builtStakeCount;
     public int DeployedStakeCount => _deployedStakes.Count;
     public int EligibleStakeCount => _eligibleStakeCount;
+    public int DeployingStakeCount => _deployingStakes.Count;
     public override string ConnectionStateLabel => IsConnectedToWorld
         ? !IsWorldFlowReady
             ? "展开中"
-            : _deployedStakes.Count == 0
+            : _deployingStakes.Count > 0 || _pendingStakeCells.Count > 0
+                ? "部署中"
+                : _deployedStakes.Count == 0
                 ? "待机"
                 : _deployedStakes.Count < _eligibleStakeCount
                     ? TransitItemCount > 0 ? "部分采集" : "部分部署"
@@ -544,6 +556,10 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
         yield return $"矿区：{_depositName}";
         yield return $"采矿桩库存：{_builtStakeCount}/{MaxStakeCapacity}";
         yield return $"已部署采矿桩：{_deployedStakes.Count}/{Mathf.Max(_eligibleStakeCount, 1)}";
+        if (_deployingStakes.Count > 0 || _pendingStakeCells.Count > 0)
+        {
+            yield return $"部署中采矿桩：{_deployingStakes.Count} | 排队：{_pendingStakeCells.Count}";
+        }
         if (HasDeploymentProjection)
         {
             yield return $"当前可部署矿位：{_eligibleStakeCount}";
@@ -616,6 +632,7 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
     public override void SimulationStep(SimulationController simulation, double stepSeconds)
     {
         base.SimulationStep(simulation, stepSeconds);
+        UpdateStakeDeploymentQueue((float)stepSeconds, simulation);
 
         if (!IsConnectedToWorld || !_resourceKind.HasValue || _deployedStakes.Count == 0)
         {
@@ -633,8 +650,20 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
             return;
         }
 
-        var item = simulation.CreateItem(Kind, FactoryResourceCatalog.GetOutputItemKind(_resourceKind.Value));
-        if (TryReceiveProvidedItem(item, WorldPortCell, simulation))
+        var producedItemCount = 0;
+        var outputKind = FactoryResourceCatalog.GetOutputItemKind(_resourceKind.Value);
+        foreach (var stakeCell in GetReadyStakeCellsForMining())
+        {
+            var item = simulation.CreateItem(Kind, outputKind);
+            if (!TryReceiveProvidedItem(item, stakeCell, simulation))
+            {
+                continue;
+            }
+
+            producedItemCount++;
+        }
+
+        if (producedItemCount > 0)
         {
             _miningTimer = MiningCycleSeconds;
         }
@@ -704,7 +733,10 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
         if (worldSite is not null)
         {
             var staleStakes = new List<MobileFactoryMiningStakeStructure>(_deployedStakes.Values);
+            staleStakes.AddRange(_deployingStakes.Values);
             _deployedStakes.Clear();
+            _deployingStakes.Clear();
+            _pendingStakeCells.Clear();
             for (var index = 0; index < staleStakes.Count; index++)
             {
                 var stake = staleStakes[index];
@@ -713,6 +745,7 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
                     continue;
                 }
 
+                stake.PrepareForRemoval();
                 simulation.UnregisterStructure(stake);
                 worldSite.RemoveStructure(stake);
                 stake.QueueFree();
@@ -722,6 +755,7 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
         _worldStructureRoot = null;
         _worldSimulation = null;
         _miningTimer = 0.0f;
+        _stakeDeployCooldownTimer = 0.0f;
         RefreshMiningRuntimeState();
     }
 
@@ -823,6 +857,11 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
         return IsWorldFlowReady;
     }
 
+    protected override int GetTransitLaneKey(Vector2I sourceCell, Vector2I targetCell)
+    {
+        return sourceCell == WorldPortCell ? 0 : sourceCell.GetHashCode();
+    }
+
     protected override bool CanReceiveProvidedFrom(Vector2I sourceCell)
     {
         if (!IsConnectedToWorld || Projection is null)
@@ -868,17 +907,34 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
 
     public void HandleDeployedStakeDestroyed(MobileFactoryMiningStakeStructure destroyedStake)
     {
-        if (!_deployedStakes.Remove(destroyedStake.Cell))
+        var removed = _deployedStakes.Remove(destroyedStake.Cell);
+        removed |= _deployingStakes.Remove(destroyedStake.Cell);
+        if (!removed)
         {
             return;
         }
 
         _builtStakeCount = Mathf.Max(0, _builtStakeCount - 1);
-        if (_deployedStakes.Count == 0 && IsConnectedToWorld)
+        if (_worldStructureRoot is not null
+            && _worldSimulation is not null
+            && DeploymentWorldSite is GridManager worldSite
+            && DeploymentProjection is not null)
         {
-            ClearBinding();
+            SyncStakeDeployment(worldSite, _worldStructureRoot, _worldSimulation, EvaluateDeployment(worldSite, DeploymentProjection));
         }
 
+        RefreshMiningRuntimeState();
+    }
+
+    public void HandleDeployingStakeCompleted(MobileFactoryMiningStakeStructure completedStake)
+    {
+        if (!_deployingStakes.Remove(completedStake.Cell))
+        {
+            return;
+        }
+
+        _deployedStakes[completedStake.Cell] = completedStake;
+        _stakeDeployCooldownTimer = 0.0f;
         RefreshMiningRuntimeState();
     }
 
@@ -918,6 +974,7 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
         MobileFactoryAttachmentDeploymentEvaluation evaluation)
     {
         var desiredStakeCells = new HashSet<Vector2I>(evaluation.ActiveWorldCells);
+        var orderedStakeCells = OrderStakeCellsForDeployment(evaluation.Projection, evaluation.ActiveWorldCells);
         var staleStakeCells = new List<Vector2I>();
         foreach (var deployedStakeCell in _deployedStakes.Keys)
         {
@@ -935,37 +992,48 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
                 continue;
             }
 
-            if (!GodotObject.IsInstanceValid(staleStake))
-            {
-                continue;
-            }
-
-            simulation.UnregisterStructure(staleStake);
-            worldSite.RemoveStructure(staleStake);
-            staleStake.QueueFree();
+            RemoveStakeInstance(staleStake, worldSite, simulation);
         }
 
-        for (var index = 0; index < evaluation.ActiveWorldCells.Count; index++)
+        staleStakeCells.Clear();
+        foreach (var deployingStakeCell in _deployingStakes.Keys)
         {
-            var worldCell = evaluation.ActiveWorldCells[index];
-            if (_deployedStakes.ContainsKey(worldCell))
+            if (!desiredStakeCells.Contains(deployingStakeCell))
+            {
+                staleStakeCells.Add(deployingStakeCell);
+            }
+        }
+
+        for (var index = 0; index < staleStakeCells.Count; index++)
+        {
+            var staleCell = staleStakeCells[index];
+            if (!_deployingStakes.Remove(staleCell, out var staleStake))
             {
                 continue;
             }
 
-            if (!worldSite.TryGetResourceDeposit(worldCell, out var deposit) || deposit is null)
+            RemoveStakeInstance(staleStake, worldSite, simulation);
+        }
+
+        for (var index = _pendingStakeCells.Count - 1; index >= 0; index--)
+        {
+            if (!desiredStakeCells.Contains(_pendingStakeCells[index]))
+            {
+                _pendingStakeCells.RemoveAt(index);
+            }
+        }
+
+        for (var index = 0; index < orderedStakeCells.Count; index++)
+        {
+            var worldCell = orderedStakeCells[index];
+            if (_deployedStakes.ContainsKey(worldCell)
+                || _deployingStakes.ContainsKey(worldCell)
+                || _pendingStakeCells.Contains(worldCell))
             {
                 continue;
             }
 
-            var facing = FactoryDirection.Opposite(evaluation.Projection.WorldFacing);
-            var stake = new MobileFactoryMiningStakeStructure();
-            var hubWorld = worldSite.CellToWorld(evaluation.Projection.WorldPortCell) + new Vector3(0.0f, 0.18f, 0.0f);
-            stake.ConfigureStake(this, worldSite, worldCell, facing, deposit, hubWorld, $"{ReservationOwnerId}:stake:{worldCell.X}:{worldCell.Y}");
-            worldStructureRoot.AddChild(stake);
-            worldSite.PlaceStructure(stake);
-            simulation.RegisterStructure(stake);
-            _deployedStakes[worldCell] = stake;
+            _pendingStakeCells.Add(worldCell);
         }
     }
 
@@ -994,6 +1062,161 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
 
         _resourceKind = deposit.ResourceKind;
         _depositName = deposit.DisplayName;
+    }
+
+    private void UpdateStakeDeploymentQueue(float stepSeconds, SimulationController simulation)
+    {
+        if (!IsConnectedToWorld || !IsWorldFlowReady)
+        {
+            _stakeDeployCooldownTimer = 0.0f;
+            return;
+        }
+
+        if (_pendingStakeCells.Count == 0)
+        {
+            _stakeDeployCooldownTimer = 0.0f;
+            return;
+        }
+
+        if (_deployingStakes.Count > 0)
+        {
+            return;
+        }
+
+        _stakeDeployCooldownTimer = Mathf.Max(0.0f, _stakeDeployCooldownTimer - stepSeconds);
+        if (_stakeDeployCooldownTimer > 0.0f
+            || _worldStructureRoot is null
+            || BoundWorldSite is not GridManager worldSite
+            || Projection is null)
+        {
+            return;
+        }
+
+        var worldCell = _pendingStakeCells[0];
+        _pendingStakeCells.RemoveAt(0);
+        if (!worldSite.TryGetResourceDeposit(worldCell, out var deposit) || deposit is null)
+        {
+            return;
+        }
+
+        var facing = FactoryDirection.Opposite(Projection.WorldFacing);
+        var stake = new MobileFactoryMiningStakeStructure();
+        var hubWorld = worldSite.CellToWorld(Projection.WorldPortCell) + new Vector3(0.0f, 0.18f, 0.0f);
+        stake.ConfigureStake(this, worldSite, worldCell, facing, deposit, hubWorld, $"{ReservationOwnerId}:stake:{worldCell.X}:{worldCell.Y}");
+        _worldStructureRoot.AddChild(stake);
+        worldSite.PlaceStructure(stake);
+        simulation.RegisterStructure(stake);
+        stake.BeginDeployment(StakeDeployDurationSeconds);
+        _deployingStakes[worldCell] = stake;
+        _stakeDeployCooldownTimer = StakeDeployDurationSeconds;
+        RefreshMiningRuntimeState();
+    }
+
+    private void RemoveStakeInstance(MobileFactoryMiningStakeStructure stake, GridManager worldSite, SimulationController simulation)
+    {
+        if (!GodotObject.IsInstanceValid(stake))
+        {
+            return;
+        }
+
+        stake.PrepareForRemoval();
+        simulation.UnregisterStructure(stake);
+        worldSite.RemoveStructure(stake);
+        stake.QueueFree();
+    }
+
+    public override IReadOnlyList<Vector2I> GetActivationReservedWorldCells(MobileFactoryAttachmentDeploymentEvaluation evaluation)
+    {
+        if (_deployedStakes.Count == 0 && _deployingStakes.Count == 0)
+        {
+            return evaluation.ReservedWorldCells;
+        }
+
+        var occupiedStakeCells = new HashSet<Vector2I>(_deployedStakes.Keys);
+        foreach (var stakeCell in _deployingStakes.Keys)
+        {
+            occupiedStakeCells.Add(stakeCell);
+        }
+
+        var filteredCells = new List<Vector2I>(evaluation.ReservedWorldCells.Count);
+        for (var index = 0; index < evaluation.ReservedWorldCells.Count; index++)
+        {
+            var worldCell = evaluation.ReservedWorldCells[index];
+            if (!occupiedStakeCells.Contains(worldCell))
+            {
+                filteredCells.Add(worldCell);
+            }
+        }
+
+        return filteredCells;
+    }
+
+    private List<Vector2I> GetReadyStakeCellsForMining()
+    {
+        var readyStakeCells = new List<Vector2I>(_deployedStakes.Count);
+        foreach (var pair in _deployedStakes)
+        {
+            var stake = pair.Value;
+            if (!GodotObject.IsInstanceValid(stake)
+                || stake.IsDestroyed
+                || !stake.IsDeploymentComplete)
+            {
+                continue;
+            }
+
+            readyStakeCells.Add(pair.Key);
+        }
+
+        readyStakeCells.Sort(static (left, right) =>
+        {
+            if (left.X != right.X)
+            {
+                return left.X.CompareTo(right.X);
+            }
+
+            return left.Y.CompareTo(right.Y);
+        });
+        return readyStakeCells;
+    }
+
+    private static List<Vector2I> OrderStakeCellsForDeployment(MobileFactoryAttachmentProjection projection, IReadOnlyList<Vector2I> candidateCells)
+    {
+        var ordered = new List<(Vector2I Cell, int ScoreX, int ScoreY)>(candidateCells.Count);
+        for (var index = 0; index < candidateCells.Count; index++)
+        {
+            var worldCell = candidateCells[index];
+            var relativeCell = worldCell - projection.WorldPortCell;
+            var localCell = FactoryDirection.RotateOffset(relativeCell, FactoryDirection.Opposite(projection.WorldFacing));
+            ordered.Add((worldCell, Mathf.Abs(localCell.X) * 4 + Mathf.Abs(localCell.Y), Mathf.Abs(localCell.Y)));
+        }
+
+        ordered.Sort(static (left, right) =>
+        {
+            if (left.ScoreX != right.ScoreX)
+            {
+                return left.ScoreX.CompareTo(right.ScoreX);
+            }
+
+            if (left.ScoreY != right.ScoreY)
+            {
+                return left.ScoreY.CompareTo(right.ScoreY);
+            }
+
+            if (left.Cell.X != right.Cell.X)
+            {
+                return left.Cell.X.CompareTo(right.Cell.X);
+            }
+
+            return left.Cell.Y.CompareTo(right.Cell.Y);
+        });
+
+        var result = new List<Vector2I>(ordered.Count);
+        for (var index = 0; index < ordered.Count; index++)
+        {
+            result.Add(ordered[index].Cell);
+        }
+
+        return result;
     }
 
     private static void ResolveMiningStakePlan(

@@ -1895,17 +1895,27 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         var alpha = _simulation.TickAlpha;
-        foreach (var child in _structureRoot.GetChildren())
+        UpdateStructureVisualsRecursive(_structureRoot, alpha);
+    }
+
+    private void UpdateStructureVisualsRecursive(Node node, float tickAlpha)
+    {
+        if (node is FactoryStructure structure)
         {
-            if (child is FactoryStructure structure)
+            var isInteriorStructure = structure.Site is MobileFactorySite;
+            structure.SetCombatFocus(
+                isInteriorStructure && structure == _hoveredInteriorStructure,
+                isInteriorStructure && structure == _selectedInteriorStructure);
+            structure.SetPowerRangeVisible(ShouldShowInteriorPowerRange(structure));
+            structure.UpdateVisuals(tickAlpha);
+            structure.SyncCombatVisuals(tickAlpha);
+        }
+
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Node childNode)
             {
-                var isInteriorStructure = structure.Site is MobileFactorySite;
-                structure.SetCombatFocus(
-                    isInteriorStructure && structure == _hoveredInteriorStructure,
-                    isInteriorStructure && structure == _selectedInteriorStructure);
-                structure.SetPowerRangeVisible(ShouldShowInteriorPowerRange(structure));
-                structure.UpdateVisuals(alpha);
-                structure.SyncCombatVisuals(alpha);
+                UpdateStructureVisualsRecursive(childNode, tickAlpha);
             }
         }
     }
@@ -3898,6 +3908,8 @@ public partial class MobileFactoryDemo : Node3D
         var detailVisibleForRebuild = false;
         var rebuildActionWorked = false;
         var fullStakeDeployAfterRebuild = false;
+        var miningStayedConnectedAfterOutputRemoval = false;
+        var otherOutputsStayedConnectedAfterOutputRemoval = false;
 
         if (warningAnchorFound)
         {
@@ -3961,7 +3973,14 @@ public partial class MobileFactoryDemo : Node3D
         await WaitForCondition(() => _mobileFactory.State != MobileFactoryLifecycleState.AutoDeploying, MiningPortSmokeDeployTimeoutSeconds);
 
         var deployedAtAnchorA = _mobileFactory.State == MobileFactoryLifecycleState.Deployed;
-        await ToSignal(GetTree().CreateTimer(0.9f), SceneTreeTimer.SignalName.Timeout);
+        await WaitForCondition(() =>
+        {
+            var port = GetMiningInputPort();
+            return port is not null
+                && port.EligibleStakeCount > 0
+                && port.DeployingStakeCount == 0
+                && port.DeployedStakeCount == port.EligibleStakeCount;
+        }, 4.0f);
         var connectedAtAnchorA = _mobileFactory.HasConnectedAttachment(BuildPrototypeKind.MiningInputPort);
         miningPort = GetMiningInputPort();
         deployedStakeCountAtAnchorA = miningPort?.DeployedStakeCount ?? 0;
@@ -4003,7 +4022,13 @@ public partial class MobileFactoryDemo : Node3D
         await WaitForCondition(() => _mobileFactory.State != MobileFactoryLifecycleState.AutoDeploying, MiningPortSmokeDeployTimeoutSeconds);
 
         var deployedAtAnchorB = _mobileFactory.State == MobileFactoryLifecycleState.Deployed;
-        await ToSignal(GetTree().CreateTimer(0.9f), SceneTreeTimer.SignalName.Timeout);
+        await WaitForCondition(() =>
+        {
+            var port = GetMiningInputPort();
+            return port is not null
+                && port.DeployingStakeCount == 0
+                && port.DeployedStakeCount > 0;
+        }, 4.0f);
         var connectedAtAnchorB = _mobileFactory.HasConnectedAttachment(BuildPrototypeKind.MiningInputPort);
         miningPort = GetMiningInputPort();
         var payloadVisibleAtAnchorB = CountMiningStakeStructures(_structureRoot) > 0;
@@ -4044,11 +4069,32 @@ public partial class MobileFactoryDemo : Node3D
         await WaitForCondition(() => _mobileFactory.State != MobileFactoryLifecycleState.AutoDeploying, MiningPortSmokeDeployTimeoutSeconds);
         if (_mobileFactory.State == MobileFactoryLifecycleState.Deployed)
         {
-            await ToSignal(GetTree().CreateTimer(0.9f), SceneTreeTimer.SignalName.Timeout);
+            await WaitForCondition(() =>
+            {
+                var port = GetMiningInputPort();
+                return port is not null
+                    && port.EligibleStakeCount > 0
+                    && port.DeployingStakeCount == 0
+                    && port.DeployedStakeCount == port.EligibleStakeCount;
+            }, 4.0f);
             miningPort = GetMiningInputPort();
             fullStakeDeployAfterRebuild = miningPort is not null
                 && miningPort.DeployedStakeCount == miningPort.EligibleStakeCount
                 && miningPort.DeployedStakeCount > 0;
+
+            var connectedOutputsBeforeRemoval = CountConnectedAttachments(BuildPrototypeKind.OutputPort);
+            var removedAuxOutput = _mobileFactory.RemoveInteriorStructure(new Vector2I(7, 4));
+            await ToSignal(GetTree().CreateTimer(0.4f), SceneTreeTimer.SignalName.Timeout);
+            miningPort = GetMiningInputPort();
+            miningStayedConnectedAfterOutputRemoval = removedAuxOutput
+                && _mobileFactory.State == MobileFactoryLifecycleState.Deployed
+                && _mobileFactory.HasConnectedAttachment(BuildPrototypeKind.MiningInputPort)
+                && miningPort is not null
+                && miningPort.DeployedStakeCount > 0
+                && CountMiningStakeStructures(_structureRoot) > 0;
+            otherOutputsStayedConnectedAfterOutputRemoval = removedAuxOutput
+                && connectedOutputsBeforeRemoval > 1
+                && CountConnectedAttachments(BuildPrototypeKind.OutputPort) == connectedOutputsBeforeRemoval - 1;
         }
 
         if (!swapped
@@ -4085,9 +4131,11 @@ public partial class MobileFactoryDemo : Node3D
             || !payloadRetractedAfterAnchorB
             || !detailVisibleForRebuild
             || !rebuildActionWorked
-            || !fullStakeDeployAfterRebuild)
+            || !fullStakeDeployAfterRebuild
+            || !miningStayedConnectedAfterOutputRemoval
+            || !otherOutputsStayedConnectedAfterOutputRemoval)
         {
-            GD.PushError($"MOBILE_FACTORY_MINING_PORT_SMOKE_FAILED baselineOutputDeploy={baselineOutputDeploy} baselineOutputConnected={baselineOutputConnected} baselineOutputDelivered={baselineOutputDelivered} baselineOutputRecall={baselineOutputRecall} swapped={swapped} anchorAValid={anchorAValid} anchorBValid={anchorBValid} warningAnchorFound={warningAnchorFound} warningPreviewTone={warningPreviewTone} warningArrowVisible={warningArrowVisible} warningMiningPreviewVisible={warningMiningPreviewVisible} deployedAtWarningAnchor={deployedAtWarningAnchor} connectedAtWarningAnchor={connectedAtWarningAnchor} payloadVisibleAtWarningAnchor={payloadVisibleAtWarningAnchor} deliveredAtWarningAnchor={deliveredAtWarningAnchor} recalledFromWarningAnchor={recalledFromWarningAnchor} payloadRetractedAfterWarningAnchor={payloadRetractedAfterWarningAnchor} deployedAtAnchorA={deployedAtAnchorA} connectedAtAnchorA={connectedAtAnchorA} payloadVisibleAtAnchorA={payloadVisibleAtAnchorA} deliveredAtAnchorA={deliveredAtAnchorA} deployedStakeCountAtAnchorA={deployedStakeCountAtAnchorA} eligibleStakeCountAtAnchorA={eligibleStakeCountAtAnchorA} stakeDestroyedAtAnchorA={stakeDestroyedAtAnchorA} builtStakeCountAfterDamage={builtStakeCountAfterDamage} recalledFromAnchorA={recalledFromAnchorA} payloadRetractedAfterAnchorA={payloadRetractedAfterAnchorA} deployedAtAnchorB={deployedAtAnchorB} connectedAtAnchorB={connectedAtAnchorB} payloadVisibleAtAnchorB={payloadVisibleAtAnchorB} deliveredAtAnchorB={deliveredAtAnchorB} partialStakeDeployAtAnchorB={partialStakeDeployAtAnchorB} recalledFromAnchorB={recalledFromAnchorB} payloadRetractedAfterAnchorB={payloadRetractedAfterAnchorB} detailVisibleForRebuild={detailVisibleForRebuild} rebuildActionWorked={rebuildActionWorked} fullStakeDeployAfterRebuild={fullStakeDeployAfterRebuild}");
+            GD.PushError($"MOBILE_FACTORY_MINING_PORT_SMOKE_FAILED baselineOutputDeploy={baselineOutputDeploy} baselineOutputConnected={baselineOutputConnected} baselineOutputDelivered={baselineOutputDelivered} baselineOutputRecall={baselineOutputRecall} swapped={swapped} anchorAValid={anchorAValid} anchorBValid={anchorBValid} warningAnchorFound={warningAnchorFound} warningPreviewTone={warningPreviewTone} warningArrowVisible={warningArrowVisible} warningMiningPreviewVisible={warningMiningPreviewVisible} deployedAtWarningAnchor={deployedAtWarningAnchor} connectedAtWarningAnchor={connectedAtWarningAnchor} payloadVisibleAtWarningAnchor={payloadVisibleAtWarningAnchor} deliveredAtWarningAnchor={deliveredAtWarningAnchor} recalledFromWarningAnchor={recalledFromWarningAnchor} payloadRetractedAfterWarningAnchor={payloadRetractedAfterWarningAnchor} deployedAtAnchorA={deployedAtAnchorA} connectedAtAnchorA={connectedAtAnchorA} payloadVisibleAtAnchorA={payloadVisibleAtAnchorA} deliveredAtAnchorA={deliveredAtAnchorA} deployedStakeCountAtAnchorA={deployedStakeCountAtAnchorA} eligibleStakeCountAtAnchorA={eligibleStakeCountAtAnchorA} stakeDestroyedAtAnchorA={stakeDestroyedAtAnchorA} builtStakeCountAfterDamage={builtStakeCountAfterDamage} recalledFromAnchorA={recalledFromAnchorA} payloadRetractedAfterAnchorA={payloadRetractedAfterAnchorA} deployedAtAnchorB={deployedAtAnchorB} connectedAtAnchorB={connectedAtAnchorB} payloadVisibleAtAnchorB={payloadVisibleAtAnchorB} deliveredAtAnchorB={deliveredAtAnchorB} partialStakeDeployAtAnchorB={partialStakeDeployAtAnchorB} recalledFromAnchorB={recalledFromAnchorB} payloadRetractedAfterAnchorB={payloadRetractedAfterAnchorB} detailVisibleForRebuild={detailVisibleForRebuild} rebuildActionWorked={rebuildActionWorked} fullStakeDeployAfterRebuild={fullStakeDeployAfterRebuild} miningStayedConnectedAfterOutputRemoval={miningStayedConnectedAfterOutputRemoval} otherOutputsStayedConnectedAfterOutputRemoval={otherOutputsStayedConnectedAfterOutputRemoval}");
             GetTree().Quit(1);
             return;
         }
@@ -4486,6 +4534,25 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         return null;
+    }
+
+    private int CountConnectedAttachments(BuildPrototypeKind kind)
+    {
+        if (_mobileFactory is null)
+        {
+            return 0;
+        }
+
+        var count = 0;
+        foreach (var attachment in _mobileFactory.BoundaryAttachments)
+        {
+            if (attachment.Kind == kind && attachment.IsConnectedToWorld)
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private MobileFactoryMiningInputPortStructure? GetMiningInputPort()
