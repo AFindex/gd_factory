@@ -1276,6 +1276,7 @@ public partial class FactoryDemo : Node3D
             {
                 structure.SetCombatFocus(structure == _hoveredStructure, structure == _selectedStructure);
                 structure.SetPowerRangeVisible(ShouldShowPowerRange(structure));
+                structure.SyncVisualPresentation(alpha);
                 structure.UpdateVisuals(alpha);
                 structure.SyncCombatVisuals(alpha);
             }
@@ -2463,6 +2464,7 @@ public partial class FactoryDemo : Node3D
         var blueprintVerified = RunBlueprintWorkflowSmoke();
         var workspaceVerified = RunWorkspaceNavigationSmoke();
         var itemVisualProfilesVerified = RunItemVisualProfileSmoke();
+        var structureVisualProfilesVerified = RunStructureVisualProfileSmoke();
         var combatVerified = await VerifyCombatScenarios();
 
         if (!placed
@@ -2480,16 +2482,17 @@ public partial class FactoryDemo : Node3D
             || !blueprintVerified
             || !workspaceVerified
             || !itemVisualProfilesVerified
+            || !structureVisualProfilesVerified
             || !combatVerified
             || !multiCellPlacementVerified
             || !previewArrowReady)
         {
-            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
+            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} previewArrowReady={previewArrowReady}");
+        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} previewArrowReady={previewArrowReady}");
         GetTree().Quit();
     }
 
@@ -2672,6 +2675,120 @@ public partial class FactoryDemo : Node3D
             && modelMeshCount >= 2
             && distinctBaselineColors
             && iconsPresent;
+    }
+
+    private bool RunStructureVisualProfileSmoke()
+    {
+        var authoredRoot = new Node3D { Name = "AuthoredVisualRoot" };
+        var authoredMesh = new MeshInstance3D
+        {
+            Name = "Mesh",
+            Mesh = new BoxMesh { Size = new Vector3(0.4f, 0.4f, 0.4f) },
+            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color("38BDF8") }
+        };
+        authoredRoot.AddChild(authoredMesh);
+        authoredMesh.Owner = authoredRoot;
+        var authoredScene = new PackedScene();
+        var authoredPacked = authoredScene.Pack(authoredRoot) == Error.Ok;
+        authoredRoot.Free();
+
+        var authoredController = FactoryStructureVisualFactory.CreateDetachedController(
+            new FactoryStructureVisualProfile(
+                authoredScene: authoredScene,
+                nodeAnchors: new Dictionary<string, NodePath>
+                {
+                    ["mesh"] = new NodePath("Mesh")
+                },
+                materialAnchors: new Dictionary<string, NodePath>
+                {
+                    ["mesh-material"] = new NodePath("Mesh")
+                }),
+            FactoryConstants.CellSize);
+        var authoredResolved = authoredPacked
+            && authoredController.SourceKind == FactoryStructureVisualSourceKind.AuthoredScene
+            && authoredController.GetNodeAnchor<MeshInstance3D>("mesh") is not null
+            && authoredController.GetMaterialAnchor("mesh-material") is not null
+            && CountMeshes(authoredController.Root) >= 1;
+
+        var fallbackController = FactoryStructureVisualFactory.CreateDetachedController(
+            new FactoryStructureVisualProfile(
+                authoredScenePath: "res://missing/structure_visual_profile_smoke.tscn",
+                proceduralBuilder: controller =>
+                {
+                    controller.Root.AddChild(FactoryStructureVisualFactory.CreateGenericPlaceholderNode(controller.CellSize * 0.8f));
+                }),
+            FactoryConstants.CellSize);
+        var fallbackResolved = fallbackController.SourceKind == FactoryStructureVisualSourceKind.Procedural
+            && fallbackController.Root.GetChildCount() > 0;
+
+        var genericController = FactoryStructureVisualFactory.CreateDetachedController(
+            new FactoryStructureVisualProfile(authoredScenePath: "res://missing/structure_visual_profile_placeholder.tscn"),
+            FactoryConstants.CellSize);
+        var genericResolved = genericController.SourceKind == FactoryStructureVisualSourceKind.GenericPlaceholder
+            && CountMeshes(genericController.Root) >= 3;
+
+        var legacyController = new GeneratorStructure().CreateDetachedVisualControllerForTesting();
+        var legacyResolved = legacyController.SourceKind == FactoryStructureVisualSourceKind.Procedural
+            && CountMeshes(legacyController.Root) >= 4;
+
+        var smelter = new SmelterStructure();
+        var smelterController = smelter.CreateDetachedVisualControllerForTesting();
+        var coolState = new FactoryStructureVisualState(
+            IsVisible: true,
+            IsHovered: false,
+            IsSelected: false,
+            IsUnderAttack: false,
+            IsDestroyed: false,
+            IsActive: true,
+            IsProcessing: false,
+            ProcessRatio: 0.0f,
+            HasBufferedOutput: false,
+            PowerStatus: FactoryPowerStatus.Disconnected,
+            PowerSatisfaction: 0.0f,
+            PresentationTimeSeconds: 0.0);
+        var hotState = coolState with
+        {
+            IsProcessing = true,
+            ProcessRatio = 0.72f,
+            HasBufferedOutput = true,
+            PowerStatus = FactoryPowerStatus.Powered,
+            PowerSatisfaction = 1.0f,
+            PresentationTimeSeconds = 1.6
+        };
+
+        for (var index = 0; index < 6; index++)
+        {
+            smelter.ApplyVisualStateForTesting(smelterController, coolState with { PresentationTimeSeconds = index * 0.1 }, 1.0f);
+        }
+
+        var coolCoreEnergy = smelterController.GetMaterialAnchor("core-glow")?.EmissionEnergyMultiplier ?? 0.0f;
+        var coolFireboxEnergy = smelterController.GetMaterialAnchor("firebox-glow")?.EmissionEnergyMultiplier ?? 0.0f;
+        var coolPlumeScale = smelterController.GetNodeAnchor<Node3D>("heat-plume")?.Scale.Y ?? 0.0f;
+
+        for (var index = 0; index < 6; index++)
+        {
+            smelter.ApplyVisualStateForTesting(smelterController, hotState with { PresentationTimeSeconds = 1.6 + (index * 0.12) }, 1.0f);
+        }
+
+        var hotCoreEnergy = smelterController.GetMaterialAnchor("core-glow")?.EmissionEnergyMultiplier ?? 0.0f;
+        var hotFireboxEnergy = smelterController.GetMaterialAnchor("firebox-glow")?.EmissionEnergyMultiplier ?? 0.0f;
+        var hotPlumeScale = smelterController.GetNodeAnchor<Node3D>("heat-plume")?.Scale.Y ?? 0.0f;
+        var smelterHotCoolVerified = smelterController.SourceKind == FactoryStructureVisualSourceKind.Procedural
+            && hotCoreEnergy > coolCoreEnergy
+            && hotFireboxEnergy > coolFireboxEnergy
+            && hotPlumeScale > coolPlumeScale;
+
+        authoredController.Root.Free();
+        fallbackController.Root.Free();
+        genericController.Root.Free();
+        legacyController.Root.Free();
+        smelterController.Root.Free();
+
+        return authoredResolved
+            && fallbackResolved
+            && genericResolved
+            && legacyResolved
+            && smelterHotCoolVerified;
     }
 
     private static MeshInstance3D? FindFirstMesh(Node node)

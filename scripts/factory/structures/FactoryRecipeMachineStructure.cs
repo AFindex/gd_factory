@@ -314,6 +314,19 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
         return FactoryItemKind.GenericCargo;
     }
 
+    protected override FactoryStructureVisualState CreateVisualState(float tickAlpha)
+    {
+        var baseState = base.CreateVisualState(tickAlpha);
+        return baseState with
+        {
+            IsProcessing = HasActiveProcess,
+            ProcessRatio = ProcessRatio,
+            HasBufferedOutput = HasBufferedOutput,
+            PowerStatus = CurrentPowerStatus,
+            PowerSatisfaction = CurrentPowerSatisfaction
+        };
+    }
+
     private bool CanAcceptInput(FactoryItem item, Vector2I sourceCell)
     {
         if (!IsOrthogonallyAdjacent(Cell, sourceCell)

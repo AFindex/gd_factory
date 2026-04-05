@@ -1931,6 +1931,7 @@ public partial class MobileFactoryDemo : Node3D
                 isInteriorStructure && structure == _hoveredInteriorStructure,
                 isInteriorStructure && structure == _selectedInteriorStructure);
             structure.SetPowerRangeVisible(ShouldShowInteriorPowerRange(structure));
+            structure.SyncVisualPresentation(tickAlpha);
             structure.UpdateVisuals(tickAlpha);
             structure.SyncCombatVisuals(tickAlpha);
         }

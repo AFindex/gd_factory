@@ -4,6 +4,10 @@ using System.Collections.Generic;
 public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IFactoryStructureDetailProvider
 {
     private bool _visualsBuilt;
+    private Node3D? _structureVisualRoot;
+    private FactoryStructureVisualProfile? _visualProfile;
+    private FactoryStructureVisualController? _visualController;
+    private Node? _currentVisualParent;
     private Node3D? _combatOverlayRoot;
     private MeshInstance3D? _healthBarBackground;
     private MeshInstance3D? _healthBarFill;
@@ -19,6 +23,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
 
     protected float CellSize { get; private set; } = FactoryConstants.CellSize;
     protected FactoryStructureFootprint Footprint { get; private set; } = FactoryStructureFootprint.SingleCell;
+    protected FactoryStructureVisualController? VisualController => _visualController;
 
     public IFactorySite Site { get; private set; } = null!;
     public Vector2I Cell { get; private set; }
@@ -30,6 +35,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
     public float CurrentHealth => _currentHealth;
     public bool IsDestroyed { get; private set; }
     public bool IsUnderAttack => _recentDamageTimer > 0.0;
+    public FactoryStructureVisualSourceKind VisualSourceKind => _visualController?.SourceKind ?? FactoryStructureVisualSourceKind.GenericPlaceholder;
     public virtual float CombatRadius => Footprint.GetCombatRadius(CellSize, Facing);
 
     public abstract BuildPrototypeKind Kind { get; }
@@ -204,8 +210,12 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
         }
 
         _visualsBuilt = true;
-        BuildVisuals();
+        _structureVisualRoot = new Node3D { Name = "StructureVisualRoot" };
+        AddChild(_structureVisualRoot);
+        _visualProfile ??= CreateVisualProfile();
+        _visualController = FactoryStructureVisualFactory.BuildForStructure(this, _visualProfile, _structureVisualRoot, CellSize);
         BuildCombatVisuals();
+        SyncVisualPresentation(0.0f);
         SyncCombatVisuals(0.0f);
     }
 
@@ -227,6 +237,17 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
         _ghostVisualApplied = true;
         _ghostTint = tint;
         ApplyGhostTintRecursive(this, tint);
+    }
+
+    public void SyncVisualPresentation(float tickAlpha)
+    {
+        if (_visualController is null)
+        {
+            return;
+        }
+
+        _visualProfile ??= CreateVisualProfile();
+        _visualController.ApplyState(CreateVisualState(tickAlpha), _visualProfile, tickAlpha);
     }
 
     public void SyncCombatVisuals(float tickAlpha)
@@ -258,15 +279,74 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
                 : new Color(0.94f, 0.81f, 0.32f, 0.32f);
     }
 
+    internal void BeginVisualBuildScope(Node parent)
+    {
+        _currentVisualParent = parent;
+    }
+
+    internal void EndVisualBuildScope()
+    {
+        _currentVisualParent = null;
+    }
+
+    internal FactoryStructureVisualController CreateDetachedVisualControllerForTesting()
+    {
+        _visualProfile ??= CreateVisualProfile();
+        var root = new Node3D { Name = "DetachedStructureVisualRoot" };
+        return FactoryStructureVisualFactory.BuildForStructure(this, _visualProfile, root, CellSize);
+    }
+
+    internal void ApplyVisualStateForTesting(FactoryStructureVisualController controller, FactoryStructureVisualState state, float tickAlpha)
+    {
+        _visualProfile ??= CreateVisualProfile();
+        controller.ApplyState(state, _visualProfile, tickAlpha);
+    }
+
+    internal bool TryGetVisualMaterial(string alias, out StandardMaterial3D material)
+    {
+        material = _visualController?.GetMaterialAnchor(alias) ?? null!;
+        return material is not null;
+    }
+
     protected static bool IsOrthogonallyAdjacent(Vector2I a, Vector2I b)
     {
         var delta = a - b;
         return Mathf.Abs(delta.X) + Mathf.Abs(delta.Y) == 1;
     }
 
-    protected abstract void BuildVisuals();
+    protected virtual FactoryStructureVisualProfile CreateVisualProfile()
+    {
+        return new FactoryStructureVisualProfile(
+            proceduralBuilder: _ => BuildVisuals());
+    }
+
+    protected virtual FactoryStructureVisualState CreateVisualState(float tickAlpha)
+    {
+        return new FactoryStructureVisualState(
+            Visible,
+            _isHovered,
+            _isSelected,
+            IsUnderAttack,
+            IsDestroyed,
+            !IsDestroyed && Site.IsSimulationActive,
+            false,
+            0.0f,
+            false,
+            FactoryPowerStatus.Disconnected,
+            0.0f,
+            Time.GetTicksMsec() / 1000.0);
+    }
+
+    protected virtual void BuildVisuals()
+    {
+    }
 
     protected MeshInstance3D CreateBox(string name, Vector3 size, Color color, Vector3? localPosition = null)
+    {
+        return CreateBox(GetVisualParent(), name, size, color, localPosition);
+    }
+
+    protected MeshInstance3D CreateBox(Node parent, string name, Vector3 size, Color color, Vector3? localPosition = null)
     {
         var mesh = new MeshInstance3D();
         mesh.Name = name;
@@ -282,11 +362,16 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
             mesh.Position = localPosition.Value;
         }
 
-        AddChild(mesh);
+        parent.AddChild(mesh);
         return mesh;
     }
 
     protected MeshInstance3D CreateDisc(string name, float radius, float height, Color color, Vector3? localPosition = null)
+    {
+        return CreateDisc(GetVisualParent(), name, radius, height, color, localPosition);
+    }
+
+    protected MeshInstance3D CreateDisc(Node parent, string name, float radius, float height, Color color, Vector3? localPosition = null)
     {
         var mesh = new MeshInstance3D();
         mesh.Name = name;
@@ -313,7 +398,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
             mesh.Position = localPosition.Value;
         }
 
-        AddChild(mesh);
+        parent.AddChild(mesh);
         return mesh;
     }
 
@@ -344,6 +429,11 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
         }
 
         return new FactoryInventorySectionModel(inventoryId, title, inventory.GridSize, slots, allowMove);
+    }
+
+    private Node GetVisualParent()
+    {
+        return _currentVisualParent ?? this;
     }
 
     private void BuildCombatVisuals()
