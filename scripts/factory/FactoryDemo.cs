@@ -47,7 +47,7 @@ public partial class FactoryDemo : Node3D
     private Node3D? _blueprintGhostPreviewRoot;
     private Node3D? _powerLinkOverlayRoot;
     private MeshInstance3D? _previewCell;
-    private MeshInstance3D? _previewArrow;
+    private Node3D? _previewArrow;
     private MeshInstance3D? _previewPowerRange;
     private readonly List<MeshInstance3D> _blueprintPreviewMeshes = new();
     private readonly List<FactoryStructure> _blueprintPreviewGhosts = new();
@@ -2113,9 +2113,7 @@ public partial class FactoryDemo : Node3D
         _previewCell.Position = new Vector3(0.0f, 0.05f, 0.0f);
         _previewRoot.AddChild(_previewCell);
 
-        _previewArrow = new MeshInstance3D { Name = "PreviewArrow" };
-        _previewArrow.Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.28f, 0.18f, FactoryConstants.CellSize * 0.32f) };
-        _previewArrow.Position = new Vector3(FactoryConstants.CellSize * 0.34f, 0.18f, 0.0f);
+        _previewArrow = FactoryPreviewVisuals.CreateFacingArrow("PreviewArrow", FactoryConstants.CellSize, 0.18f);
         _previewRoot.AddChild(_previewArrow);
 
         _previewPowerRange = new MeshInstance3D { Name = "PreviewPowerRange", Visible = false };
@@ -2135,6 +2133,11 @@ public partial class FactoryDemo : Node3D
         material.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
         material.Roughness = 0.4f;
         meshInstance.MaterialOverride = material;
+    }
+
+    private static void ApplyPreviewColor(Node3D arrowRoot, Color color)
+    {
+        FactoryPreviewVisuals.ApplyArrowColor(arrowRoot, color);
     }
 
     private static WorldEnvironment CreateEnvironment()
@@ -2298,6 +2301,7 @@ public partial class FactoryDemo : Node3D
         var placed = _grid.TryGetStructure(probeCell, out var placedStructure) && placedStructure is BeltStructure;
         RemoveStructure(probeCell);
         var removed = _grid.CanPlace(probeCell);
+        var previewArrowReady = _previewArrow is not null && _previewArrow.GetChildCount() >= 3;
 
         var initialStructureCount = _simulation.RegisteredStructureCount;
         var poweredFactoryVerified = await RunPoweredFactorySmoke();
@@ -2324,14 +2328,15 @@ public partial class FactoryDemo : Node3D
             || !inspectionVerified
             || !detailWindowVerified
             || !blueprintVerified
-            || !combatVerified)
+            || !combatVerified
+            || !previewArrowReady)
         {
-            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} combat={combatVerified}");
+            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} combat={combatVerified}");
+        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
         GetTree().Quit();
     }
 

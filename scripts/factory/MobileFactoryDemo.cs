@@ -103,9 +103,10 @@ public partial class MobileFactoryDemo : Node3D
     private FactoryCombatDirector? _combatDirector;
     private readonly List<MeshInstance3D> _worldPreviewFootprintMeshes = new();
     private readonly List<MeshInstance3D> _worldPreviewPortMeshes = new();
-    private Label3D? _worldPreviewFacingArrow;
+    private readonly List<MeshInstance3D> _worldPreviewMiningMeshes = new();
+    private Node3D? _worldPreviewFacingArrow;
     private MeshInstance3D? _interiorPreviewCell;
-    private MeshInstance3D? _interiorPreviewArrow;
+    private Node3D? _interiorPreviewArrow;
     private MeshInstance3D? _interiorPreviewPowerRange;
     private readonly List<MeshInstance3D> _interiorPreviewBoundaryMeshes = new();
     private readonly List<MeshInstance3D> _interiorPreviewExteriorMeshes = new();
@@ -127,7 +128,8 @@ public partial class MobileFactoryDemo : Node3D
     private Vector2I _hoveredAnchor;
     private bool _hasHoveredAnchor;
     private bool _canDeployCurrentAnchor;
-    private bool _worldStatusPositive = true;
+    private MobileFactoryDeploymentEvaluation? _currentDeployEvaluation;
+    private FactoryStatusTone _worldStatusTone = FactoryStatusTone.Positive;
     private string _worldPreviewMessage = "移动工厂待命中。";
     private string? _worldEventMessage;
     private bool _worldEventPositive;
@@ -1260,6 +1262,7 @@ public partial class MobileFactoryDemo : Node3D
     {
         _hasHoveredAnchor = false;
         _canDeployCurrentAnchor = false;
+        _currentDeployEvaluation = null;
 
         if (_editorOpen && _hoveringEditorPane)
         {
@@ -1283,7 +1286,8 @@ public partial class MobileFactoryDemo : Node3D
 
         _hoveredAnchor = _grid.WorldToCell(worldPosition);
         _hasHoveredAnchor = true;
-        _canDeployCurrentAnchor = _mobileFactory.CanDeployAt(_grid, _hoveredAnchor, _selectedDeployFacing);
+        _currentDeployEvaluation = _mobileFactory.EvaluateDeployment(_grid, _hoveredAnchor, _selectedDeployFacing);
+        _canDeployCurrentAnchor = _currentDeployEvaluation.CanDeploy;
     }
 
     private void UpdateHoveredInteriorCell()
@@ -1414,6 +1418,23 @@ public partial class MobileFactoryDemo : Node3D
         _interiorPreviewMessage = $"内部格 ({cell.X}, {cell.Y}) 已被占用，Delete 可拆除悬停结构，右键可退出建造模式。";
     }
 
+    private MobileFactoryDeploymentEvaluation? GetCurrentDeploymentEvaluation()
+    {
+        if (_currentDeployEvaluation is not null)
+        {
+            return _currentDeployEvaluation;
+        }
+
+        if (_grid is null || _mobileFactory is null || !_hasHoveredAnchor)
+        {
+            return null;
+        }
+
+        _currentDeployEvaluation = _mobileFactory.EvaluateDeployment(_grid, _hoveredAnchor, _selectedDeployFacing);
+        _canDeployCurrentAnchor = _currentDeployEvaluation.CanDeploy;
+        return _currentDeployEvaluation;
+    }
+
     private void UpdateWorldPreview()
     {
         if (_grid is null || _worldPreviewRoot is null || _mobileFactory is null)
@@ -1431,6 +1452,11 @@ public partial class MobileFactoryDemo : Node3D
             mesh.Visible = false;
         }
 
+        foreach (var mesh in _worldPreviewMiningMeshes)
+        {
+            mesh.Visible = false;
+        }
+
         if (_worldPreviewFacingArrow is not null)
         {
             _worldPreviewFacingArrow.Visible = false;
@@ -1442,16 +1468,63 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        var footprintColor = _canDeployCurrentAnchor
-            ? new Color(0.35f, 0.95f, 0.55f, 0.38f)
-            : new Color(1.0f, 0.35f, 0.35f, 0.38f);
-        var portColor = _canDeployCurrentAnchor
-            ? new Color(0.98f, 0.72f, 0.34f, 0.55f)
-            : new Color(1.0f, 0.55f, 0.35f, 0.55f);
+        var evaluation = GetCurrentDeploymentEvaluation();
+        var deployState = evaluation?.State ?? (_canDeployCurrentAnchor ? MobileFactoryDeployState.Valid : MobileFactoryDeployState.Blocked);
+        var footprintColor = deployState == MobileFactoryDeployState.Blocked
+            ? new Color(1.0f, 0.35f, 0.35f, 0.38f)
+            : new Color(0.35f, 0.95f, 0.55f, 0.38f);
+        var portColor = deployState == MobileFactoryDeployState.Blocked
+            ? new Color(1.0f, 0.55f, 0.35f, 0.55f)
+            : new Color(0.98f, 0.72f, 0.34f, 0.55f);
+        var miningPreviewColor = deployState == MobileFactoryDeployState.Warning
+            ? new Color(0.98f, 0.84f, 0.36f, 0.76f)
+            : new Color(0.35f, 0.95f, 0.55f, 0.72f);
+        var miningInactiveColor = deployState == MobileFactoryDeployState.Warning
+            ? new Color(0.98f, 0.84f, 0.36f, 0.42f)
+            : new Color(0.35f, 0.95f, 0.55f, 0.34f);
 
-        var footprintCells = new List<Vector2I>(_mobileFactory.GetFootprintCells(_hoveredAnchor, _selectedDeployFacing));
-        var portCells = new List<Vector2I>(_mobileFactory.GetPortCells(_hoveredAnchor, _selectedDeployFacing));
-        EnsureWorldPreviewVisualCapacity(footprintCells.Count, portCells.Count);
+        var footprintCells = evaluation is not null
+            ? new List<Vector2I>(evaluation.FootprintCells)
+            : new List<Vector2I>(_mobileFactory.GetFootprintCells(_hoveredAnchor, _selectedDeployFacing));
+        var portCellSet = new HashSet<Vector2I>();
+        var miningPreviewCellSet = new HashSet<Vector2I>();
+        var activeMiningCellSet = new HashSet<Vector2I>();
+        if (evaluation is not null)
+        {
+            for (var attachmentIndex = 0; attachmentIndex < evaluation.AttachmentEvaluations.Count; attachmentIndex++)
+            {
+                var attachmentEvaluation = evaluation.AttachmentEvaluations[attachmentIndex];
+                if (attachmentEvaluation.Attachment.Kind == BuildPrototypeKind.MiningInputPort)
+                {
+                    for (var cellIndex = 0; cellIndex < attachmentEvaluation.PreviewWorldCells.Count; cellIndex++)
+                    {
+                        miningPreviewCellSet.Add(attachmentEvaluation.PreviewWorldCells[cellIndex]);
+                    }
+
+                    for (var cellIndex = 0; cellIndex < attachmentEvaluation.ActiveWorldCells.Count; cellIndex++)
+                    {
+                        activeMiningCellSet.Add(attachmentEvaluation.ActiveWorldCells[cellIndex]);
+                    }
+                    continue;
+                }
+
+                for (var cellIndex = 0; cellIndex < attachmentEvaluation.PreviewWorldCells.Count; cellIndex++)
+                {
+                    portCellSet.Add(attachmentEvaluation.PreviewWorldCells[cellIndex]);
+                }
+            }
+        }
+        else
+        {
+            foreach (var cell in _mobileFactory.GetPortCells(_hoveredAnchor, _selectedDeployFacing))
+            {
+                portCellSet.Add(cell);
+            }
+        }
+
+        var portCells = new List<Vector2I>(portCellSet);
+        var miningPreviewCells = new List<Vector2I>(miningPreviewCellSet);
+        EnsureWorldPreviewVisualCapacity(footprintCells.Count, portCells.Count, miningPreviewCells.Count);
 
         var index = 0;
         foreach (var cell in footprintCells)
@@ -1471,12 +1544,21 @@ public partial class MobileFactoryDemo : Node3D
             ApplyPreviewColor(mesh, portColor);
         }
 
+        index = 0;
+        foreach (var cell in miningPreviewCells)
+        {
+            var mesh = _worldPreviewMiningMeshes[index++];
+            mesh.Visible = true;
+            mesh.Position = _grid.CellToWorld(cell) + new Vector3(0.0f, 0.18f, 0.0f);
+            ApplyMiningPreviewColor(mesh, activeMiningCellSet.Contains(cell) ? miningPreviewColor : miningInactiveColor);
+        }
+
         if (_worldPreviewFacingArrow is not null)
         {
             _worldPreviewFacingArrow.Visible = true;
             _worldPreviewFacingArrow.Position = GetPreviewFacingArrowPosition(_hoveredAnchor, _selectedDeployFacing);
             _worldPreviewFacingArrow.Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(_selectedDeployFacing), 0.0f);
-            _worldPreviewFacingArrow.Modulate = new Color(0.66f, 0.86f, 1.0f, 0.96f);
+            ApplyPreviewColor(_worldPreviewFacingArrow, portColor.Lightened(0.08f));
         }
     }
 
@@ -1711,24 +1793,36 @@ public partial class MobileFactoryDemo : Node3D
 
         if (_controlMode == MobileFactoryControlMode.DeployPreview && _hasHoveredAnchor && _mobileFactory is not null)
         {
-            _worldPreviewMessage = _canDeployCurrentAnchor
-                ? $"可部署到 ({_hoveredAnchor.X}, {_hoveredAnchor.Y})，朝向 {FactoryDirection.ToLabel(_selectedDeployFacing)}，确认后会自动进场部署。"
-                : $"锚点 ({_hoveredAnchor.X}, {_hoveredAnchor.Y}) 以朝向 {FactoryDirection.ToLabel(_selectedDeployFacing)} 无法部署，可能越界或与现有占用冲突。";
-            _worldStatusPositive = _canDeployCurrentAnchor;
+            var evaluation = GetCurrentDeploymentEvaluation();
+            var deployState = evaluation?.State ?? (_canDeployCurrentAnchor ? MobileFactoryDeployState.Valid : MobileFactoryDeployState.Blocked);
+            _worldPreviewMessage = deployState switch
+            {
+                MobileFactoryDeployState.Valid => $"可部署到 ({_hoveredAnchor.X}, {_hoveredAnchor.Y})，朝向 {FactoryDirection.ToLabel(_selectedDeployFacing)}，确认后会自动进场部署。",
+                MobileFactoryDeployState.Warning => $"可部署到 ({_hoveredAnchor.X}, {_hoveredAnchor.Y})，朝向 {FactoryDirection.ToLabel(_selectedDeployFacing)}，但采矿输入端口当前未覆盖矿点，部署后会保持待机。",
+                _ => string.IsNullOrWhiteSpace(evaluation?.Reason)
+                    ? $"锚点 ({_hoveredAnchor.X}, {_hoveredAnchor.Y}) 以朝向 {FactoryDirection.ToLabel(_selectedDeployFacing)} 无法部署，可能越界或与现有占用冲突。"
+                    : $"锚点 ({_hoveredAnchor.X}, {_hoveredAnchor.Y}) 以朝向 {FactoryDirection.ToLabel(_selectedDeployFacing)} 无法部署：{evaluation!.Reason}"
+            };
+            _worldStatusTone = deployState switch
+            {
+                MobileFactoryDeployState.Valid => FactoryStatusTone.Positive,
+                MobileFactoryDeployState.Warning => FactoryStatusTone.Warning,
+                _ => FactoryStatusTone.Negative
+            };
             return;
         }
 
         if (_worldEventTimer > 0.0f && !string.IsNullOrWhiteSpace(_worldEventMessage))
         {
             _worldPreviewMessage = _worldEventMessage!;
-            _worldStatusPositive = _worldEventPositive;
+            _worldStatusTone = _worldEventPositive ? FactoryStatusTone.Positive : FactoryStatusTone.Negative;
             return;
         }
 
         if (_mobileFactory is null)
         {
             _worldPreviewMessage = "移动工厂尚未生成。";
-            _worldStatusPositive = false;
+            _worldStatusTone = FactoryStatusTone.Negative;
             return;
         }
 
@@ -1736,11 +1830,11 @@ public partial class MobileFactoryDemo : Node3D
         {
             case MobileFactoryControlMode.Observer:
                 _worldPreviewMessage = "观察模式：WASD/方向键移动相机，滚轮缩放，Tab 返回工厂控制。";
-                _worldStatusPositive = true;
+                _worldStatusTone = FactoryStatusTone.Positive;
                 break;
             case MobileFactoryControlMode.DeployPreview:
                 _worldPreviewMessage = "部署预览：移动鼠标选择落点，Q/E/R 旋转朝向，左键确认，Esc/G 取消。";
-                _worldStatusPositive = true;
+                _worldStatusTone = FactoryStatusTone.Positive;
                 break;
             default:
                 _worldPreviewMessage = _mobileFactory.State switch
@@ -1750,7 +1844,7 @@ public partial class MobileFactoryDemo : Node3D
                     MobileFactoryLifecycleState.Recalling => "切回移动态中：部署机构正在收拢，很快恢复机动。",
                     _ => "工厂控制：W/S 前进后退，A/D 转向，G 进入部署模式，Tab 进入观察模式。"
                 };
-                _worldStatusPositive = true;
+                _worldStatusTone = FactoryStatusTone.Positive;
                 break;
         }
     }
@@ -2143,7 +2237,7 @@ public partial class MobileFactoryDemo : Node3D
         _hud.SetControlMode(_controlMode, _mobileFactory.State, _mobileFactory.TransitFacing, _selectedDeployFacing);
         _hud.SetState(_mobileFactory.State, _mobileFactory.AnchorCell);
         _hud.SetHoverAnchor(_hoveredAnchor, _controlMode == MobileFactoryControlMode.DeployPreview && _hasHoveredAnchor);
-        _hud.SetPreviewStatus(_worldStatusPositive, _worldPreviewMessage);
+        _hud.SetPreviewStatus(_worldStatusTone, _worldPreviewMessage);
         _hud.SetDeliveryStats(GetPrimaryDeliveryTotal(), GetSecondaryDeliveryTotal());
         _hud.SetEditorSelection(_interiorInteractionMode, _selectedInteriorKind, _selectedInteriorFacing);
         _hud.SetEditorSelectionTarget(GetSelectedInteriorStructureText());
@@ -2259,6 +2353,7 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         _selectedDeployFacing = _mobileFactory.TransitFacing;
+        _currentDeployEvaluation = null;
         SetControlMode(MobileFactoryControlMode.DeployPreview);
         ShowWorldEvent("部署预览已开启，移动鼠标选点，Q/E/R 旋转，左键确认。", true);
     }
@@ -2326,6 +2421,7 @@ public partial class MobileFactoryDemo : Node3D
         _selectedDeployFacing = direction < 0
             ? FactoryDirection.RotateCounterClockwise(_selectedDeployFacing)
             : FactoryDirection.RotateClockwise(_selectedDeployFacing);
+        _currentDeployEvaluation = null;
         ShowWorldEvent($"部署朝向已通过 {sourceLabel} 旋转到 {FactoryDirection.ToLabel(_selectedDeployFacing)}。", true);
     }
 
@@ -3211,6 +3307,7 @@ public partial class MobileFactoryDemo : Node3D
 
         _worldPreviewFootprintMeshes.Clear();
         _worldPreviewPortMeshes.Clear();
+        _worldPreviewMiningMeshes.Clear();
         _worldPreviewFacingArrow = null;
 
         for (var i = 0; i < footprintCount; i++)
@@ -3235,20 +3332,11 @@ public partial class MobileFactoryDemo : Node3D
             _worldPreviewPortMeshes.Add(port);
         }
 
-        _worldPreviewFacingArrow = new Label3D
-        {
-            Name = "PreviewFacingArrow",
-            Visible = false,
-            Text = "➜",
-            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
-            FontSize = 96,
-            OutlineSize = 6,
-            Scale = Vector3.One * 3.4f
-        };
+        _worldPreviewFacingArrow = FactoryPreviewVisuals.CreateFacingArrow("PreviewFacingArrow", FactoryConstants.CellSize, 0.32f);
         _worldPreviewRoot.AddChild(_worldPreviewFacingArrow);
     }
 
-    private void EnsureWorldPreviewVisualCapacity(int footprintCount, int portCount)
+    private void EnsureWorldPreviewVisualCapacity(int footprintCount, int portCount, int miningCount)
     {
         if (_worldPreviewRoot is null)
         {
@@ -3276,6 +3364,17 @@ public partial class MobileFactoryDemo : Node3D
             _worldPreviewRoot.AddChild(port);
             _worldPreviewPortMeshes.Add(port);
         }
+
+        while (_worldPreviewMiningMeshes.Count < miningCount)
+        {
+            var miningStake = new MeshInstance3D { Name = $"PreviewMiningStake_{_worldPreviewMiningMeshes.Count}", Visible = false };
+            miningStake.Mesh = new BoxMesh
+            {
+                Size = new Vector3(FactoryConstants.CellSize * 0.52f, 0.06f, FactoryConstants.CellSize * 0.52f)
+            };
+            _worldPreviewRoot.AddChild(miningStake);
+            _worldPreviewMiningMeshes.Add(miningStake);
+        }
     }
 
     private void CreateInteriorPreviewVisuals()
@@ -3290,9 +3389,7 @@ public partial class MobileFactoryDemo : Node3D
         _interiorPreviewCell.Position = new Vector3(0.0f, 0.04f, 0.0f);
         _interiorPreviewRoot.AddChild(_interiorPreviewCell);
 
-        _interiorPreviewArrow = new MeshInstance3D { Name = "InteriorPreviewArrow" };
-        _interiorPreviewArrow.Mesh = new BoxMesh { Size = new Vector3(0.14f, 0.10f, 0.20f) };
-        _interiorPreviewArrow.Position = new Vector3(0.18f, 0.12f, 0.0f);
+        _interiorPreviewArrow = FactoryPreviewVisuals.CreateFacingArrow("InteriorPreviewArrow", 0.5f, 0.12f);
         _interiorPreviewRoot.AddChild(_interiorPreviewArrow);
 
         _interiorPreviewPowerRange = new MeshInstance3D { Name = "InteriorPreviewPowerRange", Visible = false };
@@ -3304,7 +3401,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private void UpdateInteriorPreviewSizing()
     {
-        if (_mobileFactory is null || _interiorPreviewCell is null || _interiorPreviewArrow is null)
+        if (_mobileFactory is null || _interiorPreviewCell is null || _interiorPreviewArrow is null || _interiorPreviewRoot is null)
         {
             return;
         }
@@ -3313,8 +3410,9 @@ public partial class MobileFactoryDemo : Node3D
         _interiorPreviewCell.Mesh = new BoxMesh { Size = new Vector3(cellSize * 0.78f, 0.06f, cellSize * 0.78f) };
         _interiorPreviewCell.Position = new Vector3(0.0f, 0.04f, 0.0f);
 
-        _interiorPreviewArrow.Mesh = new BoxMesh { Size = new Vector3(cellSize * 0.24f, 0.10f, cellSize * 0.30f) };
-        _interiorPreviewArrow.Position = new Vector3(cellSize * 0.28f, 0.12f, 0.0f);
+        _interiorPreviewArrow.QueueFree();
+        _interiorPreviewArrow = FactoryPreviewVisuals.CreateFacingArrow("InteriorPreviewArrow", cellSize * 0.6f, 0.12f);
+        _interiorPreviewRoot.AddChild(_interiorPreviewArrow);
     }
 
     private void EnsureInteriorAttachmentPreviewMeshCount(List<MeshInstance3D> meshes, int count, Vector3 size)
@@ -3492,14 +3590,25 @@ public partial class MobileFactoryDemo : Node3D
         _selectedDeployFacing = FacingDirection.East;
         HandleCommandSlot(MobileFactoryCommandSlot.Auxiliary);
         var contextualRotateWorks = _selectedDeployFacing == FacingDirection.South;
+        _hoveredAnchor = AnchorA;
+        _hasHoveredAnchor = true;
+        _currentDeployEvaluation = _mobileFactory.EvaluateDeployment(_grid, AnchorA, _selectedDeployFacing);
+        _canDeployCurrentAnchor = _currentDeployEvaluation.CanDeploy;
+        UpdateWorldPreview();
+        var previewArrowTracksFacing = _worldPreviewFacingArrow is not null
+            && _worldPreviewFacingArrow.Visible
+            && _worldPreviewFacingArrow.GetChildCount() >= 3
+            && Mathf.Abs(_worldPreviewFacingArrow.Rotation.Y - FactoryDirection.ToYRotationRadians(_selectedDeployFacing)) <= 0.001f;
         _selectedDeployFacing = FacingDirection.East;
+        _currentDeployEvaluation = null;
 
         SetEditorOpenState(false);
         SetControlMode(MobileFactoryControlMode.DeployPreview);
         _selectedDeployFacing = FacingDirection.East;
         _hoveredAnchor = AnchorA;
         _hasHoveredAnchor = true;
-        _canDeployCurrentAnchor = _mobileFactory.CanDeployAt(_grid, AnchorA, FacingDirection.East);
+        _currentDeployEvaluation = _mobileFactory.EvaluateDeployment(_grid, AnchorA, FacingDirection.East);
+        _canDeployCurrentAnchor = _currentDeployEvaluation.CanDeploy;
         ConfirmDeployPreview();
         await WaitForCondition(() => _mobileFactory.State == MobileFactoryLifecycleState.Deployed, 4.5f);
         var firstDeploy = _mobileFactory.State == MobileFactoryLifecycleState.Deployed;
@@ -3538,14 +3647,21 @@ public partial class MobileFactoryDemo : Node3D
         _selectedDeployFacing = FacingDirection.East;
         _hoveredAnchor = AnchorB;
         _hasHoveredAnchor = true;
-        _canDeployCurrentAnchor = _mobileFactory.CanDeployAt(_grid, AnchorB, FacingDirection.East);
+        _currentDeployEvaluation = _mobileFactory.EvaluateDeployment(_grid, AnchorB, FacingDirection.East);
+        _canDeployCurrentAnchor = _currentDeployEvaluation.CanDeploy;
         ConfirmDeployPreview();
         await WaitForCondition(() => _mobileFactory.State == MobileFactoryLifecycleState.Deployed, 4.5f);
         var secondDeploy = _mobileFactory.State == MobileFactoryLifecycleState.Deployed;
         await ToSignal(GetTree().CreateTimer(3.5f), SceneTreeTimer.SignalName.Timeout);
         var secondDelivered = _sinkB.DeliveredTotal;
         var miningAttachmentSwapped = false;
-        var miningRejectsClearNoDeposit = false;
+        var miningWarningAnchorFound = false;
+        var miningWarningPreview = false;
+        var miningWarningDeploy = false;
+        var miningWarningConnected = false;
+        var miningWarningPayloadVisible = false;
+        var miningWarningDelivered = false;
+        var miningWarningPayloadRetracted = false;
         var miningSecondRecall = false;
         var miningDeploy = false;
         var miningAttachmentConnected = false;
@@ -3562,18 +3678,51 @@ public partial class MobileFactoryDemo : Node3D
             miningAttachmentSwapped = ReplaceFocusedInputAttachmentWithMiningPort();
             if (miningAttachmentSwapped)
             {
-                miningRejectsClearNoDeposit = TryFindMiningBlockedAnchor(FacingDirection.East, out var blockedMiningAnchor)
-                    && !_mobileFactory.CanDeployAt(_grid, blockedMiningAnchor, FacingDirection.East);
+                miningWarningAnchorFound = TryFindMiningWarningAnchor(FacingDirection.East, out var warningMiningAnchor);
 
                 _mobileFactory.TryGetInteriorStructure(new Vector2I(1, 3), out presetInputSinkStructure);
                 inputSinkInTransit = presetInputSinkStructure as SinkStructure;
                 var miningSinkBaseline = inputSinkInTransit?.DeliveredTotal ?? 0;
+                if (miningWarningAnchorFound)
+                {
+                    SetControlMode(MobileFactoryControlMode.DeployPreview);
+                    _selectedDeployFacing = FacingDirection.East;
+                    _hoveredAnchor = warningMiningAnchor;
+                    _hasHoveredAnchor = true;
+                    _currentDeployEvaluation = _mobileFactory.EvaluateDeployment(_grid, warningMiningAnchor, FacingDirection.East);
+                    _canDeployCurrentAnchor = _currentDeployEvaluation.CanDeploy;
+                    UpdateWorldPreview();
+                    UpdateWorldStatusMessage(0.0);
+                    miningWarningPreview = _worldStatusTone == FactoryStatusTone.Warning && CountVisibleWorldPreviewMiningMeshes() == 0;
+                    ConfirmDeployPreview();
+                    await WaitForCondition(() => _mobileFactory.State == MobileFactoryLifecycleState.Deployed, 4.5f);
+                    miningWarningDeploy = _mobileFactory.State == MobileFactoryLifecycleState.Deployed;
+
+                    if (miningWarningDeploy)
+                    {
+                        await ToSignal(GetTree().CreateTimer(0.9f), SceneTreeTimer.SignalName.Timeout);
+                        miningWarningConnected = _mobileFactory.HasConnectedAttachment(BuildPrototypeKind.MiningInputPort);
+                        miningWarningPayloadVisible = _structureRoot is not null && CountVisibleNodesWithPrefix(_structureRoot, "PayloadStake_") > 0;
+                        await ToSignal(GetTree().CreateTimer(3.0f), SceneTreeTimer.SignalName.Timeout);
+                        miningWarningDelivered = (inputSinkInTransit?.DeliveredTotal ?? 0) > miningSinkBaseline;
+
+                        if (_mobileFactory.ReturnToTransitMode())
+                        {
+                            await WaitForCondition(() => _mobileFactory.State == MobileFactoryLifecycleState.InTransit, 1.2f);
+                            await ToSignal(GetTree().CreateTimer(1.0f), SceneTreeTimer.SignalName.Timeout);
+                            miningWarningPayloadRetracted = _structureRoot is not null && CountNamedNodes(_structureRoot, "WorldPayloadRoot") == 0;
+                        }
+                    }
+                }
+
+                var connectedMiningBaseline = inputSinkInTransit?.DeliveredTotal ?? 0;
 
                 SetControlMode(MobileFactoryControlMode.DeployPreview);
                 _selectedDeployFacing = FacingDirection.East;
                 _hoveredAnchor = AnchorA;
                 _hasHoveredAnchor = true;
-                _canDeployCurrentAnchor = _mobileFactory.CanDeployAt(_grid, AnchorA, FacingDirection.East);
+                _currentDeployEvaluation = _mobileFactory.EvaluateDeployment(_grid, AnchorA, FacingDirection.East);
+                _canDeployCurrentAnchor = _currentDeployEvaluation.CanDeploy;
                 ConfirmDeployPreview();
                 await WaitForCondition(() => _mobileFactory.State == MobileFactoryLifecycleState.Deployed, 4.5f);
                 miningDeploy = _mobileFactory.State == MobileFactoryLifecycleState.Deployed;
@@ -3582,9 +3731,9 @@ public partial class MobileFactoryDemo : Node3D
                 {
                     await ToSignal(GetTree().CreateTimer(0.9f), SceneTreeTimer.SignalName.Timeout);
                     miningAttachmentConnected = _mobileFactory.HasConnectedAttachment(BuildPrototypeKind.MiningInputPort);
-                    miningPayloadVisible = _structureRoot is not null && CountNamedNodes(_structureRoot, "WorldPayloadRoot") > 0;
+                    miningPayloadVisible = _structureRoot is not null && CountVisibleNodesWithPrefix(_structureRoot, "PayloadStake_") > 0;
                     await ToSignal(GetTree().CreateTimer(3.0f), SceneTreeTimer.SignalName.Timeout);
-                    miningSinkDelivered = (inputSinkInTransit?.DeliveredTotal ?? 0) > miningSinkBaseline;
+                    miningSinkDelivered = (inputSinkInTransit?.DeliveredTotal ?? 0) > connectedMiningBaseline;
 
                     if (_mobileFactory.ReturnToTransitMode())
                     {
@@ -3596,9 +3745,9 @@ public partial class MobileFactoryDemo : Node3D
             }
         }
 
-        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !rightPaneHover || !leftPaneHover || !detailWindowInTransit || !blueprintWorkflowInTransit || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !contextualRotateWorks || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !inputDeliveredWhileDeployed || !turretTrackedThreats || !mobileCombatActive || !recalled || !blockedOutputActive || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0 || !miningSecondRecall || !miningAttachmentSwapped || !miningRejectsClearNoDeposit || !miningDeploy || !miningAttachmentConnected || !miningPayloadVisible || !miningSinkDelivered || !miningPayloadRetracted)
+        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !rightPaneHover || !leftPaneHover || !detailWindowInTransit || !blueprintWorkflowInTransit || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !contextualRotateWorks || !previewArrowTracksFacing || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !inputDeliveredWhileDeployed || !turretTrackedThreats || !mobileCombatActive || !recalled || !blockedOutputActive || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0 || !miningSecondRecall || !miningAttachmentSwapped || !miningWarningAnchorFound || !miningWarningPreview || !miningWarningDeploy || miningWarningConnected || miningWarningPayloadVisible || miningWarningDelivered || !miningWarningPayloadRetracted || !miningDeploy || !miningAttachmentConnected || !miningPayloadVisible || !miningSinkDelivered || !miningPayloadRetracted)
         {
-            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} rightHover={rightPaneHover} leftHover={leftPaneHover} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} contextualRotateWorks={contextualRotateWorks} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered} miningSecondRecall={miningSecondRecall} miningAttachmentSwapped={miningAttachmentSwapped} miningRejectsClearNoDeposit={miningRejectsClearNoDeposit} miningDeploy={miningDeploy} miningAttachmentConnected={miningAttachmentConnected} miningPayloadVisible={miningPayloadVisible} miningSinkDelivered={miningSinkDelivered} miningPayloadRetracted={miningPayloadRetracted}");
+            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} rightHover={rightPaneHover} leftHover={leftPaneHover} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} contextualRotateWorks={contextualRotateWorks} previewArrowTracksFacing={previewArrowTracksFacing} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered} miningSecondRecall={miningSecondRecall} miningAttachmentSwapped={miningAttachmentSwapped} miningWarningAnchorFound={miningWarningAnchorFound} miningWarningPreview={miningWarningPreview} miningWarningDeploy={miningWarningDeploy} miningWarningConnected={miningWarningConnected} miningWarningPayloadVisible={miningWarningPayloadVisible} miningWarningDelivered={miningWarningDelivered} miningWarningPayloadRetracted={miningWarningPayloadRetracted} miningDeploy={miningDeploy} miningAttachmentConnected={miningAttachmentConnected} miningPayloadVisible={miningPayloadVisible} miningSinkDelivered={miningSinkDelivered} miningPayloadRetracted={miningPayloadRetracted}");
             GetTree().Quit(1);
             return;
         }
@@ -3619,28 +3768,74 @@ public partial class MobileFactoryDemo : Node3D
         await ToSignal(GetTree().CreateTimer(0.25f), SceneTreeTimer.SignalName.Timeout);
 
         var swapped = ReplaceFocusedInputAttachmentWithMiningPort();
-        var anchorAValid = swapped && _mobileFactory.CanDeployAt(_grid, MiningAnchorA, FacingDirection.East);
-        var anchorBValid = swapped && _mobileFactory.CanDeployAt(_grid, MiningAnchorB, FacingDirection.East);
-        var rejectsNoDeposit = swapped
-            && TryFindMiningBlockedAnchor(FacingDirection.East, out var blockedAnchor)
-            && !_mobileFactory.CanDeployAt(_grid, blockedAnchor, FacingDirection.East);
+        var anchorAValid = swapped && _mobileFactory.EvaluateDeployment(_grid, MiningAnchorA, FacingDirection.East).State == MobileFactoryDeployState.Valid;
+        var anchorBValid = swapped && _mobileFactory.EvaluateDeployment(_grid, MiningAnchorB, FacingDirection.East).State == MobileFactoryDeployState.Valid;
+        var warningAnchor = Vector2I.Zero;
+        var warningAnchorFound = swapped && TryFindMiningWarningAnchor(FacingDirection.East, out warningAnchor);
+        var warningPreviewTone = false;
+        var warningArrowVisible = false;
+        var warningMiningPreviewVisible = false;
+        var deployedAtWarningAnchor = false;
+        var connectedAtWarningAnchor = false;
+        var payloadVisibleAtWarningAnchor = false;
+        var deliveredAtWarningAnchor = false;
+        var recalledFromWarningAnchor = false;
+        var payloadRetractedAfterWarningAnchor = false;
 
         _mobileFactory.TryGetInteriorStructure(new Vector2I(1, 3), out var sinkStructure);
         var sink = sinkStructure as SinkStructure;
+
+        if (warningAnchorFound)
+        {
+            var deliveredBeforeWarningAnchor = sink?.DeliveredTotal ?? 0;
+            SetControlMode(MobileFactoryControlMode.DeployPreview);
+            _selectedDeployFacing = FacingDirection.East;
+            _hoveredAnchor = warningAnchor;
+            _hasHoveredAnchor = true;
+            _currentDeployEvaluation = _mobileFactory.EvaluateDeployment(_grid, warningAnchor, FacingDirection.East);
+            _canDeployCurrentAnchor = _currentDeployEvaluation.CanDeploy;
+            UpdateWorldPreview();
+            UpdateWorldStatusMessage(0.0);
+            warningPreviewTone = _worldStatusTone == FactoryStatusTone.Warning;
+            warningArrowVisible = _worldPreviewFacingArrow is not null
+                && _worldPreviewFacingArrow.Visible
+                && _worldPreviewFacingArrow.GetChildCount() >= 3;
+            warningMiningPreviewVisible = CountVisibleWorldPreviewMiningMeshes() > 0;
+
+            ConfirmDeployPreview();
+            await WaitForCondition(() => _mobileFactory.State != MobileFactoryLifecycleState.AutoDeploying, MiningPortSmokeDeployTimeoutSeconds);
+
+            deployedAtWarningAnchor = _mobileFactory.State == MobileFactoryLifecycleState.Deployed;
+            await ToSignal(GetTree().CreateTimer(0.9f), SceneTreeTimer.SignalName.Timeout);
+            connectedAtWarningAnchor = _mobileFactory.HasConnectedAttachment(BuildPrototypeKind.MiningInputPort);
+            payloadVisibleAtWarningAnchor = CountVisibleNodesWithPrefix(_structureRoot, "PayloadStake_") > 0;
+            await ToSignal(GetTree().CreateTimer(3.0f), SceneTreeTimer.SignalName.Timeout);
+            deliveredAtWarningAnchor = (sink?.DeliveredTotal ?? 0) > deliveredBeforeWarningAnchor;
+
+            recalledFromWarningAnchor = _mobileFactory.ReturnToTransitMode();
+            if (recalledFromWarningAnchor)
+            {
+                await WaitForCondition(() => _mobileFactory.State == MobileFactoryLifecycleState.InTransit, 1.2f);
+            }
+            await ToSignal(GetTree().CreateTimer(1.0f), SceneTreeTimer.SignalName.Timeout);
+            payloadRetractedAfterWarningAnchor = CountNamedNodes(_structureRoot, "WorldPayloadRoot") == 0;
+        }
+
         var deliveredBeforeAnchorA = sink?.DeliveredTotal ?? 0;
 
         SetControlMode(MobileFactoryControlMode.DeployPreview);
         _selectedDeployFacing = FacingDirection.East;
         _hoveredAnchor = MiningAnchorA;
         _hasHoveredAnchor = true;
-        _canDeployCurrentAnchor = _mobileFactory.CanDeployAt(_grid, MiningAnchorA, FacingDirection.East);
+        _currentDeployEvaluation = _mobileFactory.EvaluateDeployment(_grid, MiningAnchorA, FacingDirection.East);
+        _canDeployCurrentAnchor = _currentDeployEvaluation.CanDeploy;
         ConfirmDeployPreview();
         await WaitForCondition(() => _mobileFactory.State != MobileFactoryLifecycleState.AutoDeploying, MiningPortSmokeDeployTimeoutSeconds);
 
         var deployedAtAnchorA = _mobileFactory.State == MobileFactoryLifecycleState.Deployed;
         await ToSignal(GetTree().CreateTimer(0.9f), SceneTreeTimer.SignalName.Timeout);
         var connectedAtAnchorA = _mobileFactory.HasConnectedAttachment(BuildPrototypeKind.MiningInputPort);
-        var payloadVisibleAtAnchorA = CountNamedNodes(_structureRoot, "WorldPayloadRoot") > 0;
+        var payloadVisibleAtAnchorA = CountVisibleNodesWithPrefix(_structureRoot, "PayloadStake_") > 0;
         await ToSignal(GetTree().CreateTimer(3.0f), SceneTreeTimer.SignalName.Timeout);
         var deliveredAtAnchorA = (sink?.DeliveredTotal ?? 0) > deliveredBeforeAnchorA;
 
@@ -3657,14 +3852,15 @@ public partial class MobileFactoryDemo : Node3D
         _selectedDeployFacing = FacingDirection.East;
         _hoveredAnchor = MiningAnchorB;
         _hasHoveredAnchor = true;
-        _canDeployCurrentAnchor = _mobileFactory.CanDeployAt(_grid, MiningAnchorB, FacingDirection.East);
+        _currentDeployEvaluation = _mobileFactory.EvaluateDeployment(_grid, MiningAnchorB, FacingDirection.East);
+        _canDeployCurrentAnchor = _currentDeployEvaluation.CanDeploy;
         ConfirmDeployPreview();
         await WaitForCondition(() => _mobileFactory.State != MobileFactoryLifecycleState.AutoDeploying, MiningPortSmokeDeployTimeoutSeconds);
 
         var deployedAtAnchorB = _mobileFactory.State == MobileFactoryLifecycleState.Deployed;
         await ToSignal(GetTree().CreateTimer(0.9f), SceneTreeTimer.SignalName.Timeout);
         var connectedAtAnchorB = _mobileFactory.HasConnectedAttachment(BuildPrototypeKind.MiningInputPort);
-        var payloadVisibleAtAnchorB = CountNamedNodes(_structureRoot, "WorldPayloadRoot") > 0;
+        var payloadVisibleAtAnchorB = CountVisibleNodesWithPrefix(_structureRoot, "PayloadStake_") > 0;
         await ToSignal(GetTree().CreateTimer(3.0f), SceneTreeTimer.SignalName.Timeout);
         var deliveredAtAnchorB = (sink?.DeliveredTotal ?? 0) > deliveredBeforeAnchorB;
 
@@ -3676,14 +3872,38 @@ public partial class MobileFactoryDemo : Node3D
         await ToSignal(GetTree().CreateTimer(1.0f), SceneTreeTimer.SignalName.Timeout);
         var payloadRetractedAfterAnchorB = CountNamedNodes(_structureRoot, "WorldPayloadRoot") == 0;
 
-        if (!swapped || !anchorAValid || !anchorBValid || !rejectsNoDeposit || !deployedAtAnchorA || !connectedAtAnchorA || !payloadVisibleAtAnchorA || !deliveredAtAnchorA || !recalledFromAnchorA || !payloadRetractedAfterAnchorA || !deployedAtAnchorB || !connectedAtAnchorB || !payloadVisibleAtAnchorB || !deliveredAtAnchorB || !recalledFromAnchorB || !payloadRetractedAfterAnchorB)
+        if (!swapped
+            || !anchorAValid
+            || !anchorBValid
+            || !warningAnchorFound
+            || !warningPreviewTone
+            || !warningArrowVisible
+            || !warningMiningPreviewVisible
+            || !deployedAtWarningAnchor
+            || connectedAtWarningAnchor
+            || payloadVisibleAtWarningAnchor
+            || deliveredAtWarningAnchor
+            || !recalledFromWarningAnchor
+            || !payloadRetractedAfterWarningAnchor
+            || !deployedAtAnchorA
+            || !connectedAtAnchorA
+            || !payloadVisibleAtAnchorA
+            || !deliveredAtAnchorA
+            || !recalledFromAnchorA
+            || !payloadRetractedAfterAnchorA
+            || !deployedAtAnchorB
+            || !connectedAtAnchorB
+            || !payloadVisibleAtAnchorB
+            || !deliveredAtAnchorB
+            || !recalledFromAnchorB
+            || !payloadRetractedAfterAnchorB)
         {
-            GD.PushError($"MOBILE_FACTORY_MINING_PORT_SMOKE_FAILED swapped={swapped} anchorAValid={anchorAValid} anchorBValid={anchorBValid} rejectsNoDeposit={rejectsNoDeposit} deployedAtAnchorA={deployedAtAnchorA} connectedAtAnchorA={connectedAtAnchorA} payloadVisibleAtAnchorA={payloadVisibleAtAnchorA} deliveredAtAnchorA={deliveredAtAnchorA} recalledFromAnchorA={recalledFromAnchorA} payloadRetractedAfterAnchorA={payloadRetractedAfterAnchorA} deployedAtAnchorB={deployedAtAnchorB} connectedAtAnchorB={connectedAtAnchorB} payloadVisibleAtAnchorB={payloadVisibleAtAnchorB} deliveredAtAnchorB={deliveredAtAnchorB} recalledFromAnchorB={recalledFromAnchorB} payloadRetractedAfterAnchorB={payloadRetractedAfterAnchorB}");
+            GD.PushError($"MOBILE_FACTORY_MINING_PORT_SMOKE_FAILED swapped={swapped} anchorAValid={anchorAValid} anchorBValid={anchorBValid} warningAnchorFound={warningAnchorFound} warningPreviewTone={warningPreviewTone} warningArrowVisible={warningArrowVisible} warningMiningPreviewVisible={warningMiningPreviewVisible} deployedAtWarningAnchor={deployedAtWarningAnchor} connectedAtWarningAnchor={connectedAtWarningAnchor} payloadVisibleAtWarningAnchor={payloadVisibleAtWarningAnchor} deliveredAtWarningAnchor={deliveredAtWarningAnchor} recalledFromWarningAnchor={recalledFromWarningAnchor} payloadRetractedAfterWarningAnchor={payloadRetractedAfterWarningAnchor} deployedAtAnchorA={deployedAtAnchorA} connectedAtAnchorA={connectedAtAnchorA} payloadVisibleAtAnchorA={payloadVisibleAtAnchorA} deliveredAtAnchorA={deliveredAtAnchorA} recalledFromAnchorA={recalledFromAnchorA} payloadRetractedAfterAnchorA={payloadRetractedAfterAnchorA} deployedAtAnchorB={deployedAtAnchorB} connectedAtAnchorB={connectedAtAnchorB} payloadVisibleAtAnchorB={payloadVisibleAtAnchorB} deliveredAtAnchorB={deliveredAtAnchorB} recalledFromAnchorB={recalledFromAnchorB} payloadRetractedAfterAnchorB={payloadRetractedAfterAnchorB}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"MOBILE_FACTORY_MINING_PORT_SMOKE_OK anchorADelivered={deliveredAtAnchorA} anchorBDelivered={deliveredAtAnchorB} totalDelivered={(sink?.DeliveredTotal ?? 0)}");
+        GD.Print($"MOBILE_FACTORY_MINING_PORT_SMOKE_OK warningAnchor={warningAnchorFound} anchorADelivered={deliveredAtAnchorA} anchorBDelivered={deliveredAtAnchorB} totalDelivered={(sink?.DeliveredTotal ?? 0)}");
         GetTree().Quit();
     }
 
@@ -3972,13 +4192,35 @@ public partial class MobileFactoryDemo : Node3D
             for (var x = GetWorldMinCell(); x <= GetWorldMaxCell(); x++)
             {
                 var candidate = new Vector2I(x, y);
-                if (!_grid.CanReserveAll(_mobileFactory.GetFootprintCells(candidate, facing), _mobileFactory.ReservationOwnerId)
-                    || !_grid.CanReserveAll(_mobileFactory.GetPortCells(candidate, facing), _mobileFactory.ReservationOwnerId))
+                var evaluation = _mobileFactory.EvaluateDeployment(_grid, candidate, facing);
+                if (evaluation.State != MobileFactoryDeployState.Blocked)
                 {
                     continue;
                 }
 
-                if (_mobileFactory.CanDeployAt(_grid, candidate, facing))
+                anchor = candidate;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool TryFindMiningWarningAnchor(FacingDirection facing, out Vector2I anchor)
+    {
+        anchor = Vector2I.Zero;
+        if (_mobileFactory is null || _grid is null)
+        {
+            return false;
+        }
+
+        for (var y = GetWorldMinCell(); y <= GetWorldMaxCell(); y++)
+        {
+            for (var x = GetWorldMinCell(); x <= GetWorldMaxCell(); x++)
+            {
+                var candidate = new Vector2I(x, y);
+                var evaluation = _mobileFactory.EvaluateDeployment(_grid, candidate, facing);
+                if (evaluation.State != MobileFactoryDeployState.Warning)
                 {
                     continue;
                 }
@@ -3999,6 +4241,36 @@ public partial class MobileFactoryDemo : Node3D
             if (child is Node childNode)
             {
                 count += CountNamedNodes(childNode, nodeName);
+            }
+        }
+
+        return count;
+    }
+
+    private static int CountVisibleNodesWithPrefix(Node root, string namePrefix)
+    {
+        var count = root is Node3D node3D && node3D.Visible && root.Name.ToString().StartsWith(namePrefix, global::System.StringComparison.Ordinal)
+            ? 1
+            : 0;
+        foreach (var child in root.GetChildren())
+        {
+            if (child is Node childNode)
+            {
+                count += CountVisibleNodesWithPrefix(childNode, namePrefix);
+            }
+        }
+
+        return count;
+    }
+
+    private int CountVisibleWorldPreviewMiningMeshes()
+    {
+        var count = 0;
+        for (var index = 0; index < _worldPreviewMiningMeshes.Count; index++)
+        {
+            if (_worldPreviewMiningMeshes[index].Visible)
+            {
+                count++;
             }
         }
 
@@ -4063,7 +4335,8 @@ public partial class MobileFactoryDemo : Node3D
         _selectedDeployFacing = FacingDirection.East;
         _hoveredAnchor = new Vector2I(-12, 3);
         _hasHoveredAnchor = true;
-        _canDeployCurrentAnchor = _mobileFactory.CanDeployAt(_grid, _hoveredAnchor, FacingDirection.East);
+        _currentDeployEvaluation = _mobileFactory.EvaluateDeployment(_grid, _hoveredAnchor, FacingDirection.East);
+        _canDeployCurrentAnchor = _currentDeployEvaluation.CanDeploy;
         SetControlMode(MobileFactoryControlMode.DeployPreview);
         ConfirmDeployPreview();
         await WaitForCondition(() => _mobileFactory.State == MobileFactoryLifecycleState.Deployed, 5.0f);
@@ -4134,6 +4407,10 @@ public partial class MobileFactoryDemo : Node3D
     private void SetControlMode(MobileFactoryControlMode controlMode)
     {
         _controlMode = controlMode;
+        if (controlMode != MobileFactoryControlMode.DeployPreview)
+        {
+            _currentDeployEvaluation = null;
+        }
         FocusFactoryForCurrentMode();
     }
 
@@ -4208,6 +4485,22 @@ public partial class MobileFactoryDemo : Node3D
             AlbedoColor = color,
             Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
             Roughness = 0.4f
+        };
+    }
+
+    private static void ApplyPreviewColor(Node3D arrowRoot, Color color)
+    {
+        FactoryPreviewVisuals.ApplyArrowColor(arrowRoot, color);
+    }
+
+    private static void ApplyMiningPreviewColor(MeshInstance3D meshInstance, Color color)
+    {
+        meshInstance.MaterialOverride = new StandardMaterial3D
+        {
+            AlbedoColor = color,
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            Roughness = 0.28f,
+            NoDepthTest = true
         };
     }
 

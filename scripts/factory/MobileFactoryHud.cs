@@ -227,7 +227,7 @@ public partial class MobileFactoryHud : CanvasLayer
             : "当前锚点：未选择";
     }
 
-    public void SetPreviewStatus(bool isValid, string text)
+    public void SetPreviewStatus(FactoryStatusTone tone, string text)
     {
         if (_previewLabel is null)
         {
@@ -235,7 +235,12 @@ public partial class MobileFactoryHud : CanvasLayer
         }
 
         _previewLabel.Text = $"世界提示：{text}";
-        _previewLabel.Modulate = isValid ? new Color("A7F3A0") : new Color("FFB4A2");
+        _previewLabel.Modulate = tone switch
+        {
+            FactoryStatusTone.Positive => new Color("A7F3A0"),
+            FactoryStatusTone.Warning => new Color("FDE68A"),
+            _ => new Color("FFB4A2")
+        };
     }
 
     public void SetDeliveryStats(int sinkA, int sinkB)

@@ -155,32 +155,70 @@ public sealed class MobileFactoryInstance
         }
     }
 
-    public bool CanDeployAt(GridManager worldGrid, Vector2I anchorCell, FacingDirection facing)
+    public MobileFactoryDeploymentEvaluation EvaluateDeployment(GridManager worldGrid, Vector2I anchorCell, FacingDirection facing)
     {
+        var footprintCells = new List<Vector2I>(GetFootprintCells(anchorCell, facing));
         if (State == MobileFactoryLifecycleState.Deployed || State == MobileFactoryLifecycleState.Recalling)
         {
-            return false;
+            return new MobileFactoryDeploymentEvaluation(
+                MobileFactoryDeployState.Blocked,
+                footprintCells,
+                new List<MobileFactoryAttachmentDeploymentEvaluation>(),
+                "移动工厂当前必须先解除部署，才能重新选择落点。");
         }
 
-        if (!worldGrid.CanReserveAll(GetFootprintCells(anchorCell, facing), ReservationOwnerId))
+        if (!worldGrid.CanReserveAll(footprintCells, ReservationOwnerId))
         {
-            return false;
+            return new MobileFactoryDeploymentEvaluation(
+                MobileFactoryDeployState.Blocked,
+                footprintCells,
+                new List<MobileFactoryAttachmentDeploymentEvaluation>(),
+                "移动工厂主体占地越界或与现有占用冲突。");
         }
 
+        var attachmentEvaluations = new List<MobileFactoryAttachmentDeploymentEvaluation>(_attachments.Count);
+        var state = MobileFactoryDeployState.Valid;
+        var reason = string.Empty;
         foreach (var projection in GetAttachmentProjections(anchorCell, facing))
         {
-            if (!projection.Attachment.CanBindToWorld(worldGrid, projection, out _))
+            var evaluation = projection.Attachment.EvaluateDeployment(worldGrid, projection);
+            if (evaluation.CanDeploy && !worldGrid.CanReserveAll(evaluation.ReservedWorldCells, ReservationOwnerId))
             {
-                return false;
+                evaluation = new MobileFactoryAttachmentDeploymentEvaluation(
+                    projection.Attachment,
+                    projection,
+                    MobileFactoryAttachmentDeployState.Blocked,
+                    evaluation.PreviewWorldCells,
+                    new List<Vector2I>(),
+                    evaluation.ActiveWorldCells,
+                    "边界 attachment 的世界侧投影越界或与现有占用冲突。");
             }
 
-            if (!worldGrid.CanReserveAll(projection.Attachment.GetReservedWorldCells(worldGrid, projection), ReservationOwnerId))
+            attachmentEvaluations.Add(evaluation);
+            if (evaluation.State == MobileFactoryAttachmentDeployState.Blocked)
             {
-                return false;
+                state = MobileFactoryDeployState.Blocked;
+                if (string.IsNullOrWhiteSpace(reason))
+                {
+                    reason = evaluation.Reason;
+                }
+            }
+            else if (evaluation.State == MobileFactoryAttachmentDeployState.Optional && state != MobileFactoryDeployState.Blocked)
+            {
+                state = MobileFactoryDeployState.Warning;
+                if (string.IsNullOrWhiteSpace(reason))
+                {
+                    reason = evaluation.Reason;
+                }
             }
         }
 
-        return true;
+        return new MobileFactoryDeploymentEvaluation(state, footprintCells, attachmentEvaluations, reason);
+    }
+
+    public bool CanDeployAt(GridManager worldGrid, Vector2I anchorCell, FacingDirection facing)
+    {
+        return EvaluateDeployment(worldGrid, anchorCell, facing).CanDeploy;
     }
 
     public bool CanDeployAt(GridManager worldGrid, Vector2I anchorCell)
@@ -292,13 +330,16 @@ public sealed class MobileFactoryInstance
 
     public bool TryDeploy(GridManager worldGrid, Vector2I anchorCell, FacingDirection facing)
     {
-        if (!CanDeployAt(worldGrid, anchorCell, facing))
+        var evaluation = EvaluateDeployment(worldGrid, anchorCell, facing);
+        if (!evaluation.CanDeploy)
         {
             return false;
         }
 
-        FinalizeDeployment(worldGrid, anchorCell, facing);
-        PushStatus($"已部署到 ({anchorCell.X}, {anchorCell.Y})，朝向 {FactoryDirection.ToLabel(facing)}。");
+        FinalizeDeployment(worldGrid, anchorCell, facing, evaluation);
+        PushStatus(evaluation.HasWarnings
+            ? $"已部署到 ({anchorCell.X}, {anchorCell.Y})，朝向 {FactoryDirection.ToLabel(facing)}；采矿输入端口未接入矿区，将保持待机。"
+            : $"已部署到 ({anchorCell.X}, {anchorCell.Y})，朝向 {FactoryDirection.ToLabel(facing)}。");
         return true;
     }
 
@@ -505,7 +546,14 @@ public sealed class MobileFactoryInstance
                 var projection = TryGetAttachmentProjection(attachment, target.AnchorCell, target.Facing);
                 if (projection is not null)
                 {
-                    lines.Add($"{displayLabel} {i + 1}：目标朝{FactoryDirection.ToLabel(projection.WorldFacing)}，准备连接 ({projection.WorldPortCell.X}, {projection.WorldPortCell.Y})");
+                    var evaluation = attachment.EvaluateDeployment(target.WorldGrid, projection);
+                    var pendingState = evaluation.State switch
+                    {
+                        MobileFactoryAttachmentDeployState.Connected => "准备连接",
+                        MobileFactoryAttachmentDeployState.Optional => "部署后待机",
+                        _ => "目标无效"
+                    };
+                    lines.Add($"{displayLabel} {i + 1}：目标朝{FactoryDirection.ToLabel(projection.WorldFacing)}，{pendingState} ({projection.WorldPortCell.X}, {projection.WorldPortCell.Y})");
                 }
             }
             else
@@ -646,7 +694,8 @@ public sealed class MobileFactoryInstance
             return;
         }
 
-        if (!CanDeployAt(target.WorldGrid, target.AnchorCell, target.Facing))
+        var evaluation = EvaluateDeployment(target.WorldGrid, target.AnchorCell, target.Facing);
+        if (!evaluation.CanDeploy)
         {
             _pendingDeployTarget = null;
             State = MobileFactoryLifecycleState.InTransit;
@@ -654,9 +703,11 @@ public sealed class MobileFactoryInstance
             return;
         }
 
-        FinalizeDeployment(target.WorldGrid, target.AnchorCell, target.Facing);
+        FinalizeDeployment(target.WorldGrid, target.AnchorCell, target.Facing, evaluation);
         _pendingDeployTarget = null;
-        PushStatus($"自动部署完成，已在 ({target.AnchorCell.X}, {target.AnchorCell.Y}) 朝 {FactoryDirection.ToLabel(target.Facing)} 展开。");
+        PushStatus(evaluation.HasWarnings
+            ? $"自动部署完成，已在 ({target.AnchorCell.X}, {target.AnchorCell.Y}) 朝 {FactoryDirection.ToLabel(target.Facing)} 展开；采矿输入端口当前未接入矿区。"
+            : $"自动部署完成，已在 ({target.AnchorCell.X}, {target.AnchorCell.Y}) 朝 {FactoryDirection.ToLabel(target.Facing)} 展开。");
     }
 
     private void UpdateRecall(float delta)
@@ -673,7 +724,7 @@ public sealed class MobileFactoryInstance
         PushStatus("移动工厂已切回移动态，可继续机动或重新部署；未连接边界 attachment 会如实阻塞等待重连。");
     }
 
-    private void FinalizeDeployment(GridManager worldGrid, Vector2I anchorCell, FacingDirection facing)
+    private void FinalizeDeployment(GridManager worldGrid, Vector2I anchorCell, FacingDirection facing, MobileFactoryDeploymentEvaluation evaluation)
     {
         _deployedGrid = worldGrid;
         AnchorCell = anchorCell;
@@ -685,33 +736,35 @@ public sealed class MobileFactoryInstance
         var footprintCenter = GetFootprintCenterWorld(worldGrid, anchorCell, facing);
         _currentHeadingRadians = FactoryDirection.ToYRotationRadians(facing);
         ApplyHullTransform(footprintCenter, _currentHeadingRadians);
-        ActivateAttachmentsForDeployment(worldGrid, anchorCell, facing);
+        ActivateAttachmentsForDeployment(worldGrid, evaluation);
         InteriorSite.SetRuntimeState(true, true);
         _simulation.RebuildTopology();
     }
 
-    private void ActivateAttachmentsForDeployment(GridManager worldGrid, Vector2I anchorCell, FacingDirection facing)
+    private void ActivateAttachmentsForDeployment(GridManager worldGrid, MobileFactoryDeploymentEvaluation evaluation)
     {
         DisconnectAttachmentBindings();
 
-        foreach (var projection in GetAttachmentProjections(anchorCell, facing))
+        for (var index = 0; index < evaluation.AttachmentEvaluations.Count; index++)
         {
-            if (!projection.Attachment.CanBindToWorld(worldGrid, projection, out _))
+            var attachmentEvaluation = evaluation.AttachmentEvaluations[index];
+            if (!attachmentEvaluation.CanDeploy)
             {
                 continue;
             }
 
-            var reservedCells = projection.Attachment.GetReservedWorldCells(worldGrid, projection);
-            if (!worldGrid.CanReserveAll(reservedCells, ReservationOwnerId))
+            if (attachmentEvaluation.ReservedWorldCells.Count > 0)
             {
-                continue;
+                worldGrid.ReserveCells(attachmentEvaluation.ReservedWorldCells, ReservationOwnerId, GridReservationKind.MobilePort, attachmentEvaluation.Attachment);
             }
 
-            worldGrid.ReserveCells(reservedCells, ReservationOwnerId, GridReservationKind.MobilePort, projection.Attachment);
-            projection.Attachment.BindToWorld(worldGrid, projection);
+            if (attachmentEvaluation.State == MobileFactoryAttachmentDeployState.Connected)
+            {
+                attachmentEvaluation.Attachment.BindToWorld(worldGrid, attachmentEvaluation.Projection);
+            }
         }
 
-        RebuildWorldAttachmentVisuals(worldGrid, anchorCell, facing);
+        RebuildWorldAttachmentVisuals(worldGrid, AnchorCell ?? Vector2I.Zero, DeploymentFacing);
     }
 
     private void RegisterInteriorStructure(FactoryStructure structure)
@@ -729,7 +782,7 @@ public sealed class MobileFactoryInstance
             ReleaseDeploymentReservations();
             _deployedGrid = deployedGrid;
             deployedGrid.ReserveCells(GetFootprintCells(anchorCell, DeploymentFacing), ReservationOwnerId, GridReservationKind.MobileFootprint);
-            ActivateAttachmentsForDeployment(deployedGrid, anchorCell, DeploymentFacing);
+            ActivateAttachmentsForDeployment(deployedGrid, EvaluateDeployment(deployedGrid, anchorCell, DeploymentFacing));
         }
         else
         {
@@ -1290,10 +1343,10 @@ public sealed class MobileFactoryInstance
             }
 
             var projection = MobileFactoryBoundaryAttachmentGeometry.CreateProjection(previewStructure, mount, anchorCell, DeploymentFacing);
-            var canBind = previewStructure.CanBindToWorld(_deployedGrid, projection, out _);
+            var evaluation = previewStructure.EvaluateDeployment(_deployedGrid, projection);
             previewStructure.QueueFree();
-            return _deployedGrid.CanReserveAll(previewStructure.GetReservedWorldCells(_deployedGrid, projection), ReservationOwnerId)
-                && canBind;
+            return evaluation.CanDeploy
+                && _deployedGrid.CanReserveAll(evaluation.ReservedWorldCells, ReservationOwnerId);
         }
 
         return true;

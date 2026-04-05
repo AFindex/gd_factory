@@ -92,6 +92,27 @@ public enum MobileFactoryAttachmentChannelType
     ItemInput
 }
 
+public enum MobileFactoryDeployState
+{
+    Blocked,
+    Warning,
+    Valid
+}
+
+public enum MobileFactoryAttachmentDeployState
+{
+    Blocked,
+    Optional,
+    Connected
+}
+
+public enum FactoryStatusTone
+{
+    Positive,
+    Warning,
+    Negative
+}
+
 public sealed class FactoryItem
 {
     public FactoryItem(int id, BuildPrototypeKind sourceKind, FactoryItemKind itemKind = FactoryItemKind.GenericCargo)

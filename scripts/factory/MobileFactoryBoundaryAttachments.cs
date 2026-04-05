@@ -122,6 +122,58 @@ public sealed class MobileFactoryAttachmentProjection
     public Vector2I WorldAdjacentCell => WorldPortCell + FactoryDirection.ToCellOffset(WorldFacing);
 }
 
+public sealed class MobileFactoryAttachmentDeploymentEvaluation
+{
+    public MobileFactoryAttachmentDeploymentEvaluation(
+        MobileFactoryBoundaryAttachmentStructure attachment,
+        MobileFactoryAttachmentProjection projection,
+        MobileFactoryAttachmentDeployState state,
+        IReadOnlyList<Vector2I> previewWorldCells,
+        IReadOnlyList<Vector2I> reservedWorldCells,
+        IReadOnlyList<Vector2I> activeWorldCells,
+        string reason = "")
+    {
+        Attachment = attachment;
+        Projection = projection;
+        State = state;
+        PreviewWorldCells = previewWorldCells;
+        ReservedWorldCells = reservedWorldCells;
+        ActiveWorldCells = activeWorldCells;
+        Reason = reason;
+    }
+
+    public MobileFactoryBoundaryAttachmentStructure Attachment { get; }
+    public MobileFactoryAttachmentProjection Projection { get; }
+    public MobileFactoryAttachmentDeployState State { get; }
+    public IReadOnlyList<Vector2I> PreviewWorldCells { get; }
+    public IReadOnlyList<Vector2I> ReservedWorldCells { get; }
+    public IReadOnlyList<Vector2I> ActiveWorldCells { get; }
+    public string Reason { get; }
+    public bool CanDeploy => State != MobileFactoryAttachmentDeployState.Blocked;
+}
+
+public sealed class MobileFactoryDeploymentEvaluation
+{
+    public MobileFactoryDeploymentEvaluation(
+        MobileFactoryDeployState state,
+        IReadOnlyList<Vector2I> footprintCells,
+        IReadOnlyList<MobileFactoryAttachmentDeploymentEvaluation> attachmentEvaluations,
+        string reason = "")
+    {
+        State = state;
+        FootprintCells = footprintCells;
+        AttachmentEvaluations = attachmentEvaluations;
+        Reason = reason;
+    }
+
+    public MobileFactoryDeployState State { get; }
+    public IReadOnlyList<Vector2I> FootprintCells { get; }
+    public IReadOnlyList<MobileFactoryAttachmentDeploymentEvaluation> AttachmentEvaluations { get; }
+    public string Reason { get; }
+    public bool CanDeploy => State != MobileFactoryDeployState.Blocked;
+    public bool HasWarnings => State == MobileFactoryDeployState.Warning;
+}
+
 public static class MobileFactoryBoundaryAttachmentCatalog
 {
     private static readonly Dictionary<BuildPrototypeKind, MobileFactoryBoundaryAttachmentDefinition> Definitions = new()

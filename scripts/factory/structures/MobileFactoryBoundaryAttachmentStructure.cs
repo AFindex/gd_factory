@@ -25,6 +25,31 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         return true;
     }
 
+    public virtual MobileFactoryAttachmentDeploymentEvaluation EvaluateDeployment(GridManager worldSite, MobileFactoryAttachmentProjection projection)
+    {
+        var previewWorldCells = new List<Vector2I>(projection.WorldCells);
+        if (!CanBindToWorld(worldSite, projection, out var reason))
+        {
+            return new MobileFactoryAttachmentDeploymentEvaluation(
+                this,
+                projection,
+                MobileFactoryAttachmentDeployState.Blocked,
+                previewWorldCells,
+                new List<Vector2I>(),
+                new List<Vector2I>(),
+                reason);
+        }
+
+        return new MobileFactoryAttachmentDeploymentEvaluation(
+            this,
+            projection,
+            MobileFactoryAttachmentDeployState.Connected,
+            previewWorldCells,
+            new List<Vector2I>(GetReservedWorldCells(worldSite, projection)),
+            previewWorldCells,
+            string.Empty);
+    }
+
     public void BindToWorld(GridManager worldSite, MobileFactoryAttachmentProjection projection)
     {
         _worldSite = worldSite;
@@ -479,20 +504,35 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
         return deposit is not null && activeStakeCells.Count > 0;
     }
 
-    public override IReadOnlyList<Vector2I> GetReservedWorldCells(GridManager worldSite, MobileFactoryAttachmentProjection projection)
+    public override MobileFactoryAttachmentDeploymentEvaluation EvaluateDeployment(GridManager worldSite, MobileFactoryAttachmentProjection projection)
     {
-        var reservedCells = new List<Vector2I> { projection.WorldPortCell };
+        var previewWorldCells = new List<Vector2I>(projection.WorldCells);
+        var reservedWorldCells = new List<Vector2I>(projection.WorldCells);
         if (!TryResolveMiningDeployment(worldSite, projection, out _, out var activeStakeCells))
         {
-            return reservedCells;
+            return new MobileFactoryAttachmentDeploymentEvaluation(
+                this,
+                projection,
+                MobileFactoryAttachmentDeployState.Optional,
+                previewWorldCells,
+                reservedWorldCells,
+                new List<Vector2I>(),
+                "采矿输入端口未覆盖矿点，将以待机状态部署。");
         }
 
-        for (var index = 0; index < activeStakeCells.Count; index++)
-        {
-            reservedCells.Add(activeStakeCells[index]);
-        }
+        return new MobileFactoryAttachmentDeploymentEvaluation(
+            this,
+            projection,
+            MobileFactoryAttachmentDeployState.Connected,
+            previewWorldCells,
+            reservedWorldCells,
+            new List<Vector2I>(activeStakeCells),
+            string.Empty);
+    }
 
-        return reservedCells;
+    public override IReadOnlyList<Vector2I> GetReservedWorldCells(GridManager worldSite, MobileFactoryAttachmentProjection projection)
+    {
+        return new List<Vector2I>(projection.WorldCells);
     }
 
     public override void SimulationStep(SimulationController simulation, double stepSeconds)
