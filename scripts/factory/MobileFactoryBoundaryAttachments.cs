@@ -157,10 +157,12 @@ public static class MobileFactoryBoundaryAttachmentCatalog
             new[] { Vector2I.Right },
             new[]
             {
+                new Vector2I(2, 0),
+                new Vector2I(3, 0),
+                new Vector2I(2, -1),
+                new Vector2I(3, -1),
                 new Vector2I(2, 1),
-                new Vector2I(3, 1),
-                new Vector2I(2, 2),
-                new Vector2I(3, 2)
+                new Vector2I(3, 1)
             })
     };
 
@@ -194,7 +196,13 @@ public static class MobileFactoryBoundaryAttachmentGeometry
 
     public static List<Vector2I> GetExteriorStencilCells(MobileFactoryBoundaryAttachmentDefinition definition, Vector2I anchorCell, FacingDirection facing)
     {
-        return ResolveLocalCells(definition.ExteriorStencil, anchorCell, facing);
+        var previewStencil = new List<Vector2I>(definition.ExteriorStencil.Count);
+        for (var i = 0; i < definition.ExteriorStencil.Count; i++)
+        {
+            previewStencil.Add(definition.ExteriorStencil[i] - Vector2I.Right);
+        }
+
+        return ResolveLocalCells(previewStencil, anchorCell, facing);
     }
 
     public static MobileFactoryAttachmentProjection CreateProjection(

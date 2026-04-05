@@ -46,6 +46,13 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
     {
     }
 
+    public override void ApplyDamage(float damage, SimulationController simulation)
+    {
+        // Boundary attachments are modular deployment equipment on the mobile factory.
+        // They can be pressured in combat, but should not be permanently deleted by stray hits.
+        base.ApplyDamage(0.0f, simulation);
+    }
+
     public virtual Vector3 GetWorldConnectorEndWorld(GridManager worldGrid, MobileFactoryAttachmentProjection projection)
     {
         var cellCenter = worldGrid.CellToWorld(projection.WorldPortCell);
@@ -503,15 +510,29 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
             });
 
             payloadRoot.AddChild(stakeRoot);
+        }
+
+        for (var rowIndex = 0; rowIndex < 3; rowIndex++)
+        {
+            payloadRoot.AddChild(new MeshInstance3D
+            {
+                Name = $"PayloadRowLink_{rowIndex}",
+                Mesh = new BoxMesh { Size = new Vector3(0.12f, 0.08f, 0.001f) },
+                MaterialOverride = new StandardMaterial3D
+                {
+                    AlbedoColor = AttachmentDefinition.ConnectorColor.Darkened(0.10f),
+                    Roughness = 0.64f
+                }
+            });
 
             payloadRoot.AddChild(new MeshInstance3D
             {
-                Name = $"PayloadLink_{index}",
-                Mesh = new BoxMesh { Size = new Vector3(0.14f, 0.08f, 0.001f) },
+                Name = $"PayloadCollectorLink_{rowIndex}",
+                Mesh = new BoxMesh { Size = new Vector3(0.12f, 0.08f, 0.001f) },
                 MaterialOverride = new StandardMaterial3D
                 {
-                    AlbedoColor = AttachmentDefinition.ConnectorColor.Darkened(0.08f),
-                    Roughness = 0.62f
+                    AlbedoColor = AttachmentDefinition.ConnectorColor.Darkened(0.02f),
+                    Roughness = 0.60f
                 }
             });
         }
@@ -574,16 +595,53 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
 
         var cellCentersWorld = new List<Vector3>(projection.WorldCells.Count);
         var centerWorld = Vector3.Zero;
+        var localPositions = new Vector3[projection.WorldCells.Count];
+        var localCells = new Vector2I[projection.WorldCells.Count];
+        var nearColumnByRow = new int[3] { -1, -1, -1 };
+        var farColumnByRow = new int[3] { -1, -1, -1 };
+        var relayColumn = int.MinValue;
         for (var index = 0; index < projection.WorldCells.Count; index++)
         {
             var world = worldGrid.CellToWorld(projection.WorldCells[index]);
             cellCentersWorld.Add(world);
             centerWorld += world;
+
+            var relativeCell = projection.WorldCells[index] - projection.WorldPortCell;
+            var localCell = FactoryDirection.RotateOffset(relativeCell, FactoryDirection.Opposite(projection.WorldFacing));
+            localCells[index] = localCell;
+            if (projection.WorldCells[index] == projection.WorldPortCell)
+            {
+                relayColumn = localCell.X;
+            }
+        }
+
+        if (relayColumn == int.MinValue)
+        {
+            relayColumn = localCells.Length > 0 ? localCells[0].X : 0;
+        }
+
+        for (var index = 0; index < projection.WorldCells.Count; index++)
+        {
+            var localCell = localCells[index];
+            var row = Mathf.Clamp(localCell.Y + 1, 0, 2);
+            if (localCell.X == relayColumn)
+            {
+                nearColumnByRow[row] = index;
+            }
+            else
+            {
+                farColumnByRow[row] = index;
+            }
         }
 
         if (cellCentersWorld.Count > 0)
         {
             centerWorld /= cellCentersWorld.Count;
+        }
+
+        for (var index = 0; index < cellCentersWorld.Count; index++)
+        {
+            localPositions[index] = cellCentersWorld[index] - centerWorld;
         }
 
         var payloadCenterWorld = centerWorld + new Vector3(0.0f, 0.08f, 0.0f);
@@ -593,31 +651,28 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
         payloadRoot.Rotation = new Vector3(0.0f, -root.Rotation.Y, 0.0f);
         payloadRoot.Visible = true;
 
-        var nearestIndex = 0;
-        var nearestDistanceSquared = float.PositiveInfinity;
-        for (var index = 0; index < cellCentersWorld.Count; index++)
+        var relayIndex = -1;
+        for (var index = 0; index < projection.WorldCells.Count; index++)
         {
-            var distanceSquared = cellCentersWorld[index].DistanceSquaredTo(worldGrid.CellToWorld(projection.WorldPortCell));
-            if (distanceSquared < nearestDistanceSquared)
+            if (projection.WorldCells[index] == projection.WorldPortCell)
             {
-                nearestDistanceSquared = distanceSquared;
-                nearestIndex = index;
+                relayIndex = index;
+                break;
             }
         }
 
-        var towardsPort = worldGrid.CellToWorld(projection.WorldPortCell) - cellCentersWorld[nearestIndex];
-        towardsPort.Y = 0.0f;
-        if (towardsPort.LengthSquared() <= 0.0001f)
+        if (relayIndex < 0)
         {
-            towardsPort = -FactoryDirection.ToWorldForward(FactoryDirection.ToYRotationRadians(projection.WorldFacing));
-        }
-        else
-        {
-            towardsPort = towardsPort.Normalized();
+            relayIndex = nearColumnByRow[1] >= 0 ? nearColumnByRow[1] : 0;
         }
 
-        var relayLocal = cellCentersWorld[nearestIndex] - centerWorld + towardsPort * (worldGrid.CellSize * 0.42f);
-        var relayFacing = Mathf.Atan2(-towardsPort.Z, towardsPort.X);
+        var relayWorld = cellCentersWorld[relayIndex];
+        var relayLocal = localPositions[relayIndex];
+
+        var towardsFactory = FactoryDirection.ToWorldForward(
+            FactoryDirection.ToYRotationRadians(FactoryDirection.Opposite(projection.WorldFacing)));
+        var relayFacing = Mathf.Atan2(-towardsFactory.Z, towardsFactory.X);
+
 
         if (payloadRoot.GetNodeOrNull<MeshInstance3D>("PayloadRelayBase") is MeshInstance3D relayBase)
         {
@@ -639,62 +694,122 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
 
         if (payloadRoot.GetNodeOrNull<MeshInstance3D>("PayloadRelayNozzle") is MeshInstance3D relayNozzle)
         {
-            relayNozzle.Position = relayLocal + towardsPort * (worldGrid.CellSize * 0.24f) + new Vector3(0.0f, 0.30f, 0.0f);
+            relayNozzle.Position = relayLocal + towardsFactory * (worldGrid.CellSize * 0.24f) + new Vector3(0.0f, 0.30f, 0.0f);
             relayNozzle.Rotation = new Vector3(0.0f, relayFacing, 0.0f);
         }
 
-        for (var index = 0; index < cellCentersWorld.Count; index++)
+        for (var index = 0; index < projection.WorldCells.Count; index++)
         {
-            var localWorldAligned = cellCentersWorld[index] - centerWorld;
-            var toRelay = relayLocal - localWorldAligned;
-            toRelay.Y = 0.0f;
-            var relayDirection = toRelay.LengthSquared() > 0.0001f ? toRelay.Normalized() : towardsPort;
-            var relayYaw = Mathf.Atan2(-relayDirection.Z, relayDirection.X);
+            var localWorldAligned = localPositions[index];
+            Vector3 desiredDirection;
+            var rowIndex = -1;
+            var isNearColumn = false;
+            for (var row = 0; row < 3; row++)
+            {
+                if (nearColumnByRow[row] == index)
+                {
+                    rowIndex = row;
+                    isNearColumn = true;
+                    break;
+                }
+                if (farColumnByRow[row] == index)
+                {
+                    rowIndex = row;
+                    break;
+                }
+            }
+
+            if (!isNearColumn && rowIndex >= 0 && nearColumnByRow[rowIndex] >= 0)
+            {
+                desiredDirection = cellCentersWorld[nearColumnByRow[rowIndex]] - cellCentersWorld[index];
+            }
+            else if (rowIndex >= 0 && rowIndex != 1)
+            {
+                desiredDirection = relayWorld - cellCentersWorld[index];
+            }
+            else
+            {
+                desiredDirection = towardsFactory;
+            }
+
+            desiredDirection.Y = 0.0f;
+            if (desiredDirection.LengthSquared() <= 0.0001f)
+            {
+                desiredDirection = towardsFactory;
+            }
+            else
+            {
+                desiredDirection = desiredDirection.Normalized();
+            }
+
+            var relayYaw = Mathf.Atan2(-desiredDirection.Z, desiredDirection.X);
 
             if (payloadRoot.GetNodeOrNull<Node3D>($"PayloadStake_{index}") is Node3D stakeRoot)
             {
                 stakeRoot.Position = localWorldAligned;
                 stakeRoot.Rotation = new Vector3(0.0f, relayYaw, 0.0f);
             }
+        }
 
-            if (payloadRoot.GetNodeOrNull<MeshInstance3D>($"PayloadLink_{index}") is MeshInstance3D linkMesh)
+        for (var rowIndex = 0; rowIndex < 3; rowIndex++)
+        {
+            var leftIndex = farColumnByRow[rowIndex];
+            var rightIndex = nearColumnByRow[rowIndex];
+            if (leftIndex < 0 || rightIndex < 0)
             {
-                var linkLength = Mathf.Max(0.12f, new Vector2(toRelay.X, toRelay.Z).Length());
-                linkMesh.Mesh = new BoxMesh { Size = new Vector3(0.12f, 0.08f, linkLength) };
-                linkMesh.Position = (localWorldAligned + relayLocal) * 0.5f + new Vector3(0.0f, 0.26f, 0.0f);
-                linkMesh.Rotation = new Vector3(0.0f, Mathf.Atan2(toRelay.X, toRelay.Z), 0.0f);
+                if (payloadRoot.GetNodeOrNull<MeshInstance3D>($"PayloadRowLink_{rowIndex}") is MeshInstance3D hiddenRow)
+                {
+                    hiddenRow.Visible = false;
+                }
+
+                if (payloadRoot.GetNodeOrNull<MeshInstance3D>($"PayloadCollectorLink_{rowIndex}") is MeshInstance3D hiddenCollector)
+                {
+                    hiddenCollector.Visible = false;
+                }
+
+                continue;
+            }
+
+            var leftLocal = localPositions[leftIndex];
+            var rightLocal = localPositions[rightIndex];
+            var rowVector = rightLocal - leftLocal;
+            var rowLength = Mathf.Max(0.12f, new Vector2(rowVector.X, rowVector.Z).Length());
+
+            if (payloadRoot.GetNodeOrNull<MeshInstance3D>($"PayloadRowLink_{rowIndex}") is MeshInstance3D rowLink)
+            {
+                rowLink.Mesh = new BoxMesh { Size = new Vector3(0.12f, 0.08f, rowLength) };
+                rowLink.Position = (leftLocal + rightLocal) * 0.5f + new Vector3(0.0f, 0.24f, 0.0f);
+                rowLink.Rotation = new Vector3(0.0f, Mathf.Atan2(rowVector.X, rowVector.Z), 0.0f);
+                rowLink.Visible = true;
+            }
+
+            if (rowIndex == 1)
+            {
+                if (payloadRoot.GetNodeOrNull<MeshInstance3D>($"PayloadCollectorLink_{rowIndex}") is MeshInstance3D hiddenCollector)
+                {
+                    hiddenCollector.Visible = false;
+                }
+                continue;
+            }
+
+            var relayVector = relayLocal - rightLocal;
+            var relayLength = Mathf.Max(0.12f, new Vector2(relayVector.X, relayVector.Z).Length());
+            if (payloadRoot.GetNodeOrNull<MeshInstance3D>($"PayloadCollectorLink_{rowIndex}") is MeshInstance3D collectorLink)
+            {
+                collectorLink.Mesh = new BoxMesh { Size = new Vector3(0.12f, 0.08f, relayLength) };
+                collectorLink.Position = (rightLocal + relayLocal) * 0.5f + new Vector3(0.0f, 0.26f, 0.0f);
+                collectorLink.Rotation = new Vector3(0.0f, Mathf.Atan2(relayVector.X, relayVector.Z), 0.0f);
+                collectorLink.Visible = true;
             }
         }
     }
 
     public override Vector3 GetWorldConnectorEndWorld(GridManager worldGrid, MobileFactoryAttachmentProjection projection)
     {
-        var nearestCell = projection.WorldCells[0];
-        var nearestDistanceSquared = float.PositiveInfinity;
-        for (var index = 0; index < projection.WorldCells.Count; index++)
-        {
-            var distanceSquared = projection.WorldCells[index].DistanceSquaredTo(projection.WorldPortCell);
-            if (distanceSquared < nearestDistanceSquared)
-            {
-                nearestDistanceSquared = distanceSquared;
-                nearestCell = projection.WorldCells[index];
-            }
-        }
-
-        var nearestCenter = worldGrid.CellToWorld(nearestCell);
-        var towardsPort = worldGrid.CellToWorld(projection.WorldPortCell) - nearestCenter;
-        towardsPort.Y = 0.0f;
-        if (towardsPort.LengthSquared() <= 0.0001f)
-        {
-            towardsPort = -FactoryDirection.ToWorldForward(FactoryDirection.ToYRotationRadians(projection.WorldFacing));
-        }
-        else
-        {
-            towardsPort = towardsPort.Normalized();
-        }
-
-        var relayCenter = nearestCenter + towardsPort * (worldGrid.CellSize * 0.42f) + new Vector3(0.0f, 0.30f, 0.0f);
-        return relayCenter + towardsPort * (worldGrid.CellSize * 0.26f);
+        var relayCenter = worldGrid.CellToWorld(projection.WorldPortCell);
+        var towardsFactory = FactoryDirection.ToWorldForward(
+            FactoryDirection.ToYRotationRadians(FactoryDirection.Opposite(projection.WorldFacing)));
+        return relayCenter + towardsFactory * (worldGrid.CellSize * 0.34f) + new Vector3(0.0f, 0.30f, 0.0f);
     }
 
     protected override bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell)

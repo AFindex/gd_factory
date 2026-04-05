@@ -13,9 +13,12 @@ public partial class MobileFactoryDemo : Node3D
     private const float PowerLinkEndpointInset = FactoryConstants.CellSize * 0.22f;
     private const float PreviewPowerPoleWireHeight = 1.44f;
     private const int PreviewPowerPoleConnectionRangeCells = 6;
+    private const float MiningPortSmokeDeployTimeoutSeconds = 24.0f;
 
     private static readonly Vector2I AnchorA = new(-6, -3);
     private static readonly Vector2I AnchorB = new(2, 3);
+    private static readonly Vector2I MiningAnchorA = new(-17, -14);
+    private static readonly Vector2I MiningAnchorB = new(17, 12);
     private static readonly Vector2I BlockedAnchor = new(-1, 1);
     private static readonly BuildPrototypeKind[] InteriorPalette =
     {
@@ -77,7 +80,7 @@ public partial class MobileFactoryDemo : Node3D
         [BuildPrototypeKind.GunTurret] = new BuildPrototypeDefinition(BuildPrototypeKind.GunTurret, "机枪炮塔", new Color("CBD5E1"), "会跟随移动工厂整体旋转，对世界中的敌人自动转向并射击。"),
         [BuildPrototypeKind.OutputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.OutputPort, "输出端口", new Color("FB923C"), "将移动工厂内部物流送往世界网格。"),
         [BuildPrototypeKind.InputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.InputPort, "输入端口", new Color("60A5FA"), "把世界侧物流导入移动工厂内部。"),
-        [BuildPrototypeKind.MiningInputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.MiningInputPort, "采矿输入端口", new Color("34D399"), "部署后会展开一个 2x2 世界侧采矿头，直接把矿区资源送回移动工厂内部。"),
+        [BuildPrototypeKind.MiningInputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.MiningInputPort, "采矿输入端口", new Color("34D399"), "部署后会在工厂外侧展开一个贴边的 3x2 采矿阵列，并通过靠近车体的中转站把矿区资源送回移动工厂内部。"),
         [BuildPrototypeKind.Generator] = new BuildPrototypeDefinition(BuildPrototypeKind.Generator, "发电机", new Color("FB923C"), "消耗煤炭发电，为移动工厂内部设备提供基础电力。"),
         [BuildPrototypeKind.PowerPole] = new BuildPrototypeDefinition(BuildPrototypeKind.PowerPole, "电线杆", new Color("FDE68A"), "延伸移动工厂内部的供电覆盖，并可预览连线。"),
         [BuildPrototypeKind.Smelter] = new BuildPrototypeDefinition(BuildPrototypeKind.Smelter, "熔炉", new Color("CBD5E1"), "消耗电力把矿石炼成铁板，便于在内部试配生产链。"),
@@ -100,7 +103,7 @@ public partial class MobileFactoryDemo : Node3D
     private FactoryCombatDirector? _combatDirector;
     private readonly List<MeshInstance3D> _worldPreviewFootprintMeshes = new();
     private readonly List<MeshInstance3D> _worldPreviewPortMeshes = new();
-    private MeshInstance3D? _worldPreviewFacingArrow;
+    private Label3D? _worldPreviewFacingArrow;
     private MeshInstance3D? _interiorPreviewCell;
     private MeshInstance3D? _interiorPreviewArrow;
     private MeshInstance3D? _interiorPreviewPowerRange;
@@ -1465,11 +1468,10 @@ public partial class MobileFactoryDemo : Node3D
 
         if (_worldPreviewFacingArrow is not null)
         {
-            var center = GetPreviewCenter(_hoveredAnchor, _selectedDeployFacing);
             _worldPreviewFacingArrow.Visible = true;
-            _worldPreviewFacingArrow.Position = center + FactoryDirection.ToWorldForward(FactoryDirection.ToYRotationRadians(_selectedDeployFacing)) * (FactoryConstants.CellSize * 0.75f) + new Vector3(0.0f, 0.18f, 0.0f);
+            _worldPreviewFacingArrow.Position = GetPreviewFacingArrowPosition(_hoveredAnchor, _selectedDeployFacing);
             _worldPreviewFacingArrow.Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(_selectedDeployFacing), 0.0f);
-            ApplyPreviewColor(_worldPreviewFacingArrow, portColor.Lightened(0.1f));
+            _worldPreviewFacingArrow.Modulate = new Color(0.66f, 0.86f, 1.0f, 0.96f);
         }
     }
 
@@ -3228,10 +3230,15 @@ public partial class MobileFactoryDemo : Node3D
             _worldPreviewPortMeshes.Add(port);
         }
 
-        _worldPreviewFacingArrow = new MeshInstance3D { Name = "PreviewFacingArrow", Visible = false };
-        _worldPreviewFacingArrow.Mesh = new BoxMesh
+        _worldPreviewFacingArrow = new Label3D
         {
-            Size = new Vector3(FactoryConstants.CellSize * 0.42f, 0.16f, FactoryConstants.CellSize * 0.22f)
+            Name = "PreviewFacingArrow",
+            Visible = false,
+            Text = "➜",
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+            FontSize = 96,
+            OutlineSize = 6,
+            Scale = Vector3.One * 3.4f
         };
         _worldPreviewRoot.AddChild(_worldPreviewFacingArrow);
     }
@@ -3607,8 +3614,8 @@ public partial class MobileFactoryDemo : Node3D
         await ToSignal(GetTree().CreateTimer(0.25f), SceneTreeTimer.SignalName.Timeout);
 
         var swapped = ReplaceFocusedInputAttachmentWithMiningPort();
-        var anchorAValid = swapped && _mobileFactory.CanDeployAt(_grid, AnchorA, FacingDirection.East);
-        var anchorBValid = swapped && _mobileFactory.CanDeployAt(_grid, AnchorB, FacingDirection.East);
+        var anchorAValid = swapped && _mobileFactory.CanDeployAt(_grid, MiningAnchorA, FacingDirection.East);
+        var anchorBValid = swapped && _mobileFactory.CanDeployAt(_grid, MiningAnchorB, FacingDirection.East);
         var rejectsNoDeposit = swapped
             && TryFindMiningBlockedAnchor(FacingDirection.East, out var blockedAnchor)
             && !_mobileFactory.CanDeployAt(_grid, blockedAnchor, FacingDirection.East);
@@ -3619,11 +3626,11 @@ public partial class MobileFactoryDemo : Node3D
 
         SetControlMode(MobileFactoryControlMode.DeployPreview);
         _selectedDeployFacing = FacingDirection.East;
-        _hoveredAnchor = AnchorA;
+        _hoveredAnchor = MiningAnchorA;
         _hasHoveredAnchor = true;
-        _canDeployCurrentAnchor = _mobileFactory.CanDeployAt(_grid, AnchorA, FacingDirection.East);
+        _canDeployCurrentAnchor = _mobileFactory.CanDeployAt(_grid, MiningAnchorA, FacingDirection.East);
         ConfirmDeployPreview();
-        await WaitForCondition(() => _mobileFactory.State == MobileFactoryLifecycleState.Deployed, 4.5f);
+        await WaitForCondition(() => _mobileFactory.State != MobileFactoryLifecycleState.AutoDeploying, MiningPortSmokeDeployTimeoutSeconds);
 
         var deployedAtAnchorA = _mobileFactory.State == MobileFactoryLifecycleState.Deployed;
         await ToSignal(GetTree().CreateTimer(0.9f), SceneTreeTimer.SignalName.Timeout);
@@ -3643,11 +3650,11 @@ public partial class MobileFactoryDemo : Node3D
         var deliveredBeforeAnchorB = sink?.DeliveredTotal ?? 0;
         SetControlMode(MobileFactoryControlMode.DeployPreview);
         _selectedDeployFacing = FacingDirection.East;
-        _hoveredAnchor = AnchorB;
+        _hoveredAnchor = MiningAnchorB;
         _hasHoveredAnchor = true;
-        _canDeployCurrentAnchor = _mobileFactory.CanDeployAt(_grid, AnchorB, FacingDirection.East);
+        _canDeployCurrentAnchor = _mobileFactory.CanDeployAt(_grid, MiningAnchorB, FacingDirection.East);
         ConfirmDeployPreview();
-        await WaitForCondition(() => _mobileFactory.State == MobileFactoryLifecycleState.Deployed, 4.5f);
+        await WaitForCondition(() => _mobileFactory.State != MobileFactoryLifecycleState.AutoDeploying, MiningPortSmokeDeployTimeoutSeconds);
 
         var deployedAtAnchorB = _mobileFactory.State == MobileFactoryLifecycleState.Deployed;
         await ToSignal(GetTree().CreateTimer(0.9f), SceneTreeTimer.SignalName.Timeout);
@@ -4156,6 +4163,19 @@ public partial class MobileFactoryDemo : Node3D
         {
             _scenarioSinks.Add(sink);
         }
+    }
+
+    private Vector3 GetPreviewFacingArrowPosition(Vector2I anchorCell, FacingDirection facing)
+    {
+        if (_grid is null || _mobileFactory is null)
+        {
+            return Vector3.Zero;
+        }
+
+        var center = GetPreviewCenter(anchorCell, facing);
+        return center
+            + FactoryDirection.ToWorldForward(FactoryDirection.ToYRotationRadians(facing)) * (FactoryConstants.CellSize * 0.75f)
+            + new Vector3(0.0f, 0.44f, 0.0f);
     }
 
     private Vector3 GetPreviewCenter(Vector2I anchorCell, FacingDirection facing)
