@@ -2655,6 +2655,11 @@ public partial class FactoryDemo : Node3D
             !FactoryItemCatalog.GetAccentColor(FactoryItemKind.Coal).IsEqualApprox(FactoryItemCatalog.GetAccentColor(FactoryItemKind.IronOre))
             && !FactoryItemCatalog.GetAccentColor(FactoryItemKind.IronOre).IsEqualApprox(FactoryItemCatalog.GetAccentColor(FactoryItemKind.CopperOre))
             && !FactoryItemCatalog.GetAccentColor(FactoryItemKind.AmmoMagazine).IsEqualApprox(FactoryItemCatalog.GetAccentColor(FactoryItemKind.HighVelocityAmmo));
+        var iconsPresent =
+            FactoryItemCatalog.GetIconTexture(FactoryItemKind.IronOre) is not null
+            && FactoryItemCatalog.GetIconTexture(FactoryItemKind.IronPlate) is not null
+            && FactoryItemCatalog.GetIconTexture(FactoryItemKind.CopperWire) is not null
+            && FactoryItemCatalog.GetIconTexture(FactoryItemKind.HighVelocityAmmo) is not null;
 
         placeholderVisual.QueueFree();
         billboardVisual.QueueFree();
@@ -2665,7 +2670,8 @@ public partial class FactoryDemo : Node3D
             && billboardMesh.MaterialOverride is StandardMaterial3D billboardMaterial
             && billboardMaterial.BillboardMode == BaseMaterial3D.BillboardModeEnum.Enabled
             && modelMeshCount >= 2
-            && distinctBaselineColors;
+            && distinctBaselineColors
+            && iconsPresent;
     }
 
     private static MeshInstance3D? FindFirstMesh(Node node)

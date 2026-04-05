@@ -207,11 +207,14 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
             for (var index = 0; index < AvailableRecipes.Count; index++)
             {
                 var recipe = AvailableRecipes[index];
+                var previewItemKind = GetRecipePreviewItemKind(recipe);
                 options.Add(new FactoryRecipeOptionModel(
                     recipe.Id,
                     recipe.DisplayName,
                     BuildRecipeSummary(recipe),
-                    index == _activeRecipeIndex));
+                    index == _activeRecipeIndex,
+                    FactoryPresentation.GetItemAccentColor(previewItemKind),
+                    FactoryPresentation.GetItemIcon(previewItemKind)));
             }
 
             recipeSection = new FactoryRecipeSectionModel(
@@ -294,6 +297,21 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
         var outputText = string.Join(" + ", BuildOutputText(recipe.Outputs));
         var powerText = recipe.PowerDemand > 0.0f ? $" | {recipe.PowerDemand:0} kW" : string.Empty;
         return $"{inputText} -> {outputText} | {recipe.CycleSeconds:0.00}s{powerText}";
+    }
+
+    protected virtual FactoryItemKind GetRecipePreviewItemKind(FactoryRecipeDefinition recipe)
+    {
+        if (recipe.Outputs.Count > 0)
+        {
+            return recipe.Outputs[0].ItemKind;
+        }
+
+        if (recipe.Inputs.Count > 0)
+        {
+            return recipe.Inputs[0].ItemKind;
+        }
+
+        return FactoryItemKind.GenericCargo;
     }
 
     private bool CanAcceptInput(FactoryItem item, Vector2I sourceCell)

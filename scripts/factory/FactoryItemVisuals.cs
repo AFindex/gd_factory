@@ -41,6 +41,7 @@ public sealed class FactoryItemDefinition
         string displayName,
         Color accentColor,
         FactoryTransportVisualProfile visualProfile,
+        Texture2D? iconTexture = null,
         bool isFuel = false,
         float fuelValueSeconds = 0.0f)
     {
@@ -48,6 +49,7 @@ public sealed class FactoryItemDefinition
         DisplayName = displayName;
         AccentColor = accentColor;
         VisualProfile = visualProfile;
+        IconTexture = iconTexture ?? visualProfile.Texture;
         IsFuel = isFuel;
         FuelValueSeconds = Mathf.Max(0.0f, fuelValueSeconds);
     }
@@ -56,6 +58,7 @@ public sealed class FactoryItemDefinition
     public string DisplayName { get; }
     public Color AccentColor { get; }
     public FactoryTransportVisualProfile VisualProfile { get; }
+    public Texture2D? IconTexture { get; }
     public bool IsFuel { get; }
     public float FuelValueSeconds { get; }
 }
@@ -87,6 +90,11 @@ public static partial class FactoryItemCatalog
         return GetDefinition(itemKind).IsFuel;
     }
 
+    public static Texture2D? GetIconTexture(FactoryItemKind itemKind)
+    {
+        return GetDefinition(itemKind).IconTexture;
+    }
+
     public static bool TryGetFuelValueSeconds(FactoryItemKind itemKind, out float burnSeconds)
     {
         burnSeconds = GetDefinition(itemKind).FuelValueSeconds;
@@ -102,7 +110,8 @@ public static partial class FactoryItemCatalog
                 FactoryItemKind.GenericCargo,
                 "基础货物",
                 GenericTint,
-                new FactoryTransportVisualProfile(GenericTint)),
+                new FactoryTransportVisualProfile(GenericTint),
+                iconTexture: textures["generic-cargo"]),
             [FactoryItemKind.Coal] = new FactoryItemDefinition(
                 FactoryItemKind.Coal,
                 "煤矿",
@@ -111,13 +120,15 @@ public static partial class FactoryItemCatalog
                     new Color("5B4636"),
                     texture: textures["coal"],
                     texturedMeshScale: new Vector3(0.22f, 0.18f, 0.20f)),
+                iconTexture: textures["coal"],
                 isFuel: true,
                 fuelValueSeconds: 12.0f),
             [FactoryItemKind.IronOre] = new FactoryItemDefinition(
                 FactoryItemKind.IronOre,
                 "铁矿石",
                 new Color("64748B"),
-                new FactoryTransportVisualProfile(new Color("64748B"), placeholderScale: new Vector3(0.20f, 0.18f, 0.20f))),
+                new FactoryTransportVisualProfile(new Color("64748B"), placeholderScale: new Vector3(0.20f, 0.18f, 0.20f)),
+                iconTexture: textures["iron-ore"]),
             [FactoryItemKind.CopperOre] = new FactoryItemDefinition(
                 FactoryItemKind.CopperOre,
                 "铜矿石",
@@ -125,22 +136,26 @@ public static partial class FactoryItemCatalog
                 new FactoryTransportVisualProfile(
                     new Color("C2410C"),
                     texture: textures["copper-ore"],
-                    texturedMeshScale: new Vector3(0.20f, 0.18f, 0.20f))),
+                    texturedMeshScale: new Vector3(0.20f, 0.18f, 0.20f)),
+                iconTexture: textures["copper-ore"]),
             [FactoryItemKind.IronPlate] = new FactoryItemDefinition(
                 FactoryItemKind.IronPlate,
                 "铁板",
                 new Color("CBD5E1"),
-                new FactoryTransportVisualProfile(new Color("CBD5E1"), placeholderScale: new Vector3(0.24f, 0.08f, 0.18f))),
+                new FactoryTransportVisualProfile(new Color("CBD5E1"), placeholderScale: new Vector3(0.24f, 0.08f, 0.18f)),
+                iconTexture: textures["iron-plate"]),
             [FactoryItemKind.CopperPlate] = new FactoryItemDefinition(
                 FactoryItemKind.CopperPlate,
                 "铜板",
                 new Color("FB923C"),
-                new FactoryTransportVisualProfile(new Color("FB923C"), placeholderScale: new Vector3(0.24f, 0.08f, 0.18f))),
+                new FactoryTransportVisualProfile(new Color("FB923C"), placeholderScale: new Vector3(0.24f, 0.08f, 0.18f)),
+                iconTexture: textures["copper-plate"]),
             [FactoryItemKind.SteelPlate] = new FactoryItemDefinition(
                 FactoryItemKind.SteelPlate,
                 "钢板",
                 new Color("94A3B8"),
-                new FactoryTransportVisualProfile(new Color("94A3B8"), placeholderScale: new Vector3(0.26f, 0.08f, 0.18f))),
+                new FactoryTransportVisualProfile(new Color("94A3B8"), placeholderScale: new Vector3(0.26f, 0.08f, 0.18f)),
+                iconTexture: textures["steel-plate"]),
             [FactoryItemKind.Gear] = new FactoryItemDefinition(
                 FactoryItemKind.Gear,
                 "齿轮",
@@ -148,7 +163,8 @@ public static partial class FactoryItemCatalog
                 new FactoryTransportVisualProfile(
                     new Color("FBBF24"),
                     texture: textures["gear"],
-                    modelFactory: FactoryTransportModelLibrary.CreateGearModel)),
+                    modelFactory: FactoryTransportModelLibrary.CreateGearModel),
+                iconTexture: textures["gear"]),
             [FactoryItemKind.CopperWire] = new FactoryItemDefinition(
                 FactoryItemKind.CopperWire,
                 "铜线",
@@ -158,7 +174,8 @@ public static partial class FactoryItemCatalog
                     texture: textures["copper-wire"],
                     billboardScale: new Vector2(0.30f, 0.30f),
                     allowTexturedMeshFallback: false,
-                    allowBillboardFallback: true)),
+                    allowBillboardFallback: true),
+                iconTexture: textures["copper-wire"]),
             [FactoryItemKind.CircuitBoard] = new FactoryItemDefinition(
                 FactoryItemKind.CircuitBoard,
                 "电路板",
@@ -168,7 +185,8 @@ public static partial class FactoryItemCatalog
                     texture: textures["circuit-board"],
                     billboardScale: new Vector2(0.32f, 0.28f),
                     allowTexturedMeshFallback: false,
-                    allowBillboardFallback: true)),
+                    allowBillboardFallback: true),
+                iconTexture: textures["circuit-board"]),
             [FactoryItemKind.MachinePart] = new FactoryItemDefinition(
                 FactoryItemKind.MachinePart,
                 "机加工件",
@@ -176,7 +194,8 @@ public static partial class FactoryItemCatalog
                 new FactoryTransportVisualProfile(
                     new Color("8B5CF6"),
                     texture: textures["machine-part"],
-                    modelFactory: FactoryTransportModelLibrary.CreateMachinePartModel)),
+                    modelFactory: FactoryTransportModelLibrary.CreateMachinePartModel),
+                iconTexture: textures["machine-part"]),
             [FactoryItemKind.AmmoMagazine] = new FactoryItemDefinition(
                 FactoryItemKind.AmmoMagazine,
                 "弹药",
@@ -184,7 +203,8 @@ public static partial class FactoryItemCatalog
                 new FactoryTransportVisualProfile(
                     new Color("FACC15"),
                     texture: textures["ammo-magazine"],
-                    modelFactory: FactoryTransportModelLibrary.CreateAmmoMagazineModel)),
+                    modelFactory: FactoryTransportModelLibrary.CreateAmmoMagazineModel),
+                iconTexture: textures["ammo-magazine"]),
             [FactoryItemKind.HighVelocityAmmo] = new FactoryItemDefinition(
                 FactoryItemKind.HighVelocityAmmo,
                 "高速弹药",
@@ -193,7 +213,8 @@ public static partial class FactoryItemCatalog
                     new Color("F97316"),
                     texture: textures["high-velocity-ammo"],
                     texturedMeshScale: new Vector3(0.24f, 0.10f, 0.10f),
-                    billboardScale: new Vector2(0.34f, 0.24f))),
+                    billboardScale: new Vector2(0.34f, 0.24f)),
+                iconTexture: textures["high-velocity-ammo"]),
         };
     }
 }
@@ -310,8 +331,13 @@ internal static class FactoryGeneratedItemTextureLibrary
     {
         return new Dictionary<string, Texture2D>
         {
+            ["generic-cargo"] = CreateGenericCargoTexture(),
             ["coal"] = CreateCoalTexture(),
+            ["iron-ore"] = CreateIronOreTexture(),
             ["copper-ore"] = CreateCopperOreTexture(),
+            ["iron-plate"] = CreatePlateTexture(new Color("CBD5E1"), new Color("64748B")),
+            ["copper-plate"] = CreatePlateTexture(new Color("FB923C"), new Color("9A3412")),
+            ["steel-plate"] = CreatePlateTexture(new Color("94A3B8"), new Color("475569")),
             ["gear"] = CreateGearTexture(),
             ["copper-wire"] = CreateCopperWireTexture(),
             ["circuit-board"] = CreateCircuitBoardTexture(),
@@ -319,6 +345,15 @@ internal static class FactoryGeneratedItemTextureLibrary
             ["ammo-magazine"] = CreateAmmoTexture(new Color("FACC15"), new Color("78350F")),
             ["high-velocity-ammo"] = CreateAmmoTexture(new Color("F97316"), new Color("5B4636")),
         };
+    }
+
+    private static Texture2D CreateGenericCargoTexture()
+    {
+        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
+        FillRect(image, new Rect2I(5, 6, 22, 20), new Color("7DD3FC"));
+        FillRect(image, new Rect2I(9, 10, 14, 12), new Color("E0F2FE"));
+        FillRect(image, new Rect2I(12, 13, 8, 6), new Color("0C4A6E"));
+        return ImageTexture.CreateFromImage(image);
     }
 
     private static Texture2D CreateCoalTexture()
@@ -336,6 +371,25 @@ internal static class FactoryGeneratedItemTextureLibrary
         FillCircle(image, 10, 12, 6, new Color("9A3412"));
         FillCircle(image, 18, 12, 6, new Color("EA580C"));
         FillCircle(image, 14, 19, 7, new Color("C2410C"));
+        return ImageTexture.CreateFromImage(image);
+    }
+
+    private static Texture2D CreateIronOreTexture()
+    {
+        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
+        FillCircle(image, 10, 12, 6, new Color("475569"));
+        FillCircle(image, 18, 12, 6, new Color("64748B"));
+        FillCircle(image, 14, 19, 7, new Color("94A3B8"));
+        return ImageTexture.CreateFromImage(image);
+    }
+
+    private static Texture2D CreatePlateTexture(Color plateColor, Color accentColor)
+    {
+        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
+        FillRect(image, new Rect2I(5, 10, 22, 12), plateColor);
+        FillRect(image, new Rect2I(7, 8, 18, 2), accentColor);
+        FillRect(image, new Rect2I(7, 22, 18, 2), accentColor.Darkened(0.1f));
+        FillRect(image, new Rect2I(9, 13, 14, 6), plateColor.Lightened(0.18f));
         return ImageTexture.CreateFromImage(image);
     }
 

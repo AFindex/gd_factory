@@ -334,7 +334,8 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
                 item is null ? null : item.Id.ToString(),
                 item is null ? null : FactoryPresentation.GetItemLabel(item),
                 item is null ? "空槽位" : $"槽位 ({state.Position.X}, {state.Position.Y})",
-                item is null ? new Color("475569") : FactoryPresentation.GetItemAccentColor(item.ItemKind)));
+                item is null ? new Color("475569") : FactoryPresentation.GetItemAccentColor(item.ItemKind),
+                item is null ? null : FactoryPresentation.GetItemIcon(item.ItemKind)));
         }
 
         return new FactoryInventorySectionModel(inventoryId, title, inventory.GridSize, slots, allowMove);

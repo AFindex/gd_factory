@@ -159,13 +159,15 @@ public sealed class FactoryInventorySlotModel
         string? itemId,
         string? itemLabel,
         string? itemDescription,
-        Color accentColor)
+        Color accentColor,
+        Texture2D? iconTexture = null)
     {
         Position = position;
         ItemId = itemId;
         ItemLabel = itemLabel;
         ItemDescription = itemDescription;
         AccentColor = accentColor;
+        IconTexture = iconTexture;
     }
 
     public Vector2I Position { get; }
@@ -173,6 +175,7 @@ public sealed class FactoryInventorySlotModel
     public string? ItemLabel { get; }
     public string? ItemDescription { get; }
     public Color AccentColor { get; }
+    public Texture2D? IconTexture { get; }
     public bool HasItem => !string.IsNullOrWhiteSpace(ItemId);
 }
 
@@ -198,16 +201,26 @@ public sealed class FactoryRecipeSectionModel
 
 public sealed class FactoryRecipeOptionModel
 {
-    public FactoryRecipeOptionModel(string recipeId, string displayName, string summary, bool isActive)
+    public FactoryRecipeOptionModel(
+        string recipeId,
+        string displayName,
+        string summary,
+        bool isActive,
+        Color accentColor,
+        Texture2D? iconTexture = null)
     {
         RecipeId = recipeId;
         DisplayName = displayName;
         Summary = summary;
         IsActive = isActive;
+        AccentColor = accentColor;
+        IconTexture = iconTexture;
     }
 
     public string RecipeId { get; }
     public string DisplayName { get; }
     public string Summary { get; }
     public bool IsActive { get; }
+    public Color AccentColor { get; }
+    public Texture2D? IconTexture { get; }
 }

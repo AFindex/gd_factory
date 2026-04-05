@@ -201,6 +201,11 @@ public static class FactoryPresentation
         return FactoryItemCatalog.GetAccentColor(itemKind);
     }
 
+    public static Texture2D? GetItemIcon(FactoryItemKind itemKind)
+    {
+        return FactoryItemCatalog.GetIconTexture(itemKind);
+    }
+
     public static bool IsAmmoItem(FactoryItemKind itemKind)
     {
         return itemKind == FactoryItemKind.AmmoMagazine || itemKind == FactoryItemKind.HighVelocityAmmo;

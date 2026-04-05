@@ -10,6 +10,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         public required string InventoryId { get; init; }
         public required Vector2I SlotPosition { get; init; }
         public required bool HasItem { get; init; }
+        public required TextureRect Icon { get; init; }
         public required Label Label { get; init; }
         public required Label SubLabel { get; init; }
         public required Color AccentColor { get; init; }
@@ -25,6 +26,8 @@ public partial class FactoryStructureDetailWindow : PanelContainer
     private VBoxContainer? _inventorySections;
     private VBoxContainer? _recipeSections;
     private VBoxContainer? _actionSections;
+    private PanelContainer? _recipePickerPanel;
+    private VBoxContainer? _recipePickerList;
     private Label? _dragStateLabel;
     private readonly List<InventorySlotWidget> _slotWidgets = new();
     private Rect2 _dragBounds = new(Vector2.Zero, new Vector2(900.0f, 600.0f));
@@ -47,7 +50,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         Name = "FactoryStructureDetailWindow";
         Visible = false;
         MouseFilter = MouseFilterEnum.Stop;
-        CustomMinimumSize = new Vector2(348.0f, 280.0f);
+        CustomMinimumSize = new Vector2(522.0f, 280.0f);
         Size = CustomMinimumSize;
         AddThemeStyleboxOverride("panel", CreatePanelStyle(new Color("0F172A"), new Color("60A5FA"), 2));
 
@@ -102,14 +105,14 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         var scroll = new ScrollContainer();
         scroll.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         scroll.SizeFlagsVertical = SizeFlags.ExpandFill;
-        scroll.CustomMinimumSize = new Vector2(320.0f, 0.0f);
+        scroll.CustomMinimumSize = new Vector2(480.0f, 0.0f);
         root.AddChild(scroll);
         _scroll = scroll;
 
         var bodyMargin = new MarginContainer();
         bodyMargin.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         bodyMargin.SizeFlagsVertical = SizeFlags.ExpandFill;
-        bodyMargin.CustomMinimumSize = new Vector2(320.0f, 0.0f);
+        bodyMargin.CustomMinimumSize = new Vector2(480.0f, 0.0f);
         bodyMargin.AddThemeConstantOverride("margin_left", 10);
         bodyMargin.AddThemeConstantOverride("margin_top", 8);
         bodyMargin.AddThemeConstantOverride("margin_right", 10);
@@ -120,7 +123,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         var body = new VBoxContainer();
         body.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         body.SizeFlagsVertical = SizeFlags.ExpandFill;
-        body.CustomMinimumSize = new Vector2(300.0f, 0.0f);
+        body.CustomMinimumSize = new Vector2(450.0f, 0.0f);
         body.AddThemeConstantOverride("separation", 10);
         bodyMargin.AddChild(body);
         _body = body;
@@ -128,13 +131,13 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         _summaryLabel = CreateTextLabel(12, new Color("D7E6F2"));
         body.AddChild(_summaryLabel);
 
-        _inventorySections = new VBoxContainer();
-        _inventorySections.AddThemeConstantOverride("separation", 8);
-        body.AddChild(_inventorySections);
-
         _recipeSections = new VBoxContainer();
         _recipeSections.AddThemeConstantOverride("separation", 6);
         body.AddChild(_recipeSections);
+
+        _inventorySections = new VBoxContainer();
+        _inventorySections.AddThemeConstantOverride("separation", 8);
+        body.AddChild(_inventorySections);
 
         _actionSections = new VBoxContainer();
         _actionSections.AddThemeConstantOverride("separation", 6);
@@ -206,6 +209,8 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         _modelSignature = null;
         _dragSourceSlot = null;
         _hoveredSlot = null;
+        _recipePickerPanel = null;
+        _recipePickerList = null;
         UpdateDragStateLabel();
     }
 
@@ -280,7 +285,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                 var slot = section.Slots[slotIndex];
                 var slotPanel = new PanelContainer();
                 slotPanel.MouseFilter = MouseFilterEnum.Stop;
-                slotPanel.CustomMinimumSize = new Vector2(74.0f, 66.0f);
+                slotPanel.CustomMinimumSize = new Vector2(90.0f, 96.0f);
                 grid.AddChild(slotPanel);
 
                 var margin = new MarginContainer();
@@ -293,6 +298,28 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                 var body = new VBoxContainer();
                 body.AddThemeConstantOverride("separation", 2);
                 margin.AddChild(body);
+
+                var iconFrame = new PanelContainer();
+                iconFrame.CustomMinimumSize = new Vector2(34.0f, 34.0f);
+                iconFrame.SizeFlagsHorizontal = SizeFlags.ShrinkBegin;
+                body.AddChild(iconFrame);
+
+                var iconMargin = new MarginContainer();
+                iconMargin.SetAnchorsPreset(LayoutPreset.FullRect);
+                iconMargin.AddThemeConstantOverride("margin_left", 4);
+                iconMargin.AddThemeConstantOverride("margin_top", 4);
+                iconMargin.AddThemeConstantOverride("margin_right", 4);
+                iconMargin.AddThemeConstantOverride("margin_bottom", 4);
+                iconFrame.AddChild(iconMargin);
+
+                var iconRect = new TextureRect();
+                iconRect.MouseFilter = MouseFilterEnum.Ignore;
+                iconRect.ExpandMode = TextureRect.ExpandModeEnum.FitWidthProportional;
+                iconRect.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
+                iconRect.CustomMinimumSize = new Vector2(24.0f, 24.0f);
+                iconRect.Texture = slot.IconTexture;
+                iconRect.Visible = slot.IconTexture is not null;
+                iconMargin.AddChild(iconRect);
 
                 var itemLabel = CreateTextLabel(11, slot.HasItem ? Colors.White : new Color("7B8DA1"));
                 itemLabel.Text = slot.HasItem ? slot.ItemLabel ?? string.Empty : "空槽位";
@@ -310,6 +337,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                     InventoryId = section.InventoryId,
                     SlotPosition = slot.Position,
                     HasItem = slot.HasItem,
+                    Icon = iconRect,
                     Label = itemLabel,
                     SubLabel = posLabel,
                     AccentColor = slot.AccentColor
@@ -352,6 +380,8 @@ public partial class FactoryStructureDetailWindow : PanelContainer
 
         if (section is null)
         {
+            _recipePickerPanel = null;
+            _recipePickerList = null;
             return;
         }
 
@@ -366,19 +396,133 @@ public partial class FactoryStructureDetailWindow : PanelContainer
             _recipeSections.AddChild(description);
         }
 
+        FactoryRecipeOptionModel? activeOption = null;
         for (var index = 0; index < section.Options.Count; index++)
         {
             var option = section.Options[index];
-            var button = new Button();
-            button.Text = $"{option.DisplayName} | {option.Summary}";
-            button.Alignment = HorizontalAlignment.Left;
-            button.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
-            button.CustomMinimumSize = new Vector2(0.0f, 34.0f);
-            button.ToggleMode = true;
-            button.ButtonPressed = option.IsActive;
-            button.Modulate = option.IsActive ? Colors.White : new Color("CBD5E1");
-            button.Pressed += () => RecipeSelected?.Invoke(option.RecipeId);
-            _recipeSections.AddChild(button);
+            if (option.IsActive)
+            {
+                activeOption = option;
+                break;
+            }
+        }
+
+        activeOption ??= section.Options.Count > 0 ? section.Options[0] : null;
+        if (activeOption is null)
+        {
+            _recipePickerPanel = null;
+            _recipePickerList = null;
+            return;
+        }
+
+        var triggerRow = new HBoxContainer();
+        triggerRow.AddThemeConstantOverride("separation", 8);
+        _recipeSections.AddChild(triggerRow);
+
+        var triggerCard = CreateRecipeCard(activeOption, isCompact: true, isActive: true);
+        triggerCard.TooltipText = $"当前配方：{activeOption.DisplayName}\n点击打开配方列表";
+        triggerCard.GuiInput += @event =>
+        {
+            if (@event is InputEventMouseButton mouseButton
+                && mouseButton.ButtonIndex == MouseButton.Left
+                && mouseButton.Pressed
+                && _recipePickerPanel is not null)
+            {
+                _recipePickerPanel.Visible = !_recipePickerPanel.Visible;
+                MoveToFront();
+            }
+        };
+        triggerRow.AddChild(triggerCard);
+
+        var activeRecipeText = new VBoxContainer();
+        activeRecipeText.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        activeRecipeText.AddThemeConstantOverride("separation", 2);
+        triggerRow.AddChild(activeRecipeText);
+
+        var activeTitle = CreateTextLabel(12, Colors.White);
+        activeTitle.Text = $"当前配方：{activeOption.DisplayName}";
+        activeRecipeText.AddChild(activeTitle);
+
+        var activeSummary = CreateTextLabel(10, new Color("A5C8E1"));
+        activeSummary.Text = activeOption.Summary;
+        activeRecipeText.AddChild(activeSummary);
+
+        var activeHint = CreateTextLabel(10, new Color("93C5FD"));
+        activeHint.Text = "点击左侧图标打开配方面板";
+        activeRecipeText.AddChild(activeHint);
+
+        var pickerPanel = new PanelContainer();
+        pickerPanel.Visible = false;
+        pickerPanel.AddThemeStyleboxOverride("panel", CreatePanelStyle(new Color("10243A"), new Color("4DA8DA"), 1));
+        _recipeSections.AddChild(pickerPanel);
+        _recipePickerPanel = pickerPanel;
+
+        var pickerMargin = new MarginContainer();
+        pickerMargin.AddThemeConstantOverride("margin_left", 8);
+        pickerMargin.AddThemeConstantOverride("margin_top", 8);
+        pickerMargin.AddThemeConstantOverride("margin_right", 8);
+        pickerMargin.AddThemeConstantOverride("margin_bottom", 8);
+        pickerPanel.AddChild(pickerMargin);
+
+        var pickerBody = new VBoxContainer();
+        pickerBody.AddThemeConstantOverride("separation", 6);
+        pickerMargin.AddChild(pickerBody);
+
+        var pickerHeader = new HBoxContainer();
+        pickerHeader.AddThemeConstantOverride("separation", 6);
+        pickerBody.AddChild(pickerHeader);
+
+        var pickerTitle = CreateTextLabel(12, new Color("FDE68A"));
+        pickerTitle.Text = $"{section.Title} 列表";
+        pickerTitle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        pickerHeader.AddChild(pickerTitle);
+
+        var closeButton = new Button
+        {
+            Text = "收起",
+            CustomMinimumSize = new Vector2(56.0f, 26.0f)
+        };
+        closeButton.Pressed += () =>
+        {
+            if (_recipePickerPanel is not null)
+            {
+                _recipePickerPanel.Visible = false;
+            }
+        };
+        pickerHeader.AddChild(closeButton);
+
+        if (!string.IsNullOrWhiteSpace(section.Description))
+        {
+            var pickerDescription = CreateTextLabel(10, new Color("9FB6C9"));
+            pickerDescription.Text = section.Description;
+            pickerBody.AddChild(pickerDescription);
+        }
+
+        var pickerList = new VBoxContainer();
+        pickerList.AddThemeConstantOverride("separation", 6);
+        pickerBody.AddChild(pickerList);
+        _recipePickerList = pickerList;
+
+        for (var index = 0; index < section.Options.Count; index++)
+        {
+            var option = section.Options[index];
+            var optionCard = CreateRecipeCard(option, isCompact: false, isActive: option.IsActive);
+            optionCard.TooltipText = option.Summary;
+            optionCard.GuiInput += @event =>
+            {
+                if (@event is InputEventMouseButton mouseButton
+                    && mouseButton.ButtonIndex == MouseButton.Left
+                    && mouseButton.Pressed)
+                {
+                    if (_recipePickerPanel is not null)
+                    {
+                        _recipePickerPanel.Visible = false;
+                    }
+
+                    RecipeSelected?.Invoke(option.RecipeId);
+                }
+            };
+            pickerList.AddChild(optionCard);
         }
     }
 
@@ -423,6 +567,80 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                 _actionSections.AddChild(description);
             }
         }
+    }
+
+    private PanelContainer CreateRecipeCard(FactoryRecipeOptionModel option, bool isCompact, bool isActive)
+    {
+        var panel = new PanelContainer();
+        panel.MouseFilter = MouseFilterEnum.Stop;
+        panel.CustomMinimumSize = isCompact ? new Vector2(54.0f, 54.0f) : new Vector2(0.0f, 66.0f);
+        panel.SizeFlagsHorizontal = isCompact ? SizeFlags.ShrinkBegin : SizeFlags.ExpandFill;
+        panel.AddThemeStyleboxOverride(
+            "panel",
+            CreatePanelStyle(
+                isActive ? new Color("13253A") : new Color("0F172A"),
+                isActive ? option.AccentColor.Lightened(0.12f) : new Color("475569"),
+                isActive ? 2 : 1));
+
+        var margin = new MarginContainer();
+        margin.AddThemeConstantOverride("margin_left", 6);
+        margin.AddThemeConstantOverride("margin_top", 6);
+        margin.AddThemeConstantOverride("margin_right", 6);
+        margin.AddThemeConstantOverride("margin_bottom", 6);
+        panel.AddChild(margin);
+
+        if (isCompact)
+        {
+            margin.AddChild(CreateIconRect(option.IconTexture, option.AccentColor, new Vector2(38.0f, 38.0f)));
+            return panel;
+        }
+
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 8);
+        margin.AddChild(row);
+
+        row.AddChild(CreateIconRect(option.IconTexture, option.AccentColor, new Vector2(42.0f, 42.0f)));
+
+        var textColumn = new VBoxContainer();
+        textColumn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        textColumn.AddThemeConstantOverride("separation", 2);
+        row.AddChild(textColumn);
+
+        var title = CreateTextLabel(11, isActive ? Colors.White : new Color("D7E6F2"));
+        title.Text = option.DisplayName;
+        textColumn.AddChild(title);
+
+        var summary = CreateTextLabel(10, new Color("9FB6C9"));
+        summary.Text = option.Summary;
+        textColumn.AddChild(summary);
+
+        if (isActive)
+        {
+            var badge = CreateTextLabel(10, option.AccentColor.Lightened(0.2f));
+            badge.Text = "当前配方";
+            textColumn.AddChild(badge);
+        }
+
+        return panel;
+    }
+
+    private static Control CreateIconRect(Texture2D? texture, Color accentColor, Vector2 size)
+    {
+        var host = new CenterContainer();
+        host.MouseFilter = MouseFilterEnum.Ignore;
+        host.CustomMinimumSize = size;
+        host.SizeFlagsHorizontal = SizeFlags.ShrinkCenter;
+        host.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+
+        var iconRect = new TextureRect();
+        iconRect.MouseFilter = MouseFilterEnum.Ignore;
+        iconRect.CustomMinimumSize = size;
+        iconRect.Texture = texture;
+        iconRect.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
+        iconRect.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
+        iconRect.Modulate = texture is null ? accentColor : Colors.White;
+        host.AddChild(iconRect);
+        return host;
     }
 
     private void HandleTitleBarGuiInput(InputEvent @event)
@@ -522,6 +740,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
             widget.Panel.AddThemeStyleboxOverride("panel", CreatePanelStyle(backgroundColor, borderColor, borderWidth));
             widget.Label.Modulate = widget.HasItem ? Colors.White : new Color("7B8DA1");
             widget.SubLabel.Modulate = new Color("9FB6C9");
+            widget.Icon.Modulate = widget.HasItem ? Colors.White : new Color(0.55f, 0.62f, 0.70f, 0.72f);
         }
     }
 
@@ -567,7 +786,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         var availableWidth = Mathf.Max(260.0f, Size.X - 20.0f);
         _scroll.CustomMinimumSize = new Vector2(availableWidth, 0.0f);
         _bodyMargin.CustomMinimumSize = new Vector2(availableWidth, 0.0f);
-        _body.CustomMinimumSize = new Vector2(Mathf.Max(240.0f, availableWidth - 20.0f), 0.0f);
+        _body.CustomMinimumSize = new Vector2(Mathf.Max(360.0f, availableWidth - 20.0f), 0.0f);
     }
 
     private static Label CreateTextLabel(int fontSize, Color color)
