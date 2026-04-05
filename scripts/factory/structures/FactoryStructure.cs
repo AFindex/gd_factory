@@ -120,6 +120,11 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
         return false;
     }
 
+    public virtual bool TryInvokeDetailAction(string actionId)
+    {
+        return false;
+    }
+
     public virtual IReadOnlyDictionary<string, string> CaptureBlueprintConfiguration()
     {
         return new Dictionary<string, string>();

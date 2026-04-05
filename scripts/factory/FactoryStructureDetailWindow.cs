@@ -24,6 +24,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
     private VBoxContainer? _body;
     private VBoxContainer? _inventorySections;
     private VBoxContainer? _recipeSections;
+    private VBoxContainer? _actionSections;
     private Label? _dragStateLabel;
     private readonly List<InventorySlotWidget> _slotWidgets = new();
     private Rect2 _dragBounds = new(Vector2.Zero, new Vector2(900.0f, 600.0f));
@@ -36,6 +37,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
 
     public event Action<string, Vector2I, Vector2I>? InventoryMoveRequested;
     public event Action<string>? RecipeSelected;
+    public event Action<string>? DetailActionRequested;
     public event Action? CloseRequested;
     public bool IsShowing => Visible;
     public string CurrentTitleText => _titleLabel?.Text ?? string.Empty;
@@ -133,6 +135,10 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         _recipeSections = new VBoxContainer();
         _recipeSections.AddThemeConstantOverride("separation", 6);
         body.AddChild(_recipeSections);
+
+        _actionSections = new VBoxContainer();
+        _actionSections.AddThemeConstantOverride("separation", 6);
+        body.AddChild(_actionSections);
 
         _dragStateLabel = CreateTextLabel(11, new Color("FDE68A"));
         body.AddChild(_dragStateLabel);
@@ -237,6 +243,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
 
         RebuildInventorySections(model.InventorySections);
         RebuildRecipeSection(model.RecipeSection);
+        RebuildActionSection(model.Actions);
         UpdateDragStateLabel();
     }
 
@@ -372,6 +379,49 @@ public partial class FactoryStructureDetailWindow : PanelContainer
             button.Modulate = option.IsActive ? Colors.White : new Color("CBD5E1");
             button.Pressed += () => RecipeSelected?.Invoke(option.RecipeId);
             _recipeSections.AddChild(button);
+        }
+    }
+
+    private void RebuildActionSection(IReadOnlyList<FactoryDetailActionModel> actions)
+    {
+        if (_actionSections is null)
+        {
+            return;
+        }
+
+        foreach (var child in _actionSections.GetChildren())
+        {
+            child.QueueFree();
+        }
+
+        if (actions.Count == 0)
+        {
+            return;
+        }
+
+        var title = CreateTextLabel(13, new Color("FDE68A"));
+        title.Text = "操作";
+        _actionSections.AddChild(title);
+
+        for (var index = 0; index < actions.Count; index++)
+        {
+            var action = actions[index];
+            var button = new Button
+            {
+                Text = action.Label,
+                Disabled = !action.IsEnabled,
+                CustomMinimumSize = new Vector2(0.0f, 34.0f)
+            };
+            button.Alignment = HorizontalAlignment.Left;
+            button.Pressed += () => DetailActionRequested?.Invoke(action.ActionId);
+            _actionSections.AddChild(button);
+
+            if (!string.IsNullOrWhiteSpace(action.Description))
+            {
+                var description = CreateTextLabel(10, new Color("9FB6C9"));
+                description.Text = action.Description;
+                _actionSections.AddChild(description);
+            }
         }
     }
 

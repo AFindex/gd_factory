@@ -7,6 +7,7 @@ public interface IFactoryStructureDetailProvider
     FactoryStructureDetailModel GetDetailModel();
     bool TryMoveDetailInventoryItem(string inventoryId, Vector2I fromSlot, Vector2I toSlot);
     bool TrySetDetailRecipe(string recipeId);
+    bool TryInvokeDetailAction(string actionId);
 }
 
 public sealed class FactoryStructureDetailModel
@@ -16,13 +17,15 @@ public sealed class FactoryStructureDetailModel
         string? subtitle,
         IReadOnlyList<string> summaryLines,
         IReadOnlyList<FactoryInventorySectionModel>? inventorySections = null,
-        FactoryRecipeSectionModel? recipeSection = null)
+        FactoryRecipeSectionModel? recipeSection = null,
+        IReadOnlyList<FactoryDetailActionModel>? actions = null)
     {
         Title = title;
         Subtitle = subtitle ?? string.Empty;
         SummaryLines = summaryLines;
         InventorySections = inventorySections ?? System.Array.Empty<FactoryInventorySectionModel>();
         RecipeSection = recipeSection;
+        Actions = actions ?? System.Array.Empty<FactoryDetailActionModel>();
     }
 
     public string Title { get; }
@@ -30,6 +33,7 @@ public sealed class FactoryStructureDetailModel
     public IReadOnlyList<string> SummaryLines { get; }
     public IReadOnlyList<FactoryInventorySectionModel> InventorySections { get; }
     public FactoryRecipeSectionModel? RecipeSection { get; }
+    public IReadOnlyList<FactoryDetailActionModel> Actions { get; }
 
     public string BuildSignature()
     {
@@ -92,8 +96,37 @@ public sealed class FactoryStructureDetailModel
             }
         }
 
+        for (var actionIndex = 0; actionIndex < Actions.Count; actionIndex++)
+        {
+            var action = Actions[actionIndex];
+            builder.Append("|action:")
+                .Append(action.ActionId)
+                .Append(':')
+                .Append(action.Label)
+                .Append(':')
+                .Append(action.Description ?? string.Empty)
+                .Append(':')
+                .Append(action.IsEnabled ? "1" : "0");
+        }
+
         return builder.ToString();
     }
+}
+
+public sealed class FactoryDetailActionModel
+{
+    public FactoryDetailActionModel(string actionId, string label, string? description, bool isEnabled = true)
+    {
+        ActionId = actionId;
+        Label = label;
+        Description = description ?? string.Empty;
+        IsEnabled = isEnabled;
+    }
+
+    public string ActionId { get; }
+    public string Label { get; }
+    public string Description { get; }
+    public bool IsEnabled { get; }
 }
 
 public sealed class FactoryInventorySectionModel

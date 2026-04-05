@@ -76,6 +76,7 @@ public partial class MobileFactoryHud : CanvasLayer
     public event Action? DeployModeToggleRequested;
     public event Action<string, Vector2I, Vector2I>? EditorDetailInventoryMoveRequested;
     public event Action<string>? EditorDetailRecipeSelected;
+    public event Action<string>? EditorDetailActionRequested;
     public event Action? EditorDetailClosed;
     public event Action? BlueprintCaptureSelectionRequested;
     public event Action? BlueprintCaptureFullRequested;
@@ -591,6 +592,7 @@ public partial class MobileFactoryHud : CanvasLayer
         _detailWindow = new FactoryStructureDetailWindow();
         _detailWindow.InventoryMoveRequested += (inventoryId, fromSlot, toSlot) => EditorDetailInventoryMoveRequested?.Invoke(inventoryId, fromSlot, toSlot);
         _detailWindow.RecipeSelected += recipeId => EditorDetailRecipeSelected?.Invoke(recipeId);
+        _detailWindow.DetailActionRequested += actionId => EditorDetailActionRequested?.Invoke(actionId);
         _detailWindow.CloseRequested += () => EditorDetailClosed?.Invoke();
         _overlayRoot?.AddChild(_detailWindow);
 

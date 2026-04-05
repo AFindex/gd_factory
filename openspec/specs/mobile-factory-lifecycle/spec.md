@@ -11,15 +11,19 @@ The game SHALL model each mobile factory as a persistent gameplay entity whose i
 - **THEN** the same mobile factory instance is reused and its internal structures, inventory, and configuration remain intact instead of being rebuilt from scratch
 
 ### Requirement: Mobile factories deploy only onto a valid footprint
-The game SHALL allow each mobile factory to enter the deployed state only when every cell in that factory's size-specific footprint and every required world-facing attachment projection cell for the chosen deployment facing is inside bounds and unreserved.
+The game SHALL allow each mobile factory to enter the deployed state only when every cell in that factory's size-specific footprint and every hard-required world-facing attachment projection cell for the chosen deployment facing is inside bounds and unreserved, while mining-input deposit coverage may remain optional.
 
 #### Scenario: Valid deployment reserves footprint and active attachment projections
-- **WHEN** the player or scripted scenario logic confirms a deployment target whose full factory-specific footprint and every active boundary attachment projection cell are valid for the chosen facing
-- **THEN** the game completes deployment, reserves the entire size-specific footprint, reserves the correctly oriented world-facing attachment cells, activates those attachments, and marks that factory as deployed
+- **WHEN** the player or scripted scenario logic confirms a deployment target whose full factory-specific footprint and every hard-required boundary attachment projection cell are valid for the chosen facing
+- **THEN** the game completes deployment, reserves the entire size-specific footprint, reserves the correctly oriented world-facing attachment cells, activates every fully connected attachment, and marks that factory as deployed
 
 #### Scenario: Invalid deployment is blocked for attachment projection conflicts
-- **WHEN** any required footprint cell or active attachment projection cell for a factory's chosen facing would overlap an occupied, reserved, or out-of-bounds location
+- **WHEN** any required footprint cell or hard-required attachment projection cell for a factory's chosen facing would overlap an occupied, reserved, or out-of-bounds location
 - **THEN** that deployment does not occur and the game reports that the target location is invalid for that factory's current size, facing, and installed attachments
+
+#### Scenario: Mining-input deployment can proceed without deposit coverage
+- **WHEN** a mobile factory deployment target keeps the footprint and projected mining-input cells reservable but none of those projected cells overlap deposits
+- **THEN** the factory still deploys, the projected mining cells remain reserved for that deployment, and the mining input attachment stays disconnected until a later deployment overlaps deposits
 
 ### Requirement: Deployed mobile factories must be recalled before moving
 The game SHALL prevent direct movement, turning, or redeploy commands from relocating a mobile factory while it still owns an active deployed footprint in the world.
@@ -66,4 +70,3 @@ The game SHALL allow multiple mobile factories to exist at the same time with in
 #### Scenario: One factory changes state without disturbing another
 - **WHEN** one mobile factory deploys, recalls, or auto-deploys while another mobile factory remains deployed or in transit elsewhere in the world
 - **THEN** each factory keeps its own state, pose, reservations, and logistics connections without being reset or re-authored by the other factory's lifecycle transition
-

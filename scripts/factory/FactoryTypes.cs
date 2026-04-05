@@ -4,6 +4,7 @@ public enum BuildPrototypeKind
 {
     Producer,
     MiningDrill,
+    MiningStake,
     Generator,
     PowerPole,
     Smelter,
@@ -151,6 +152,7 @@ public static class FactoryPresentation
         {
             BuildPrototypeKind.Producer => "生产器",
             BuildPrototypeKind.MiningDrill => "采矿机",
+            BuildPrototypeKind.MiningStake => "采矿桩",
             BuildPrototypeKind.Generator => "发电机",
             BuildPrototypeKind.PowerPole => "电线杆",
             BuildPrototypeKind.Smelter => "熔炉",

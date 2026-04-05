@@ -40,6 +40,7 @@ public sealed class MobileFactoryInstance
     private readonly SimulationController _simulation;
     private readonly Node3D _structureRoot;
     private readonly Node3D _hullRoot;
+    private readonly Node3D _worldChildStructureRoot;
     private readonly Node3D _worldAttachmentVisualRoot;
     private readonly List<MobileFactoryBoundaryAttachmentStructure> _attachments = new();
     private readonly Vector3 _interiorFloorLocalOffset;
@@ -74,6 +75,11 @@ public sealed class MobileFactoryInstance
 
         _hullRoot = CreateHullRoot(Profile, _interiorFloorLocalOffset);
         _structureRoot.AddChild(_hullRoot);
+        _worldChildStructureRoot = new Node3D
+        {
+            Name = "MobileFactoryWorldChildStructures"
+        };
+        _structureRoot.AddChild(_worldChildStructureRoot);
         _worldAttachmentVisualRoot = new Node3D
         {
             Name = "MobileFactoryWorldAttachments",
@@ -539,7 +545,17 @@ public sealed class MobileFactoryInstance
                     && attachment.GetReservedWorldCells(boundWorld, projection).Count > 1
                     ? $"，占地 {attachment.GetReservedWorldCells(boundWorld, projection).Count} 格"
                     : string.Empty;
-                lines.Add($"{displayLabel} {i + 1}：朝{FactoryDirection.ToLabel(attachment.WorldFacing)}，{stateLabel} ({portCell.X}, {portCell.Y}){footprintSuffix}");
+                var miningSuffix = attachment is MobileFactoryMiningInputPortStructure miningPort
+                    ? $"，采矿桩 {miningPort.DeployedStakeCount}/{Mathf.Max(miningPort.EligibleStakeCount, 1)}"
+                    : string.Empty;
+                lines.Add($"{displayLabel} {i + 1}：朝{FactoryDirection.ToLabel(attachment.WorldFacing)}，{stateLabel} ({portCell.X}, {portCell.Y}){footprintSuffix}{miningSuffix}");
+            }
+            else if (State == MobileFactoryLifecycleState.Deployed && attachment.DeploymentProjection is { } deployedProjection)
+            {
+                var miningSuffix = attachment is MobileFactoryMiningInputPortStructure miningPort
+                    ? $"，采矿桩 {miningPort.DeployedStakeCount}/{Mathf.Max(miningPort.EligibleStakeCount, 1)}，库存 {miningPort.BuiltStakeCount}/{miningPort.MaxStakeCapacity}"
+                    : string.Empty;
+                lines.Add($"{displayLabel} {i + 1}：目标朝{FactoryDirection.ToLabel(deployedProjection.WorldFacing)}，{stateLabel} ({deployedProjection.WorldPortCell.X}, {deployedProjection.WorldPortCell.Y}){miningSuffix}");
             }
             else if (State == MobileFactoryLifecycleState.AutoDeploying && AnchorCell is null && _pendingDeployTarget is DeployTarget target)
             {
@@ -753,15 +769,22 @@ public sealed class MobileFactoryInstance
                 continue;
             }
 
+            attachmentEvaluation.Attachment.RecordDeploymentContext(worldGrid, attachmentEvaluation.Projection);
             if (attachmentEvaluation.ReservedWorldCells.Count > 0)
             {
                 worldGrid.ReserveCells(attachmentEvaluation.ReservedWorldCells, ReservationOwnerId, GridReservationKind.MobilePort, attachmentEvaluation.Attachment);
             }
 
-            if (attachmentEvaluation.State == MobileFactoryAttachmentDeployState.Connected)
+            if (attachmentEvaluation.ActiveWorldCells.Count > 0 || attachmentEvaluation.State == MobileFactoryAttachmentDeployState.Connected)
             {
                 attachmentEvaluation.Attachment.BindToWorld(worldGrid, attachmentEvaluation.Projection);
             }
+
+            attachmentEvaluation.Attachment.OnDeploymentActivated(
+                _worldChildStructureRoot,
+                _simulation,
+                worldGrid,
+                attachmentEvaluation);
         }
 
         RebuildWorldAttachmentVisuals(worldGrid, AnchorCell ?? Vector2I.Zero, DeploymentFacing);
@@ -804,7 +827,9 @@ public sealed class MobileFactoryInstance
         }
 
         _attachments.Remove(attachment);
+        attachment.OnDeploymentCleared(_worldChildStructureRoot, _simulation);
         attachment.ClearBinding();
+        attachment.ClearDeploymentContext();
     }
 
     private void MoveToTransitParking()
@@ -1142,7 +1167,9 @@ public sealed class MobileFactoryInstance
     {
         for (var i = 0; i < _attachments.Count; i++)
         {
+            _attachments[i].OnDeploymentCleared(_worldChildStructureRoot, _simulation);
             _attachments[i].ClearBinding();
+            _attachments[i].ClearDeploymentContext();
         }
     }
 
@@ -1159,6 +1186,13 @@ public sealed class MobileFactoryInstance
         }
 
         _worldAttachmentVisualRoot.Visible = false;
+        foreach (var child in _worldChildStructureRoot.GetChildren())
+        {
+            if (child is Node node)
+            {
+                node.QueueFree();
+            }
+        }
     }
 
     private void BeginAttachmentRetraction()
