@@ -122,6 +122,16 @@ public static class FactoryRecipeCatalog
             12.0f,
             null,
             new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.IronOre, 1) })
+        ,
+        new FactoryRecipeDefinition(
+            "copper-ore-extraction",
+            "铜矿开采",
+            "从铜矿区持续采出铜矿石。",
+            BuildPrototypeKind.MiningDrill,
+            1.00f,
+            13.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.CopperOre, 1) })
     };
 
     public static readonly IReadOnlyList<FactoryRecipeDefinition> SmelterRecipes = new[]
@@ -134,60 +144,104 @@ public static class FactoryRecipeCatalog
             1.35f,
             18.0f,
             new[] { new FactoryRecipeIngredientDefinition(FactoryItemKind.IronOre, 1) },
-            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.IronPlate, 1) })
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.IronPlate, 1) }),
+        new FactoryRecipeDefinition(
+            "copper-smelting",
+            "炼制铜板",
+            "把铜矿石冶炼成可用于线缆与电路的铜板。",
+            BuildPrototypeKind.Smelter,
+            1.30f,
+            18.0f,
+            new[] { new FactoryRecipeIngredientDefinition(FactoryItemKind.CopperOre, 1) },
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.CopperPlate, 1) }),
+        new FactoryRecipeDefinition(
+            "steel-smelting",
+            "炼制钢板",
+            "把多块铁板继续冶炼成更高强度的钢板。",
+            BuildPrototypeKind.Smelter,
+            2.10f,
+            26.0f,
+            new[] { new FactoryRecipeIngredientDefinition(FactoryItemKind.IronPlate, 2) },
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.SteelPlate, 1) })
     };
 
     public static readonly IReadOnlyList<FactoryRecipeDefinition> AssemblerRecipes = new[]
     {
         new FactoryRecipeDefinition(
+            "gear",
+            "齿轮",
+            "使用铁板压制出基础机械齿轮。",
+            BuildPrototypeKind.Assembler,
+            0.95f,
+            16.0f,
+            new[] { new FactoryRecipeIngredientDefinition(FactoryItemKind.IronPlate, 1) },
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.Gear, 1) }),
+        new FactoryRecipeDefinition(
+            "copper-wire",
+            "铜线",
+            "把铜板拉制成后续电路与弹药需要的铜线。",
+            BuildPrototypeKind.Assembler,
+            0.85f,
+            14.0f,
+            new[] { new FactoryRecipeIngredientDefinition(FactoryItemKind.CopperPlate, 1) },
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.CopperWire, 1) }),
+        new FactoryRecipeDefinition(
+            "circuit-board",
+            "电路板",
+            "把铁板与铜线焊接为基础电路板。",
+            BuildPrototypeKind.Assembler,
+            1.35f,
+            20.0f,
+            new[]
+            {
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.IronPlate, 1),
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.CopperWire, 2)
+            },
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.CircuitBoard, 1) }),
+        new FactoryRecipeDefinition(
             "machine-parts",
             "机加工件",
-            "消耗铁板装配更高阶的机加工件。",
+            "消耗齿轮、钢板和电路板装配更高阶的机加工件。",
             BuildPrototypeKind.Assembler,
-            1.55f,
-            24.0f,
-            new[] { new FactoryRecipeIngredientDefinition(FactoryItemKind.IronPlate, 2) },
+            1.80f,
+            26.0f,
+            new[]
+            {
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.Gear, 1),
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.SteelPlate, 1),
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.CircuitBoard, 1)
+            },
             new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.MachinePart, 1) }),
         new FactoryRecipeDefinition(
             "standard-ammo",
             "标准弹药",
-            "把铁板压装为标准弹药，用于炮塔补给。",
+            "把铁板和铜线压装为标准弹药，用于炮塔补给。",
             BuildPrototypeKind.Assembler,
             1.20f,
             22.0f,
-            new[] { new FactoryRecipeIngredientDefinition(FactoryItemKind.IronPlate, 1) },
+            new[]
+            {
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.IronPlate, 1),
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.CopperWire, 1)
+            },
             new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.AmmoMagazine, 1) }),
         new FactoryRecipeDefinition(
             "high-velocity-ammo",
             "高速弹药",
-            "高压装配强化弹药，节拍更慢。",
+            "高压装配强化弹药，进一步消耗钢板与煤。",
             BuildPrototypeKind.Assembler,
             1.65f,
             28.0f,
             new[]
             {
-                new FactoryRecipeIngredientDefinition(FactoryItemKind.IronPlate, 2),
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.AmmoMagazine, 1),
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.SteelPlate, 1),
                 new FactoryRecipeIngredientDefinition(FactoryItemKind.Coal, 1)
             },
             new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.HighVelocityAmmo, 1) })
     };
 }
 
-public static class FactoryItemCatalog
+public static partial class FactoryItemCatalog
 {
-    public static bool IsFuel(FactoryItemKind itemKind)
-    {
-        return TryGetFuelValueSeconds(itemKind, out _);
-    }
-
-    public static bool TryGetFuelValueSeconds(FactoryItemKind itemKind, out float burnSeconds)
-    {
-        burnSeconds = itemKind switch
-        {
-            FactoryItemKind.Coal => 7.5f,
-            _ => 0.0f
-        };
-
-        return burnSeconds > 0.0f;
-    }
 }

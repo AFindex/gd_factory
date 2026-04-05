@@ -62,6 +62,7 @@ public sealed class GridManager : IFactorySite
     {
         reason = string.Empty;
         var footprintCells = FactoryPlacement.ResolveFootprintCells(kind, cell, facing);
+        var matchedResourceCell = false;
         for (var index = 0; index < footprintCells.Count; index++)
         {
             var footprintCell = footprintCells[index];
@@ -81,6 +82,7 @@ public sealed class GridManager : IFactorySite
                         return false;
                     }
 
+                    matchedResourceCell = true;
                     continue;
                 }
 
@@ -89,7 +91,7 @@ public sealed class GridManager : IFactorySite
             }
         }
 
-        if (kind == BuildPrototypeKind.MiningDrill)
+        if (kind == BuildPrototypeKind.MiningDrill && !matchedResourceCell)
         {
             reason = "采矿机必须放在矿点上。";
             return false;

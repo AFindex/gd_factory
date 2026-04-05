@@ -167,6 +167,8 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
         }
 
         yield return $"配方：{ActiveRecipe.DisplayName}";
+        yield return $"需求：{FormatIngredientSummary(ActiveRecipe.Inputs)}";
+        yield return $"产出：{FormatOutputSummary(ActiveRecipe.Outputs)}";
         yield return $"节拍：{ActiveRecipe.CycleSeconds:0.00} 秒";
         yield return $"输入缓存：{_inputInventory.Count}";
         yield return $"输出缓存：{_outputInventory.Count}";
@@ -389,13 +391,7 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
         for (var index = 0; index < inputs.Count; index++)
         {
             var ingredient = inputs[index];
-            yield return $"{FactoryPresentation.GetItemLabel(new FactoryItem(0, ingredient.ItemKind switch
-            {
-                FactoryItemKind.MachinePart => BuildPrototypeKind.Assembler,
-                FactoryItemKind.AmmoMagazine => BuildPrototypeKind.Assembler,
-                FactoryItemKind.HighVelocityAmmo => BuildPrototypeKind.Assembler,
-                _ => BuildPrototypeKind.Producer
-            }, ingredient.ItemKind)).Replace(" #0", string.Empty)} x{ingredient.Amount}";
+            yield return $"{FactoryPresentation.GetItemKindLabel(ingredient.ItemKind)} x{ingredient.Amount}";
         }
     }
 
@@ -404,13 +400,21 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
         for (var index = 0; index < outputs.Count; index++)
         {
             var output = outputs[index];
-            yield return $"{FactoryPresentation.GetItemLabel(new FactoryItem(0, output.ItemKind switch
-            {
-                FactoryItemKind.MachinePart => BuildPrototypeKind.Assembler,
-                FactoryItemKind.AmmoMagazine => BuildPrototypeKind.Assembler,
-                FactoryItemKind.HighVelocityAmmo => BuildPrototypeKind.Assembler,
-                _ => BuildPrototypeKind.Producer
-            }, output.ItemKind)).Replace(" #0", string.Empty)} x{output.Amount}";
+            yield return $"{FactoryPresentation.GetItemKindLabel(output.ItemKind)} x{output.Amount}";
         }
+    }
+
+    private static string FormatIngredientSummary(IReadOnlyList<FactoryRecipeIngredientDefinition> inputs)
+    {
+        return inputs.Count == 0
+            ? "无输入"
+            : string.Join(" + ", BuildIngredientText(inputs));
+    }
+
+    private static string FormatOutputSummary(IReadOnlyList<FactoryRecipeOutputDefinition> outputs)
+    {
+        return outputs.Count == 0
+            ? "无产出"
+            : string.Join(" + ", BuildOutputText(outputs));
     }
 }

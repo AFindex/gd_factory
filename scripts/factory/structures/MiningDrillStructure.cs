@@ -61,6 +61,7 @@ public partial class MiningDrillStructure : FactoryRecipeMachineStructure
                 {
                     FactoryResourceKind.Coal => new Color("FBBF24"),
                     FactoryResourceKind.IronOre => new Color("93C5FD"),
+                    FactoryResourceKind.CopperOre => new Color("FB923C"),
                     _ => new Color("FCA5A5")
                 };
             }
@@ -93,6 +94,11 @@ public partial class MiningDrillStructure : FactoryRecipeMachineStructure
 
         _resourceKind = deposit.ResourceKind;
         _depositName = deposit.DisplayName;
-        SetActiveRecipeById(deposit.ResourceKind == FactoryResourceKind.Coal ? "coal-extraction" : "iron-ore-extraction");
+        SetActiveRecipeById(deposit.ResourceKind switch
+        {
+            FactoryResourceKind.Coal => "coal-extraction",
+            FactoryResourceKind.IronOre => "iron-ore-extraction",
+            _ => "copper-ore-extraction"
+        });
     }
 }

@@ -176,7 +176,7 @@ public partial class FactoryHud : CanvasLayer
         SetSinkStats(0, 0, 0);
         SetProfilerStats(0, 0.0, 0, 0, 0.0, 0.0, 0.0);
         SetCombatStats(0, 0, 0);
-        SetNote("默认场景包含采矿、电力与制造主循环，同时保留一部分 legacy 回归线用于 smoke 和蓝图验证。");
+        SetNote("默认场景现在包含煤炭供电、铁/铜双矿支路、铜线与弹药组装主循环，同时保留部分 legacy 回归线用于 smoke 和蓝图验证。");
         SetInspection(null, null);
         UpdateLayout();
         GetViewport().SizeChanged += UpdateLayout;

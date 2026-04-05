@@ -33,7 +33,13 @@ public enum FactoryItemKind
     GenericCargo,
     Coal,
     IronOre,
+    CopperOre,
     IronPlate,
+    CopperPlate,
+    SteelPlate,
+    Gear,
+    CopperWire,
+    CircuitBoard,
     MachinePart,
     AmmoMagazine,
     HighVelocityAmmo
@@ -182,30 +188,17 @@ public static class FactoryPresentation
 
     public static string GetItemLabel(FactoryItem item)
     {
-        return item.ItemKind switch
-        {
-            FactoryItemKind.Coal => $"煤矿 #{item.Id}",
-            FactoryItemKind.IronOre => $"铁矿石 #{item.Id}",
-            FactoryItemKind.IronPlate => $"铁板 #{item.Id}",
-            FactoryItemKind.MachinePart => $"机加工件 #{item.Id}",
-            FactoryItemKind.AmmoMagazine => $"弹药 #{item.Id}",
-            FactoryItemKind.HighVelocityAmmo => $"高速弹药 #{item.Id}",
-            _ => $"{GetKindLabel(item.SourceKind)} #{item.Id}"
-        };
+        return $"{GetItemKindLabel(item.ItemKind)} #{item.Id}";
+    }
+
+    public static string GetItemKindLabel(FactoryItemKind itemKind)
+    {
+        return FactoryItemCatalog.GetDisplayName(itemKind);
     }
 
     public static Color GetItemAccentColor(FactoryItemKind itemKind)
     {
-        return itemKind switch
-        {
-            FactoryItemKind.Coal => new Color("78350F"),
-            FactoryItemKind.IronOre => new Color("B45309"),
-            FactoryItemKind.IronPlate => new Color("CBD5E1"),
-            FactoryItemKind.MachinePart => new Color("8B5CF6"),
-            FactoryItemKind.AmmoMagazine => new Color("FACC15"),
-            FactoryItemKind.HighVelocityAmmo => new Color("F97316"),
-            _ => new Color("7DD3FC")
-        };
+        return FactoryItemCatalog.GetAccentColor(itemKind);
     }
 
     public static bool IsAmmoItem(FactoryItemKind itemKind)

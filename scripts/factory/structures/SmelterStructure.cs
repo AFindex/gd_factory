@@ -20,8 +20,10 @@ public partial class SmelterStructure : FactoryRecipeMachineStructure
     protected override string OutputSectionTitle => "冶炼输出";
     protected override string InputInventoryId => "smelter-input";
     protected override string OutputInventoryId => "smelter-output";
+    protected override string RecipeSectionTitle => "冶炼方案";
+    protected override string RecipeSectionDescription => "切换当前熔炉的冶炼配方。";
     protected override int MachinePowerRangeCells => 3;
-    protected override bool SupportsRecipeSelection => false;
+    protected override bool SupportsRecipeSelection => true;
     protected override float DispatchCooldownSeconds => 0.22f;
 
     public override void UpdateVisuals(float tickAlpha)

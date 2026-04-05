@@ -5,7 +5,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
 {
     protected sealed class TransitItemState
     {
-        public TransitItemState(FactoryItem item, MeshInstance3D visual, Vector2I sourceCell, Vector2I targetCell)
+        public TransitItemState(FactoryItem item, Node3D visual, Vector2I sourceCell, Vector2I targetCell)
         {
             Item = item;
             Visual = visual;
@@ -15,7 +15,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         }
 
         public FactoryItem Item { get; }
-        public MeshInstance3D Visual { get; }
+        public Node3D Visual { get; }
         public Vector2I SourceCell { get; }
         public Vector2I TargetCell { get; set; }
         public int LaneKey { get; set; }
@@ -54,7 +54,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
             return false;
         }
 
-        var state = new TransitItemState(item, CreateTransitVisual(), sourceCell, targetCell)
+        var state = new TransitItemState(item, CreateTransitVisual(item), sourceCell, targetCell)
         {
             LaneKey = laneKey,
             Position = 0.0f,
@@ -159,7 +159,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
             return false;
         }
 
-        var state = new TransitItemState(item, CreateTransitVisual(), sourceCell, targetCell)
+        var state = new TransitItemState(item, CreateTransitVisual(item), sourceCell, targetCell)
         {
             LaneKey = laneKey,
             Position = 0.0f,
@@ -228,13 +228,12 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         }
     }
 
-    protected MeshInstance3D CreateTransitVisual()
+    protected Node3D CreateTransitVisual(FactoryItem item)
     {
-        return CreateColoredBox(
-            $"Item_{_items.Count}",
-            new Vector3(CellSize * 0.18f, CellSize * 0.18f, CellSize * 0.18f),
-            new Color("FFD166"),
-            new Vector3(0.0f, ItemHeight, 0.0f));
+        var visual = FactoryTransportVisualFactory.CreateVisual(item, CellSize);
+        visual.Name = $"Item_{item.Id}";
+        AddChild(visual);
+        return visual;
     }
 
     protected MeshInstance3D CreateColoredBox(string name, Vector3 size, Color color, Vector3 localPosition)

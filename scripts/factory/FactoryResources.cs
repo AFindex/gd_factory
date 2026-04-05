@@ -4,7 +4,8 @@ using System.Collections.Generic;
 public enum FactoryResourceKind
 {
     Coal,
-    IronOre
+    IronOre,
+    CopperOre
 }
 
 public sealed class FactoryResourceDepositDefinition
@@ -37,7 +38,8 @@ public static class FactoryResourceCatalog
         return resourceKind switch
         {
             FactoryResourceKind.Coal => FactoryItemKind.Coal,
-            _ => FactoryItemKind.IronOre
+            FactoryResourceKind.IronOre => FactoryItemKind.IronOre,
+            _ => FactoryItemKind.CopperOre
         };
     }
 
@@ -46,13 +48,16 @@ public static class FactoryResourceCatalog
         return resourceKind switch
         {
             FactoryResourceKind.Coal => "煤层",
-            _ => "铁矿区"
+            FactoryResourceKind.IronOre => "铁矿区",
+            _ => "铜矿区"
         };
     }
 
     public static bool SupportsExtractor(BuildPrototypeKind kind, FactoryResourceKind resourceKind)
     {
         return (kind == BuildPrototypeKind.MiningDrill || kind == BuildPrototypeKind.MiningInputPort)
-            && (resourceKind == FactoryResourceKind.Coal || resourceKind == FactoryResourceKind.IronOre);
+            && (resourceKind == FactoryResourceKind.Coal
+                || resourceKind == FactoryResourceKind.IronOre
+                || resourceKind == FactoryResourceKind.CopperOre);
     }
 }

@@ -21,11 +21,11 @@ public partial class FactoryDemo : Node3D
     private readonly Dictionary<BuildPrototypeKind, BuildPrototypeDefinition> _definitions = new()
     {
         [BuildPrototypeKind.Producer] = new BuildPrototypeDefinition(BuildPrototypeKind.Producer, "兼容生产器", new Color("9DC08B"), "兼容型占位产物流，仅用于 legacy 回归线。"),
-        [BuildPrototypeKind.MiningDrill] = new BuildPrototypeDefinition(BuildPrototypeKind.MiningDrill, "采矿机", new Color("FBBF24"), "只能放在矿点上，通电后持续采出资源。"),
+        [BuildPrototypeKind.MiningDrill] = new BuildPrototypeDefinition(BuildPrototypeKind.MiningDrill, "采矿机", new Color("FBBF24"), "只能放在矿点上，通电后持续采出煤、铁矿石或铜矿石。"),
         [BuildPrototypeKind.Generator] = new BuildPrototypeDefinition(BuildPrototypeKind.Generator, "发电机", new Color("FB923C"), "消耗煤炭发电，为周边电网提供基础供给。"),
         [BuildPrototypeKind.PowerPole] = new BuildPrototypeDefinition(BuildPrototypeKind.PowerPole, "电线杆", new Color("FDE68A"), "延伸电网覆盖，把发电机接到更远的机器。"),
-        [BuildPrototypeKind.Smelter] = new BuildPrototypeDefinition(BuildPrototypeKind.Smelter, "熔炉", new Color("CBD5E1"), "消耗电力把矿石炼成铁板。"),
-        [BuildPrototypeKind.Assembler] = new BuildPrototypeDefinition(BuildPrototypeKind.Assembler, "组装机", new Color("67E8F9"), "消耗中间品和电力，组装高阶产物。"),
+        [BuildPrototypeKind.Smelter] = new BuildPrototypeDefinition(BuildPrototypeKind.Smelter, "熔炉", new Color("CBD5E1"), "消耗电力把铁矿、铜矿或铁板冶炼成更高阶板材。"),
+        [BuildPrototypeKind.Assembler] = new BuildPrototypeDefinition(BuildPrototypeKind.Assembler, "组装机", new Color("67E8F9"), "消耗板材和中间件，组装铜线、电路、机加工件与弹药。"),
         [BuildPrototypeKind.Belt] = new BuildPrototypeDefinition(BuildPrototypeKind.Belt, "传送带", new Color("7DD3FC"), "将物品沿直线向前输送。"),
         [BuildPrototypeKind.Sink] = new BuildPrototypeDefinition(BuildPrototypeKind.Sink, "回收站", new Color("FDE68A"), "接收物品并统计送达数量。"),
         [BuildPrototypeKind.Splitter] = new BuildPrototypeDefinition(BuildPrototypeKind.Splitter, "分流器", new Color("C4B5FD"), "将后方输入分到左右两路。"),
@@ -491,7 +491,13 @@ public partial class FactoryDemo : Node3D
                 FactoryResourceKind.IronOre,
                 "北西铁矿区",
                 new Color("64748B"),
-                BuildRectCells(new Vector2I(-39, -23), new Vector2I(2, 2)))
+                BuildRectCells(new Vector2I(-39, -23), new Vector2I(2, 2))),
+            new FactoryResourceDepositDefinition(
+                "copper_patch_main",
+                FactoryResourceKind.CopperOre,
+                "北西铜矿区",
+                new Color("C2410C"),
+                BuildRectCells(new Vector2I(-39, -19), new Vector2I(2, 2)))
         };
 
         _grid.SetResourceDeposits(deposits);
@@ -554,10 +560,13 @@ public partial class FactoryDemo : Node3D
         PlaceStructure(BuildPrototypeKind.MiningDrill, -38, -30, FacingDirection.East);
         PlaceBeltRun(new Vector2I(-37, -30), FacingDirection.East, 6);
         var generator = PlaceStructure(BuildPrototypeKind.Generator, -31, -30, FacingDirection.East) as GeneratorStructure;
+        var reserveGenerator = PlaceStructure(BuildPrototypeKind.Generator, -31, -28, FacingDirection.East) as GeneratorStructure;
         if (generator is not null && _simulation is not null)
         {
             generator.TryAcceptItem(_simulation.CreateItem(BuildPrototypeKind.MiningDrill, FactoryItemKind.Coal), generator.Cell + Vector2I.Left, _simulation);
             generator.TryAcceptItem(_simulation.CreateItem(BuildPrototypeKind.MiningDrill, FactoryItemKind.Coal), generator.Cell + Vector2I.Left, _simulation);
+            reserveGenerator?.TryAcceptItem(_simulation.CreateItem(BuildPrototypeKind.MiningDrill, FactoryItemKind.Coal), reserveGenerator.Cell + Vector2I.Left, _simulation);
+            reserveGenerator?.TryAcceptItem(_simulation.CreateItem(BuildPrototypeKind.MiningDrill, FactoryItemKind.Coal), reserveGenerator.Cell + Vector2I.Left, _simulation);
         }
 
         PlaceStructure(BuildPrototypeKind.PowerPole, -34, -27, FacingDirection.East);
@@ -569,17 +578,34 @@ public partial class FactoryDemo : Node3D
     {
         PlaceStructure(BuildPrototypeKind.MiningDrill, -38, -22, FacingDirection.East);
         PlaceBeltRun(new Vector2I(-37, -22), FacingDirection.East, 7);
-        PlaceStructure(BuildPrototypeKind.Smelter, -30, -22, FacingDirection.East);
+        var ironSmelter = PlaceStructure(BuildPrototypeKind.Smelter, -30, -22, FacingDirection.East) as SmelterStructure;
+        ironSmelter?.TrySetDetailRecipe("iron-smelting");
         PlaceStructure(BuildPrototypeKind.Belt, -29, -22, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Storage, -28, -22, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Inserter, -27, -22, FacingDirection.East);
+
+        PlaceStructure(BuildPrototypeKind.MiningDrill, -38, -18, FacingDirection.East);
+        PlaceBeltRun(new Vector2I(-37, -18), FacingDirection.East, 7);
+        var copperSmelter = PlaceStructure(BuildPrototypeKind.Smelter, -30, -18, FacingDirection.East) as SmelterStructure;
+        copperSmelter?.TrySetDetailRecipe("copper-smelting");
+        PlaceStructure(BuildPrototypeKind.Belt, -29, -18, FacingDirection.East);
+        var wireAssembler = PlaceStructure(BuildPrototypeKind.Assembler, -28, -18, FacingDirection.East) as AssemblerStructure;
+        wireAssembler?.TrySetDetailRecipe("copper-wire");
+        PlaceStructure(BuildPrototypeKind.Belt, -27, -18, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, -26, -18, FacingDirection.North);
+        PlaceStructure(BuildPrototypeKind.Belt, -26, -19, FacingDirection.North);
+        PlaceStructure(BuildPrototypeKind.Storage, -26, -20, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Inserter, -26, -21, FacingDirection.North);
+
         var assembler = PlaceStructure(BuildPrototypeKind.Assembler, -26, -22, FacingDirection.East) as AssemblerStructure;
         assembler?.TrySetDetailRecipe("standard-ammo");
         PlaceStructure(BuildPrototypeKind.Belt, -25, -22, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Belt, -24, -22, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Sink, -23, -22, FacingDirection.East);
 
-        PlaceStructure(BuildPrototypeKind.PowerPole, -26, -20, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.PowerPole, -24, -20, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.PowerPole, -35, -21, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.PowerPole, -31, -17, FacingDirection.East);
     }
 
     private static Vector2I[] BuildRectCells(Vector2I origin, Vector2I size)
@@ -2436,6 +2462,7 @@ public partial class FactoryDemo : Node3D
         var detailWindowVerified = await RunStructureDetailSmoke();
         var blueprintVerified = RunBlueprintWorkflowSmoke();
         var workspaceVerified = RunWorkspaceNavigationSmoke();
+        var itemVisualProfilesVerified = RunItemVisualProfileSmoke();
         var combatVerified = await VerifyCombatScenarios();
 
         if (!placed
@@ -2452,16 +2479,17 @@ public partial class FactoryDemo : Node3D
             || !detailWindowVerified
             || !blueprintVerified
             || !workspaceVerified
+            || !itemVisualProfilesVerified
             || !combatVerified
             || !multiCellPlacementVerified
             || !previewArrowReady)
         {
-            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
+            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} previewArrowReady={previewArrowReady}");
+        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} previewArrowReady={previewArrowReady}");
         GetTree().Quit();
     }
 
@@ -2559,26 +2587,121 @@ public partial class FactoryDemo : Node3D
             return false;
         }
 
-        if (!_grid.TryGetStructure(new Vector2I(-38, -30), out var coalDrillStructure) || coalDrillStructure is not MiningDrillStructure coalDrill
-            || !_grid.TryGetStructure(new Vector2I(-31, -30), out var generatorStructure) || generatorStructure is not GeneratorStructure generator
-            || !_grid.TryGetStructure(new Vector2I(-38, -22), out var ironDrillStructure) || ironDrillStructure is not MiningDrillStructure ironDrill
-            || !_grid.TryGetStructure(new Vector2I(-30, -22), out var smelterStructure) || smelterStructure is not SmelterStructure smelter
-            || !_grid.TryGetStructure(new Vector2I(-28, -22), out var storageStructure) || storageStructure is not StorageStructure storage
-            || !_grid.TryGetStructure(new Vector2I(-26, -22), out var assemblerStructure) || assemblerStructure is not AssemblerStructure assembler
-            || !_grid.TryGetStructure(new Vector2I(-23, -22), out var sinkStructure) || sinkStructure is not SinkStructure sink)
+        var coalDrillFound = _grid.TryGetStructure(new Vector2I(-38, -30), out var coalDrillStructure) && coalDrillStructure is MiningDrillStructure;
+        var generatorFound = _grid.TryGetStructure(new Vector2I(-31, -30), out var generatorStructure) && generatorStructure is GeneratorStructure;
+        var ironDrillFound = _grid.TryGetStructure(new Vector2I(-38, -22), out var ironDrillStructure) && ironDrillStructure is MiningDrillStructure;
+        var copperDrillFound = _grid.TryGetStructure(new Vector2I(-38, -18), out var copperDrillStructure) && copperDrillStructure is MiningDrillStructure;
+        var ironSmelterFound = _grid.TryGetStructure(new Vector2I(-30, -22), out var ironSmelterStructure) && ironSmelterStructure is SmelterStructure;
+        var copperSmelterFound = _grid.TryGetStructure(new Vector2I(-30, -18), out var copperSmelterStructure) && copperSmelterStructure is SmelterStructure;
+        var wireAssemblerFound = _grid.TryGetStructure(new Vector2I(-28, -18), out var wireAssemblerStructure) && wireAssemblerStructure is AssemblerStructure;
+        var assemblerFound = _grid.TryGetStructure(new Vector2I(-26, -22), out var assemblerStructure) && assemblerStructure is AssemblerStructure;
+        var sinkFound = _grid.TryGetStructure(new Vector2I(-23, -22), out var sinkStructure) && sinkStructure is SinkStructure;
+        if (!coalDrillFound || !generatorFound || !ironDrillFound || !copperDrillFound || !ironSmelterFound || !copperSmelterFound || !wireAssemblerFound || !assemblerFound || !sinkFound)
         {
             return false;
         }
 
+        var coalDrill = (MiningDrillStructure)coalDrillStructure!;
+        var generator = (GeneratorStructure)generatorStructure!;
+        var ironDrill = (MiningDrillStructure)ironDrillStructure!;
+        var copperDrill = (MiningDrillStructure)copperDrillStructure!;
+        var ironSmelter = (SmelterStructure)ironSmelterStructure!;
+        var copperSmelter = (SmelterStructure)copperSmelterStructure!;
+        var wireAssembler = (AssemblerStructure)wireAssemblerStructure!;
+        var assembler = (AssemblerStructure)assemblerStructure!;
+        var sink = (SinkStructure)sinkStructure!;
+
         await ToSignal(GetTree().CreateTimer(14.0f), SceneTreeTimer.SignalName.Timeout);
+        var ironSummary = ironSmelter.GetDetailModel().SummaryLines;
+        var copperSummary = copperSmelter.GetDetailModel().SummaryLines;
+        var wireSummary = wireAssembler.GetDetailModel().SummaryLines;
+        var ammoSummary = assembler.GetDetailModel().SummaryLines;
         var verified = coalDrill.ResourceKind == FactoryResourceKind.Coal
             && ironDrill.ResourceKind == FactoryResourceKind.IronOre
+            && copperDrill.ResourceKind == FactoryResourceKind.CopperOre
             && sink.DeliveredTotal > 0
             && (generator.IsGenerating || generator.HasFuelBuffered)
-            && smelter.GetDetailModel().SummaryLines.Count > 0
-            && assembler.GetDetailModel().SummaryLines.Count > 0;
+            && ContainsSummaryLine(ironSummary, "铁板")
+            && ContainsSummaryLine(copperSummary, "铜板")
+            && ContainsSummaryLine(wireSummary, "铜线")
+            && ContainsSummaryLine(ammoSummary, "弹药");
 
         return verified;
+    }
+
+    private static bool ContainsSummaryLine(IReadOnlyList<string> summaryLines, string pattern)
+    {
+        for (var index = 0; index < summaryLines.Count; index++)
+        {
+            if (summaryLines[index].Contains(pattern, global::System.StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool RunItemVisualProfileSmoke()
+    {
+        var placeholderVisual = FactoryTransportVisualFactory.CreateVisual(new FactoryItem(-101, BuildPrototypeKind.MiningDrill, FactoryItemKind.IronOre), FactoryConstants.CellSize);
+        var billboardVisual = FactoryTransportVisualFactory.CreateVisual(new FactoryItem(-102, BuildPrototypeKind.Assembler, FactoryItemKind.CopperWire), FactoryConstants.CellSize);
+        var modelVisual = FactoryTransportVisualFactory.CreateVisual(new FactoryItem(-103, BuildPrototypeKind.Assembler, FactoryItemKind.AmmoMagazine), FactoryConstants.CellSize);
+
+        var placeholderMesh = FindFirstMesh(placeholderVisual);
+        var billboardMesh = FindFirstMesh(billboardVisual);
+        var modelMeshCount = CountMeshes(modelVisual);
+        var distinctBaselineColors =
+            !FactoryItemCatalog.GetAccentColor(FactoryItemKind.Coal).IsEqualApprox(FactoryItemCatalog.GetAccentColor(FactoryItemKind.IronOre))
+            && !FactoryItemCatalog.GetAccentColor(FactoryItemKind.IronOre).IsEqualApprox(FactoryItemCatalog.GetAccentColor(FactoryItemKind.CopperOre))
+            && !FactoryItemCatalog.GetAccentColor(FactoryItemKind.AmmoMagazine).IsEqualApprox(FactoryItemCatalog.GetAccentColor(FactoryItemKind.HighVelocityAmmo));
+
+        placeholderVisual.QueueFree();
+        billboardVisual.QueueFree();
+        modelVisual.QueueFree();
+
+        return placeholderMesh?.Mesh is BoxMesh
+            && billboardMesh?.Mesh is QuadMesh
+            && billboardMesh.MaterialOverride is StandardMaterial3D billboardMaterial
+            && billboardMaterial.BillboardMode == BaseMaterial3D.BillboardModeEnum.Enabled
+            && modelMeshCount >= 2
+            && distinctBaselineColors;
+    }
+
+    private static MeshInstance3D? FindFirstMesh(Node node)
+    {
+        if (node is MeshInstance3D mesh)
+        {
+            return mesh;
+        }
+
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Node childNode)
+            {
+                var found = FindFirstMesh(childNode);
+                if (found is not null)
+                {
+                    return found;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static int CountMeshes(Node node)
+    {
+        var total = node is MeshInstance3D ? 1 : 0;
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Node childNode)
+            {
+                total += CountMeshes(childNode);
+            }
+        }
+
+        return total;
     }
 
     private bool RunBlueprintWorkflowSmoke()
