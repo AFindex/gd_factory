@@ -658,6 +658,7 @@ public partial class MobileFactoryHud
             BuildPrototypeKind.Loader => "装载器",
             BuildPrototypeKind.Unloader => "卸载器",
             BuildPrototypeKind.Storage => "仓储",
+            BuildPrototypeKind.LargeStorageDepot => "大型仓储",
             BuildPrototypeKind.Inserter => "机械臂",
             BuildPrototypeKind.Wall => "墙体",
             BuildPrototypeKind.AmmoAssembler => "弹药组装器",

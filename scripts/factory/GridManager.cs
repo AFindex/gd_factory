@@ -45,30 +45,48 @@ public sealed class GridManager : IFactorySite
         return CanReserve(cell);
     }
 
-    public bool CanPlaceStructure(BuildPrototypeKind kind, Vector2I cell, out string reason)
+    public bool CanPlaceCells(IReadOnlyList<Vector2I> cells, string? ownerId = null)
     {
-        reason = string.Empty;
-        if (!CanPlace(cell))
+        for (var index = 0; index < cells.Count; index++)
         {
-            reason = $"格子 ({cell.X}, {cell.Y}) 已被现有结构占用。";
-            return false;
+            if (!CanReserve(cells[index], ownerId))
+            {
+                return false;
+            }
         }
 
-        if (_resourceCells.TryGetValue(cell, out var deposit))
-        {
-            if (kind == BuildPrototypeKind.MiningDrill)
-            {
-                if (!FactoryResourceCatalog.SupportsExtractor(kind, deposit.ResourceKind))
-                {
-                    reason = $"{deposit.DisplayName} 不能由当前建筑开采。";
-                    return false;
-                }
+        return true;
+    }
 
-                return true;
+    public bool CanPlaceStructure(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing, out string reason)
+    {
+        reason = string.Empty;
+        var footprintCells = FactoryPlacement.ResolveFootprintCells(kind, cell, facing);
+        for (var index = 0; index < footprintCells.Count; index++)
+        {
+            var footprintCell = footprintCells[index];
+            if (!CanReserve(footprintCell))
+            {
+                reason = $"格子 ({footprintCell.X}, {footprintCell.Y}) 已被现有结构占用。";
+                return false;
             }
 
-            reason = $"{deposit.DisplayName} 上只能放置匹配的采矿机。";
-            return false;
+            if (_resourceCells.TryGetValue(footprintCell, out var deposit))
+            {
+                if (kind == BuildPrototypeKind.MiningDrill)
+                {
+                    if (!FactoryResourceCatalog.SupportsExtractor(kind, deposit.ResourceKind))
+                    {
+                        reason = $"{deposit.DisplayName} 不能由当前建筑开采。";
+                        return false;
+                    }
+
+                    continue;
+                }
+
+                reason = $"{deposit.DisplayName} 上只能放置匹配的采矿机。";
+                return false;
+            }
         }
 
         if (kind == BuildPrototypeKind.MiningDrill)

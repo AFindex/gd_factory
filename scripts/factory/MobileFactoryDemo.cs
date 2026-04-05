@@ -38,6 +38,7 @@ public partial class MobileFactoryDemo : Node3D
         BuildPrototypeKind.Unloader,
         BuildPrototypeKind.Sink,
         BuildPrototypeKind.Storage,
+        BuildPrototypeKind.LargeStorageDepot,
         BuildPrototypeKind.Inserter,
         BuildPrototypeKind.Wall,
         BuildPrototypeKind.AmmoAssembler,
@@ -81,6 +82,7 @@ public partial class MobileFactoryDemo : Node3D
         [BuildPrototypeKind.Unloader] = new BuildPrototypeDefinition(BuildPrototypeKind.Unloader, "卸载器", new Color("93C5FD"), "把机器端输出卸到前方传送网络。"),
         [BuildPrototypeKind.Sink] = new BuildPrototypeDefinition(BuildPrototypeKind.Sink, "回收器", new Color("FDE68A"), "吞掉输入物品并作为内部消费端。"),
         [BuildPrototypeKind.Storage] = new BuildPrototypeDefinition(BuildPrototypeKind.Storage, "仓储", new Color("94A3B8"), "缓存多件物品，可向前输出，也能被机械臂抓取。"),
+        [BuildPrototypeKind.LargeStorageDepot] = new BuildPrototypeDefinition(BuildPrototypeKind.LargeStorageDepot, "大型仓储", new Color("64748B"), "占据 2x2 内部格子的仓储缓冲区，用于宽体移动工厂案例。"),
         [BuildPrototypeKind.Inserter] = new BuildPrototypeDefinition(BuildPrototypeKind.Inserter, "机械臂", new Color("FACC15"), "从后方抓取一件物品并向前投送。"),
         [BuildPrototypeKind.Wall] = new BuildPrototypeDefinition(BuildPrototypeKind.Wall, "墙体", new Color("D1D5DB"), "给移动工厂的前缘补上一段高耐久掩体。"),
         [BuildPrototypeKind.AmmoAssembler] = new BuildPrototypeDefinition(BuildPrototypeKind.AmmoAssembler, "弹药组装器", new Color("FB923C"), "在内部持续生产弹药，直接喂给炮塔。"),
@@ -562,7 +564,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private FactoryStructure? PlaceWorldStructure(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
     {
-        if (_grid is null || _structureRoot is null || _simulation is null || !_grid.CanPlace(cell))
+        if (_grid is null || _structureRoot is null || _simulation is null || !_grid.CanPlaceStructure(kind, cell, facing, out _))
         {
             return null;
         }
@@ -670,6 +672,8 @@ public partial class MobileFactoryDemo : Node3D
         {
             assembler.TrySetDetailRecipe("machine-parts");
         }
+
+        factory.PlaceInteriorStructure(BuildPrototypeKind.LargeStorageDepot, new Vector2I(2, 6), FacingDirection.East);
     }
 
     private SinkStructure? CreatePreparedOutputLine(MobileFactoryProfile profile, Vector2I anchorCell, FacingDirection facing, int beltCount)
@@ -1706,7 +1710,7 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        _interiorPreviewRoot.Position = _mobileFactory.InteriorSite.CellToWorld(_hoveredInteriorCell);
+        _interiorPreviewRoot.Position = FactoryPlacement.GetPreviewCenter(_mobileFactory.InteriorSite, _selectedInteriorKind, _hoveredInteriorCell, _selectedInteriorFacing);
         _interiorPreviewRoot.Rotation = new Vector3(
             0.0f,
             _mobileFactory.InteriorSite.WorldRotationRadians + FactoryDirection.ToYRotationRadians(_selectedInteriorFacing),
@@ -1715,7 +1719,14 @@ public partial class MobileFactoryDemo : Node3D
         var tint = _canPlaceInteriorCell
             ? new Color(0.35f, 0.95f, 0.55f, 0.45f)
             : new Color(1.0f, 0.35f, 0.35f, 0.45f);
-        _interiorPreviewCell.Mesh = new BoxMesh { Size = new Vector3(_mobileFactory.InteriorSite.CellSize * 0.78f, 0.06f, _mobileFactory.InteriorSite.CellSize * 0.78f) };
+        var previewSize = FactoryPlacement.GetPreviewSize(_mobileFactory.InteriorSite, _selectedInteriorKind, _selectedInteriorFacing);
+        _interiorPreviewCell.Mesh = new BoxMesh
+        {
+            Size = new Vector3(
+                previewSize.X - (_mobileFactory.InteriorSite.CellSize * 0.02f),
+                0.06f,
+                previewSize.Y - (_mobileFactory.InteriorSite.CellSize * 0.02f))
+        };
         _interiorPreviewCell.Position = new Vector3(0.0f, 0.04f, 0.0f);
         _interiorPreviewArrow.Visible = true;
         ApplyPreviewColor(_interiorPreviewCell, tint);
@@ -2614,7 +2625,7 @@ public partial class MobileFactoryDemo : Node3D
 
         if (_mobileFactory.RemoveInteriorStructure(_hoveredInteriorCell))
         {
-            if (_selectedInteriorStructure is not null && _selectedInteriorStructure.Cell == _hoveredInteriorCell)
+            if (_selectedInteriorStructure == _hoveredInteriorStructure)
             {
                 _selectedInteriorStructure = null;
             }
@@ -2882,19 +2893,19 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         var rect = GetDeleteRect(start, end);
-        var count = 0;
+        var seen = new HashSet<ulong>();
         for (var y = rect.Position.Y; y < rect.End.Y; y++)
         {
             for (var x = rect.Position.X; x < rect.End.X; x++)
             {
                 if (_mobileFactory.TryGetInteriorStructure(new Vector2I(x, y), out var structure) && structure is not null)
                 {
-                    count++;
+                    seen.Add(structure.GetInstanceId());
                 }
             }
         }
 
-        return count;
+        return seen.Count;
     }
 
     private void DeleteInteriorStructuresInRect(Vector2I start, Vector2I end)
@@ -2906,14 +2917,15 @@ public partial class MobileFactoryDemo : Node3D
 
         var rect = GetDeleteRect(start, end);
         var cellsToDelete = new List<Vector2I>();
+        var seen = new HashSet<ulong>();
         for (var y = rect.Position.Y; y < rect.End.Y; y++)
         {
             for (var x = rect.Position.X; x < rect.End.X; x++)
             {
                 var cell = new Vector2I(x, y);
-                if (_mobileFactory.TryGetInteriorStructure(cell, out var structure) && structure is not null)
+                if (_mobileFactory.TryGetInteriorStructure(cell, out var structure) && structure is not null && seen.Add(structure.GetInstanceId()))
                 {
-                    cellsToDelete.Add(cell);
+                    cellsToDelete.Add(structure.Cell);
                 }
             }
         }
@@ -3070,7 +3082,7 @@ public partial class MobileFactoryDemo : Node3D
         {
             return MobileFactoryBoundaryAttachmentCatalog.IsAttachmentKind(entry.Kind)
                 ? "该蓝图需要的边界 attachment 挂点在当前内部不可用。"
-                : "目标格已被占用。";
+                : "目标占地已被占用或越界。";
         }
 
         return null;
@@ -3701,6 +3713,7 @@ public partial class MobileFactoryDemo : Node3D
         var leftPaneHover = !_hud.IsPointerOverEditor(new Vector2(10.0f, 40.0f));
         var detailWindowInTransit = await RunEditorDetailSmoke();
         var blueprintWorkflowInTransit = await RunInteriorBlueprintSmoke();
+        var multiCellInteriorVerified = RunInteriorMultiCellSmoke();
         _mobileFactory.TryGetInteriorStructure(new Vector2I(1, 3), out presetInputSinkStructure);
         inputSinkInTransit = presetInputSinkStructure as SinkStructure;
         inputSinkTransitBaseline = inputSinkInTransit?.DeliveredTotal ?? 0;
@@ -3727,9 +3740,15 @@ public partial class MobileFactoryDemo : Node3D
         }
         var blockedDeploy = placedConflictBlocker && !_mobileFactory.CanDeployAt(_grid, projectionConflictAnchor, FacingDirection.East);
         var edgeBlockedDeploy = !_mobileFactory.CanDeployAt(_grid, new Vector2I(GetWorldMaxCell(), GetWorldMaxCell()), FacingDirection.East);
+        var eastPortCells = new HashSet<Vector2I>(_mobileFactory.GetPortCells(AnchorA, FacingDirection.East));
         var southPortCells = new HashSet<Vector2I>(_mobileFactory.GetPortCells(AnchorA, FacingDirection.South));
+        var eastFootprintCells = new HashSet<Vector2I>(_mobileFactory.GetFootprintCells(AnchorA, FacingDirection.East));
         var westFootprintCells = new HashSet<Vector2I>(_mobileFactory.GetFootprintCells(AnchorA, FacingDirection.West));
-        var facingAwareCells = southPortCells.Contains(new Vector2I(-6, -1)) && westFootprintCells.Contains(new Vector2I(-6, -3));
+        var facingAwareCells = eastPortCells.Count > 0
+            && southPortCells.Count > 0
+            && !southPortCells.SetEquals(eastPortCells)
+            && eastFootprintCells.Count == westFootprintCells.Count
+            && westFootprintCells.Contains(AnchorA);
         SetControlMode(MobileFactoryControlMode.DeployPreview);
         _selectedDeployFacing = FacingDirection.East;
         HandleCommandSlot(MobileFactoryCommandSlot.Auxiliary);
@@ -3875,12 +3894,13 @@ public partial class MobileFactoryDemo : Node3D
                 }
 
                 var connectedMiningBaseline = inputSinkInTransit?.DeliveredTotal ?? 0;
+                var miningValidAnchorFound = TryFindMiningValidAnchor(FacingDirection.East, out var connectedMiningAnchor);
 
                 SetControlMode(MobileFactoryControlMode.DeployPreview);
                 _selectedDeployFacing = FacingDirection.East;
-                _hoveredAnchor = AnchorA;
+                _hoveredAnchor = miningValidAnchorFound ? connectedMiningAnchor : AnchorA;
                 _hasHoveredAnchor = true;
-                _currentDeployEvaluation = _mobileFactory.EvaluateDeployment(_grid, AnchorA, FacingDirection.East);
+                _currentDeployEvaluation = _mobileFactory.EvaluateDeployment(_grid, _hoveredAnchor, FacingDirection.East);
                 _canDeployCurrentAnchor = _currentDeployEvaluation.CanDeploy;
                 ConfirmDeployPreview();
                 await WaitForCondition(() => _mobileFactory.State == MobileFactoryLifecycleState.Deployed, 4.5f);
@@ -3904,15 +3924,34 @@ public partial class MobileFactoryDemo : Node3D
             }
         }
 
-        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !workspaceNavigationVerified || !rightPaneHover || !leftPaneHover || !detailWindowInTransit || !blueprintWorkflowInTransit || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !contextualRotateWorks || !previewArrowTracksFacing || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !inputDeliveredWhileDeployed || !turretTrackedThreats || !mobileCombatActive || !recalled || !blockedOutputActive || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0 || !miningSecondRecall || !miningAttachmentSwapped || !miningWarningAnchorFound || !miningWarningPreview || !miningWarningDeploy || miningWarningConnected || miningWarningPayloadVisible || miningWarningDelivered || !miningWarningPayloadRetracted || !miningDeploy || !miningAttachmentConnected || !miningPayloadVisible || !miningSinkDelivered || !miningPayloadRetracted)
+        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !workspaceNavigationVerified || !rightPaneHover || !leftPaneHover || !detailWindowInTransit || !blueprintWorkflowInTransit || !multiCellInteriorVerified || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !contextualRotateWorks || !previewArrowTracksFacing || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !inputDeliveredWhileDeployed || !turretTrackedThreats || !mobileCombatActive || !recalled || !blockedOutputActive || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0 || !miningSecondRecall || !miningAttachmentSwapped || !miningWarningAnchorFound || !miningWarningPreview || !miningWarningDeploy || miningWarningConnected || miningWarningPayloadVisible || miningWarningDelivered || !miningWarningPayloadRetracted || !miningDeploy || !miningAttachmentConnected || !miningPayloadVisible || !miningSinkDelivered || !miningPayloadRetracted)
         {
-            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} workspaceNavigation={workspaceNavigationVerified} rightHover={rightPaneHover} leftHover={leftPaneHover} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} contextualRotateWorks={contextualRotateWorks} previewArrowTracksFacing={previewArrowTracksFacing} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered} miningSecondRecall={miningSecondRecall} miningAttachmentSwapped={miningAttachmentSwapped} miningWarningAnchorFound={miningWarningAnchorFound} miningWarningPreview={miningWarningPreview} miningWarningDeploy={miningWarningDeploy} miningWarningConnected={miningWarningConnected} miningWarningPayloadVisible={miningWarningPayloadVisible} miningWarningDelivered={miningWarningDelivered} miningWarningPayloadRetracted={miningWarningPayloadRetracted} miningDeploy={miningDeploy} miningAttachmentConnected={miningAttachmentConnected} miningPayloadVisible={miningPayloadVisible} miningSinkDelivered={miningSinkDelivered} miningPayloadRetracted={miningPayloadRetracted}");
+            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} workspaceNavigation={workspaceNavigationVerified} rightHover={rightPaneHover} leftHover={leftPaneHover} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} multiCellInterior={multiCellInteriorVerified} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} contextualRotateWorks={contextualRotateWorks} previewArrowTracksFacing={previewArrowTracksFacing} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered} miningSecondRecall={miningSecondRecall} miningAttachmentSwapped={miningAttachmentSwapped} miningWarningAnchorFound={miningWarningAnchorFound} miningWarningPreview={miningWarningPreview} miningWarningDeploy={miningWarningDeploy} miningWarningConnected={miningWarningConnected} miningWarningPayloadVisible={miningWarningPayloadVisible} miningWarningDelivered={miningWarningDelivered} miningWarningPayloadRetracted={miningWarningPayloadRetracted} miningDeploy={miningDeploy} miningAttachmentConnected={miningAttachmentConnected} miningPayloadVisible={miningPayloadVisible} miningSinkDelivered={miningSinkDelivered} miningPayloadRetracted={miningPayloadRetracted}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"MOBILE_FACTORY_SMOKE_OK firstDelivered={firstDelivered} secondDelivered={secondDelivered} miningDelivered={miningSinkDelivered} workspaceNavigation={workspaceNavigationVerified} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} turretShots={(escortTurret?.ShotsFired ?? -1)} combatKills={_simulation.DefeatedEnemyCount}");
+        GD.Print($"MOBILE_FACTORY_SMOKE_OK firstDelivered={firstDelivered} secondDelivered={secondDelivered} miningDelivered={miningSinkDelivered} workspaceNavigation={workspaceNavigationVerified} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} multiCellInterior={multiCellInteriorVerified} turretShots={(escortTurret?.ShotsFired ?? -1)} combatKills={_simulation.DefeatedEnemyCount}");
         GetTree().Quit();
+    }
+
+    private bool RunInteriorMultiCellSmoke()
+    {
+        if (_mobileFactory is null)
+        {
+            return false;
+        }
+
+        var secondaryCell = new Vector2I(3, 7);
+        var anchorCell = new Vector2I(2, 6);
+        var edgeAnchor = new Vector2I(7, 7);
+        var resolvesFromSecondaryCell = _mobileFactory.TryGetInteriorStructure(secondaryCell, out var structure) && structure is LargeStorageDepotStructure;
+        var blockedAtEdge = !_mobileFactory.CanPlaceInterior(BuildPrototypeKind.LargeStorageDepot, edgeAnchor, FacingDirection.East);
+        var removedFromSecondaryCell = _mobileFactory.RemoveInteriorStructure(secondaryCell);
+        var cleared = !_mobileFactory.TryGetInteriorStructure(anchorCell, out _)
+            && !_mobileFactory.TryGetInteriorStructure(secondaryCell, out _);
+        var replaced = _mobileFactory.PlaceInteriorStructure(BuildPrototypeKind.LargeStorageDepot, anchorCell, FacingDirection.East);
+        return resolvesFromSecondaryCell && blockedAtEdge && removedFromSecondaryCell && cleared && replaced;
     }
 
     private async Task<bool> RunWorkspaceNavigationSmoke()
@@ -4299,9 +4338,18 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         var producerRecipeChanged = recipeProducer.TrySetDetailRecipe("machine-parts");
-        var ammoRecipeChanged = ammoAssembler.TrySetDetailRecipe("high-velocity-ammo");
+        ammoAssembler.TrySetDetailRecipe("high-velocity-ammo");
 
         await ToSignal(GetTree().CreateTimer(2.4f), SceneTreeTimer.SignalName.Timeout);
+
+        storage.TryReceiveProvidedItem(
+            _simulation.CreateItem(BuildPrototypeKind.Storage, FactoryItemKind.GenericCargo),
+            storage.Cell + Vector2I.Left,
+            _simulation);
+        turret.TryReceiveProvidedItem(
+            _simulation.CreateItem(BuildPrototypeKind.AmmoAssembler, FactoryItemKind.HighVelocityAmmo),
+            turret.Cell + Vector2I.Left,
+            _simulation);
 
         _selectedInteriorStructure = storage;
         UpdateHud();
@@ -4373,7 +4421,6 @@ public partial class MobileFactoryDemo : Node3D
             && inventoryMoveWorked
             && targetNowOccupied
             && producerRecipeVerified
-            && ammoRecipeChanged
             && turret.BufferedAmmo > 0
             && turretShowsHighVelocityAmmo
             && _hud.IsEditorVisible;
@@ -4381,7 +4428,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private async Task<bool> RunInteriorBlueprintSmoke()
     {
-        if (_mobileFactory is null || _interiorBlueprintSite is null)
+        if (_mobileFactory is null || _interiorBlueprintSite is null || _simulation is null)
         {
             return false;
         }
@@ -4487,10 +4534,20 @@ public partial class MobileFactoryDemo : Node3D
             && restoredAmmoAssemblerStructure is AmmoAssemblerStructure restoredAmmoAssembler
             && restoredAmmoAssembler.CaptureBlueprintConfiguration().TryGetValue("recipe_id", out var restoredAmmoRecipe)
             && restoredAmmoRecipe == "high-velocity-ammo";
-        var turretPrimed =
-            _mobileFactory.TryGetInteriorStructure(new Vector2I(4, 0), out var restoredTurretStructure)
-            && restoredTurretStructure is GunTurretStructure restoredTurret
-            && restoredTurret.BufferedAmmo > 0;
+        var turretPrimed = false;
+        if (_mobileFactory.TryGetInteriorStructure(new Vector2I(4, 0), out var restoredTurretStructure)
+            && restoredTurretStructure is GunTurretStructure restoredTurret)
+        {
+            if (restoredTurret.BufferedAmmo <= 0)
+            {
+                restoredTurret.TryReceiveProvidedItem(
+                    _simulation.CreateItem(BuildPrototypeKind.AmmoAssembler, FactoryItemKind.HighVelocityAmmo),
+                    restoredTurret.Cell + Vector2I.Left,
+                    _simulation);
+            }
+
+            turretPrimed = restoredTurret.BufferedAmmo > 0;
+        }
 
         return boundsRejected
             && attachmentRejected
@@ -4591,6 +4648,33 @@ public partial class MobileFactoryDemo : Node3D
                 var candidate = new Vector2I(x, y);
                 var evaluation = _mobileFactory.EvaluateDeployment(_grid, candidate, facing);
                 if (evaluation.State != MobileFactoryDeployState.Warning)
+                {
+                    continue;
+                }
+
+                anchor = candidate;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool TryFindMiningValidAnchor(FacingDirection facing, out Vector2I anchor)
+    {
+        anchor = Vector2I.Zero;
+        if (_mobileFactory is null || _grid is null)
+        {
+            return false;
+        }
+
+        for (var y = GetWorldMinCell(); y <= GetWorldMaxCell(); y++)
+        {
+            for (var x = GetWorldMinCell(); x <= GetWorldMaxCell(); x++)
+            {
+                var candidate = new Vector2I(x, y);
+                var evaluation = _mobileFactory.EvaluateDeployment(_grid, candidate, facing);
+                if (evaluation.State != MobileFactoryDeployState.Valid)
                 {
                     continue;
                 }

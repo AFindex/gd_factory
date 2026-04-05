@@ -28,8 +28,10 @@ public partial class SimulationController : Node
     private readonly List<FactoryStructure> _structures = new();
     private readonly List<IFactoryCombatSystem> _combatSystems = new();
     private readonly List<FactoryEnemyActor> _hostiles = new();
+    private readonly List<FactoryCombatProjectile> _projectiles = new();
     private readonly HashSet<FactoryStructure> _destroyedStructures = new();
     private readonly HashSet<FactoryEnemyActor> _defeatedHostiles = new();
+    private readonly HashSet<FactoryCombatProjectile> _expiredProjectiles = new();
     private readonly List<PowerNetworkRuntime> _powerNetworks = new();
     private double _accumulator;
     private double _averageStepMilliseconds;
@@ -45,6 +47,8 @@ public partial class SimulationController : Node
     public double AverageStepMilliseconds => _averageStepMilliseconds;
     public double LastTopologyRebuildMilliseconds => _lastTopologyRebuildMilliseconds;
     public int ActiveEnemyCount => _hostiles.Count;
+    public int ActiveProjectileCount => _projectiles.Count;
+    public int TotalProjectileLaunchCount { get; private set; }
     public int DestroyedStructureCount { get; private set; }
     public int DefeatedEnemyCount { get; private set; }
 
@@ -96,6 +100,21 @@ public partial class SimulationController : Node
     {
         _hostiles.Remove(hostile);
         _defeatedHostiles.Remove(hostile);
+    }
+
+    public void RegisterProjectile(FactoryCombatProjectile projectile)
+    {
+        if (!_projectiles.Contains(projectile))
+        {
+            AddChild(projectile);
+            _projectiles.Add(projectile);
+            TotalProjectileLaunchCount++;
+        }
+    }
+
+    public void QueueProjectileRemoval(FactoryCombatProjectile projectile)
+    {
+        _expiredProjectiles.Add(projectile);
     }
 
     public void QueueStructureDestruction(FactoryStructure structure)
@@ -301,6 +320,16 @@ public partial class SimulationController : Node
                 _hostiles[i].SimulationStep(this, FactoryConstants.SimulationStepSeconds);
             }
 
+            for (var i = 0; i < _projectiles.Count; i++)
+            {
+                if (!GodotObject.IsInstanceValid(_projectiles[i]) || _projectiles[i].IsExpired)
+                {
+                    continue;
+                }
+
+                _projectiles[i].SimulationStep(this, FactoryConstants.SimulationStepSeconds);
+            }
+
             ProcessQueuedCombatCleanup();
             _accumulator -= FactoryConstants.SimulationStepSeconds;
             _activeTransportItemCount = CountTransitItems();
@@ -353,6 +382,23 @@ public partial class SimulationController : Node
                 UnregisterEnemy(hostile);
                 hostile.QueueFree();
                 DefeatedEnemyCount++;
+            }
+        }
+
+        if (_expiredProjectiles.Count > 0)
+        {
+            var projectileSnapshot = new List<FactoryCombatProjectile>(_expiredProjectiles);
+            _expiredProjectiles.Clear();
+            for (var i = 0; i < projectileSnapshot.Count; i++)
+            {
+                var projectile = projectileSnapshot[i];
+                if (!GodotObject.IsInstanceValid(projectile))
+                {
+                    continue;
+                }
+
+                _projectiles.Remove(projectile);
+                projectile.QueueFree();
             }
         }
     }

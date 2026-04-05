@@ -1,4 +1,5 @@
 using Godot;
+using System.Collections.Generic;
 
 public enum GridReservationKind
 {
@@ -23,16 +24,18 @@ public sealed class GridReservation
 
 public readonly struct FactoryStructurePlacement
 {
-    public FactoryStructurePlacement(IFactorySite site, Vector2I cell, FacingDirection facing)
+    public FactoryStructurePlacement(IFactorySite site, Vector2I cell, FacingDirection facing, FactoryStructureFootprint? footprint = null)
     {
         Site = site;
         Cell = cell;
         Facing = facing;
+        Footprint = footprint ?? FactoryStructureFootprint.SingleCell;
     }
 
     public IFactorySite Site { get; }
     public Vector2I Cell { get; }
     public FacingDirection Facing { get; }
+    public FactoryStructureFootprint Footprint { get; }
 }
 
 public interface IFactorySite
@@ -46,6 +49,7 @@ public interface IFactorySite
 
     bool IsInBounds(Vector2I cell);
     Vector3 CellToWorld(Vector2I cell);
+    bool CanPlaceCells(IReadOnlyList<Vector2I> cells, string? ownerId = null);
     bool TryGetStructure(Vector2I cell, out FactoryStructure? structure);
     bool TrySendItem(FactoryStructure source, Vector2I targetCell, FactoryItem item, SimulationController simulation);
     void RemoveStructure(FactoryStructure structure);

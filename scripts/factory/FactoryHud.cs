@@ -416,10 +416,12 @@ public partial class FactoryHud : CanvasLayer
         CreateSelectionButton(buttonGrid, BuildPrototypeKind.Loader, "7 装载器");
         CreateSelectionButton(buttonGrid, BuildPrototypeKind.Unloader, "8 卸载器");
         CreateSelectionButton(buttonGrid, BuildPrototypeKind.Storage, "9 仓储");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.LargeStorageDepot, "大型仓储");
         CreateSelectionButton(buttonGrid, BuildPrototypeKind.Inserter, "0 机械臂");
         CreateSelectionButton(buttonGrid, BuildPrototypeKind.Wall, "墙体");
         CreateSelectionButton(buttonGrid, BuildPrototypeKind.AmmoAssembler, "弹药组装器");
         CreateSelectionButton(buttonGrid, BuildPrototypeKind.GunTurret, "机枪炮塔");
+        CreateSelectionButton(buttonGrid, BuildPrototypeKind.HeavyGunTurret, "重型炮塔");
 
         body.AddChild(CreateDivider());
         body.AddChild(CreateSectionLabel("快速观察", 12, new Color("F8FAFC")));

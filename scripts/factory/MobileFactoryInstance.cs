@@ -426,7 +426,8 @@ public sealed class MobileFactoryInstance
             return CanPlaceAttachment(kind, cell, facing);
         }
 
-        return InteriorSite.CanPlace(cell);
+        var occupiedCells = FactoryPlacement.ResolveFootprintCells(kind, cell, facing);
+        return InteriorSite.CanPlaceCells(occupiedCells);
     }
 
     public bool TryGetInteriorStructure(Vector2I cell, out FactoryStructure? structure)
@@ -630,7 +631,7 @@ public sealed class MobileFactoryInstance
     {
         foreach (var placement in preset.Placements)
         {
-            if (!InteriorSite.CanPlace(placement.Cell))
+            if (!CanPlaceInterior(placement.Kind, placement.Cell, placement.Facing))
             {
                 continue;
             }
@@ -666,7 +667,7 @@ public sealed class MobileFactoryInstance
         for (var i = 0; i < Profile.AttachmentMounts.Count; i++)
         {
             var mount = Profile.AttachmentMounts[i];
-            if (!mount.Allows(BuildPrototypeKind.OutputPort) || !InteriorSite.CanPlace(mount.Cell))
+            if (!mount.Allows(BuildPrototypeKind.OutputPort) || !CanPlaceInterior(BuildPrototypeKind.OutputPort, mount.Cell, mount.Facing))
             {
                 continue;
             }

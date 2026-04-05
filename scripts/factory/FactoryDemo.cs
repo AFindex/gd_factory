@@ -34,10 +34,12 @@ public partial class FactoryDemo : Node3D
         [BuildPrototypeKind.Loader] = new BuildPrototypeDefinition(BuildPrototypeKind.Loader, "装载器", new Color("FDBA74"), "把后方带上的物品装入前方机器或回收端。"),
         [BuildPrototypeKind.Unloader] = new BuildPrototypeDefinition(BuildPrototypeKind.Unloader, "卸载器", new Color("93C5FD"), "把机器端输出卸到前方传送网络。"),
         [BuildPrototypeKind.Storage] = new BuildPrototypeDefinition(BuildPrototypeKind.Storage, "仓储", new Color("94A3B8"), "缓存多件物品，可向前输出，也能被机械臂抓取。"),
+        [BuildPrototypeKind.LargeStorageDepot] = new BuildPrototypeDefinition(BuildPrototypeKind.LargeStorageDepot, "大型仓储", new Color("64748B"), "占据 2x2 空间的大型缓存仓，可作为更稳定的物流缓冲点。"),
         [BuildPrototypeKind.Inserter] = new BuildPrototypeDefinition(BuildPrototypeKind.Inserter, "机械臂", new Color("FACC15"), "从后方抓取一件物品并向前投送。"),
         [BuildPrototypeKind.Wall] = new BuildPrototypeDefinition(BuildPrototypeKind.Wall, "墙体", new Color("D1D5DB"), "高耐久阻挡物，用来拖延敌人推进。"),
         [BuildPrototypeKind.AmmoAssembler] = new BuildPrototypeDefinition(BuildPrototypeKind.AmmoAssembler, "弹药组装器", new Color("FB923C"), "持续生产弹药，沿物流链补给防线。"),
-        [BuildPrototypeKind.GunTurret] = new BuildPrototypeDefinition(BuildPrototypeKind.GunTurret, "机枪炮塔", new Color("CBD5E1"), "需要弹药供给，敌人进入射程时自动开火。")
+        [BuildPrototypeKind.GunTurret] = new BuildPrototypeDefinition(BuildPrototypeKind.GunTurret, "机枪炮塔", new Color("CBD5E1"), "需要弹药供给，敌人进入射程时自动开火。"),
+        [BuildPrototypeKind.HeavyGunTurret] = new BuildPrototypeDefinition(BuildPrototypeKind.HeavyGunTurret, "重型炮塔", new Color("E2E8F0"), "占据 2x2 空间，消耗高速弹药并发射独立炮弹。")
     };
 
     private GridManager? _grid;
@@ -458,10 +460,15 @@ public partial class FactoryDemo : Node3D
         AddWestSplitterFanout();
         AddCentralBridgeCrossing();
         AddAmmoFedDefenseLane();
+        AddHeavyTurretDefenseLane();
         AddAmmoStarvedBreachLane();
         AddMixedPressureLane();
+        PrimeDefenseStocks();
         RefreshAllTopology();
-        ConfigureCombatScenarios();
+        if (!HasSmokeTestFlag())
+        {
+            ConfigureCombatScenarios();
+        }
     }
 
     private void SeedWorldResourceDeposits()
@@ -804,6 +811,17 @@ public partial class FactoryDemo : Node3D
         PlaceStructure(BuildPrototypeKind.Storage, -7, 16, FacingDirection.West);
     }
 
+    private void AddHeavyTurretDefenseLane()
+    {
+        PlaceStructure(BuildPrototypeKind.Wall, -18, 20, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Wall, -17, 20, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.HeavyGunTurret, -16, 19, FacingDirection.West);
+        PlaceStructure(BuildPrototypeKind.Inserter, -14, 19, FacingDirection.West);
+        PlaceStructure(BuildPrototypeKind.Belt, -13, 19, FacingDirection.West);
+        PlaceStructure(BuildPrototypeKind.AmmoAssembler, -12, 19, FacingDirection.West);
+        PlaceStructure(BuildPrototypeKind.LargeStorageDepot, -10, 19, FacingDirection.West);
+    }
+
     private void AddAmmoStarvedBreachLane()
     {
         PlaceStructure(BuildPrototypeKind.Wall, 14, 14, FacingDirection.West);
@@ -839,27 +857,81 @@ public partial class FactoryDemo : Node3D
             BuildLanePath(new Vector2I(-16, 16), new Vector2I(-15, 16), new Vector2I(-14, 16), new Vector2I(-12, 16)),
             new FactoryEnemySpawnRule[]
             {
-                new("melee", 2.8f),
-                new("melee", 3.2f),
-                new("melee", 3.0f)
+                new("melee", 4.2f),
+                new("melee", 4.8f),
+                new("melee", 4.4f)
             }));
         _combatDirector.AddLane(new FactoryEnemyLaneDefinition(
             "starved_lane",
             BuildLanePath(new Vector2I(16, 14), new Vector2I(15, 14), new Vector2I(14, 14), new Vector2I(12, 14)),
             new FactoryEnemySpawnRule[]
             {
-                new("melee", 3.0f),
-                new("melee", 3.0f)
+                new("melee", 5.0f),
+                new("melee", 5.0f)
+            }));
+        _combatDirector.AddLane(new FactoryEnemyLaneDefinition(
+            "heavy_lane",
+            BuildLanePath(new Vector2I(-20, 20), new Vector2I(-19, 20), new Vector2I(-18, 20), new Vector2I(-16, 20)),
+            new FactoryEnemySpawnRule[]
+            {
+                new("melee", 4.8f),
+                new("ranged", 6.8f)
             }));
         _combatDirector.AddLane(new FactoryEnemyLaneDefinition(
             "mixed_lane",
             BuildLanePath(new Vector2I(16, -15), new Vector2I(15, -15), new Vector2I(14, -15), new Vector2I(12, -15)),
             new FactoryEnemySpawnRule[]
             {
-                new("melee", 3.2f),
-                new("ranged", 4.8f),
-                new("melee", 3.6f)
+                new("melee", 4.8f),
+                new("ranged", 6.0f),
+                new("melee", 5.2f)
             }));
+    }
+
+    private void PrimeDefenseStocks()
+    {
+        if (_grid is null || _simulation is null)
+        {
+            return;
+        }
+
+        PrimeTurretAmmo(new Vector2I(-12, 16), 10, FactoryItemKind.AmmoMagazine);
+        PrimeTurretAmmo(new Vector2I(12, -15), 8, FactoryItemKind.AmmoMagazine);
+        PrimeTurretAmmo(new Vector2I(-16, 19), 10, FactoryItemKind.HighVelocityAmmo);
+        PrimeAmmoAssemblerRecipe(new Vector2I(-12, 19), "high-velocity-ammo");
+    }
+
+    private void PrimeTurretAmmo(Vector2I cell, int count, FactoryItemKind itemKind)
+    {
+        if (_grid is null || _simulation is null)
+        {
+            return;
+        }
+
+        if (!_grid.TryGetStructure(cell, out var structure) || structure is not IFactoryItemReceiver receiver)
+        {
+            return;
+        }
+
+        for (var index = 0; index < count; index++)
+        {
+            var sourceCell = structure.GetInputCell();
+            var item = _simulation.CreateItem(BuildPrototypeKind.AmmoAssembler, itemKind);
+            if (!receiver.TryReceiveProvidedItem(item, sourceCell, _simulation))
+            {
+                break;
+            }
+        }
+    }
+
+    private void PrimeAmmoAssemblerRecipe(Vector2I cell, string recipeId)
+    {
+        if (_grid is null || !_grid.TryGetStructure(cell, out var structure) || structure is not AmmoAssemblerStructure ammoAssembler)
+        {
+            return;
+        }
+
+        ammoAssembler.TrySetDetailRecipe(recipeId);
     }
 
     private Vector3[] BuildLanePath(params Vector2I[] cells)
@@ -972,7 +1044,7 @@ public partial class FactoryDemo : Node3D
 
         if (_interactionMode == FactoryInteractionMode.Build && _selectedBuildKind.HasValue)
         {
-            _canPlaceCurrentCell = TryValidateWorldPlacement(_selectedBuildKind.Value, cell, out var placementIssue);
+            _canPlaceCurrentCell = TryValidateWorldPlacement(_selectedBuildKind.Value, cell, _selectedFacing, out var placementIssue);
             _previewMessage = _canPlaceCurrentCell
                 ? $"可在 ({cell.X}, {cell.Y}) 放置{_definitions[_selectedBuildKind.Value].DisplayName}，朝向 {FactoryDirection.ToLabel(_selectedFacing)}"
                 : placementIssue;
@@ -1080,9 +1152,16 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        _previewRoot.Position = _grid.CellToWorld(_hoveredCell);
+        _previewRoot.Position = FactoryPlacement.GetPreviewCenter(_grid, _selectedBuildKind!.Value, _hoveredCell, _selectedFacing);
         _previewRoot.Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(_selectedFacing), 0.0f);
-        _previewCell.Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.92f, 0.08f, FactoryConstants.CellSize * 0.92f) };
+        var previewSize = FactoryPlacement.GetPreviewSize(_grid, _selectedBuildKind.Value, _selectedFacing);
+        _previewCell.Mesh = new BoxMesh
+        {
+            Size = new Vector3(
+                previewSize.X - (_grid.CellSize * 0.08f),
+                0.08f,
+                previewSize.Y - (_grid.CellSize * 0.08f))
+        };
         _previewCell.Position = new Vector3(0.0f, 0.05f, 0.0f);
         _previewArrow.Visible = true;
 
@@ -1620,7 +1699,7 @@ public partial class FactoryDemo : Node3D
 
     private FactoryStructure? PlaceStructure(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
     {
-        if (_grid is null || _structureRoot is null || _simulation is null || !TryValidateWorldPlacement(kind, cell, out _))
+        if (_grid is null || _structureRoot is null || _simulation is null || !TryValidateWorldPlacement(kind, cell, facing, out _))
         {
             return null;
         }
@@ -1751,19 +1830,19 @@ public partial class FactoryDemo : Node3D
         }
 
         var rect = GetDeleteRect(start, end);
-        var count = 0;
+        var seen = new HashSet<ulong>();
         for (var y = rect.Position.Y; y < rect.End.Y; y++)
         {
             for (var x = rect.Position.X; x < rect.End.X; x++)
             {
                 if (_grid.TryGetStructure(new Vector2I(x, y), out var structure) && structure is not null)
                 {
-                    count++;
+                    seen.Add(structure.GetInstanceId());
                 }
             }
         }
 
-        return count;
+        return seen.Count;
     }
 
     private void DeleteStructuresInRect(Vector2I start, Vector2I end)
@@ -1775,14 +1854,15 @@ public partial class FactoryDemo : Node3D
 
         var rect = GetDeleteRect(start, end);
         var cellsToDelete = new List<Vector2I>();
+        var seen = new HashSet<ulong>();
         for (var y = rect.Position.Y; y < rect.End.Y; y++)
         {
             for (var x = rect.Position.X; x < rect.End.X; x++)
             {
                 var cell = new Vector2I(x, y);
-                if (_grid.TryGetStructure(cell, out var structure) && structure is not null)
+                if (_grid.TryGetStructure(cell, out var structure) && structure is not null && seen.Add(structure.GetInstanceId()))
                 {
-                    cellsToDelete.Add(cell);
+                    cellsToDelete.Add(structure.Cell);
                 }
             }
         }
@@ -1919,7 +1999,7 @@ public partial class FactoryDemo : Node3D
             return "目标格已被占用。";
         }
 
-        if (!TryValidateWorldPlacement(entry.Kind, targetCell, out var placementIssue))
+        if (!TryValidateWorldPlacement(entry.Kind, targetCell, targetFacing, out var placementIssue))
         {
             return placementIssue;
         }
@@ -2327,11 +2407,13 @@ public partial class FactoryDemo : Node3D
         var placed = _grid.TryGetStructure(probeCell, out var placedStructure) && placedStructure is BeltStructure;
         RemoveStructure(probeCell);
         var removed = _grid.CanPlace(probeCell);
+        var multiCellPlacementVerified = RunMultiCellPlacementSmoke();
         var previewArrowReady = _previewArrow is not null && _previewArrow.GetChildCount() >= 3;
 
         var initialStructureCount = _simulation.RegisteredStructureCount;
         var poweredFactoryVerified = await RunPoweredFactorySmoke();
         var sinkStats = CollectSinkStats();
+        ConfigureCombatScenarios();
         var profilerText = _hud?.ProfilerText ?? string.Empty;
         var splitterFallbackRecovered = await RunSplitterFallbackSmoke();
         var bridgeLaneRecovered = await RunBridgeLaneIndependenceSmoke();
@@ -2357,15 +2439,49 @@ public partial class FactoryDemo : Node3D
             || !blueprintVerified
             || !workspaceVerified
             || !combatVerified
+            || !multiCellPlacementVerified
             || !previewArrowReady)
         {
-            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
+            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
+        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} previewArrowReady={previewArrowReady}");
         GetTree().Quit();
+    }
+
+    private bool RunMultiCellPlacementSmoke()
+    {
+        if (_grid is null || _simulation is null)
+        {
+            return false;
+        }
+
+        var anchor = new Vector2I(18, 18);
+        var overflowAnchor = new Vector2I(FactoryConstants.GridMax, FactoryConstants.GridMax);
+        if (!TryValidateWorldPlacement(BuildPrototypeKind.LargeStorageDepot, anchor, FacingDirection.East, out _))
+        {
+            return false;
+        }
+
+        if (TryValidateWorldPlacement(BuildPrototypeKind.LargeStorageDepot, overflowAnchor, FacingDirection.East, out _))
+        {
+            return false;
+        }
+
+        var depot = PlaceStructure(BuildPrototypeKind.LargeStorageDepot, anchor, FacingDirection.East) as LargeStorageDepotStructure;
+        if (depot is null)
+        {
+            return false;
+        }
+
+        var occupiedCell = anchor + Vector2I.One;
+        var resolvedFromSecondaryCell = _grid.TryGetStructure(occupiedCell, out var resolvedStructure) && resolvedStructure == depot;
+        RemoveStructure(occupiedCell);
+        var released = _grid.CanPlace(anchor) && _grid.CanPlace(occupiedCell);
+        var singleCellStillValid = TryValidateWorldPlacement(BuildPrototypeKind.Belt, anchor, FacingDirection.East, out _);
+        return resolvedFromSecondaryCell && released && singleCellStillValid;
     }
 
     private bool RunWorkspaceNavigationSmoke()
@@ -2835,6 +2951,7 @@ public partial class FactoryDemo : Node3D
         await ToSignal(GetTree().CreateTimer(20.0f), SceneTreeTimer.SignalName.Timeout);
 
         var totalTurretShots = 0;
+        var totalHeavyTurretShots = 0;
         for (var x = FactoryConstants.GridMin; x <= FactoryConstants.GridMax; x++)
         {
             for (var y = FactoryConstants.GridMin; y <= FactoryConstants.GridMax; y++)
@@ -2843,21 +2960,29 @@ public partial class FactoryDemo : Node3D
                 {
                     totalTurretShots += turret.ShotsFired;
                 }
+                else if (_grid.TryGetStructure(new Vector2I(x, y), out structure) && structure is HeavyGunTurretStructure heavyTurret)
+                {
+                    totalHeavyTurretShots += heavyTurret.ShotsFired;
+                }
             }
         }
 
         var combatPressureVisible = totalTurretShots > 0
+            || totalHeavyTurretShots > 0
             || _simulation.ActiveEnemyCount > 0
             || _simulation.DefeatedEnemyCount > 0
             || _simulation.DestroyedStructureCount > 0;
+        var heavyProjectileVerified = totalHeavyTurretShots > 0
+            || _simulation.ActiveProjectileCount > 0
+            || _simulation.TotalProjectileLaunchCount > 0;
         var breachOccurred = breachWall is null
             || !GodotObject.IsInstanceValid(breachWall)
             || breachWall.CurrentHealth < breachWall.MaxHealth
             || _simulation.DestroyedStructureCount > 0;
 
-        GD.Print($"FACTORY_COMBAT_SMOKE totalTurretShots={totalTurretShots} kills={_simulation.DefeatedEnemyCount} activeEnemies={_simulation.ActiveEnemyCount} destroyedStructures={_simulation.DestroyedStructureCount} breachWallPresent={breachWall is not null} breachWallHealth={(breachWall is not null && GodotObject.IsInstanceValid(breachWall) ? breachWall.CurrentHealth : -1.0f)}");
+        GD.Print($"FACTORY_COMBAT_SMOKE totalTurretShots={totalTurretShots} heavyTurretShots={totalHeavyTurretShots} activeProjectiles={_simulation.ActiveProjectileCount} totalProjectileLaunches={_simulation.TotalProjectileLaunchCount} kills={_simulation.DefeatedEnemyCount} activeEnemies={_simulation.ActiveEnemyCount} destroyedStructures={_simulation.DestroyedStructureCount} breachWallPresent={breachWall is not null} breachWallHealth={(breachWall is not null && GodotObject.IsInstanceValid(breachWall) ? breachWall.CurrentHealth : -1.0f)}");
 
-        return combatPressureVisible;
+        return combatPressureVisible && heavyProjectileVerified;
     }
 
     private static double SmoothMetric(double current, double sample, double weight)
@@ -2867,7 +2992,7 @@ public partial class FactoryDemo : Node3D
             : current + ((sample - current) * weight);
     }
 
-    private bool TryValidateWorldPlacement(BuildPrototypeKind kind, Vector2I cell, out string message)
+    private bool TryValidateWorldPlacement(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing, out string message)
     {
         message = "世界网格不可用。";
         if (_grid is null)
@@ -2881,6 +3006,6 @@ public partial class FactoryDemo : Node3D
             return false;
         }
 
-        return _grid.CanPlaceStructure(kind, cell, out message);
+        return _grid.CanPlaceStructure(kind, cell, facing, out message);
     }
 }

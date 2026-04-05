@@ -21,6 +21,8 @@ public enum BuildPrototypeKind
     Wall,
     AmmoAssembler,
     GunTurret,
+    HeavyGunTurret,
+    LargeStorageDepot,
     OutputPort,
     InputPort,
     MiningInputPort
@@ -169,6 +171,8 @@ public static class FactoryPresentation
             BuildPrototypeKind.Wall => "墙体",
             BuildPrototypeKind.AmmoAssembler => "弹药组装器",
             BuildPrototypeKind.GunTurret => "机枪炮塔",
+            BuildPrototypeKind.HeavyGunTurret => "重型炮塔",
+            BuildPrototypeKind.LargeStorageDepot => "大型仓储",
             BuildPrototypeKind.OutputPort => "输出端口",
             BuildPrototypeKind.InputPort => "输入端口",
             BuildPrototypeKind.MiningInputPort => "采矿输入端口",

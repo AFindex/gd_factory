@@ -17,7 +17,7 @@ public partial class MobileFactoryHud : CanvasLayer
     {
         BuildPrototypeKind.Producer, BuildPrototypeKind.Belt, BuildPrototypeKind.Splitter, BuildPrototypeKind.Merger,
         BuildPrototypeKind.Bridge, BuildPrototypeKind.Loader, BuildPrototypeKind.Unloader, BuildPrototypeKind.Sink,
-        BuildPrototypeKind.Storage, BuildPrototypeKind.Inserter, BuildPrototypeKind.Wall, BuildPrototypeKind.AmmoAssembler,
+        BuildPrototypeKind.Storage, BuildPrototypeKind.LargeStorageDepot, BuildPrototypeKind.Inserter, BuildPrototypeKind.Wall, BuildPrototypeKind.AmmoAssembler,
         BuildPrototypeKind.GunTurret, BuildPrototypeKind.OutputPort, BuildPrototypeKind.InputPort, BuildPrototypeKind.MiningInputPort,
         BuildPrototypeKind.Generator, BuildPrototypeKind.PowerPole, BuildPrototypeKind.Smelter, BuildPrototypeKind.Assembler
     };

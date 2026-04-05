@@ -25,6 +25,17 @@ public static class FactoryConstants
     public const float GunTurretAimToleranceRadians = 0.22f;
     public const float GunTurretTracerLifetime = 0.12f;
     public const float GunTurretMuzzleFlashLifetime = 0.08f;
+    public const int LargeStorageDepotCapacity = 20;
+    public const float HeavyGunTurretRange = 13.5f;
+    public const float HeavyGunTurretCooldownSeconds = 1.15f;
+    public const int HeavyGunTurretAmmoCapacity = 14;
+    public const float HeavyGunTurretDamage = 46.0f;
+    public const float HeavyGunTurretTrackingSpeed = 7.4f;
+    public const float HeavyGunTurretReturnSpeed = 3.8f;
+    public const float HeavyGunTurretAimToleranceRadians = 0.28f;
+    public const float HeavyGunTurretMuzzleFlashLifetime = 0.14f;
+    public const float HeavyProjectileSpeed = 13.5f;
+    public const float HeavyProjectileMaxTravel = 16.0f;
     public const float AmmoAssemblerSpawnSeconds = 0.85f;
     public const float EnemyMeleeSpeed = 2.6f;
     public const float EnemyRangedSpeed = 2.1f;

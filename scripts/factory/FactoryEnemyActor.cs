@@ -342,7 +342,7 @@ public sealed partial class MeleeRaiderEnemy : FactoryEnemyActor
     public override float AttackRange => FactoryConstants.EnemyMeleeAttackRange;
     public override float AttackDamage => 5.0f;
     public override float AttackCooldownSeconds => 0.72f;
-    public override IReadOnlyCollection<BuildPrototypeKind>? PreferredTargetKinds => new[] { BuildPrototypeKind.Wall, BuildPrototypeKind.GunTurret };
+    public override IReadOnlyCollection<BuildPrototypeKind>? PreferredTargetKinds => new[] { BuildPrototypeKind.Wall, BuildPrototypeKind.GunTurret, BuildPrototypeKind.HeavyGunTurret };
 }
 
 public sealed partial class RangedRaiderEnemy : FactoryEnemyActor
@@ -364,5 +364,5 @@ public sealed partial class RangedRaiderEnemy : FactoryEnemyActor
     public override float AttackRange => FactoryConstants.EnemyRangedAttackRange;
     public override float AttackDamage => 4.0f;
     public override float AttackCooldownSeconds => 0.95f;
-    public override IReadOnlyCollection<BuildPrototypeKind>? PreferredTargetKinds => new[] { BuildPrototypeKind.GunTurret, BuildPrototypeKind.AmmoAssembler, BuildPrototypeKind.Storage };
+    public override IReadOnlyCollection<BuildPrototypeKind>? PreferredTargetKinds => new[] { BuildPrototypeKind.GunTurret, BuildPrototypeKind.HeavyGunTurret, BuildPrototypeKind.AmmoAssembler, BuildPrototypeKind.Storage, BuildPrototypeKind.LargeStorageDepot };
 }

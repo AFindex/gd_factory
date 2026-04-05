@@ -18,6 +18,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
     private Color _ghostTint = new(-1.0f, -1.0f, -1.0f, -1.0f);
 
     protected float CellSize { get; private set; } = FactoryConstants.CellSize;
+    protected FactoryStructureFootprint Footprint { get; private set; } = FactoryStructureFootprint.SingleCell;
 
     public IFactorySite Site { get; private set; } = null!;
     public Vector2I Cell { get; private set; }
@@ -29,18 +30,19 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
     public float CurrentHealth => _currentHealth;
     public bool IsDestroyed { get; private set; }
     public bool IsUnderAttack => _recentDamageTimer > 0.0;
-    public virtual float CombatRadius => CellSize * 0.46f;
+    public virtual float CombatRadius => Footprint.GetCombatRadius(CellSize, Facing);
 
     public abstract BuildPrototypeKind Kind { get; }
     public abstract string Description { get; }
     public virtual bool IsTransportNode => false;
 
-    public void Configure(IFactorySite site, Vector2I cell, FacingDirection facing, string? reservationOwnerId = null)
+    public void Configure(IFactorySite site, Vector2I cell, FacingDirection facing, string? reservationOwnerId = null, FactoryStructureFootprint? footprint = null)
     {
         Site = site;
         Cell = cell;
         Facing = facing;
         CellSize = site.CellSize;
+        Footprint = footprint ?? FactoryStructureFootprint.SingleCell;
         _currentHealth = MaxHealth;
         ReservationOwnerId = string.IsNullOrWhiteSpace(reservationOwnerId)
             ? $"structure:{GetInstanceId()}"
@@ -77,7 +79,10 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
 
     public virtual void RefreshPlacement()
     {
-        Position = Site.CellToWorld(Cell);
+        var anchorWorld = Site.CellToWorld(Cell);
+        var centerOffset = Footprint.GetWorldCenterOffset(CellSize, Facing);
+        var rotatedCenterOffset = centerOffset.Rotated(Vector3.Up, Site.WorldRotationRadians);
+        Position = anchorWorld + rotatedCenterOffset;
         Rotation = new Vector3(0.0f, Site.WorldRotationRadians + FactoryDirection.ToYRotationRadians(Facing), 0.0f);
         Visible = Site.IsVisible;
         SyncCombatOverlayPlacement();
@@ -85,7 +90,10 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
 
     public virtual IEnumerable<Vector2I> GetOccupiedCells()
     {
-        yield return Cell;
+        foreach (var cell in Footprint.ResolveOccupiedCells(Cell, Facing))
+        {
+            yield return cell;
+        }
     }
 
     public virtual IEnumerable<string> GetInspectionLines()
@@ -137,12 +145,12 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
 
     public Vector2I GetOutputCell()
     {
-        return Cell + FactoryDirection.ToCellOffset(Facing);
+        return Footprint.ResolveOutputCell(Cell, Facing);
     }
 
     public Vector2I GetInputCell()
     {
-        return Cell - FactoryDirection.ToCellOffset(Facing);
+        return Footprint.ResolveInputCell(Cell, Facing);
     }
 
     public bool AcceptsFrom(Vector2I sourceCell)
@@ -344,7 +352,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
         _healthBarBackground = new MeshInstance3D
         {
             Name = "HealthBarBackground",
-            Mesh = new BoxMesh { Size = new Vector3(CellSize * 0.62f, 0.04f, CellSize * 0.08f) },
+            Mesh = new BoxMesh { Size = new Vector3(Mathf.Max(CellSize * 0.62f, Footprint.GetPreviewSize(CellSize, Facing).X * 0.42f), 0.04f, CellSize * 0.08f) },
             Position = new Vector3(0.0f, FactoryConstants.StructureHealthBarHeight, 0.0f),
             MaterialOverride = new StandardMaterial3D
             {
@@ -365,7 +373,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
         _healthBarFill = new MeshInstance3D
         {
             Name = "HealthBarFill",
-            Mesh = new BoxMesh { Size = new Vector3(CellSize * 0.60f, 0.03f, CellSize * 0.06f) },
+            Mesh = new BoxMesh { Size = new Vector3(Mathf.Max(CellSize * 0.60f, Footprint.GetPreviewSize(CellSize, Facing).X * 0.40f), 0.03f, CellSize * 0.06f) },
             Position = new Vector3(0.0f, FactoryConstants.StructureHealthBarHeight, 0.0f),
             MaterialOverride = _healthBarFillMaterial,
             Visible = false
@@ -381,7 +389,13 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
         _focusRing = new MeshInstance3D
         {
             Name = "CombatFocusRing",
-            Mesh = new BoxMesh { Size = new Vector3(CellSize * 0.96f, 0.02f, CellSize * 0.96f) },
+            Mesh = new BoxMesh
+            {
+                Size = new Vector3(
+                    Mathf.Max(CellSize * 0.96f, Footprint.GetPreviewSize(CellSize, Facing).X - (CellSize * 0.12f)),
+                    0.02f,
+                    Mathf.Max(CellSize * 0.96f, Footprint.GetPreviewSize(CellSize, Facing).Y - (CellSize * 0.12f)))
+            },
             Position = new Vector3(0.0f, 0.03f, 0.0f),
             MaterialOverride = _focusRingMaterial,
             Visible = false

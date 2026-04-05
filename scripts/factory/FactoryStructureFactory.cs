@@ -8,18 +8,21 @@ public sealed class FactoryStructureDefinition
         BuildPrototypeKind kind,
         Func<FactoryStructure> creator,
         bool allowWorldPlacement,
-        bool allowMobileInterior)
+        bool allowMobileInterior,
+        FactoryStructureFootprint? footprint = null)
     {
         Kind = kind;
         Creator = creator;
         AllowWorldPlacement = allowWorldPlacement;
         AllowMobileInterior = allowMobileInterior;
+        Footprint = footprint ?? FactoryStructureFootprint.SingleCell;
     }
 
     public BuildPrototypeKind Kind { get; }
     public Func<FactoryStructure> Creator { get; }
     public bool AllowWorldPlacement { get; }
     public bool AllowMobileInterior { get; }
+    public FactoryStructureFootprint Footprint { get; }
 }
 
 public static class FactoryStructureFactory
@@ -40,10 +43,26 @@ public static class FactoryStructureFactory
         [BuildPrototypeKind.Loader] = new FactoryStructureDefinition(BuildPrototypeKind.Loader, () => new LoaderStructure(), true, true),
         [BuildPrototypeKind.Unloader] = new FactoryStructureDefinition(BuildPrototypeKind.Unloader, () => new UnloaderStructure(), true, true),
         [BuildPrototypeKind.Storage] = new FactoryStructureDefinition(BuildPrototypeKind.Storage, () => new StorageStructure(), true, true),
+        [BuildPrototypeKind.LargeStorageDepot] = new FactoryStructureDefinition(
+            BuildPrototypeKind.LargeStorageDepot,
+            () => new LargeStorageDepotStructure(),
+            true,
+            true,
+            new FactoryStructureFootprint(
+                new[] { Vector2I.Zero, Vector2I.Right, Vector2I.Down, Vector2I.Right + Vector2I.Down },
+                inputOffsetEast: new Vector2I(-1, 0),
+                outputOffsetEast: new Vector2I(2, 0))),
         [BuildPrototypeKind.Inserter] = new FactoryStructureDefinition(BuildPrototypeKind.Inserter, () => new InserterStructure(), true, true),
         [BuildPrototypeKind.Wall] = new FactoryStructureDefinition(BuildPrototypeKind.Wall, () => new WallStructure(), true, true),
         [BuildPrototypeKind.AmmoAssembler] = new FactoryStructureDefinition(BuildPrototypeKind.AmmoAssembler, () => new AmmoAssemblerStructure(), true, true),
         [BuildPrototypeKind.GunTurret] = new FactoryStructureDefinition(BuildPrototypeKind.GunTurret, () => new GunTurretStructure(), true, true),
+        [BuildPrototypeKind.HeavyGunTurret] = new FactoryStructureDefinition(
+            BuildPrototypeKind.HeavyGunTurret,
+            () => new HeavyGunTurretStructure(),
+            true,
+            false,
+            new FactoryStructureFootprint(
+                new[] { Vector2I.Zero, Vector2I.Right, Vector2I.Down, Vector2I.Right + Vector2I.Down })),
         [BuildPrototypeKind.OutputPort] = new FactoryStructureDefinition(BuildPrototypeKind.OutputPort, () => new MobileFactoryOutputPortStructure(), false, true),
         [BuildPrototypeKind.InputPort] = new FactoryStructureDefinition(BuildPrototypeKind.InputPort, () => new MobileFactoryInputPortStructure(), false, true),
         [BuildPrototypeKind.MiningInputPort] = new FactoryStructureDefinition(BuildPrototypeKind.MiningInputPort, () => new MobileFactoryMiningInputPortStructure(), false, true)
@@ -68,7 +87,7 @@ public static class FactoryStructureFactory
         }
 
         var structure = definition.Creator();
-        structure.Configure(placement.Site, placement.Cell, placement.Facing);
+        structure.Configure(placement.Site, placement.Cell, placement.Facing, footprint: definition.Footprint);
         return structure;
     }
 
@@ -83,5 +102,10 @@ public static class FactoryStructureFactory
     {
         var structure = Create(kind, placement);
         return structure;
+    }
+
+    public static FactoryStructureFootprint GetFootprint(BuildPrototypeKind kind)
+    {
+        return GetDefinition(kind).Footprint;
     }
 }

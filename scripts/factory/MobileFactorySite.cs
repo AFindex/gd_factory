@@ -39,6 +39,25 @@ public sealed class MobileFactorySite : IFactorySite
         return IsInBounds(cell) && !_structures.ContainsKey(cell);
     }
 
+    public bool CanPlaceCells(IReadOnlyList<Vector2I> cells, string? ownerId = null)
+    {
+        for (var index = 0; index < cells.Count; index++)
+        {
+            var cell = cells[index];
+            if (!IsInBounds(cell))
+            {
+                return false;
+            }
+
+            if (_structures.TryGetValue(cell, out var structure) && (ownerId is null || structure.ReservationOwnerId != ownerId))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public Vector3 CellToWorld(Vector2I cell)
     {
         var local = new Vector3(cell.X * CellSize, 0.0f, cell.Y * CellSize);
@@ -60,19 +79,38 @@ public sealed class MobileFactorySite : IFactorySite
 
     public IEnumerable<FactoryStructure> GetStructures()
     {
-        return _structures.Values;
+        var seen = new HashSet<ulong>();
+        foreach (var structure in _structures.Values)
+        {
+            if (seen.Add(structure.GetInstanceId()))
+            {
+                yield return structure;
+            }
+        }
     }
 
     public void AddStructure(FactoryStructure structure)
     {
-        _structures[structure.Cell] = structure;
+        foreach (var cell in structure.GetOccupiedCells())
+        {
+            _structures[cell] = structure;
+        }
     }
 
     public void RemoveStructure(FactoryStructure structure)
     {
-        if (_structures.TryGetValue(structure.Cell, out var existing) && existing == structure)
+        var toRemove = new List<Vector2I>();
+        foreach (var pair in _structures)
         {
-            _structures.Remove(structure.Cell);
+            if (pair.Value == structure)
+            {
+                toRemove.Add(pair.Key);
+            }
+        }
+
+        for (var index = 0; index < toRemove.Count; index++)
+        {
+            _structures.Remove(toRemove[index]);
         }
     }
 
