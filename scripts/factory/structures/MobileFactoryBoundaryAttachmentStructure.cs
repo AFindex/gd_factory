@@ -439,40 +439,100 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
 
         for (var index = 0; index < projection.WorldCells.Count; index++)
         {
-            payloadRoot.AddChild(new MeshInstance3D
+            var stakeRoot = new Node3D
             {
-                Name = $"PayloadCell_{index}",
-                Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.82f, 0.16f, FactoryConstants.CellSize * 0.82f) },
+                Name = $"PayloadStake_{index}"
+            };
+
+            stakeRoot.AddChild(new MeshInstance3D
+            {
+                Name = "StakePad",
+                Mesh = new CylinderMesh
+                {
+                    TopRadius = FactoryConstants.CellSize * 0.14f,
+                    BottomRadius = FactoryConstants.CellSize * 0.18f,
+                    Height = 0.16f
+                },
+                Position = new Vector3(0.0f, 0.08f, 0.0f),
                 MaterialOverride = new StandardMaterial3D
                 {
-                    AlbedoColor = AttachmentDefinition.Tint.Darkened(0.12f),
-                    Roughness = 0.82f
+                    AlbedoColor = AttachmentDefinition.Tint.Darkened(0.18f),
+                    Roughness = 0.86f
+                }
+            });
+
+            stakeRoot.AddChild(new MeshInstance3D
+            {
+                Name = "StakeMast",
+                Mesh = new CylinderMesh
+                {
+                    TopRadius = 0.06f,
+                    BottomRadius = 0.08f,
+                    Height = 0.56f
+                },
+                Position = new Vector3(0.0f, 0.40f, 0.0f),
+                MaterialOverride = new StandardMaterial3D
+                {
+                    AlbedoColor = AttachmentDefinition.Tint,
+                    Roughness = 0.70f
+                }
+            });
+
+            stakeRoot.AddChild(new MeshInstance3D
+            {
+                Name = "StakeHead",
+                Mesh = new BoxMesh { Size = new Vector3(0.26f, 0.16f, 0.44f) },
+                Position = new Vector3(0.0f, 0.70f, 0.0f),
+                MaterialOverride = new StandardMaterial3D
+                {
+                    AlbedoColor = AttachmentDefinition.ConnectorColor,
+                    Roughness = 0.56f
+                }
+            });
+
+            stakeRoot.AddChild(new MeshInstance3D
+            {
+                Name = "StakeTip",
+                Mesh = new BoxMesh { Size = new Vector3(0.12f, 0.10f, 0.26f) },
+                Position = new Vector3(0.0f, 0.62f, 0.20f),
+                MaterialOverride = new StandardMaterial3D
+                {
+                    AlbedoColor = AttachmentDefinition.ConnectorColor.Lightened(0.14f),
+                    Roughness = 0.48f
+                }
+            });
+
+            payloadRoot.AddChild(stakeRoot);
+
+            payloadRoot.AddChild(new MeshInstance3D
+            {
+                Name = $"PayloadLink_{index}",
+                Mesh = new BoxMesh { Size = new Vector3(0.14f, 0.08f, 0.001f) },
+                MaterialOverride = new StandardMaterial3D
+                {
+                    AlbedoColor = AttachmentDefinition.ConnectorColor.Darkened(0.08f),
+                    Roughness = 0.62f
                 }
             });
         }
 
         payloadRoot.AddChild(new MeshInstance3D
         {
-            Name = "PayloadBase",
-            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 1.34f, 0.22f, FactoryConstants.CellSize * 1.34f) },
-            Position = new Vector3(0.0f, 0.22f, 0.0f),
+            Name = "PayloadRelayBase",
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.62f, 0.18f, FactoryConstants.CellSize * 0.82f) },
+            Position = new Vector3(0.0f, 0.12f, 0.0f),
             MaterialOverride = new StandardMaterial3D
             {
-                AlbedoColor = AttachmentDefinition.Tint,
-                Roughness = 0.76f
+                AlbedoColor = AttachmentDefinition.Tint.Darkened(0.20f),
+                Roughness = 0.82f
             }
         });
 
         payloadRoot.AddChild(new MeshInstance3D
         {
-            Name = "PayloadMast",
-            Mesh = new CylinderMesh
-            {
-                TopRadius = 0.10f,
-                BottomRadius = 0.14f,
-                Height = 0.78f
-            },
-            Position = new Vector3(0.0f, 0.66f, 0.0f),
+            Name = "PayloadRelayBody",
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.34f, 0.34f, FactoryConstants.CellSize * 0.64f) },
+            Position = new Vector3(-FactoryConstants.CellSize * 0.08f, 0.30f, 0.0f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = AttachmentDefinition.ConnectorColor,
@@ -482,9 +542,21 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
 
         payloadRoot.AddChild(new MeshInstance3D
         {
-            Name = "PayloadHead",
-            Mesh = new BoxMesh { Size = new Vector3(0.44f, 0.24f, 0.72f) },
-            Position = new Vector3(0.0f, 1.04f, 0.0f),
+            Name = "PayloadRelayDeck",
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.76f, 0.10f, FactoryConstants.CellSize * 0.24f) },
+            Position = new Vector3(FactoryConstants.CellSize * 0.02f, 0.22f, 0.0f),
+            MaterialOverride = new StandardMaterial3D
+            {
+                AlbedoColor = AttachmentDefinition.Tint,
+                Roughness = 0.62f
+            }
+        });
+
+        payloadRoot.AddChild(new MeshInstance3D
+        {
+            Name = "PayloadRelayNozzle",
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.18f, 0.16f, FactoryConstants.CellSize * 0.22f) },
+            Position = new Vector3(FactoryConstants.CellSize * 0.34f, 0.30f, 0.0f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = AttachmentDefinition.ConnectorColor.Lightened(0.12f),
@@ -521,37 +593,6 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
         payloadRoot.Rotation = new Vector3(0.0f, -root.Rotation.Y, 0.0f);
         payloadRoot.Visible = true;
 
-        var minX = float.PositiveInfinity;
-        var maxX = float.NegativeInfinity;
-        var minZ = float.PositiveInfinity;
-        var maxZ = float.NegativeInfinity;
-
-        for (var index = 0; index < cellCentersWorld.Count; index++)
-        {
-            var localWorldAligned = cellCentersWorld[index] - centerWorld;
-            minX = Mathf.Min(minX, localWorldAligned.X);
-            maxX = Mathf.Max(maxX, localWorldAligned.X);
-            minZ = Mathf.Min(minZ, localWorldAligned.Z);
-            maxZ = Mathf.Max(maxZ, localWorldAligned.Z);
-
-            if (payloadRoot.GetNodeOrNull<MeshInstance3D>($"PayloadCell_{index}") is MeshInstance3D cellMesh)
-            {
-                cellMesh.Position = localWorldAligned + new Vector3(0.0f, 0.08f, 0.0f);
-            }
-        }
-
-        var spanX = maxX - minX + worldGrid.CellSize;
-        var spanZ = maxZ - minZ + worldGrid.CellSize;
-        if (payloadRoot.GetNodeOrNull<MeshInstance3D>("PayloadBase") is MeshInstance3D payloadBase
-            && payloadBase.Mesh is BoxMesh baseMesh)
-        {
-            baseMesh.Size = new Vector3(
-                Mathf.Max(FactoryConstants.CellSize * 1.20f, spanX - (worldGrid.CellSize * 0.12f)),
-                0.22f,
-                Mathf.Max(FactoryConstants.CellSize * 1.20f, spanZ - (worldGrid.CellSize * 0.12f)));
-            payloadBase.Position = new Vector3(0.0f, 0.22f, 0.0f);
-        }
-
         var nearestIndex = 0;
         var nearestDistanceSquared = float.PositiveInfinity;
         for (var index = 0; index < cellCentersWorld.Count; index++)
@@ -575,16 +616,54 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
             towardsPort = towardsPort.Normalized();
         }
 
-        var featureAnchor = cellCentersWorld[nearestIndex] - centerWorld + towardsPort * (worldGrid.CellSize * 0.28f);
-        if (payloadRoot.GetNodeOrNull<MeshInstance3D>("PayloadMast") is MeshInstance3D payloadMast)
+        var relayLocal = cellCentersWorld[nearestIndex] - centerWorld + towardsPort * (worldGrid.CellSize * 0.42f);
+        var relayFacing = Mathf.Atan2(-towardsPort.Z, towardsPort.X);
+
+        if (payloadRoot.GetNodeOrNull<MeshInstance3D>("PayloadRelayBase") is MeshInstance3D relayBase)
         {
-            payloadMast.Position = featureAnchor + new Vector3(0.0f, 0.66f, 0.0f);
+            relayBase.Position = relayLocal + new Vector3(0.0f, 0.12f, 0.0f);
+            relayBase.Rotation = new Vector3(0.0f, relayFacing, 0.0f);
         }
 
-        if (payloadRoot.GetNodeOrNull<MeshInstance3D>("PayloadHead") is MeshInstance3D payloadHead)
+        if (payloadRoot.GetNodeOrNull<MeshInstance3D>("PayloadRelayBody") is MeshInstance3D relayBody)
         {
-            payloadHead.Position = featureAnchor + towardsPort * (worldGrid.CellSize * 0.20f) + new Vector3(0.0f, 1.04f, 0.0f);
-            payloadHead.Rotation = new Vector3(0.0f, Mathf.Atan2(-towardsPort.Z, towardsPort.X), 0.0f);
+            relayBody.Position = relayLocal + new Vector3(-FactoryConstants.CellSize * 0.08f, 0.30f, 0.0f);
+            relayBody.Rotation = new Vector3(0.0f, relayFacing, 0.0f);
+        }
+
+        if (payloadRoot.GetNodeOrNull<MeshInstance3D>("PayloadRelayDeck") is MeshInstance3D relayDeck)
+        {
+            relayDeck.Position = relayLocal + new Vector3(FactoryConstants.CellSize * 0.02f, 0.22f, 0.0f);
+            relayDeck.Rotation = new Vector3(0.0f, relayFacing, 0.0f);
+        }
+
+        if (payloadRoot.GetNodeOrNull<MeshInstance3D>("PayloadRelayNozzle") is MeshInstance3D relayNozzle)
+        {
+            relayNozzle.Position = relayLocal + towardsPort * (worldGrid.CellSize * 0.24f) + new Vector3(0.0f, 0.30f, 0.0f);
+            relayNozzle.Rotation = new Vector3(0.0f, relayFacing, 0.0f);
+        }
+
+        for (var index = 0; index < cellCentersWorld.Count; index++)
+        {
+            var localWorldAligned = cellCentersWorld[index] - centerWorld;
+            var toRelay = relayLocal - localWorldAligned;
+            toRelay.Y = 0.0f;
+            var relayDirection = toRelay.LengthSquared() > 0.0001f ? toRelay.Normalized() : towardsPort;
+            var relayYaw = Mathf.Atan2(-relayDirection.Z, relayDirection.X);
+
+            if (payloadRoot.GetNodeOrNull<Node3D>($"PayloadStake_{index}") is Node3D stakeRoot)
+            {
+                stakeRoot.Position = localWorldAligned;
+                stakeRoot.Rotation = new Vector3(0.0f, relayYaw, 0.0f);
+            }
+
+            if (payloadRoot.GetNodeOrNull<MeshInstance3D>($"PayloadLink_{index}") is MeshInstance3D linkMesh)
+            {
+                var linkLength = Mathf.Max(0.12f, new Vector2(toRelay.X, toRelay.Z).Length());
+                linkMesh.Mesh = new BoxMesh { Size = new Vector3(0.12f, 0.08f, linkLength) };
+                linkMesh.Position = (localWorldAligned + relayLocal) * 0.5f + new Vector3(0.0f, 0.26f, 0.0f);
+                linkMesh.Rotation = new Vector3(0.0f, Mathf.Atan2(toRelay.X, toRelay.Z), 0.0f);
+            }
         }
     }
 
@@ -614,7 +693,8 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
             towardsPort = towardsPort.Normalized();
         }
 
-        return nearestCenter + towardsPort * (worldGrid.CellSize * 0.46f) + new Vector3(0.0f, 0.08f, 0.0f);
+        var relayCenter = nearestCenter + towardsPort * (worldGrid.CellSize * 0.42f) + new Vector3(0.0f, 0.30f, 0.0f);
+        return relayCenter + towardsPort * (worldGrid.CellSize * 0.26f);
     }
 
     protected override bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell)
