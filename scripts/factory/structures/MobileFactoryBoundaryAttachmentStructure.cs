@@ -5,16 +5,19 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
 {
     private GridManager? _worldSite;
     private MobileFactoryAttachmentProjection? _projection;
+    private bool _worldVisualReady;
 
     public abstract MobileFactoryBoundaryAttachmentDefinition AttachmentDefinition { get; }
     public MobileFactoryAttachmentChannelType ChannelType => AttachmentDefinition.ChannelType;
     public bool IsConnectedToWorld => _worldSite is not null && _projection is not null;
+    public bool IsWorldFlowReady => IsConnectedToWorld && _worldVisualReady;
     public GridManager? BoundWorldSite => _worldSite;
     public MobileFactoryAttachmentProjection? Projection => _projection;
     public Vector2I WorldPortCell => _projection?.WorldPortCell ?? Vector2I.Zero;
     public Vector2I WorldAdjacentCell => _projection?.WorldAdjacentCell ?? Vector2I.Zero;
     public FacingDirection WorldFacing => _projection?.WorldFacing ?? Facing;
-    public virtual string ConnectionStateLabel => IsConnectedToWorld ? "已连接" : TransitItemCount > 0 ? "阻塞" : "未连接";
+    public virtual string ConnectionStateLabel => IsConnectedToWorld ? (IsWorldFlowReady ? "已连接" : "展开中") : TransitItemCount > 0 ? "阻塞" : "未连接";
+    public virtual float WorldVisualAnimationDurationSeconds => 0.26f;
 
     public virtual bool CanBindToWorld(GridManager worldSite, MobileFactoryAttachmentProjection projection, out string reason)
     {
@@ -26,6 +29,7 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
     {
         _worldSite = worldSite;
         _projection = projection;
+        _worldVisualReady = false;
         OnWorldBindingChanged();
     }
 
@@ -33,7 +37,13 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
     {
         _worldSite = null;
         _projection = null;
+        _worldVisualReady = false;
         OnWorldBindingChanged();
+    }
+
+    public void UpdateWorldVisualReadiness(float progress, float target)
+    {
+        _worldVisualReady = IsConnectedToWorld && target >= 0.999f && progress >= 0.999f;
     }
 
     public override string Description => AttachmentDefinition.Description;
@@ -44,6 +54,24 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
 
     public virtual void ConfigureWorldPayload(Node3D root, GridManager worldGrid, MobileFactoryAttachmentProjection projection)
     {
+    }
+
+    public virtual IReadOnlyList<Vector2I> GetReservedWorldCells(GridManager worldSite, MobileFactoryAttachmentProjection projection)
+    {
+        return projection.WorldCells;
+    }
+
+    public virtual void ApplyWorldPayloadVisualProgress(Node3D root, float progress)
+    {
+        if (root.GetNodeOrNull<Node3D>("WorldPayloadRoot") is not Node3D payloadRoot)
+        {
+            return;
+        }
+
+        var targetPosition = payloadRoot.GetMeta("payload_target_position", Vector3.Zero).AsVector3();
+        payloadRoot.Position = targetPosition * progress;
+        payloadRoot.Scale = Vector3.One * Mathf.Max(0.001f, progress);
+        payloadRoot.Visible = progress > 0.001f;
     }
 
     public virtual Vector3 GetWorldConnectorEndWorld(GridManager worldGrid, MobileFactoryAttachmentProjection projection)
@@ -198,6 +226,67 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         var facing = FactoryDirection.ToWorldForward(FactoryDirection.ToYRotationRadians(projection.WorldFacing));
         return cellCenter - facing * (worldGrid.CellSize * 0.48f) + new Vector3(0.0f, 0.02f, 0.0f);
     }
+
+    protected static void ConfigurePayloadReveal(Node3D node, float start, float end, string mode = "uniform")
+    {
+        node.SetMeta("payload_reveal_start", start);
+        node.SetMeta("payload_reveal_end", end);
+        node.SetMeta("payload_reveal_mode", mode);
+        node.SetMeta("payload_reveal_base_position", node.Position);
+        node.SetMeta("payload_reveal_base_scale", node.Scale);
+    }
+
+    protected static void ApplyPayloadRevealTree(Node3D root, float progress)
+    {
+        foreach (var child in root.GetChildren())
+        {
+            if (child is Node3D childNode)
+            {
+                ApplyPayloadRevealNode(childNode, progress);
+            }
+        }
+    }
+
+    private static void ApplyPayloadRevealNode(Node3D node, float progress)
+    {
+        if (node.HasMeta("payload_reveal_start") || node.HasMeta("payload_reveal_end"))
+        {
+            var start = node.GetMeta("payload_reveal_start", 0.0f).AsSingle();
+            var end = node.GetMeta("payload_reveal_end", 1.0f).AsSingle();
+            var mode = node.GetMeta("payload_reveal_mode", "uniform").AsString();
+            var basePosition = node.GetMeta("payload_reveal_base_position", node.Position).AsVector3();
+            var baseScale = node.GetMeta("payload_reveal_base_scale", node.Scale).AsVector3();
+            var localProgress = end <= start
+                ? (progress >= end ? 1.0f : 0.0f)
+                : Mathf.Clamp((progress - start) / (end - start), 0.0f, 1.0f);
+
+            node.Visible = localProgress > 0.001f;
+
+            switch (mode)
+            {
+                case "depth":
+                    node.Position = basePosition;
+                    node.Scale = new Vector3(baseScale.X, baseScale.Y, Mathf.Max(0.001f, baseScale.Z * localProgress));
+                    break;
+                case "vertical":
+                    node.Position = new Vector3(basePosition.X, basePosition.Y * localProgress, basePosition.Z);
+                    node.Scale = new Vector3(baseScale.X, Mathf.Max(0.001f, baseScale.Y * localProgress), baseScale.Z);
+                    break;
+                default:
+                    node.Position = basePosition;
+                    node.Scale = baseScale * Mathf.Max(0.001f, localProgress);
+                    break;
+            }
+        }
+
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Node3D childNode)
+            {
+                ApplyPayloadRevealNode(childNode, progress);
+            }
+        }
+    }
 }
 
 public partial class MobileFactoryOutputPortStructure : MobileFactoryBoundaryAttachmentStructure
@@ -222,7 +311,7 @@ public partial class MobileFactoryOutputPortStructure : MobileFactoryBoundaryAtt
 
     public override bool CanReceiveFrom(Vector2I sourceCell)
     {
-        return sourceCell == Cell - FactoryDirection.ToCellOffset(Facing);
+        return IsWorldFlowReady && sourceCell == Cell - FactoryDirection.ToCellOffset(Facing);
     }
 
     public override bool CanOutputTo(Vector2I targetCell)
@@ -239,6 +328,11 @@ public partial class MobileFactoryOutputPortStructure : MobileFactoryBoundaryAtt
     protected override bool TryDispatchItem(TransitItemState state, SimulationController simulation)
     {
         if (!IsConnectedToWorld || BoundWorldSite is null)
+        {
+            return false;
+        }
+
+        if (!IsWorldFlowReady)
         {
             return false;
         }
@@ -289,7 +383,7 @@ public partial class MobileFactoryInputPortStructure : MobileFactoryBoundaryAtta
 
     public override bool CanReceiveFrom(Vector2I sourceCell)
     {
-        return IsConnectedToWorld && sourceCell == WorldAdjacentCell;
+        return IsWorldFlowReady && sourceCell == WorldAdjacentCell;
     }
 
     public override bool CanOutputTo(Vector2I targetCell)
@@ -300,7 +394,7 @@ public partial class MobileFactoryInputPortStructure : MobileFactoryBoundaryAtta
     protected override bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell)
     {
         targetCell = Cell - FactoryDirection.ToCellOffset(Facing);
-        return IsConnectedToWorld;
+        return IsWorldFlowReady;
     }
 
     protected override bool TryDispatchItem(TransitItemState state, SimulationController simulation)
@@ -336,11 +430,15 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
     private FactoryResourceKind? _resourceKind;
     private string _depositName = "未绑定矿区";
     private float _miningTimer;
+    private int _activeStakeCount;
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.MiningInputPort;
     public override MobileFactoryBoundaryAttachmentDefinition AttachmentDefinition => MobileFactoryBoundaryAttachmentCatalog.Get(BuildPrototypeKind.MiningInputPort);
+    public override float WorldVisualAnimationDurationSeconds => 1.0f;
     public override string ConnectionStateLabel => !IsConnectedToWorld
         ? TransitItemCount > 0 ? "阻塞" : "未连接"
+        : !IsWorldFlowReady
+            ? "展开中"
         : _resourceKind.HasValue
             ? TransitItemCount > 0 ? "采集中" : "就绪"
             : "待机";
@@ -365,44 +463,36 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
         yield return $"矿区：{_depositName}";
         if (Projection is not null)
         {
-            yield return $"外侧占地：{Projection.WorldCells.Count} 格";
+            yield return $"外侧采集桩：{_activeStakeCount}/{Mathf.Max(0, Projection.WorldCells.Count - 1)}";
         }
     }
 
     public override bool CanBindToWorld(GridManager worldSite, MobileFactoryAttachmentProjection projection, out string reason)
     {
-        reason = string.Empty;
-        FactoryResourceDepositDefinition? deposit = null;
-
-        for (var index = 0; index < projection.WorldCells.Count; index++)
+        if (!TryResolveMiningDeployment(worldSite, projection, out var deposit, out var activeStakeCells))
         {
-            var worldCell = projection.WorldCells[index];
-            if (!worldSite.TryGetResourceDeposit(worldCell, out var candidate) || candidate is null)
-            {
-                reason = "采矿输入端口的世界侧占地必须完整覆盖同一片矿区。";
-                return false;
-            }
-
-            if (!FactoryResourceCatalog.SupportsExtractor(Kind, candidate.ResourceKind))
-            {
-                reason = $"{candidate.DisplayName} 不能由当前采矿端口开采。";
-                return false;
-            }
-
-            if (deposit is null)
-            {
-                deposit = candidate;
-                continue;
-            }
-
-            if (deposit.Id != candidate.Id)
-            {
-                reason = "采矿输入端口当前不能跨越多片矿区部署。";
-                return false;
-            }
+            reason = "采矿输入端口至少要覆盖 1 个可开采矿点。";
+            return false;
         }
 
-        return deposit is not null;
+        reason = string.Empty;
+        return deposit is not null && activeStakeCells.Count > 0;
+    }
+
+    public override IReadOnlyList<Vector2I> GetReservedWorldCells(GridManager worldSite, MobileFactoryAttachmentProjection projection)
+    {
+        var reservedCells = new List<Vector2I> { projection.WorldPortCell };
+        if (!TryResolveMiningDeployment(worldSite, projection, out _, out var activeStakeCells))
+        {
+            return reservedCells;
+        }
+
+        for (var index = 0; index < activeStakeCells.Count; index++)
+        {
+            reservedCells.Add(activeStakeCells[index]);
+        }
+
+        return reservedCells;
     }
 
     public override void SimulationStep(SimulationController simulation, double stepSeconds)
@@ -410,6 +500,11 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
         base.SimulationStep(simulation, stepSeconds);
 
         if (!IsConnectedToWorld || !_resourceKind.HasValue)
+        {
+            return;
+        }
+
+        if (!IsWorldFlowReady)
         {
             return;
         }
@@ -436,6 +531,12 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
 
         var payloadRoot = new Node3D { Name = "WorldPayloadRoot" };
         root.AddChild(payloadRoot);
+
+        var relayGroup = new Node3D
+        {
+            Name = "PayloadRelayGroup"
+        };
+        payloadRoot.AddChild(relayGroup);
 
         for (var index = 0; index < projection.WorldCells.Count; index++)
         {
@@ -507,30 +608,44 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
 
         for (var rowIndex = 0; rowIndex < 3; rowIndex++)
         {
-            payloadRoot.AddChild(new MeshInstance3D
+            var rowLinkRoot = new Node3D
             {
                 Name = $"PayloadRowLink_{rowIndex}",
+                Visible = false
+            };
+            rowLinkRoot.AddChild(new MeshInstance3D
+            {
+                Name = "LinkMesh",
                 Mesh = new BoxMesh { Size = new Vector3(0.12f, 0.08f, 0.001f) },
+                Position = new Vector3(0.0f, 0.24f, 0.0005f),
                 MaterialOverride = new StandardMaterial3D
                 {
                     AlbedoColor = AttachmentDefinition.ConnectorColor.Darkened(0.10f),
                     Roughness = 0.64f
                 }
             });
+            payloadRoot.AddChild(rowLinkRoot);
 
-            payloadRoot.AddChild(new MeshInstance3D
+            var collectorLinkRoot = new Node3D
             {
                 Name = $"PayloadCollectorLink_{rowIndex}",
+                Visible = false
+            };
+            collectorLinkRoot.AddChild(new MeshInstance3D
+            {
+                Name = "LinkMesh",
                 Mesh = new BoxMesh { Size = new Vector3(0.12f, 0.08f, 0.001f) },
+                Position = new Vector3(0.0f, 0.26f, 0.0005f),
                 MaterialOverride = new StandardMaterial3D
                 {
                     AlbedoColor = AttachmentDefinition.ConnectorColor.Darkened(0.02f),
                     Roughness = 0.60f
                 }
             });
+            payloadRoot.AddChild(collectorLinkRoot);
         }
 
-        payloadRoot.AddChild(new MeshInstance3D
+        relayGroup.AddChild(new MeshInstance3D
         {
             Name = "PayloadRelayBase",
             Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.62f, 0.18f, FactoryConstants.CellSize * 0.82f) },
@@ -542,7 +657,7 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
             }
         });
 
-        payloadRoot.AddChild(new MeshInstance3D
+        relayGroup.AddChild(new MeshInstance3D
         {
             Name = "PayloadRelayBody",
             Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.34f, 0.34f, FactoryConstants.CellSize * 0.64f) },
@@ -554,7 +669,7 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
             }
         });
 
-        payloadRoot.AddChild(new MeshInstance3D
+        relayGroup.AddChild(new MeshInstance3D
         {
             Name = "PayloadRelayDeck",
             Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.76f, 0.10f, FactoryConstants.CellSize * 0.24f) },
@@ -566,7 +681,7 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
             }
         });
 
-        payloadRoot.AddChild(new MeshInstance3D
+        relayGroup.AddChild(new MeshInstance3D
         {
             Name = "PayloadRelayNozzle",
             Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.18f, 0.16f, FactoryConstants.CellSize * 0.22f) },
@@ -586,7 +701,14 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
             return;
         }
 
-        var cellCentersWorld = new List<Vector3>(projection.WorldCells.Count);
+        if (!TryResolveMiningDeployment(worldGrid, projection, out _, out var activeStakeCells))
+        {
+            payloadRoot.Visible = false;
+            return;
+        }
+
+        var activeStakeSet = new HashSet<Vector2I>(activeStakeCells);
+        var cellCentersWorld = new List<Vector3>(activeStakeCells.Count + 1);
         var centerWorld = Vector3.Zero;
         var localPositions = new Vector3[projection.WorldCells.Count];
         var localCells = new Vector2I[projection.WorldCells.Count];
@@ -595,10 +717,6 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
         var relayColumn = int.MinValue;
         for (var index = 0; index < projection.WorldCells.Count; index++)
         {
-            var world = worldGrid.CellToWorld(projection.WorldCells[index]);
-            cellCentersWorld.Add(world);
-            centerWorld += world;
-
             var relativeCell = projection.WorldCells[index] - projection.WorldPortCell;
             var localCell = FactoryDirection.RotateOffset(relativeCell, FactoryDirection.Opposite(projection.WorldFacing));
             localCells[index] = localCell;
@@ -615,7 +733,25 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
 
         for (var index = 0; index < projection.WorldCells.Count; index++)
         {
+            var worldCell = projection.WorldCells[index];
+            if (worldCell != projection.WorldPortCell && !activeStakeSet.Contains(worldCell))
+            {
+                continue;
+            }
+
+            var world = worldGrid.CellToWorld(worldCell);
+            cellCentersWorld.Add(world);
+            centerWorld += world;
+        }
+
+        for (var index = 0; index < projection.WorldCells.Count; index++)
+        {
             var localCell = localCells[index];
+            if (projection.WorldCells[index] != projection.WorldPortCell && !activeStakeSet.Contains(projection.WorldCells[index]))
+            {
+                continue;
+            }
+
             var row = Mathf.Clamp(localCell.Y + 1, 0, 2);
             if (localCell.X == relayColumn)
             {
@@ -632,9 +768,9 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
             centerWorld /= cellCentersWorld.Count;
         }
 
-        for (var index = 0; index < cellCentersWorld.Count; index++)
+        for (var index = 0; index < projection.WorldCells.Count; index++)
         {
-            localPositions[index] = cellCentersWorld[index] - centerWorld;
+            localPositions[index] = worldGrid.CellToWorld(projection.WorldCells[index]) - centerWorld;
         }
 
         var payloadCenterWorld = centerWorld + new Vector3(0.0f, 0.08f, 0.0f);
@@ -666,34 +802,62 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
             FactoryDirection.ToYRotationRadians(FactoryDirection.Opposite(projection.WorldFacing)));
         var relayFacing = Mathf.Atan2(-towardsFactory.Z, towardsFactory.X);
 
-
-        if (payloadRoot.GetNodeOrNull<MeshInstance3D>("PayloadRelayBase") is MeshInstance3D relayBase)
+        if (payloadRoot.GetNodeOrNull<Node3D>("PayloadRelayGroup") is Node3D relayGroup)
         {
-            relayBase.Position = relayLocal + new Vector3(0.0f, 0.12f, 0.0f);
-            relayBase.Rotation = new Vector3(0.0f, relayFacing, 0.0f);
+            relayGroup.Position = relayLocal;
+            relayGroup.Rotation = new Vector3(0.0f, relayFacing, 0.0f);
+            ConfigurePayloadReveal(relayGroup, 0.02f, 0.32f, "uniform");
         }
 
-        if (payloadRoot.GetNodeOrNull<MeshInstance3D>("PayloadRelayBody") is MeshInstance3D relayBody)
+        if (payloadRoot.GetNodeOrNull<MeshInstance3D>("PayloadRelayGroup/PayloadRelayBase") is MeshInstance3D relayBase)
         {
-            relayBody.Position = relayLocal + new Vector3(-FactoryConstants.CellSize * 0.08f, 0.30f, 0.0f);
-            relayBody.Rotation = new Vector3(0.0f, relayFacing, 0.0f);
+            relayBase.Position = new Vector3(0.0f, 0.12f, 0.0f);
+            relayBase.Rotation = Vector3.Zero;
         }
 
-        if (payloadRoot.GetNodeOrNull<MeshInstance3D>("PayloadRelayDeck") is MeshInstance3D relayDeck)
+        if (payloadRoot.GetNodeOrNull<MeshInstance3D>("PayloadRelayGroup/PayloadRelayBody") is MeshInstance3D relayBody)
         {
-            relayDeck.Position = relayLocal + new Vector3(FactoryConstants.CellSize * 0.02f, 0.22f, 0.0f);
-            relayDeck.Rotation = new Vector3(0.0f, relayFacing, 0.0f);
+            relayBody.Position = new Vector3(-FactoryConstants.CellSize * 0.08f, 0.30f, 0.0f);
+            relayBody.Rotation = Vector3.Zero;
         }
 
-        if (payloadRoot.GetNodeOrNull<MeshInstance3D>("PayloadRelayNozzle") is MeshInstance3D relayNozzle)
+        if (payloadRoot.GetNodeOrNull<MeshInstance3D>("PayloadRelayGroup/PayloadRelayDeck") is MeshInstance3D relayDeck)
         {
-            relayNozzle.Position = relayLocal + towardsFactory * (worldGrid.CellSize * 0.24f) + new Vector3(0.0f, 0.30f, 0.0f);
-            relayNozzle.Rotation = new Vector3(0.0f, relayFacing, 0.0f);
+            relayDeck.Position = new Vector3(FactoryConstants.CellSize * 0.02f, 0.22f, 0.0f);
+            relayDeck.Rotation = Vector3.Zero;
+        }
+
+        if (payloadRoot.GetNodeOrNull<MeshInstance3D>("PayloadRelayGroup/PayloadRelayNozzle") is MeshInstance3D relayNozzle)
+        {
+            relayNozzle.Position = towardsFactory * (worldGrid.CellSize * 0.24f) + new Vector3(0.0f, 0.30f, 0.0f);
+            relayNozzle.Rotation = Vector3.Zero;
         }
 
         for (var index = 0; index < projection.WorldCells.Count; index++)
         {
+            var worldCell = projection.WorldCells[index];
+            if (worldCell == projection.WorldPortCell)
+            {
+                if (payloadRoot.GetNodeOrNull<Node3D>($"PayloadStake_{index}") is Node3D relayStakeRoot)
+                {
+                    relayStakeRoot.Visible = false;
+                    ConfigurePayloadReveal(relayStakeRoot, 1.10f, 1.20f, "vertical");
+                }
+                continue;
+            }
+
             var localWorldAligned = localPositions[index];
+            if (!activeStakeSet.Contains(worldCell))
+            {
+                if (payloadRoot.GetNodeOrNull<Node3D>($"PayloadStake_{index}") is Node3D hiddenStake)
+                {
+                    hiddenStake.Visible = false;
+                    hiddenStake.Position = localWorldAligned;
+                    ConfigurePayloadReveal(hiddenStake, 1.10f, 1.20f, "vertical");
+                }
+                continue;
+            }
+
             Vector3 desiredDirection;
             var rowIndex = -1;
             var isNearColumn = false;
@@ -741,6 +905,9 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
             {
                 stakeRoot.Position = localWorldAligned;
                 stakeRoot.Rotation = new Vector3(0.0f, relayYaw, 0.0f);
+                var revealDistance = new Vector2(localWorldAligned.X - relayLocal.X, localWorldAligned.Z - relayLocal.Z).Length();
+                var revealStart = Mathf.Clamp(0.56f + (revealDistance / (FactoryConstants.CellSize * 3.2f)) * 0.22f, 0.56f, 0.82f);
+                ConfigurePayloadReveal(stakeRoot, revealStart, revealStart + 0.18f, "vertical");
             }
         }
 
@@ -748,51 +915,68 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
         {
             var leftIndex = farColumnByRow[rowIndex];
             var rightIndex = nearColumnByRow[rowIndex];
-            if (leftIndex < 0 || rightIndex < 0)
+            var hasLeft = leftIndex >= 0;
+            var hasRight = rightIndex >= 0;
+            var rowLinkVisible = hasLeft && hasRight;
+            if (payloadRoot.GetNodeOrNull<Node3D>($"PayloadRowLink_{rowIndex}") is Node3D rowLinkRoot)
             {
-                if (payloadRoot.GetNodeOrNull<MeshInstance3D>($"PayloadRowLink_{rowIndex}") is MeshInstance3D hiddenRow)
+                if (!rowLinkVisible)
                 {
-                    hiddenRow.Visible = false;
+                    rowLinkRoot.Visible = false;
+                    ConfigurePayloadReveal(rowLinkRoot, 1.10f, 1.20f, "depth");
                 }
-
-                if (payloadRoot.GetNodeOrNull<MeshInstance3D>($"PayloadCollectorLink_{rowIndex}") is MeshInstance3D hiddenCollector)
+                else
                 {
-                    hiddenCollector.Visible = false;
-                }
+                    var leftLocal = localPositions[leftIndex];
+                    var rightLocal = localPositions[rightIndex];
+                    var rowVector = rightLocal - leftLocal;
+                    var rowLength = Mathf.Max(0.12f, new Vector2(rowVector.X, rowVector.Z).Length());
+                    rowLinkRoot.Position = leftLocal;
+                    rowLinkRoot.Rotation = new Vector3(0.0f, Mathf.Atan2(rowVector.X, rowVector.Z), 0.0f);
+                    rowLinkRoot.Visible = true;
+                    if (rowLinkRoot.GetNodeOrNull<MeshInstance3D>("LinkMesh") is MeshInstance3D rowLinkMesh)
+                    {
+                        rowLinkMesh.Mesh = new BoxMesh { Size = new Vector3(0.12f, 0.08f, rowLength) };
+                        rowLinkMesh.Position = new Vector3(0.0f, 0.24f, rowLength * 0.5f);
+                    }
 
-                continue;
+                    var revealDistance = new Vector2(leftLocal.X - relayLocal.X, leftLocal.Z - relayLocal.Z).Length();
+                    var revealStart = Mathf.Clamp(0.38f + (revealDistance / (FactoryConstants.CellSize * 3.2f)) * 0.18f, 0.38f, 0.62f);
+                    ConfigurePayloadReveal(rowLinkRoot, revealStart, revealStart + 0.18f, "depth");
+                }
             }
 
-            var leftLocal = localPositions[leftIndex];
-            var rightLocal = localPositions[rightIndex];
-            var rowVector = rightLocal - leftLocal;
-            var rowLength = Mathf.Max(0.12f, new Vector2(rowVector.X, rowVector.Z).Length());
-
-            if (payloadRoot.GetNodeOrNull<MeshInstance3D>($"PayloadRowLink_{rowIndex}") is MeshInstance3D rowLink)
+            var collectorSourceIndex = rightIndex;
+            if (collectorSourceIndex < 0)
             {
-                rowLink.Mesh = new BoxMesh { Size = new Vector3(0.12f, 0.08f, rowLength) };
-                rowLink.Position = (leftLocal + rightLocal) * 0.5f + new Vector3(0.0f, 0.24f, 0.0f);
-                rowLink.Rotation = new Vector3(0.0f, Mathf.Atan2(rowVector.X, rowVector.Z), 0.0f);
-                rowLink.Visible = true;
+                collectorSourceIndex = leftIndex;
             }
 
-            if (rowIndex == 1)
+            var collectorVisible = collectorSourceIndex >= 0 && collectorSourceIndex != relayIndex;
+            if (payloadRoot.GetNodeOrNull<Node3D>($"PayloadCollectorLink_{rowIndex}") is Node3D collectorLinkRoot)
             {
-                if (payloadRoot.GetNodeOrNull<MeshInstance3D>($"PayloadCollectorLink_{rowIndex}") is MeshInstance3D hiddenCollector)
+                if (!collectorVisible)
                 {
-                    hiddenCollector.Visible = false;
+                    collectorLinkRoot.Visible = false;
+                    ConfigurePayloadReveal(collectorLinkRoot, 1.10f, 1.20f, "depth");
+                    continue;
                 }
-                continue;
-            }
 
-            var relayVector = relayLocal - rightLocal;
-            var relayLength = Mathf.Max(0.12f, new Vector2(relayVector.X, relayVector.Z).Length());
-            if (payloadRoot.GetNodeOrNull<MeshInstance3D>($"PayloadCollectorLink_{rowIndex}") is MeshInstance3D collectorLink)
-            {
-                collectorLink.Mesh = new BoxMesh { Size = new Vector3(0.12f, 0.08f, relayLength) };
-                collectorLink.Position = (rightLocal + relayLocal) * 0.5f + new Vector3(0.0f, 0.26f, 0.0f);
-                collectorLink.Rotation = new Vector3(0.0f, Mathf.Atan2(relayVector.X, relayVector.Z), 0.0f);
-                collectorLink.Visible = true;
+                var sourceLocal = localPositions[collectorSourceIndex];
+                var relayVector = relayLocal - sourceLocal;
+                var relayLength = Mathf.Max(0.12f, new Vector2(relayVector.X, relayVector.Z).Length());
+                collectorLinkRoot.Position = sourceLocal;
+                collectorLinkRoot.Rotation = new Vector3(0.0f, Mathf.Atan2(relayVector.X, relayVector.Z), 0.0f);
+                collectorLinkRoot.Visible = true;
+                if (collectorLinkRoot.GetNodeOrNull<MeshInstance3D>("LinkMesh") is MeshInstance3D collectorLinkMesh)
+                {
+                    collectorLinkMesh.Mesh = new BoxMesh { Size = new Vector3(0.12f, 0.08f, relayLength) };
+                    collectorLinkMesh.Position = new Vector3(0.0f, 0.26f, relayLength * 0.5f);
+                }
+
+                var revealDistance = new Vector2(sourceLocal.X - relayLocal.X, sourceLocal.Z - relayLocal.Z).Length();
+                var revealStart = Mathf.Clamp(0.24f + (revealDistance / (FactoryConstants.CellSize * 3.2f)) * 0.18f, 0.24f, 0.50f);
+                ConfigurePayloadReveal(collectorLinkRoot, revealStart, revealStart + 0.18f, "depth");
             }
         }
     }
@@ -805,10 +989,24 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
         return relayCenter + towardsFactory * (worldGrid.CellSize * 0.34f) + new Vector3(0.0f, 0.30f, 0.0f);
     }
 
+    public override void ApplyWorldPayloadVisualProgress(Node3D root, float progress)
+    {
+        if (root.GetNodeOrNull<Node3D>("WorldPayloadRoot") is not Node3D payloadRoot)
+        {
+            return;
+        }
+
+        var targetPosition = payloadRoot.GetMeta("payload_target_position", Vector3.Zero).AsVector3();
+        payloadRoot.Position = targetPosition;
+        payloadRoot.Scale = Vector3.One;
+        payloadRoot.Visible = progress > 0.001f;
+        ApplyPayloadRevealTree(payloadRoot, progress);
+    }
+
     protected override bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell)
     {
         targetCell = Cell - FactoryDirection.ToCellOffset(Facing);
-        return IsConnectedToWorld;
+        return IsWorldFlowReady;
     }
 
     protected override bool CanReceiveProvidedFrom(Vector2I sourceCell)
@@ -818,9 +1016,19 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
             return false;
         }
 
-        for (var index = 0; index < Projection.WorldCells.Count; index++)
+        if (!IsWorldFlowReady)
         {
-            if (Projection.WorldCells[index] == sourceCell)
+            return false;
+        }
+
+        if (!TryResolveMiningDeployment(BoundWorldSite!, Projection, out _, out var activeStakeCells))
+        {
+            return sourceCell == WorldPortCell;
+        }
+
+        for (var index = 0; index < activeStakeCells.Count; index++)
+        {
+            if (activeStakeCells[index] == sourceCell)
             {
                 return true;
             }
@@ -847,40 +1055,84 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
         {
             _resourceKind = null;
             _depositName = "未绑定矿区";
+            _activeStakeCount = 0;
             return;
         }
 
-        if (!TryResolveBoundDeposit(BoundWorldSite, Projection, out var deposit) || deposit is null)
+        if (!TryResolveMiningDeployment(BoundWorldSite, Projection, out var deposit, out var activeStakeCells) || deposit is null)
         {
             _resourceKind = null;
             _depositName = "未绑定矿区";
+            _activeStakeCount = 0;
             return;
         }
 
         _resourceKind = deposit.ResourceKind;
         _depositName = deposit.DisplayName;
+        _activeStakeCount = activeStakeCells.Count;
     }
 
-    private static bool TryResolveBoundDeposit(
+    private static bool TryResolveMiningDeployment(
         GridManager worldSite,
         MobileFactoryAttachmentProjection projection,
-        out FactoryResourceDepositDefinition? deposit)
+        out FactoryResourceDepositDefinition? deposit,
+        out List<Vector2I> activeStakeCells)
     {
         deposit = null;
+        activeStakeCells = new List<Vector2I>();
+        var compatibleCandidates = new List<(Vector2I WorldCell, Vector2I LocalCell, FactoryResourceDepositDefinition Deposit)>();
+
         for (var index = 0; index < projection.WorldCells.Count; index++)
         {
-            if (!worldSite.TryGetResourceDeposit(projection.WorldCells[index], out var candidate) || candidate is null)
+            var worldCell = projection.WorldCells[index];
+            if (worldCell == projection.WorldPortCell)
             {
-                return false;
+                continue;
             }
 
-            deposit ??= candidate;
-            if (deposit.Id != candidate.Id)
+            if (!worldSite.TryGetResourceDeposit(worldCell, out var candidate) || candidate is null)
             {
-                return false;
+                continue;
+            }
+
+            if (!FactoryResourceCatalog.SupportsExtractor(BuildPrototypeKind.MiningInputPort, candidate.ResourceKind))
+            {
+                continue;
+            }
+
+            var relativeCell = worldCell - projection.WorldPortCell;
+            var localCell = FactoryDirection.RotateOffset(relativeCell, FactoryDirection.Opposite(projection.WorldFacing));
+            compatibleCandidates.Add((worldCell, localCell, candidate));
+        }
+
+        if (compatibleCandidates.Count == 0)
+        {
+            return false;
+        }
+
+        var bestCandidate = compatibleCandidates[0];
+        var bestScore = Mathf.Abs(bestCandidate.LocalCell.X) * 3 + Mathf.Abs(bestCandidate.LocalCell.Y);
+        for (var index = 1; index < compatibleCandidates.Count; index++)
+        {
+            var candidate = compatibleCandidates[index];
+            var score = Mathf.Abs(candidate.LocalCell.X) * 3 + Mathf.Abs(candidate.LocalCell.Y);
+            if (score < bestScore)
+            {
+                bestCandidate = candidate;
+                bestScore = score;
             }
         }
 
-        return deposit is not null;
+        deposit = bestCandidate.Deposit;
+        for (var index = 0; index < compatibleCandidates.Count; index++)
+        {
+            var candidate = compatibleCandidates[index];
+            if (candidate.Deposit.Id == deposit.Id)
+            {
+                activeStakeCells.Add(candidate.WorldCell);
+            }
+        }
+
+        return activeStakeCells.Count > 0;
     }
 }

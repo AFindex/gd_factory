@@ -530,6 +530,11 @@ public partial class MobileFactoryDemo : Node3D
 
         if (_mobileFactory is not null)
         {
+            if (!_factoryLabelMap.ContainsKey(_mobileFactory))
+            {
+                AddFactoryLabel(_mobileFactory, "玩家工厂", new Color(0.72f, 0.88f, 1.0f, 0.98f));
+            }
+
             PrimeMobileFactoryShowcase(_mobileFactory);
             _selectedDeployFacing = _mobileFactory.TransitFacing;
             CreateWorldPreviewVisuals(
