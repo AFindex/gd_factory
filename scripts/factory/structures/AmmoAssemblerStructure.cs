@@ -3,20 +3,6 @@ using System.Collections.Generic;
 
 public partial class AmmoAssemblerStructure : FactoryRecipeMachineStructure
 {
-    private static readonly Vector2I[] InputPortOffsetsEast =
-    {
-        new(-1, 0),
-        new(-1, 1),
-        new(1, -1)
-    };
-
-    private static readonly Vector2I[] OutputPortOffsetsEast =
-    {
-        new(3, 0),
-        new(3, 1),
-        new(1, 2)
-    };
-
     private MeshInstance3D? _indicator;
 
     public AmmoAssemblerStructure()
@@ -56,29 +42,5 @@ public partial class AmmoAssemblerStructure : FactoryRecipeMachineStructure
         CreateBox("MagazineRack", new Vector3(CellSize * 0.44f, 0.54f, CellSize * 1.18f), new Color("F59E0B"), new Vector3(CellSize * 0.92f, 0.88f, 0.0f));
         CreateBox("MagazineFeed", new Vector3(CellSize * 1.12f, 0.12f, CellSize * 0.16f), new Color("FCD34D"), new Vector3(0.0f, 1.04f, 0.0f));
         _indicator = CreateBox("Beacon", new Vector3(CellSize * 0.20f, 0.20f, CellSize * 0.20f), new Color("FDE68A"), new Vector3(CellSize * 1.04f, 1.18f, 0.0f));
-        CreatePortMarkers();
-    }
-
-    private void CreatePortMarkers()
-    {
-        for (var index = 0; index < InputPortOffsetsEast.Length; index++)
-        {
-            var offset = Footprint.GetLocalCellCenterOffset(InputPortOffsetsEast[index], CellSize);
-            CreateBox(
-                $"InputPortMarker_{index}",
-                new Vector3(CellSize * 0.18f, 0.16f, CellSize * 0.18f),
-                new Color("38BDF8"),
-                offset + new Vector3(0.0f, 0.16f, 0.0f));
-        }
-
-        for (var index = 0; index < OutputPortOffsetsEast.Length; index++)
-        {
-            var offset = Footprint.GetLocalCellCenterOffset(OutputPortOffsetsEast[index], CellSize);
-            CreateBox(
-                $"OutputPortMarker_{index}",
-                new Vector3(CellSize * 0.18f, 0.16f, CellSize * 0.18f),
-                new Color("F59E0B"),
-                offset + new Vector3(0.0f, 0.16f, 0.0f));
-        }
     }
 }

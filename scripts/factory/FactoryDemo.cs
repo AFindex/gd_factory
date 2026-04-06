@@ -79,6 +79,8 @@ public partial class FactoryDemo : Node3D
     private bool _deleteDragActive;
     private Vector2I _deleteDragStartCell;
     private Vector2I _deleteDragCurrentCell;
+    private bool _buildPlacementDragActive;
+    private readonly HashSet<Vector2I> _buildPlacementStrokeCells = new();
     private FactoryBlueprintWorkflowMode _blueprintMode;
     private bool _blueprintSelectionDragActive;
     private bool _hasBlueprintSelectionRect;
@@ -121,6 +123,12 @@ public partial class FactoryDemo : Node3D
         }
 
         UpdateHoveredCell();
+        var placedDuringDrag = HandleBuildDragPlacement();
+        if (placedDuringDrag)
+        {
+            UpdateHoveredCell();
+        }
+
         UpdatePreview();
         UpdateStructureVisuals();
         UpdatePowerLinkVisuals();
@@ -298,6 +306,21 @@ public partial class FactoryDemo : Node3D
             }
         }
 
+        if (_interactionMode == FactoryInteractionMode.Build && mouseButton.ButtonIndex == MouseButton.Left)
+        {
+            if (mouseButton.Pressed)
+            {
+                HandleBuildPrimaryPress();
+            }
+            else
+            {
+                HandleBuildPrimaryRelease();
+            }
+
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         if (!mouseButton.Pressed)
         {
             return;
@@ -467,6 +490,7 @@ public partial class FactoryDemo : Node3D
 
         RefreshInteractionModeFromBuildSource();
         _deleteDragActive = false;
+        ResetBuildPlacementStroke();
 
         if (_interactionMode == FactoryInteractionMode.Build)
         {
@@ -481,6 +505,7 @@ public partial class FactoryDemo : Node3D
         _playerController?.DisarmHotbarPlacement();
         _interactionMode = FactoryInteractionMode.Interact;
         _deleteDragActive = false;
+        ResetBuildPlacementStroke();
     }
 
     private void EnterDeleteMode()
@@ -492,6 +517,7 @@ public partial class FactoryDemo : Node3D
         _selectedStructure = null;
         _interactionMode = FactoryInteractionMode.Delete;
         _deleteDragActive = false;
+        ResetBuildPlacementStroke();
     }
 
     private void SpawnPlayerController()
@@ -850,7 +876,7 @@ public partial class FactoryDemo : Node3D
                 {
                     ammoAssembler.TryReceiveProvidedItem(
                         _simulation.CreateItem(BuildPrototypeKind.Smelter, FactoryItemKind.IronPlate),
-                        ammoAssembler.Cell + Vector2I.Left,
+                        GetPrimaryInputCell(ammoAssembler),
                         _simulation);
                 }
 
@@ -858,7 +884,7 @@ public partial class FactoryDemo : Node3D
                 {
                     ammoAssembler.TryReceiveProvidedItem(
                         _simulation.CreateItem(BuildPrototypeKind.Assembler, FactoryItemKind.CopperWire),
-                        ammoAssembler.Cell + Vector2I.Left,
+                        GetPrimaryInputCell(ammoAssembler),
                         _simulation);
                 }
             }
@@ -931,12 +957,22 @@ public partial class FactoryDemo : Node3D
         batteryAssembler?.TrySetDetailRecipe("battery-pack");
         PlaceStructure(BuildPrototypeKind.Belt, 15, 2, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Belt, 16, 2, FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Storage, 17, 2, FacingDirection.East);
+        var maintenanceStorage = PlaceStructure(BuildPrototypeKind.Storage, 17, 2, FacingDirection.East) as StorageStructure;
         PlaceStructure(BuildPrototypeKind.Inserter, 18, 2, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.LargeStorageDepot, 19, 2, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Inserter, 21, 2, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Belt, 22, 2, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Sink, 23, 2, FacingDirection.East);
+        if (maintenanceStorage is not null && _simulation is not null)
+        {
+            for (var index = 0; index < 6; index++)
+            {
+                maintenanceStorage.TryReceiveProvidedItem(
+                    _simulation.CreateItem(BuildPrototypeKind.Assembler, FactoryItemKind.BatteryPack),
+                    maintenanceStorage.Cell + Vector2I.Left,
+                    _simulation);
+            }
+        }
 
         PlaceStructure(BuildPrototypeKind.MiningDrill, 8, -4, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Belt, 9, -4, FacingDirection.East);
@@ -1406,6 +1442,11 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
+        if (IsPointerOverUi())
+        {
+            return;
+        }
+
         if (!_cameraRig.TryProjectMouseToPlane(GetViewport().GetMousePosition(), out var worldPosition))
         {
             return;
@@ -1587,7 +1628,7 @@ public partial class FactoryDemo : Node3D
 
         _previewRoot.Position = FactoryPlacement.GetPreviewCenter(_grid, previewKind, _hoveredCell, _selectedFacing);
         _previewRoot.Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(_selectedFacing), 0.0f);
-        var previewSize = FactoryPlacement.GetPreviewSize(_grid, previewKind, _selectedFacing);
+        var previewSize = FactoryPlacement.GetPreviewBaseSize(_grid, previewKind);
         _previewCell.Mesh = new BoxMesh
         {
             Size = new Vector3(
@@ -1647,8 +1688,18 @@ public partial class FactoryDemo : Node3D
         {
             var entry = plan.Entries[index];
             var mesh = _blueprintPreviewMeshes[index];
+            var footprint = FactoryStructureFactory.GetFootprint(entry.SourceEntry.Kind);
+            var previewSize = footprint.GetPreviewSize(_grid.CellSize, FacingDirection.East);
             mesh.Visible = true;
-            mesh.Position = _grid.CellToWorld(entry.TargetCell) + new Vector3(0.0f, 0.06f, 0.0f);
+            mesh.Position = FactoryPlacement.GetPreviewCenter(_grid, entry.SourceEntry.Kind, entry.TargetCell, entry.TargetFacing) + new Vector3(0.0f, 0.06f, 0.0f);
+            mesh.Rotation = new Vector3(0.0f, _grid.WorldRotationRadians + FactoryDirection.ToYRotationRadians(entry.TargetFacing), 0.0f);
+            mesh.Mesh = new BoxMesh
+            {
+                Size = new Vector3(
+                    Mathf.Max(_grid.CellSize * 0.92f, previewSize.X - (_grid.CellSize * 0.08f)),
+                    0.10f,
+                    Mathf.Max(_grid.CellSize * 0.92f, previewSize.Y - (_grid.CellSize * 0.08f)))
+            };
             ApplyPreviewColor(mesh, entry.IsValid
                 ? new Color(0.35f, 0.95f, 0.55f, 0.42f)
                 : new Color(1.0f, 0.35f, 0.35f, 0.42f));
@@ -1662,11 +1713,18 @@ public partial class FactoryDemo : Node3D
                     ghost.Configure(_grid, entry.TargetCell, entry.TargetFacing);
                 }
 
+                ghost.GlobalPosition = FactoryPlacement.GetPreviewCenter(_grid, entry.SourceEntry.Kind, entry.TargetCell, entry.TargetFacing);
+                ghost.GlobalRotation = new Vector3(
+                    0.0f,
+                    _grid.WorldRotationRadians + FactoryDirection.ToYRotationRadians(entry.TargetFacing),
+                    0.0f);
+
                 ghost.ApplyGhostVisual(entry.IsValid
                     ? new Color(0.54f, 0.84f, 1.0f, 0.58f)
                     : new Color(1.0f, 0.52f, 0.52f, 0.54f));
             }
         }
+
     }
 
     private void UpdateStructureVisuals()
@@ -2202,28 +2260,6 @@ public partial class FactoryDemo : Node3D
         if (!_hasHoveredCell)
         {
             TraceLog("HandlePrimaryClick ignored because there is no hovered cell");
-            return;
-        }
-
-        if (_interactionMode == FactoryInteractionMode.Build && TryGetActivePlacementKind(out var placementKind, out var usesPlayerInventory))
-        {
-            TraceLog($"HandlePrimaryClick build mode cell={_hoveredCell} kind={placementKind} usesPlayerInventory={usesPlayerInventory} canPlace={_canPlaceCurrentCell} selectedInventory={_selectedPlayerItemInventoryId ?? "none"} selectedSlot={_selectedPlayerItemSlot}");
-            if (_canPlaceCurrentCell)
-            {
-                var placedStructure = PlaceStructure(placementKind, _hoveredCell, _selectedFacing);
-                TraceLog($"HandlePrimaryClick placement result placed={(placedStructure is not null)}");
-                if (placedStructure is not null && usesPlayerInventory)
-                {
-                    var consumed = TryConsumeSelectedPlayerPlaceable();
-                    TraceLog($"HandlePrimaryClick consumed player placeable={consumed}");
-                    RefreshInteractionModeFromBuildSource();
-                }
-            }
-            else
-            {
-                TraceLog($"HandlePrimaryClick placement blocked previewMessage={_previewMessage}");
-            }
-
             return;
         }
 
@@ -2843,7 +2879,7 @@ public partial class FactoryDemo : Node3D
 
     private void UpdatePreviewPortHints(BuildPrototypeKind previewKind)
     {
-        if (_grid is null || _previewPortHintRoot is null || !_hasHoveredCell || !FactoryLogisticsPreview.IsLogisticsKind(previewKind))
+        if (_grid is null || _previewPortHintRoot is null || !_hasHoveredCell || !FactoryLogisticsPreview.ShouldShowContextualPortHints(previewKind))
         {
             SetPreviewPortHintCount(0);
             return;
@@ -2910,6 +2946,82 @@ public partial class FactoryDemo : Node3D
         }
 
         _previewPortHintRoot.Visible = visibleCount > 0;
+    }
+
+    private void HandleBuildPrimaryPress()
+    {
+        _buildPlacementDragActive = true;
+        _buildPlacementStrokeCells.Clear();
+        TryPlaceCurrentBuildTarget(trackCurrentCellForStroke: true);
+    }
+
+    private void HandleBuildPrimaryRelease()
+    {
+        ResetBuildPlacementStroke();
+    }
+
+    private bool HandleBuildDragPlacement()
+    {
+        if (!_buildPlacementDragActive)
+        {
+            return false;
+        }
+
+        if (_interactionMode != FactoryInteractionMode.Build || !Input.IsMouseButtonPressed(MouseButton.Left))
+        {
+            ResetBuildPlacementStroke();
+            return false;
+        }
+
+        return TryPlaceCurrentBuildTarget(trackCurrentCellForStroke: true);
+    }
+
+    private bool TryPlaceCurrentBuildTarget(bool trackCurrentCellForStroke)
+    {
+        if (!_hasHoveredCell || _interactionMode != FactoryInteractionMode.Build || !TryGetActivePlacementKind(out var placementKind, out var usesPlayerInventory))
+        {
+            return false;
+        }
+
+        if (trackCurrentCellForStroke && _buildPlacementStrokeCells.Contains(_hoveredCell))
+        {
+            return false;
+        }
+
+        TraceLog($"TryPlaceCurrentBuildTarget cell={_hoveredCell} kind={placementKind} usesPlayerInventory={usesPlayerInventory} canPlace={_canPlaceCurrentCell} drag={trackCurrentCellForStroke}");
+        if (!_canPlaceCurrentCell)
+        {
+            TraceLog($"TryPlaceCurrentBuildTarget blocked previewMessage={_previewMessage}");
+            return false;
+        }
+
+        var targetCell = _hoveredCell;
+        var placedStructure = PlaceStructure(placementKind, targetCell, _selectedFacing);
+        TraceLog($"TryPlaceCurrentBuildTarget placement result placed={(placedStructure is not null)}");
+        if (placedStructure is null)
+        {
+            return false;
+        }
+
+        if (trackCurrentCellForStroke)
+        {
+            _buildPlacementStrokeCells.Add(targetCell);
+        }
+
+        if (usesPlayerInventory)
+        {
+            var consumed = TryConsumeSelectedPlayerPlaceable();
+            TraceLog($"TryPlaceCurrentBuildTarget consumed player placeable={consumed}");
+            RefreshInteractionModeFromBuildSource();
+        }
+
+        return true;
+    }
+
+    private void ResetBuildPlacementStroke()
+    {
+        _buildPlacementDragActive = false;
+        _buildPlacementStrokeCells.Clear();
     }
 
     private static void ApplyPreviewColor(MeshInstance3D meshInstance, Color color)
@@ -3092,6 +3204,7 @@ public partial class FactoryDemo : Node3D
         RemoveStructure(probeCell);
         var removed = _grid.CanPlace(probeCell);
         var multiCellPlacementVerified = RunMultiCellPlacementSmoke();
+        var assemblerPortPreviewVerified = RunAssemblerPortPreviewSmoke();
         var previewArrowReady = _previewArrow is not null && _previewArrow.GetChildCount() >= 3;
         var playerInteractionVerified = await RunPlayerCharacterSmoke(probeCell);
 
@@ -3129,15 +3242,16 @@ public partial class FactoryDemo : Node3D
             || !structureVisualProfilesVerified
             || !combatVerified
             || !multiCellPlacementVerified
+            || !assemblerPortPreviewVerified
             || !previewArrowReady
             || !playerInteractionVerified)
         {
-            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} playerInteraction={playerInteractionVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
+            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} assemblerPortPreview={assemblerPortPreviewVerified} playerInteraction={playerInteractionVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} previewArrowReady={previewArrowReady} playerInteraction={playerInteractionVerified}");
+        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} assemblerPortPreview={assemblerPortPreviewVerified} previewArrowReady={previewArrowReady} playerInteraction={playerInteractionVerified}");
         GetTree().Quit();
     }
 
@@ -3173,10 +3287,58 @@ public partial class FactoryDemo : Node3D
             _hoveredCell = placementCell;
             _hasHoveredCell = true;
             _canPlaceCurrentCell = true;
-            HandlePrimaryClick();
+            HandleBuildPrimaryPress();
+            HandleBuildPrimaryRelease();
             placedFromHotbar = _grid.TryGetStructure(placementCell, out var placedStructure) && placedStructure is not null;
             consumedOneItem = GetInventorySlotCount(_playerController.BackpackInventory, new Vector2I(1, 0)) == stackBeforePlacement - 1;
             RemoveStructure(placementCell);
+        }
+
+        if (!_playerController.GetArmedPlaceablePrototype().HasValue)
+        {
+            HandlePlayerHotbarPressed(1);
+        }
+
+        var dragStartCell = Vector2I.Zero;
+        var dragNextCell = Vector2I.Zero;
+        var stackBeforeDragPlacement = GetInventorySlotCount(_playerController.BackpackInventory, new Vector2I(1, 0));
+        var dragPlacementVerified = false;
+        var dragSkipVerified = false;
+        var buildModeStayedActive = false;
+        if (_playerController.GetArmedPlaceablePrototype() is BuildPrototypeKind dragPlacementKind
+            && TryFindHorizontalPlacementPair(dragPlacementKind, placementCell, out dragStartCell, out dragNextCell))
+        {
+            _selectedFacing = FacingDirection.East;
+            _hoveredCell = dragStartCell;
+            _hasHoveredCell = true;
+            _canPlaceCurrentCell = true;
+            HandleBuildPrimaryPress();
+
+            _hoveredCell = dragNextCell;
+            _hasHoveredCell = true;
+            _canPlaceCurrentCell = TryValidateWorldPlacement(dragPlacementKind, dragNextCell, FacingDirection.East, out _);
+            var dragPlacedSecond = TryPlaceCurrentBuildTarget(trackCurrentCellForStroke: true);
+
+            _hoveredCell = dragStartCell;
+            _hasHoveredCell = true;
+            _canPlaceCurrentCell = TryValidateWorldPlacement(dragPlacementKind, dragStartCell, FacingDirection.East, out _);
+            var skippedRevisit = !TryPlaceCurrentBuildTarget(trackCurrentCellForStroke: true);
+
+            HandleBuildPrimaryRelease();
+
+            var dragPlacedFirst = _grid.TryGetStructure(dragStartCell, out var dragStartStructure) && dragStartStructure is not null;
+            dragPlacementVerified = dragPlacedFirst
+                && dragPlacedSecond
+                && _grid.TryGetStructure(dragNextCell, out var dragNextStructure)
+                && dragNextStructure is not null
+                && GetInventorySlotCount(_playerController.BackpackInventory, new Vector2I(1, 0)) == stackBeforeDragPlacement - 2;
+            dragSkipVerified = skippedRevisit
+                && GetInventorySlotCount(_playerController.BackpackInventory, new Vector2I(1, 0)) == stackBeforeDragPlacement - 2;
+            buildModeStayedActive = _interactionMode == FactoryInteractionMode.Build;
+
+            RemoveStructure(dragStartCell);
+            RemoveStructure(dragNextCell);
+            RefreshInteractionModeFromBuildSource();
         }
 
         var crossTransferWorked = false;
@@ -3226,11 +3388,14 @@ public partial class FactoryDemo : Node3D
             && hotbarSelected
             && placedFromHotbar
             && consumedOneItem
+            && dragPlacementVerified
+            && dragSkipVerified
+            && buildModeStayedActive
             && crossTransferWorked;
 
         if (!passed)
         {
-            GD.Print($"FACTORY_PLAYER_SMOKE playerSpawned={playerSpawned} playerMoved={playerMoved} cameraFollowed={cameraFollowed} hotbarSelected={hotbarSelected} placedFromHotbar={placedFromHotbar} consumedOneItem={consumedOneItem} crossTransferWorked={crossTransferWorked}");
+            GD.Print($"FACTORY_PLAYER_SMOKE playerSpawned={playerSpawned} playerMoved={playerMoved} cameraFollowed={cameraFollowed} hotbarSelected={hotbarSelected} placedFromHotbar={placedFromHotbar} consumedOneItem={consumedOneItem} dragPlacement={dragPlacementVerified} dragSkip={dragSkipVerified} buildModeStayedActive={buildModeStayedActive} crossTransferWorked={crossTransferWorked}");
         }
 
         return passed;
@@ -3248,6 +3413,12 @@ public partial class FactoryDemo : Node3D
         }
 
         return 0;
+    }
+
+    private static Vector2I GetPrimaryInputCell(FactoryStructure structure)
+    {
+        var inputCells = structure.GetInputCells();
+        return inputCells.Count > 0 ? inputCells[0] : structure.Cell + Vector2I.Left;
     }
 
     private bool RunMultiCellPlacementSmoke()
@@ -3281,6 +3452,88 @@ public partial class FactoryDemo : Node3D
         var released = _grid.CanPlace(anchor) && _grid.CanPlace(occupiedCell);
         var singleCellStillValid = TryValidateWorldPlacement(BuildPrototypeKind.Belt, anchor, FacingDirection.East, out _);
         return resolvedFromSecondaryCell && released && singleCellStillValid;
+    }
+
+    private bool RunAssemblerPortPreviewSmoke()
+    {
+        if (_grid is null
+            || _previewPortHintRoot is null
+            || _previewCell is null
+            || !_grid.TryGetStructure(new Vector2I(14, 2), out var structure)
+            || structure is not AssemblerStructure assembler)
+        {
+            return false;
+        }
+
+        var footprint = FactoryStructureFactory.GetFootprint(BuildPrototypeKind.Assembler);
+        var eastInputCells = footprint.ResolveInputCells(Vector2I.Zero, FacingDirection.East);
+        var eastOutputCells = footprint.ResolveOutputCells(Vector2I.Zero, FacingDirection.East);
+        var eastContractVerified = eastInputCells.Count == 3
+            && eastOutputCells.Count == 3
+            && eastInputCells[0] == new Vector2I(0, -1)
+            && eastInputCells[1] == new Vector2I(1, -1)
+            && eastInputCells[2] == new Vector2I(2, -1)
+            && eastOutputCells[0] == new Vector2I(0, 2)
+            && eastOutputCells[1] == new Vector2I(1, 2)
+            && eastOutputCells[2] == new Vector2I(2, 2);
+
+        var previewCell = assembler.GetInputCells()[0];
+        _selectedFacing = FacingDirection.East;
+        _hoveredCell = previewCell;
+        _hasHoveredCell = true;
+
+        SelectBuildKind(BuildPrototypeKind.Belt);
+        _canPlaceCurrentCell = TryValidateWorldPlacement(BuildPrototypeKind.Belt, previewCell, FacingDirection.East, out _);
+        UpdatePreview();
+        var beltHintsVisible = _previewPortHintRoot.Visible;
+
+        _selectedFacing = FacingDirection.South;
+        _hoveredCell = new Vector2I(18, 18);
+        _hasHoveredCell = true;
+        _canPlaceCurrentCell = TryValidateWorldPlacement(BuildPrototypeKind.Assembler, _hoveredCell, _selectedFacing, out _);
+        SelectBuildKind(BuildPrototypeKind.Assembler);
+        UpdatePreview();
+        var southPreviewSizeVerified = _previewCell.Mesh is BoxMesh rotatedPreviewMesh
+            && Mathf.IsEqualApprox(rotatedPreviewMesh.Size.X, FactoryConstants.CellSize * 3.0f - (_grid.CellSize * 0.08f))
+            && Mathf.IsEqualApprox(rotatedPreviewMesh.Size.Z, FactoryConstants.CellSize * 2.0f - (_grid.CellSize * 0.08f));
+
+        SelectBuildKind(BuildPrototypeKind.Inserter);
+        _canPlaceCurrentCell = TryValidateWorldPlacement(BuildPrototypeKind.Inserter, previewCell, FacingDirection.East, out _);
+        UpdatePreview();
+        var nonBeltHintsHidden = !_previewPortHintRoot.Visible;
+
+        EnterInteractionMode();
+        return eastContractVerified && beltHintsVisible && southPreviewSizeVerified && nonBeltHintsHidden;
+    }
+
+    private bool TryFindHorizontalPlacementPair(BuildPrototypeKind kind, Vector2I nearCell, out Vector2I startCell, out Vector2I nextCell)
+    {
+        startCell = Vector2I.Zero;
+        nextCell = Vector2I.Zero;
+        if (_grid is null)
+        {
+            return false;
+        }
+
+        for (var y = nearCell.Y; y <= nearCell.Y + 4; y++)
+        {
+            for (var x = nearCell.X; x <= nearCell.X + 4; x++)
+            {
+                var candidate = new Vector2I(x, y);
+                var next = candidate + Vector2I.Right;
+                if (!TryValidateWorldPlacement(kind, candidate, FacingDirection.East, out _)
+                    || !TryValidateWorldPlacement(kind, next, FacingDirection.East, out _))
+                {
+                    continue;
+                }
+
+                startCell = candidate;
+                nextCell = next;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool RunWorkspaceNavigationSmoke()
@@ -3643,7 +3896,7 @@ public partial class FactoryDemo : Node3D
             blueprintOrigin + new Vector2I(2, 0),
             blueprintOrigin + new Vector2I(3, 0),
             blueprintOrigin + new Vector2I(0, 2),
-            blueprintOrigin + new Vector2I(2, 2)
+            blueprintOrigin + new Vector2I(4, 2)
         };
         for (var index = 0; index < blueprintAnchors.Length; index++)
         {
@@ -3657,15 +3910,15 @@ public partial class FactoryDemo : Node3D
             || PlaceStructure(BuildPrototypeKind.Inserter, blueprintOrigin.X + 1, blueprintOrigin.Y, FacingDirection.East) is null
             || PlaceStructure(BuildPrototypeKind.Belt, blueprintOrigin.X + 2, blueprintOrigin.Y, FacingDirection.East) is null
             || PlaceStructure(BuildPrototypeKind.Sink, blueprintOrigin.X + 3, blueprintOrigin.Y, FacingDirection.East) is null
-            || PlaceStructure(BuildPrototypeKind.LargeStorageDepot, blueprintOrigin.X, blueprintOrigin.Y + 2, FacingDirection.East) is null
-            || PlaceStructure(BuildPrototypeKind.PowerPole, blueprintOrigin.X + 2, blueprintOrigin.Y + 2, FacingDirection.East) is null)
+            || PlaceStructure(BuildPrototypeKind.Assembler, blueprintOrigin.X, blueprintOrigin.Y + 2, FacingDirection.East) is null
+            || PlaceStructure(BuildPrototypeKind.PowerPole, blueprintOrigin.X + 4, blueprintOrigin.Y + 2, FacingDirection.East) is null)
         {
             return false;
         }
 
         var captured = FactoryBlueprintCaptureService.CaptureSelection(
             _blueprintSite,
-            new Rect2I(blueprintOrigin.X, blueprintOrigin.Y, 4, 4),
+            new Rect2I(blueprintOrigin.X, blueprintOrigin.Y, 5, 4),
             "Smoke Utility Blueprint");
         if (captured is null || captured.StructureCount < 6)
         {
@@ -3677,12 +3930,38 @@ public partial class FactoryDemo : Node3D
 
         var invalidPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintSite, captured.SuggestedAnchorCell);
         var structureCountBefore = _simulation.RegisteredStructureCount;
-        if (!TryFindBlueprintAnchor(captured, FacingDirection.East, out var validAnchor))
+        if (!TryFindBlueprintAnchor(captured, FacingDirection.South, out var validAnchor))
         {
             return false;
         }
 
-        var validPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintSite, validAnchor, FacingDirection.East);
+        var validPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintSite, validAnchor, FacingDirection.South);
+        _blueprintMode = FactoryBlueprintWorkflowMode.ApplyPreview;
+        _blueprintApplyRotation = FacingDirection.South;
+        _blueprintApplyPlan = validPlan;
+        _hoveredCell = validAnchor;
+        _hasHoveredCell = true;
+        UpdatePreview();
+
+        var previewAligned = false;
+        for (var index = 0; index < validPlan.Entries.Count; index++)
+        {
+            var entry = validPlan.Entries[index];
+            if (entry.SourceEntry.Kind != BuildPrototypeKind.Assembler)
+            {
+                continue;
+            }
+
+            var expectedPosition = FactoryPlacement.GetPreviewCenter(_grid, entry.SourceEntry.Kind, entry.TargetCell, entry.TargetFacing) + new Vector3(0.0f, 0.06f, 0.0f);
+            var expectedRotation = _grid.WorldRotationRadians + FactoryDirection.ToYRotationRadians(entry.TargetFacing);
+            var mesh = _blueprintPreviewMeshes[index];
+            previewAligned = mesh.Visible
+                && mesh.Position.DistanceTo(expectedPosition) < 0.05f
+                && Mathf.IsEqualApprox(mesh.Rotation.Y, expectedRotation);
+
+            break;
+        }
+
         var committed = validPlan.IsValid && FactoryBlueprintPlanner.CommitPlan(validPlan, _blueprintSite);
         if (!committed)
         {
@@ -3702,7 +3981,11 @@ public partial class FactoryDemo : Node3D
             }
         }
 
+        CancelBlueprintWorkflow(clearActiveBlueprint: false);
+        EnterInteractionMode();
+
         return !invalidPlan.IsValid
+            && previewAligned
             && validPlan.IsValid
             && placedEntries == captured.Entries.Count
             && _simulation.RegisteredStructureCount >= structureCountBefore + captured.Entries.Count;
@@ -4033,13 +4316,13 @@ public partial class FactoryDemo : Node3D
         }
 
         feederStorage.TryReceiveProvidedItem(_simulation.CreateItem(BuildPrototypeKind.Storage, FactoryItemKind.GenericCargo), feederStorage.Cell + Vector2I.Left, _simulation);
-        recipeAssembler.TryReceiveProvidedItem(_simulation.CreateItem(BuildPrototypeKind.Smelter, FactoryItemKind.IronPlate), recipeAssembler.Cell + Vector2I.Left, _simulation);
-        recipeAssembler.TryReceiveProvidedItem(_simulation.CreateItem(BuildPrototypeKind.Smelter, FactoryItemKind.IronPlate), recipeAssembler.Cell + Vector2I.Left, _simulation);
+        recipeAssembler.TryReceiveProvidedItem(_simulation.CreateItem(BuildPrototypeKind.Smelter, FactoryItemKind.IronPlate), GetPrimaryInputCell(recipeAssembler), _simulation);
+        recipeAssembler.TryReceiveProvidedItem(_simulation.CreateItem(BuildPrototypeKind.Smelter, FactoryItemKind.IronPlate), GetPrimaryInputCell(recipeAssembler), _simulation);
 
         if (turret.BufferedAmmo <= 0)
         {
             var injectedAmmo = _simulation.CreateItem(BuildPrototypeKind.AmmoAssembler, FactoryItemKind.HighVelocityAmmo);
-            turret.TryReceiveProvidedItem(injectedAmmo, ammoAssembler.GetTransferOutputCell(turret.Cell), _simulation);
+            turret.TryReceiveProvidedItem(injectedAmmo, GetPrimaryInputCell(turret), _simulation);
         }
 
         _selectedStructure = storage;
@@ -4164,7 +4447,8 @@ public partial class FactoryDemo : Node3D
 
         _selectedStructure = recipeAssembler;
         UpdateHud();
-        recipeAssembler.TryPeekProvidedItem(new Vector2I(29, 28), _simulation, out var producedItem);
+        var recipeOutputCells = recipeAssembler.GetOutputCells();
+        recipeAssembler.TryPeekProvidedItem(recipeOutputCells.Count > 0 ? recipeOutputCells[0] : recipeAssembler.GetOutputCell(), _simulation, out var producedItem);
         var assemblerRecipeVerified = assemblerRecipeChanged
             && _hud.IsDetailVisible
             && _hud.DetailTitleText.Contains("组装机", global::System.StringComparison.Ordinal)
@@ -4188,7 +4472,7 @@ public partial class FactoryDemo : Node3D
             }
         }
 
-        return storageDetailVisible
+        var passed = storageDetailVisible
             && stackCountsVisible
             && emptyDragRejected
             && storageMoved
@@ -4203,6 +4487,12 @@ public partial class FactoryDemo : Node3D
             && ammoRecipeChanged
             && turretHasAmmo
             && turretShowsHighVelocityAmmo;
+        if (!passed)
+        {
+            GD.Print($"FACTORY_DETAIL_SMOKE storageDetailVisible={storageDetailVisible} stackCountsVisible={stackCountsVisible} emptyDragRejected={emptyDragRejected} storageMoved={storageMoved} movedTargetStackCount={movedTargetStackCount} targetStackBeforeMove={targetStackBeforeMove} movedTotalStackCount={movedTotalStackCount} totalStackCountBeforeMove={totalStackCountBeforeMove} splitMoveWorked={splitMoveWorked} splitTargetCount={splitTargetCount} splitSourceCountBefore={splitSourceCountBefore} splitSourceCountAfter={splitSourceCountAfter} splitTotalStackCount={splitTotalStackCount} assemblerRecipeVerified={assemblerRecipeVerified} ammoRecipeChanged={ammoRecipeChanged} turretHasAmmo={turretHasAmmo} turretShowsHighVelocityAmmo={turretShowsHighVelocityAmmo}");
+        }
+
+        return passed;
     }
 
     private async Task<bool> VerifyCombatScenarios()

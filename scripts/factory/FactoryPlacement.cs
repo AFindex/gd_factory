@@ -40,4 +40,9 @@ public static class FactoryPlacement
     {
         return FactoryStructureFactory.GetFootprint(kind).GetPreviewSize(site.CellSize, facing);
     }
+
+    public static Vector2 GetPreviewBaseSize(IFactorySite site, BuildPrototypeKind kind)
+    {
+        return FactoryStructureFactory.GetFootprint(kind).GetPreviewSize(site.CellSize, FacingDirection.East);
+    }
 }

@@ -39,15 +39,15 @@ public static class FactoryStructureFactory
         },
         inputOffsetsEast: new[]
         {
-            new Vector2I(-1, 0),
-            new Vector2I(-1, 1),
-            new Vector2I(1, -1)
+            new Vector2I(0, -1),
+            new Vector2I(1, -1),
+            new Vector2I(2, -1)
         },
         outputOffsetsEast: new[]
         {
-            new Vector2I(3, 0),
-            new Vector2I(3, 1),
-            new Vector2I(1, 2)
+            new Vector2I(0, 2),
+            new Vector2I(1, 2),
+            new Vector2I(2, 2)
         });
 
     private static readonly Dictionary<BuildPrototypeKind, FactoryStructureDefinition> Definitions = new()

@@ -2109,7 +2109,7 @@ public partial class MobileFactoryDemo : Node3D
         var tint = _canPlaceInteriorCell
             ? new Color(0.35f, 0.95f, 0.55f, 0.45f)
             : new Color(1.0f, 0.35f, 0.35f, 0.45f);
-        var previewSize = FactoryPlacement.GetPreviewSize(_mobileFactory.InteriorSite, _selectedInteriorKind, _selectedInteriorFacing);
+        var previewSize = FactoryPlacement.GetPreviewBaseSize(_mobileFactory.InteriorSite, _selectedInteriorKind);
         _interiorPreviewCell.Mesh = new BoxMesh
         {
             Size = new Vector3(
@@ -2208,11 +2208,25 @@ public partial class MobileFactoryDemo : Node3D
         {
             var entry = _interiorBlueprintPlan.Entries[index];
             var mesh = _interiorBlueprintPreviewMeshes[index];
+            var previewCenter = FactoryPlacement.GetPreviewCenter(
+                _mobileFactory.InteriorSite,
+                entry.SourceEntry.Kind,
+                entry.TargetCell,
+                entry.TargetFacing);
+            var previewSize = FactoryPlacement.GetPreviewBaseSize(_mobileFactory.InteriorSite, entry.SourceEntry.Kind);
             mesh.Visible = true;
-            mesh.Position = new Vector3(
-                entry.TargetCell.X * _mobileFactory.InteriorSite.CellSize,
-                0.06f,
-                entry.TargetCell.Y * _mobileFactory.InteriorSite.CellSize);
+            mesh.Position = _interiorBlueprintPreviewRoot.ToLocal(previewCenter) + new Vector3(0.0f, 0.06f, 0.0f);
+            mesh.Rotation = new Vector3(
+                0.0f,
+                FactoryDirection.ToYRotationRadians(entry.TargetFacing),
+                0.0f);
+            mesh.Mesh = new BoxMesh
+            {
+                Size = new Vector3(
+                    Mathf.Max(_mobileFactory.InteriorSite.CellSize * 0.92f, previewSize.X - (_mobileFactory.InteriorSite.CellSize * 0.08f)),
+                    0.08f,
+                    Mathf.Max(_mobileFactory.InteriorSite.CellSize * 0.92f, previewSize.Y - (_mobileFactory.InteriorSite.CellSize * 0.08f)))
+            };
             ApplyPreviewColor(mesh, entry.IsValid
                 ? new Color(0.35f, 0.95f, 0.55f, 0.36f)
                 : new Color(1.0f, 0.35f, 0.35f, 0.36f));
@@ -2225,6 +2239,12 @@ public partial class MobileFactoryDemo : Node3D
                 {
                     ghost.Configure(_mobileFactory.InteriorSite, entry.TargetCell, entry.TargetFacing);
                 }
+
+                ghost.GlobalPosition = previewCenter;
+                ghost.GlobalRotation = new Vector3(
+                    0.0f,
+                    _mobileFactory.InteriorSite.WorldRotationRadians + FactoryDirection.ToYRotationRadians(entry.TargetFacing),
+                    0.0f);
 
                 ghost.ApplyGhostVisual(entry.IsValid
                     ? new Color(0.54f, 0.84f, 1.0f, 0.58f)
@@ -4013,6 +4033,12 @@ public partial class MobileFactoryDemo : Node3D
         return consumed;
     }
 
+    private static Vector2I GetPrimaryInputCell(FactoryStructure structure)
+    {
+        var inputCells = structure.GetInputCells();
+        return inputCells.Count > 0 ? inputCells[0] : structure.Cell + Vector2I.Left;
+    }
+
     private bool TryResolveInventoryEndpoint(string inventoryId, out FactoryInventoryTransferEndpoint endpoint)
     {
         if (_playerController?.TryResolveInventoryEndpoint(inventoryId, out endpoint) == true)
@@ -4326,7 +4352,7 @@ public partial class MobileFactoryDemo : Node3D
         if (_mobileFactory is null
             || _interiorPortHintRoot is null
             || !_hasHoveredInteriorCell
-            || !FactoryLogisticsPreview.IsLogisticsKind(previewKind))
+            || !FactoryLogisticsPreview.ShouldShowContextualPortHints(previewKind))
         {
             SetInteriorPortHintCount(0);
             return;
@@ -5081,11 +5107,11 @@ public partial class MobileFactoryDemo : Node3D
 
         recipeAssembler.TryReceiveProvidedItem(
             _simulation.CreateItem(BuildPrototypeKind.Smelter, FactoryItemKind.IronPlate),
-            recipeAssembler.Cell + Vector2I.Left,
+            GetPrimaryInputCell(recipeAssembler),
             _simulation);
         recipeAssembler.TryReceiveProvidedItem(
             _simulation.CreateItem(BuildPrototypeKind.Smelter, FactoryItemKind.IronPlate),
-            recipeAssembler.Cell + Vector2I.Left,
+            GetPrimaryInputCell(recipeAssembler),
             _simulation);
         storage.TryReceiveProvidedItem(
             _simulation.CreateItem(BuildPrototypeKind.Storage, FactoryItemKind.GenericCargo),

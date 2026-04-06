@@ -18,15 +18,9 @@ public static class FactoryLogisticsPreview
         new Vector2I(1, 1)
     };
 
-    public static bool IsLogisticsKind(BuildPrototypeKind kind)
+    public static bool ShouldShowContextualPortHints(BuildPrototypeKind kind)
     {
-        return kind is BuildPrototypeKind.Belt
-            or BuildPrototypeKind.Splitter
-            or BuildPrototypeKind.Merger
-            or BuildPrototypeKind.Bridge
-            or BuildPrototypeKind.Loader
-            or BuildPrototypeKind.Unloader
-            or BuildPrototypeKind.Inserter;
+        return kind == BuildPrototypeKind.Belt;
     }
 
     public static List<FactoryPortPreviewMarker> CollectNearbyPortMarkers(IFactorySite site, Vector2I referenceCell)
