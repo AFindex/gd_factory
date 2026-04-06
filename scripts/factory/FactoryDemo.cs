@@ -10,11 +10,6 @@ public partial class FactoryDemo : Node3D
     private const string TelemetryWorkspaceId = "telemetry";
     private const string CombatWorkspaceId = "combat";
     private const string TestingWorkspaceId = "testing";
-    private const float PowerDashBaseLength = FactoryPreviewOverlaySupport.PowerDashBaseLength;
-    private const float PowerDashGapLength = FactoryPreviewOverlaySupport.PowerDashGapLength;
-    private const float PowerDashThickness = FactoryPreviewOverlaySupport.PowerDashThickness;
-    private const float PowerDashWidth = FactoryPreviewOverlaySupport.PowerDashWidth;
-    private const float PowerLinkEndpointInset = FactoryPreviewOverlaySupport.PowerLinkEndpointInset;
     private const float PreviewPowerPoleWireHeight = FactoryPreviewOverlaySupport.PreviewPowerPoleWireHeight;
     private const int PreviewPowerPoleConnectionRangeCells = FactoryPreviewOverlaySupport.PreviewPowerPoleConnectionRangeCells;
 
@@ -1788,57 +1783,21 @@ public partial class FactoryDemo : Node3D
 
     private void RenderPowerLinkSet(Vector3 origin, Vector2I originCell, int originRange, Color color, FactoryStructure? exclude = null)
     {
-        var targets = CollectConnectablePowerNodes(originCell, originRange, exclude);
-        if (targets.Count == 0)
-        {
-            SetPowerLinkDashCount(0);
-            return;
-        }
-
-        var dashIndex = 0;
-        for (var i = 0; i < targets.Count; i++)
-        {
-            dashIndex = DrawDashedPowerLink(origin, GetPowerAnchor(targets[i]), color, dashIndex);
-        }
-
-        SetPowerLinkDashCount(dashIndex);
+        FactoryPowerPreviewSupport.RenderPowerLinkSet(
+            _structureRoot,
+            origin,
+            originCell,
+            originRange,
+            color,
+            GetPowerAnchor,
+            DrawDashedPowerLink,
+            SetPowerLinkDashCount,
+            exclude: exclude);
     }
 
     private List<FactoryStructure> CollectConnectablePowerNodes(Vector2I originCell, int originRange, FactoryStructure? exclude)
     {
-        var candidates = new List<(FactoryStructure structure, float distance)>();
-        var origin = new Vector2(originCell.X, originCell.Y);
-        foreach (var child in _structureRoot!.GetChildren())
-        {
-            if (child is not FactoryStructure structure
-                || structure == exclude
-                || structure.IsDestroyed
-                || !structure.Site.IsSimulationActive
-                || structure is not IFactoryPowerNode powerNode
-                || powerNode.PowerConnectionRangeCells <= 0
-                || structure.Cell == originCell)
-            {
-                continue;
-            }
-
-            var target = new Vector2(structure.Cell.X, structure.Cell.Y);
-            var distance = origin.DistanceTo(target);
-            if (distance > originRange + powerNode.PowerConnectionRangeCells)
-            {
-                continue;
-            }
-
-            candidates.Add((structure, distance));
-        }
-
-        candidates.Sort((a, b) => a.distance.CompareTo(b.distance));
-        var ordered = new List<FactoryStructure>(candidates.Count);
-        for (var i = 0; i < candidates.Count; i++)
-        {
-            ordered.Add(candidates[i].structure);
-        }
-
-        return ordered;
+        return FactoryPowerPreviewSupport.CollectConnectablePowerNodes(_structureRoot, originCell, originRange, exclude: exclude);
     }
 
     private int DrawDashedPowerLink(Vector3 start, Vector3 end, Color color, int dashIndex)
@@ -1890,37 +1849,12 @@ public partial class FactoryDemo : Node3D
 
     private static void UpdatePreviewPowerRange(BuildPrototypeKind? kind, IFactorySite site, MeshInstance3D previewPowerRange, Color tint)
     {
-        if (!TryGetPowerPreviewInfo(kind, out var rangeCells))
-        {
-            previewPowerRange.Visible = false;
-            return;
-        }
-
-        previewPowerRange.Mesh = new CylinderMesh
-        {
-            TopRadius = site.CellSize * rangeCells,
-            BottomRadius = site.CellSize * rangeCells,
-            Height = 0.03f
-        };
-        previewPowerRange.Position = new Vector3(0.0f, 0.02f, 0.0f);
-        previewPowerRange.Visible = true;
-        FactoryPreviewOverlaySupport.ApplyPreviewColor(previewPowerRange, new Color(tint.R, tint.G, tint.B, 0.15f));
+        FactoryPowerPreviewSupport.UpdatePreviewPowerRange(kind, site, previewPowerRange, tint);
     }
 
     private static bool TryGetPowerPreviewInfo(BuildPrototypeKind? kind, out int rangeCells)
     {
-        switch (kind)
-        {
-            case BuildPrototypeKind.Generator:
-                rangeCells = 5;
-                return true;
-            case BuildPrototypeKind.PowerPole:
-                rangeCells = PreviewPowerPoleConnectionRangeCells;
-                return true;
-            default:
-                rangeCells = 0;
-                return false;
-        }
+        return FactoryPowerPreviewSupport.TryGetPowerPreviewInfo(kind, out rangeCells);
     }
 
     private static void ApplyPowerLinkColor(MeshInstance3D dash, Color color)
@@ -2244,11 +2178,7 @@ public partial class FactoryDemo : Node3D
 
     private Rect2I GetDeleteRect(Vector2I start, Vector2I end)
     {
-        var minX = Mathf.Min(start.X, end.X);
-        var minY = Mathf.Min(start.Y, end.Y);
-        var maxX = Mathf.Max(start.X, end.X);
-        var maxY = Mathf.Max(start.Y, end.Y);
-        return new Rect2I(minX, minY, maxX - minX + 1, maxY - minY + 1);
+        return FactorySelectionRectSupport.BuildInclusiveRect(start, end);
     }
 
     private int CountStructuresInDeleteRect(Vector2I start, Vector2I end)
@@ -2258,20 +2188,10 @@ public partial class FactoryDemo : Node3D
             return 0;
         }
 
-        var rect = GetDeleteRect(start, end);
-        var seen = new HashSet<ulong>();
-        for (var y = rect.Position.Y; y < rect.End.Y; y++)
-        {
-            for (var x = rect.Position.X; x < rect.End.X; x++)
-            {
-                if (_grid.TryGetStructure(new Vector2I(x, y), out var structure) && structure is not null)
-                {
-                    seen.Add(structure.GetInstanceId());
-                }
-            }
-        }
-
-        return seen.Count;
+        return FactorySelectionRectSupport.CountUniqueStructuresInRect(
+            start,
+            end,
+            cell => _grid.TryGetStructure(cell, out var structure) ? structure : null);
     }
 
     private void DeleteStructuresInRect(Vector2I start, Vector2I end)
@@ -2281,20 +2201,10 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        var rect = GetDeleteRect(start, end);
-        var cellsToDelete = new List<Vector2I>();
-        var seen = new HashSet<ulong>();
-        for (var y = rect.Position.Y; y < rect.End.Y; y++)
-        {
-            for (var x = rect.Position.X; x < rect.End.X; x++)
-            {
-                var cell = new Vector2I(x, y);
-                if (_grid.TryGetStructure(cell, out var structure) && structure is not null && seen.Add(structure.GetInstanceId()))
-                {
-                    cellsToDelete.Add(structure.Cell);
-                }
-            }
-        }
+        var cellsToDelete = FactorySelectionRectSupport.CollectUniqueStructureAnchorCells(
+            start,
+            end,
+            cell => _grid.TryGetStructure(cell, out var structure) ? structure : null);
 
         for (var index = 0; index < cellsToDelete.Count; index++)
         {
@@ -2329,52 +2239,32 @@ public partial class FactoryDemo : Node3D
 
     private void EnsureBlueprintPreviewCapacity(int count)
     {
-        if (_blueprintPreviewRoot is null)
-        {
-            return;
-        }
-
-        while (_blueprintPreviewMeshes.Count < count)
-        {
-            var mesh = new MeshInstance3D
+        FactoryPreviewPoolSupport.EnsureMeshCapacity(
+            _blueprintPreviewRoot,
+            _blueprintPreviewMeshes,
+            count,
+            index => new MeshInstance3D
             {
-                Name = $"BlueprintPreview_{_blueprintPreviewMeshes.Count}",
+                Name = $"BlueprintPreview_{index}",
                 Visible = false,
                 Mesh = new BoxMesh
                 {
                     Size = new Vector3(FactoryConstants.CellSize * 0.84f, 0.10f, FactoryConstants.CellSize * 0.84f)
                 }
-            };
-            _blueprintPreviewRoot.AddChild(mesh);
-            _blueprintPreviewMeshes.Add(mesh);
-        }
+            });
     }
 
     private FactoryStructure EnsureBlueprintGhostPreview(FactoryBlueprintPlanEntry entry, int index)
     {
-        if (_blueprintGhostPreviewRoot is null)
-        {
-            throw new System.InvalidOperationException("Blueprint ghost preview root is missing.");
-        }
-
-        if (index < _blueprintPreviewGhosts.Count && _blueprintPreviewGhosts[index].Kind == entry.SourceEntry.Kind)
-        {
-            return _blueprintPreviewGhosts[index];
-        }
-
-        if (index < _blueprintPreviewGhosts.Count)
-        {
-            _blueprintPreviewGhosts[index].QueueFree();
-            _blueprintPreviewGhosts.RemoveAt(index);
-        }
-
-        var ghost = FactoryStructureFactory.CreateGhostPreview(
+        return FactoryPreviewPoolSupport.EnsureGhostPreview(
+            _blueprintGhostPreviewRoot,
+            _blueprintPreviewGhosts,
+            index,
             entry.SourceEntry.Kind,
-            new FactoryStructurePlacement(_grid!, entry.TargetCell, entry.TargetFacing));
-        ghost.Name = $"BlueprintGhostPreview_{index}_{entry.SourceEntry.Kind}";
-        _blueprintGhostPreviewRoot.AddChild(ghost);
-        _blueprintPreviewGhosts.Insert(index, ghost);
-        return ghost;
+            kind => FactoryStructureFactory.CreateGhostPreview(
+                kind,
+                new FactoryStructurePlacement(_grid!, entry.TargetCell, entry.TargetFacing)),
+            "BlueprintGhostPreview");
     }
 
     private static bool SupportsGhostBlueprintPreview()
@@ -2765,32 +2655,16 @@ public partial class FactoryDemo : Node3D
 
     private void EnsurePreviewPortHintMeshCount(int count)
     {
-        if (_previewPortHintRoot is null)
-        {
-            return;
-        }
-
-        while (_previewPortHintMeshes.Count < count)
-        {
-            var mesh = FactoryPreviewOverlaySupport.CreatePortHintMesh($"PreviewPortHint_{_previewPortHintMeshes.Count}");
-            _previewPortHintRoot.AddChild(mesh);
-            _previewPortHintMeshes.Add(mesh);
-        }
+        FactoryPreviewPoolSupport.EnsureMeshCapacity(
+            _previewPortHintRoot,
+            _previewPortHintMeshes,
+            count,
+            index => FactoryPreviewOverlaySupport.CreatePortHintMesh($"PreviewPortHint_{index}"));
     }
 
     private void SetPreviewPortHintCount(int visibleCount)
     {
-        if (_previewPortHintRoot is null)
-        {
-            return;
-        }
-
-        for (var index = visibleCount; index < _previewPortHintMeshes.Count; index++)
-        {
-            _previewPortHintMeshes[index].Visible = false;
-        }
-
-        _previewPortHintRoot.Visible = visibleCount > 0;
+        FactoryPreviewPoolSupport.SetVisibleMeshCount(_previewPortHintRoot, _previewPortHintMeshes, visibleCount);
     }
 
     private void HandleBuildPrimaryPress()
@@ -3267,11 +3141,11 @@ public partial class FactoryDemo : Node3D
         }
 
         var workspaceIds = _hud.GetWorkspaceIds();
-        var hasBuild = HasWorkspace(workspaceIds, BuildWorkspaceId);
-        var hasBlueprints = HasWorkspace(workspaceIds, BlueprintWorkspaceId);
-        var hasTelemetry = HasWorkspace(workspaceIds, TelemetryWorkspaceId);
-        var hasCombat = HasWorkspace(workspaceIds, CombatWorkspaceId);
-        var hasTesting = HasWorkspace(workspaceIds, TestingWorkspaceId);
+        var required = new[] { BuildWorkspaceId, BlueprintWorkspaceId, TelemetryWorkspaceId, CombatWorkspaceId, TestingWorkspaceId };
+        if (!FactoryDemoSmokeSupport.ContainsAllWorkspaces(workspaceIds, required))
+        {
+            return false;
+        }
 
         _hud.SelectWorkspace(BlueprintWorkspaceId);
         var blueprintVisible = _hud.ActiveWorkspaceId == BlueprintWorkspaceId && _hud.IsWorkspaceVisible(BlueprintWorkspaceId);
@@ -3288,12 +3162,7 @@ public partial class FactoryDemo : Node3D
         _hud.SelectWorkspace(BuildWorkspaceId);
         var buildVisible = _hud.ActiveWorkspaceId == BuildWorkspaceId && _hud.IsWorkspaceVisible(BuildWorkspaceId);
 
-        return hasBuild
-            && hasBlueprints
-            && hasTelemetry
-            && hasCombat
-            && hasTesting
-            && blueprintVisible
+        return blueprintVisible
             && telemetryVisible
             && combatVisible
             && testingVisible
@@ -3302,15 +3171,7 @@ public partial class FactoryDemo : Node3D
 
     private static bool HasWorkspace(IReadOnlyList<string> workspaceIds, string workspaceId)
     {
-        for (var index = 0; index < workspaceIds.Count; index++)
-        {
-            if (string.Equals(workspaceIds[index], workspaceId, global::System.StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return FactoryDemoSmokeSupport.HasWorkspace(workspaceIds, workspaceId);
     }
 
     private async Task<bool> RunPoweredFactorySmoke()
@@ -3648,8 +3509,7 @@ public partial class FactoryDemo : Node3D
             return false;
         }
 
-        FactoryBlueprintLibrary.AddOrUpdate(captured);
-        FactoryBlueprintLibrary.SelectActive(captured.Id);
+        captured = FactoryBlueprintWorkflowBridge.SavePendingCapture(captured, "Smoke Utility Blueprint");
 
         var invalidPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintSite, captured.SuggestedAnchorCell);
         var structureCountBefore = _simulation.RegisteredStructureCount;
@@ -3691,18 +3551,9 @@ public partial class FactoryDemo : Node3D
             return false;
         }
 
-        var placedEntries = 0;
-        for (var index = 0; index < validPlan.Entries.Count; index++)
-        {
-            var entry = validPlan.Entries[index];
-            if (_grid.TryGetStructure(entry.TargetCell, out var structure)
-                && structure is not null
-                && structure.Kind == entry.SourceEntry.Kind
-                && structure.Facing == entry.TargetFacing)
-            {
-                placedEntries++;
-            }
-        }
+        var placedEntries = FactoryDemoSmokeSupport.CountMatchingPlacedEntries(
+            validPlan.Entries,
+            cell => _grid.TryGetStructure(cell, out var structure) ? structure : null);
 
         CancelBlueprintWorkflow(clearActiveBlueprint: false);
         EnterInteractionMode();

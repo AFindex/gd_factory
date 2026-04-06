@@ -13,11 +13,6 @@ public partial class MobileFactoryDemo : Node3D
     private const string DiagnosticsWorkspaceId = "diagnostics";
     private const int InteriorRenderLayer = 1;
     private const int HullRenderLayer = 2;
-    private const float PowerDashBaseLength = FactoryPreviewOverlaySupport.PowerDashBaseLength;
-    private const float PowerDashGapLength = FactoryPreviewOverlaySupport.PowerDashGapLength;
-    private const float PowerDashThickness = FactoryPreviewOverlaySupport.PowerDashThickness;
-    private const float PowerDashWidth = FactoryPreviewOverlaySupport.PowerDashWidth;
-    private const float PowerLinkEndpointInset = FactoryPreviewOverlaySupport.PowerLinkEndpointInset;
     private const float PreviewPowerPoleWireHeight = FactoryPreviewOverlaySupport.PreviewPowerPoleWireHeight;
     private const int PreviewPowerPoleConnectionRangeCells = FactoryPreviewOverlaySupport.PreviewPowerPoleConnectionRangeCells;
     private const float MiningPortSmokeDeployTimeoutSeconds = 24.0f;
@@ -2399,63 +2394,22 @@ public partial class MobileFactoryDemo : Node3D
         IFactorySite site,
         FactoryStructure? exclude = null)
     {
-        var targets = CollectConnectablePowerNodes(site, originCell, originRange, exclude);
-        if (targets.Count == 0)
-        {
-            SetInteriorPowerLinkDashCount(0);
-            return;
-        }
-
-        var dashIndex = 0;
-        for (var i = 0; i < targets.Count; i++)
-        {
-            dashIndex = DrawInteriorDashedPowerLink(origin, GetPowerAnchor(targets[i]), color, dashIndex);
-        }
-
-        SetInteriorPowerLinkDashCount(dashIndex);
+        FactoryPowerPreviewSupport.RenderPowerLinkSet(
+            _structureRoot,
+            origin,
+            originCell,
+            originRange,
+            color,
+            GetPowerAnchor,
+            DrawInteriorDashedPowerLink,
+            SetInteriorPowerLinkDashCount,
+            site,
+            exclude);
     }
 
     private List<FactoryStructure> CollectConnectablePowerNodes(IFactorySite site, Vector2I originCell, int originRange, FactoryStructure? exclude)
     {
-        if (_structureRoot is null)
-        {
-            return new List<FactoryStructure>();
-        }
-
-        var candidates = new List<(FactoryStructure structure, float distance)>();
-        var origin = new Vector2(originCell.X, originCell.Y);
-        foreach (var child in _structureRoot.GetChildren())
-        {
-            if (child is not FactoryStructure structure
-                || structure.Site != site
-                || structure == exclude
-                || structure.IsDestroyed
-                || !structure.Site.IsSimulationActive
-                || structure is not IFactoryPowerNode powerNode
-                || powerNode.PowerConnectionRangeCells <= 0
-                || structure.Cell == originCell)
-            {
-                continue;
-            }
-
-            var target = new Vector2(structure.Cell.X, structure.Cell.Y);
-            var distance = origin.DistanceTo(target);
-            if (distance > originRange + powerNode.PowerConnectionRangeCells)
-            {
-                continue;
-            }
-
-            candidates.Add((structure, distance));
-        }
-
-        candidates.Sort((a, b) => a.distance.CompareTo(b.distance));
-        var ordered = new List<FactoryStructure>(candidates.Count);
-        for (var i = 0; i < candidates.Count; i++)
-        {
-            ordered.Add(candidates[i].structure);
-        }
-
-        return ordered;
+        return FactoryPowerPreviewSupport.CollectConnectablePowerNodes(_structureRoot, originCell, originRange, site, exclude);
     }
 
     private int DrawInteriorDashedPowerLink(Vector3 start, Vector3 end, Color color, int dashIndex)
@@ -2513,37 +2467,12 @@ public partial class MobileFactoryDemo : Node3D
 
     private static void UpdatePreviewPowerRange(BuildPrototypeKind kind, IFactorySite site, MeshInstance3D previewPowerRange, Color tint)
     {
-        if (!TryGetPowerPreviewInfo(kind, out var rangeCells))
-        {
-            previewPowerRange.Visible = false;
-            return;
-        }
-
-        previewPowerRange.Mesh = new CylinderMesh
-        {
-            TopRadius = site.CellSize * rangeCells,
-            BottomRadius = site.CellSize * rangeCells,
-            Height = 0.03f
-        };
-        previewPowerRange.Position = new Vector3(0.0f, 0.02f, 0.0f);
-        previewPowerRange.Visible = true;
-        FactoryPreviewOverlaySupport.ApplyPreviewColor(previewPowerRange, new Color(tint.R, tint.G, tint.B, 0.15f));
+        FactoryPowerPreviewSupport.UpdatePreviewPowerRange(kind, site, previewPowerRange, tint);
     }
 
     private static bool TryGetPowerPreviewInfo(BuildPrototypeKind kind, out int rangeCells)
     {
-        switch (kind)
-        {
-            case BuildPrototypeKind.Generator:
-                rangeCells = 5;
-                return true;
-            case BuildPrototypeKind.PowerPole:
-                rangeCells = PreviewPowerPoleConnectionRangeCells;
-                return true;
-            default:
-                rangeCells = 0;
-                return false;
-        }
+        return FactoryPowerPreviewSupport.TryGetPowerPreviewInfo(kind, out rangeCells);
     }
 
     private static void ApplyPowerLinkColor(MeshInstance3D dash, Color color)
@@ -3392,11 +3321,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private Rect2I GetDeleteRect(Vector2I start, Vector2I end)
     {
-        var minX = Mathf.Min(start.X, end.X);
-        var minY = Mathf.Min(start.Y, end.Y);
-        var maxX = Mathf.Max(start.X, end.X);
-        var maxY = Mathf.Max(start.Y, end.Y);
-        return new Rect2I(minX, minY, maxX - minX + 1, maxY - minY + 1);
+        return FactorySelectionRectSupport.BuildInclusiveRect(start, end);
     }
 
     private int CountInteriorStructuresInDeleteRect(Vector2I start, Vector2I end)
@@ -3406,20 +3331,10 @@ public partial class MobileFactoryDemo : Node3D
             return 0;
         }
 
-        var rect = GetDeleteRect(start, end);
-        var seen = new HashSet<ulong>();
-        for (var y = rect.Position.Y; y < rect.End.Y; y++)
-        {
-            for (var x = rect.Position.X; x < rect.End.X; x++)
-            {
-                if (_mobileFactory.TryGetInteriorStructure(new Vector2I(x, y), out var structure) && structure is not null)
-                {
-                    seen.Add(structure.GetInstanceId());
-                }
-            }
-        }
-
-        return seen.Count;
+        return FactorySelectionRectSupport.CountUniqueStructuresInRect(
+            start,
+            end,
+            cell => _mobileFactory.TryGetInteriorStructure(cell, out var structure) ? structure : null);
     }
 
     private void DeleteInteriorStructuresInRect(Vector2I start, Vector2I end)
@@ -3429,20 +3344,10 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        var rect = GetDeleteRect(start, end);
-        var cellsToDelete = new List<Vector2I>();
-        var seen = new HashSet<ulong>();
-        for (var y = rect.Position.Y; y < rect.End.Y; y++)
-        {
-            for (var x = rect.Position.X; x < rect.End.X; x++)
-            {
-                var cell = new Vector2I(x, y);
-                if (_mobileFactory.TryGetInteriorStructure(cell, out var structure) && structure is not null && seen.Add(structure.GetInstanceId()))
-                {
-                    cellsToDelete.Add(structure.Cell);
-                }
-            }
-        }
+        var cellsToDelete = FactorySelectionRectSupport.CollectUniqueStructureAnchorCells(
+            start,
+            end,
+            cell => _mobileFactory.TryGetInteriorStructure(cell, out var structure) ? structure : null);
 
         for (var index = 0; index < cellsToDelete.Count; index++)
         {
@@ -3479,52 +3384,37 @@ public partial class MobileFactoryDemo : Node3D
 
     private void EnsureInteriorBlueprintPreviewCapacity(int count)
     {
-        if (_interiorBlueprintPreviewRoot is null)
-        {
-            return;
-        }
-
-        while (_interiorBlueprintPreviewMeshes.Count < count)
-        {
-            var mesh = new MeshInstance3D
+        FactoryPreviewPoolSupport.EnsureMeshCapacity(
+            _interiorBlueprintPreviewRoot,
+            _interiorBlueprintPreviewMeshes,
+            count,
+            index => new MeshInstance3D
             {
-                Name = $"InteriorBlueprintPreview_{_interiorBlueprintPreviewMeshes.Count}",
+                Name = $"InteriorBlueprintPreview_{index}",
                 Visible = false,
                 Mesh = new BoxMesh
                 {
                     Size = new Vector3(_mobileFactory?.InteriorSite.CellSize * 0.82f ?? 0.82f, 0.08f, _mobileFactory?.InteriorSite.CellSize * 0.82f ?? 0.82f)
                 }
-            };
-            _interiorBlueprintPreviewRoot.AddChild(mesh);
-            _interiorBlueprintPreviewMeshes.Add(mesh);
-        }
+            });
     }
 
     private FactoryStructure EnsureInteriorBlueprintGhostPreview(FactoryBlueprintPlanEntry entry, int index)
     {
-        if (_interiorBlueprintGhostPreviewRoot is null || _mobileFactory is null)
+        if (_mobileFactory is null)
         {
             throw new System.InvalidOperationException("Interior blueprint ghost preview root is missing.");
         }
 
-        if (index < _interiorBlueprintPreviewGhosts.Count && _interiorBlueprintPreviewGhosts[index].Kind == entry.SourceEntry.Kind)
-        {
-            return _interiorBlueprintPreviewGhosts[index];
-        }
-
-        if (index < _interiorBlueprintPreviewGhosts.Count)
-        {
-            _interiorBlueprintPreviewGhosts[index].QueueFree();
-            _interiorBlueprintPreviewGhosts.RemoveAt(index);
-        }
-
-        var ghost = FactoryStructureFactory.CreateGhostPreview(
+        return FactoryPreviewPoolSupport.EnsureGhostPreview(
+            _interiorBlueprintGhostPreviewRoot,
+            _interiorBlueprintPreviewGhosts,
+            index,
             entry.SourceEntry.Kind,
-            new FactoryStructurePlacement(_mobileFactory.InteriorSite, entry.TargetCell, entry.TargetFacing));
-        ghost.Name = $"InteriorBlueprintGhostPreview_{index}_{entry.SourceEntry.Kind}";
-        _interiorBlueprintGhostPreviewRoot.AddChild(ghost);
-        _interiorBlueprintPreviewGhosts.Insert(index, ghost);
-        return ghost;
+            kind => FactoryStructureFactory.CreateGhostPreview(
+                kind,
+                new FactoryStructurePlacement(_mobileFactory.InteriorSite, entry.TargetCell, entry.TargetFacing)),
+            "InteriorBlueprintGhostPreview");
     }
 
     private static bool SupportsGhostBlueprintPreview()
@@ -4020,13 +3910,7 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        foreach (var child in _worldPreviewRoot.GetChildren())
-        {
-            if (child is Node node)
-            {
-                node.QueueFree();
-            }
-        }
+        FactoryPreviewPoolSupport.ClearChildren(_worldPreviewRoot);
 
         _worldPreviewFootprintMeshes.Clear();
         _worldPreviewPortMeshes.Clear();
@@ -4034,36 +3918,45 @@ public partial class MobileFactoryDemo : Node3D
         _worldPreviewMiningLinkMeshes.Clear();
         _worldPreviewFacingArrow = null;
 
-        for (var i = 0; i < footprintCount; i++)
-        {
-            var footprint = FactoryPreviewOverlaySupport.CreatePreviewCell($"PreviewFootprint_{i}", FactoryConstants.CellSize);
-            footprint.Visible = false;
-            _worldPreviewRoot.AddChild(footprint);
-            _worldPreviewFootprintMeshes.Add(footprint);
-        }
-
-        for (var i = 0; i < portCount; i++)
-        {
-            var port = new MeshInstance3D { Name = $"PreviewPort_{i}", Visible = false };
-            port.Mesh = new BoxMesh
+        FactoryPreviewPoolSupport.EnsureMeshCapacity(
+            _worldPreviewRoot,
+            _worldPreviewFootprintMeshes,
+            footprintCount,
+            index =>
             {
-                Size = new Vector3(FactoryConstants.CellSize * 0.55f, 0.12f, FactoryConstants.CellSize * 0.55f)
-            };
-            _worldPreviewRoot.AddChild(port);
-            _worldPreviewPortMeshes.Add(port);
-        }
+                var footprint = FactoryPreviewOverlaySupport.CreatePreviewCell($"PreviewFootprint_{index}", FactoryConstants.CellSize);
+                footprint.Visible = false;
+                return footprint;
+            });
 
-        for (var i = 0; i < portCount; i++)
-        {
-            var link = new MeshInstance3D { Name = $"PreviewMiningLink_{i}", Visible = false };
-            link.Mesh = new BoxMesh
+        FactoryPreviewPoolSupport.EnsureMeshCapacity(
+            _worldPreviewRoot,
+            _worldPreviewPortMeshes,
+            portCount,
+            index => new MeshInstance3D
             {
-                Size = new Vector3(0.10f, 0.04f, 0.001f)
-            };
-            link.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
-            _worldPreviewRoot.AddChild(link);
-            _worldPreviewMiningLinkMeshes.Add(link);
-        }
+                Name = $"PreviewPort_{index}",
+                Visible = false,
+                Mesh = new BoxMesh
+                {
+                    Size = new Vector3(FactoryConstants.CellSize * 0.55f, 0.12f, FactoryConstants.CellSize * 0.55f)
+                }
+            });
+
+        FactoryPreviewPoolSupport.EnsureMeshCapacity(
+            _worldPreviewRoot,
+            _worldPreviewMiningLinkMeshes,
+            portCount,
+            index => new MeshInstance3D
+            {
+                Name = $"PreviewMiningLink_{index}",
+                Visible = false,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                Mesh = new BoxMesh
+                {
+                    Size = new Vector3(0.10f, 0.04f, 0.001f)
+                }
+            });
 
         _worldPreviewFacingArrow = FactoryPreviewOverlaySupport.CreateFacingArrow("PreviewFacingArrow", FactoryConstants.CellSize, 0.32f);
         _worldPreviewRoot.AddChild(_worldPreviewFacingArrow);
@@ -4071,49 +3964,56 @@ public partial class MobileFactoryDemo : Node3D
 
     private void EnsureWorldPreviewVisualCapacity(int footprintCount, int portCount, int miningCount)
     {
-        if (_worldPreviewRoot is null)
-        {
-            return;
-        }
-
-        while (_worldPreviewFootprintMeshes.Count < footprintCount)
-        {
-            var footprint = FactoryPreviewOverlaySupport.CreatePreviewCell($"PreviewFootprint_{_worldPreviewFootprintMeshes.Count}", FactoryConstants.CellSize);
-            footprint.Visible = false;
-            _worldPreviewRoot.AddChild(footprint);
-            _worldPreviewFootprintMeshes.Add(footprint);
-        }
-
-        while (_worldPreviewPortMeshes.Count < portCount)
-        {
-            var port = new MeshInstance3D { Name = $"PreviewPort_{_worldPreviewPortMeshes.Count}", Visible = false };
-            port.Mesh = new BoxMesh
+        FactoryPreviewPoolSupport.EnsureMeshCapacity(
+            _worldPreviewRoot,
+            _worldPreviewFootprintMeshes,
+            footprintCount,
+            index =>
             {
-                Size = new Vector3(FactoryConstants.CellSize * 0.55f, 0.12f, FactoryConstants.CellSize * 0.55f)
-            };
-            _worldPreviewRoot.AddChild(port);
-            _worldPreviewPortMeshes.Add(port);
-        }
+                var footprint = FactoryPreviewOverlaySupport.CreatePreviewCell($"PreviewFootprint_{index}", FactoryConstants.CellSize);
+                footprint.Visible = false;
+                return footprint;
+            });
 
-        while (_worldPreviewMiningMeshes.Count < miningCount)
-        {
-            var miningStake = new MeshInstance3D { Name = $"PreviewMiningStake_{_worldPreviewMiningMeshes.Count}", Visible = false };
-            miningStake.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
-            _worldPreviewRoot.AddChild(miningStake);
-            _worldPreviewMiningMeshes.Add(miningStake);
-        }
-
-        while (_worldPreviewMiningLinkMeshes.Count < miningCount)
-        {
-            var link = new MeshInstance3D { Name = $"PreviewMiningLink_{_worldPreviewMiningLinkMeshes.Count}", Visible = false };
-            link.Mesh = new BoxMesh
+        FactoryPreviewPoolSupport.EnsureMeshCapacity(
+            _worldPreviewRoot,
+            _worldPreviewPortMeshes,
+            portCount,
+            index => new MeshInstance3D
             {
-                Size = new Vector3(0.10f, 0.04f, 0.001f)
-            };
-            link.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
-            _worldPreviewRoot.AddChild(link);
-            _worldPreviewMiningLinkMeshes.Add(link);
-        }
+                Name = $"PreviewPort_{index}",
+                Visible = false,
+                Mesh = new BoxMesh
+                {
+                    Size = new Vector3(FactoryConstants.CellSize * 0.55f, 0.12f, FactoryConstants.CellSize * 0.55f)
+                }
+            });
+
+        FactoryPreviewPoolSupport.EnsureMeshCapacity(
+            _worldPreviewRoot,
+            _worldPreviewMiningMeshes,
+            miningCount,
+            index => new MeshInstance3D
+            {
+                Name = $"PreviewMiningStake_{index}",
+                Visible = false,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
+            });
+
+        FactoryPreviewPoolSupport.EnsureMeshCapacity(
+            _worldPreviewRoot,
+            _worldPreviewMiningLinkMeshes,
+            miningCount,
+            index => new MeshInstance3D
+            {
+                Name = $"PreviewMiningLink_{index}",
+                Visible = false,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                Mesh = new BoxMesh
+                {
+                    Size = new Vector3(0.10f, 0.04f, 0.001f)
+                }
+            });
     }
 
     private void CreateInteriorPreviewVisuals()
@@ -4153,24 +4053,16 @@ public partial class MobileFactoryDemo : Node3D
 
     private void EnsureInteriorAttachmentPreviewMeshCount(List<MeshInstance3D> meshes, int count, Vector3 size)
     {
-        if (_interiorPreviewRoot is null)
-        {
-            return;
-        }
-
-        while (meshes.Count < count)
-        {
-            var mesh = new MeshInstance3D();
-            mesh.Mesh = new BoxMesh { Size = size };
-            mesh.Visible = false;
-            _interiorPreviewRoot.AddChild(mesh);
-            meshes.Add(mesh);
-        }
-
-        for (var i = 0; i < meshes.Count; i++)
-        {
-            meshes[i].Mesh = new BoxMesh { Size = size };
-        }
+        FactoryPreviewPoolSupport.EnsureMeshCapacity(
+            _interiorPreviewRoot,
+            meshes,
+            count,
+            _ => new MeshInstance3D
+            {
+                Visible = false,
+                Mesh = new BoxMesh { Size = size }
+            });
+        FactoryPreviewPoolSupport.RefreshMeshGeometry(meshes, mesh => mesh.Mesh = new BoxMesh { Size = size });
     }
 
     private void UpdateInteriorPortHints(BuildPrototypeKind previewKind)
@@ -4214,32 +4106,16 @@ public partial class MobileFactoryDemo : Node3D
 
     private void EnsureInteriorPortHintMeshCount(int count)
     {
-        if (_interiorPortHintRoot is null)
-        {
-            return;
-        }
-
-        while (_interiorPortHintMeshes.Count < count)
-        {
-            var mesh = FactoryPreviewOverlaySupport.CreatePortHintMesh($"InteriorPortHint_{_interiorPortHintMeshes.Count}");
-            _interiorPortHintRoot.AddChild(mesh);
-            _interiorPortHintMeshes.Add(mesh);
-        }
+        FactoryPreviewPoolSupport.EnsureMeshCapacity(
+            _interiorPortHintRoot,
+            _interiorPortHintMeshes,
+            count,
+            index => FactoryPreviewOverlaySupport.CreatePortHintMesh($"InteriorPortHint_{index}"));
     }
 
     private void SetInteriorPortHintCount(int visibleCount)
     {
-        if (_interiorPortHintRoot is null)
-        {
-            return;
-        }
-
-        for (var index = visibleCount; index < _interiorPortHintMeshes.Count; index++)
-        {
-            _interiorPortHintMeshes[index].Visible = false;
-        }
-
-        _interiorPortHintRoot.Visible = visibleCount > 0;
+        FactoryPreviewPoolSupport.SetVisibleMeshCount(_interiorPortHintRoot, _interiorPortHintMeshes, visibleCount);
     }
 
     private void EnsureInputActions()
@@ -4524,13 +4400,9 @@ public partial class MobileFactoryDemo : Node3D
         var required = UseLargeTestScenario
             ? new[] { OverviewWorkspaceId, BuildTestWorkspaceId, BlueprintWorkspaceId, DiagnosticsWorkspaceId, DetailsWorkspaceId }
             : new[] { CommandWorkspaceId, EditorWorkspaceId, BlueprintWorkspaceId, DetailsWorkspaceId };
-
-        for (var index = 0; index < required.Length; index++)
+        if (!FactoryDemoSmokeSupport.ContainsAllWorkspaces(workspaceIds, required))
         {
-            if (!HasWorkspace(required[index], workspaceIds))
-            {
-                return false;
-            }
+            return false;
         }
 
         var editorWasOpen = _editorOpen;
@@ -4569,15 +4441,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private static bool HasWorkspace(string workspaceId, IReadOnlyList<string> workspaceIds)
     {
-        for (var index = 0; index < workspaceIds.Count; index++)
-        {
-            if (string.Equals(workspaceIds[index], workspaceId, global::System.StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return FactoryDemoSmokeSupport.HasWorkspace(workspaceIds, workspaceId);
     }
 
     private async void RunMiningPortSmokeChecks()
@@ -5144,8 +5008,7 @@ public partial class MobileFactoryDemo : Node3D
             captured.BoundsSize,
             captured.Entries,
             captured.RequiredAttachments);
-        FactoryBlueprintLibrary.AddOrUpdate(savedRecord);
-        FactoryBlueprintLibrary.SelectActive(savedRecord.Id);
+        savedRecord = FactoryBlueprintWorkflowBridge.SavePendingCapture(savedRecord, savedRecord.DisplayName);
 
         var storedBlueprint = FactoryBlueprintLibrary.FindById(savedRecord.Id);
         var activeBlueprint = FactoryBlueprintLibrary.GetActive();
@@ -5205,18 +5068,9 @@ public partial class MobileFactoryDemo : Node3D
 
         await ToSignal(GetTree().CreateTimer(2.5f), SceneTreeTimer.SignalName.Timeout);
 
-        var restoredEntries = 0;
-        for (var index = 0; index < validPlan.Entries.Count; index++)
-        {
-            var entry = validPlan.Entries[index];
-            if (_mobileFactory.TryGetInteriorStructure(entry.TargetCell, out var restoredStructure)
-                && restoredStructure is not null
-                && restoredStructure.Kind == entry.SourceEntry.Kind
-                && restoredStructure.Facing == entry.TargetFacing)
-            {
-                restoredEntries++;
-            }
-        }
+        var restoredEntries = FactoryDemoSmokeSupport.CountMatchingPlacedEntries(
+            validPlan.Entries,
+            cell => _mobileFactory.TryGetInteriorStructure(cell, out var structure) ? structure : null);
 
         var assemblerRecipeRestored =
             _mobileFactory.TryGetInteriorStructure(FocusedAssemblerCell, out var restoredAssemblerStructure)
