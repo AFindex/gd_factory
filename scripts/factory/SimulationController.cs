@@ -214,7 +214,12 @@ public partial class SimulationController : Node
 
     public bool TrySendItem(FactoryStructure source, Vector2I targetCell, FactoryItem item)
     {
-        return source.Site.TrySendItem(source, targetCell, item, this);
+        return TrySendItem(source, source.Cell, targetCell, item);
+    }
+
+    public bool TrySendItem(FactoryStructure source, Vector2I sourceCell, Vector2I targetCell, FactoryItem item)
+    {
+        return source.Site.TrySendItem(source, sourceCell, targetCell, item, this);
     }
 
     public bool TryPeekProvidedItem(IFactorySite site, Vector2I providerCell, Vector2I requesterCell, out FactoryItem? item)

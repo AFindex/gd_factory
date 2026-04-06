@@ -51,7 +51,7 @@ public interface IFactorySite
     Vector3 CellToWorld(Vector2I cell);
     bool CanPlaceCells(IReadOnlyList<Vector2I> cells, string? ownerId = null);
     bool TryGetStructure(Vector2I cell, out FactoryStructure? structure);
-    bool TrySendItem(FactoryStructure source, Vector2I targetCell, FactoryItem item, SimulationController simulation);
+    bool TrySendItem(FactoryStructure source, Vector2I sourceCell, Vector2I targetCell, FactoryItem item, SimulationController simulation);
     void RemoveStructure(FactoryStructure structure);
 }
 

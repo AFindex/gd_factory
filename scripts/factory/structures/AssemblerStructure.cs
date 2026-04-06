@@ -3,11 +3,25 @@ using System.Collections.Generic;
 
 public partial class AssemblerStructure : FactoryRecipeMachineStructure
 {
+    private static readonly Vector2I[] InputPortOffsetsEast =
+    {
+        new(-1, 0),
+        new(-1, 1),
+        new(1, -1)
+    };
+
+    private static readonly Vector2I[] OutputPortOffsetsEast =
+    {
+        new(3, 0),
+        new(3, 1),
+        new(1, 2)
+    };
+
     private MeshInstance3D? _signalLamp;
     private MeshInstance3D? _armature;
 
     public AssemblerStructure()
-        : base(2, 2, 1, 1)
+        : base(3, 2, 3, 1)
     {
     }
 
@@ -46,11 +60,39 @@ public partial class AssemblerStructure : FactoryRecipeMachineStructure
 
     protected override void BuildVisuals()
     {
-        CreateBox("Base", new Vector3(CellSize * 0.94f, 0.18f, CellSize * 0.94f), new Color("1F2937"), new Vector3(0.0f, 0.09f, 0.0f));
-        CreateBox("Body", new Vector3(CellSize * 0.80f, 0.86f, CellSize * 0.80f), new Color("334155"), new Vector3(0.0f, 0.61f, 0.0f));
-        _armature = CreateBox("Armature", new Vector3(CellSize * 0.56f, 0.14f, CellSize * 0.14f), new Color("67E8F9"), new Vector3(0.0f, 1.02f, 0.0f));
-        CreateBox("InputMark", new Vector3(CellSize * 0.18f, 0.08f, CellSize * 0.30f), new Color("CBD5E1"), new Vector3(-CellSize * 0.28f, 0.24f, 0.0f));
-        CreateBox("OutputMark", new Vector3(CellSize * 0.18f, 0.08f, CellSize * 0.30f), new Color("A7F3D0"), new Vector3(CellSize * 0.28f, 0.24f, 0.0f));
-        _signalLamp = CreateBox("SignalLamp", new Vector3(CellSize * 0.16f, 0.16f, CellSize * 0.16f), new Color("86EFAC"), new Vector3(CellSize * 0.28f, 1.18f, 0.0f));
+        var baseSize = new Vector3(CellSize * 2.82f, 0.18f, CellSize * 1.82f);
+        CreateBox("Base", baseSize, new Color("1F2937"), new Vector3(0.0f, 0.09f, 0.0f));
+        CreateBox("Deck", new Vector3(CellSize * 2.58f, 0.12f, CellSize * 1.58f), new Color("0F172A"), new Vector3(0.0f, 0.20f, 0.0f));
+        CreateBox("Body", new Vector3(CellSize * 2.22f, 0.86f, CellSize * 1.28f), new Color("334155"), new Vector3(0.0f, 0.61f, 0.0f));
+        CreateBox("LeftBay", new Vector3(CellSize * 0.44f, 0.70f, CellSize * 1.12f), new Color("475569"), new Vector3(-CellSize * 0.86f, 0.54f, 0.0f));
+        CreateBox("RightBay", new Vector3(CellSize * 0.44f, 0.70f, CellSize * 1.12f), new Color("475569"), new Vector3(CellSize * 0.86f, 0.54f, 0.0f));
+        _armature = CreateBox("Armature", new Vector3(CellSize * 1.22f, 0.14f, CellSize * 0.16f), new Color("67E8F9"), new Vector3(0.0f, 1.02f, 0.0f));
+        CreateBox("ArmColumn", new Vector3(CellSize * 0.18f, 0.48f, CellSize * 0.18f), new Color("94A3B8"), new Vector3(0.0f, 0.82f, 0.0f));
+        CreateBox("ToolHead", new Vector3(CellSize * 0.26f, 0.14f, CellSize * 0.34f), new Color("38BDF8"), new Vector3(0.0f, 0.88f, CellSize * 0.18f));
+        _signalLamp = CreateBox("SignalLamp", new Vector3(CellSize * 0.16f, 0.16f, CellSize * 0.16f), new Color("86EFAC"), new Vector3(CellSize * 1.02f, 1.18f, 0.0f));
+        CreatePortMarkers();
+    }
+
+    private void CreatePortMarkers()
+    {
+        for (var index = 0; index < InputPortOffsetsEast.Length; index++)
+        {
+            var offset = Footprint.GetLocalCellCenterOffset(InputPortOffsetsEast[index], CellSize);
+            CreateBox(
+                $"InputPortMarker_{index}",
+                new Vector3(CellSize * 0.18f, 0.16f, CellSize * 0.18f),
+                new Color("38BDF8"),
+                offset + new Vector3(0.0f, 0.16f, 0.0f));
+        }
+
+        for (var index = 0; index < OutputPortOffsetsEast.Length; index++)
+        {
+            var offset = Footprint.GetLocalCellCenterOffset(OutputPortOffsetsEast[index], CellSize);
+            CreateBox(
+                $"OutputPortMarker_{index}",
+                new Vector3(CellSize * 0.18f, 0.16f, CellSize * 0.18f),
+                new Color("F59E0B"),
+                offset + new Vector3(0.0f, 0.16f, 0.0f));
+        }
     }
 }

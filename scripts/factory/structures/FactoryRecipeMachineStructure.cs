@@ -10,6 +10,7 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
     private double _processProgress;
     private bool _isProcessing;
     private int _activeRecipeIndex;
+    private int _dispatchOutputIndex;
     private float _powerSatisfaction = 1.0f;
     private FactoryPowerStatus _powerStatus = FactoryPowerStatus.Powered;
     private int _powerNetworkId = -1;
@@ -78,7 +79,7 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
     public bool TryPeekProvidedItem(Vector2I requesterCell, SimulationController simulation, out FactoryItem? item)
     {
         item = null;
-        if (!IsOrthogonallyAdjacent(Cell, requesterCell))
+        if (!CanOutputTo(requesterCell))
         {
             return false;
         }
@@ -89,7 +90,7 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
     public bool TryTakeProvidedItem(Vector2I requesterCell, SimulationController simulation, out FactoryItem? item)
     {
         item = null;
-        if (!IsOrthogonallyAdjacent(Cell, requesterCell))
+        if (!CanOutputTo(requesterCell))
         {
             return false;
         }
@@ -353,7 +354,7 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
 
     private bool CanAcceptInput(FactoryItem item, Vector2I sourceCell)
     {
-        if (!IsOrthogonallyAdjacent(Cell, sourceCell)
+        if (!CanReceiveFrom(sourceCell)
             || ActiveRecipe.Inputs.Count == 0
             || !_inputInventory.CanAcceptItem(item))
         {
@@ -459,10 +460,20 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
             return;
         }
 
-        if (simulation.TrySendItem(this, GetOutputCell(), item))
+        var outputCells = GetOutputCells();
+        for (var index = 0; index < outputCells.Count; index++)
         {
+            var targetCell = outputCells[(_dispatchOutputIndex + index) % outputCells.Count];
+            var sourceCell = GetTransferOutputCell(targetCell);
+            if (!simulation.TrySendItem(this, sourceCell, targetCell, item))
+            {
+                continue;
+            }
+
             _outputInventory.TryTakeFirst(out _);
             _dispatchCooldown = DispatchCooldownSeconds;
+            _dispatchOutputIndex = (_dispatchOutputIndex + index + 1) % outputCells.Count;
+            break;
         }
     }
 

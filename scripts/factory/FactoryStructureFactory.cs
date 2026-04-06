@@ -27,6 +27,29 @@ public sealed class FactoryStructureDefinition
 
 public static class FactoryStructureFactory
 {
+    private static readonly FactoryStructureFootprint MultiPortProcessingFootprint = new(
+        new[]
+        {
+            Vector2I.Zero,
+            Vector2I.Right,
+            Vector2I.Right * 2,
+            Vector2I.Down,
+            Vector2I.Right + Vector2I.Down,
+            (Vector2I.Right * 2) + Vector2I.Down
+        },
+        inputOffsetsEast: new[]
+        {
+            new Vector2I(-1, 0),
+            new Vector2I(-1, 1),
+            new Vector2I(1, -1)
+        },
+        outputOffsetsEast: new[]
+        {
+            new Vector2I(3, 0),
+            new Vector2I(3, 1),
+            new Vector2I(1, 2)
+        });
+
     private static readonly Dictionary<BuildPrototypeKind, FactoryStructureDefinition> Definitions = new()
     {
         [BuildPrototypeKind.Producer] = new FactoryStructureDefinition(BuildPrototypeKind.Producer, () => new ProducerStructure(), true, true),
@@ -34,7 +57,7 @@ public static class FactoryStructureFactory
         [BuildPrototypeKind.Generator] = new FactoryStructureDefinition(BuildPrototypeKind.Generator, () => new GeneratorStructure(), true, true),
         [BuildPrototypeKind.PowerPole] = new FactoryStructureDefinition(BuildPrototypeKind.PowerPole, () => new PowerPoleStructure(), true, true),
         [BuildPrototypeKind.Smelter] = new FactoryStructureDefinition(BuildPrototypeKind.Smelter, () => new SmelterStructure(), true, true),
-        [BuildPrototypeKind.Assembler] = new FactoryStructureDefinition(BuildPrototypeKind.Assembler, () => new AssemblerStructure(), true, true),
+        [BuildPrototypeKind.Assembler] = new FactoryStructureDefinition(BuildPrototypeKind.Assembler, () => new AssemblerStructure(), true, true, MultiPortProcessingFootprint),
         [BuildPrototypeKind.Belt] = new FactoryStructureDefinition(BuildPrototypeKind.Belt, () => new BeltStructure(), true, true),
         [BuildPrototypeKind.Sink] = new FactoryStructureDefinition(BuildPrototypeKind.Sink, () => new SinkStructure(), true, true),
         [BuildPrototypeKind.Splitter] = new FactoryStructureDefinition(BuildPrototypeKind.Splitter, () => new SplitterStructure(), true, true),
@@ -54,7 +77,7 @@ public static class FactoryStructureFactory
                 outputOffsetEast: new Vector2I(2, 0))),
         [BuildPrototypeKind.Inserter] = new FactoryStructureDefinition(BuildPrototypeKind.Inserter, () => new InserterStructure(), true, true),
         [BuildPrototypeKind.Wall] = new FactoryStructureDefinition(BuildPrototypeKind.Wall, () => new WallStructure(), true, true),
-        [BuildPrototypeKind.AmmoAssembler] = new FactoryStructureDefinition(BuildPrototypeKind.AmmoAssembler, () => new AmmoAssemblerStructure(), true, true),
+        [BuildPrototypeKind.AmmoAssembler] = new FactoryStructureDefinition(BuildPrototypeKind.AmmoAssembler, () => new AmmoAssemblerStructure(), true, true, MultiPortProcessingFootprint),
         [BuildPrototypeKind.GunTurret] = new FactoryStructureDefinition(BuildPrototypeKind.GunTurret, () => new GunTurretStructure(), true, true),
         [BuildPrototypeKind.HeavyGunTurret] = new FactoryStructureDefinition(
             BuildPrototypeKind.HeavyGunTurret,

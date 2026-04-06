@@ -114,14 +114,14 @@ public sealed class MobileFactorySite : IFactorySite
         }
     }
 
-    public bool TrySendItem(FactoryStructure source, Vector2I targetCell, FactoryItem item, SimulationController simulation)
+    public bool TrySendItem(FactoryStructure source, Vector2I sourceCell, Vector2I targetCell, FactoryItem item, SimulationController simulation)
     {
         if (!TryGetStructure(targetCell, out var structure) || structure is null)
         {
             return false;
         }
 
-        return structure.TryAcceptItem(item, source.Cell, simulation);
+        return structure.TryAcceptItem(item, sourceCell, simulation);
     }
 
     public void SetWorldTransform(Vector3 worldOrigin, float worldRotationRadians)

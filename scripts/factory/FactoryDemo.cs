@@ -51,6 +51,7 @@ public partial class FactoryDemo : Node3D
     private Node3D? _structureRoot;
     private Node3D? _enemyRoot;
     private Node3D? _previewRoot;
+    private Node3D? _previewPortHintRoot;
     private Node3D? _resourceOverlayRoot;
     private Node3D? _blueprintPreviewRoot;
     private Node3D? _blueprintGhostPreviewRoot;
@@ -58,6 +59,7 @@ public partial class FactoryDemo : Node3D
     private MeshInstance3D? _previewCell;
     private Node3D? _previewArrow;
     private MeshInstance3D? _previewPowerRange;
+    private readonly List<MeshInstance3D> _previewPortHintMeshes = new();
     private readonly List<MeshInstance3D> _blueprintPreviewMeshes = new();
     private readonly List<FactoryStructure> _blueprintPreviewGhosts = new();
     private readonly List<MeshInstance3D> _powerLinkDashes = new();
@@ -334,6 +336,9 @@ public partial class FactoryDemo : Node3D
         _previewRoot = new Node3D { Name = "PreviewRoot" };
         AddChild(_previewRoot);
         CreatePreviewVisuals();
+
+        _previewPortHintRoot = new Node3D { Name = "PreviewPortHintRoot", Visible = false };
+        AddChild(_previewPortHintRoot);
 
         _powerLinkOverlayRoot = new Node3D { Name = "PowerLinkOverlayRoot", Visible = false };
         AddChild(_powerLinkOverlayRoot);
@@ -824,20 +829,39 @@ public partial class FactoryDemo : Node3D
         PlaceStructure(BuildPrototypeKind.Belt, -29, -18, FacingDirection.East);
         var wireAssembler = PlaceStructure(BuildPrototypeKind.Assembler, -28, -18, FacingDirection.East) as AssemblerStructure;
         wireAssembler?.TrySetDetailRecipe("copper-wire");
-        PlaceStructure(BuildPrototypeKind.Belt, -27, -18, FacingDirection.North);
-        PlaceStructure(BuildPrototypeKind.Belt, -27, -19, FacingDirection.North);
-        PlaceStructure(BuildPrototypeKind.Merger, -27, -20, FacingDirection.East);
 
         var ammoAssembler = PlaceStructure(BuildPrototypeKind.AmmoAssembler, -26, -20, FacingDirection.East) as AmmoAssemblerStructure;
         ammoAssembler?.TrySetDetailRecipe("standard-ammo");
-        PlaceStructure(BuildPrototypeKind.Belt, -25, -20, FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Belt, -24, -20, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Sink, -23, -20, FacingDirection.East);
         var supportGenerator = PlaceStructure(BuildPrototypeKind.Generator, -31, -16, FacingDirection.East) as GeneratorStructure;
+        var boosterGenerator = PlaceStructure(BuildPrototypeKind.Generator, -27, -15, FacingDirection.East) as GeneratorStructure;
+        var reserveGenerator = PlaceStructure(BuildPrototypeKind.Generator, -27, -11, FacingDirection.East) as GeneratorStructure;
         if (supportGenerator is not null && _simulation is not null)
         {
             supportGenerator.TryAcceptItem(_simulation.CreateItem(BuildPrototypeKind.MiningDrill, FactoryItemKind.Coal), supportGenerator.Cell + Vector2I.Left, _simulation);
             supportGenerator.TryAcceptItem(_simulation.CreateItem(BuildPrototypeKind.MiningDrill, FactoryItemKind.Coal), supportGenerator.Cell + Vector2I.Left, _simulation);
+            boosterGenerator?.TryAcceptItem(_simulation.CreateItem(BuildPrototypeKind.MiningDrill, FactoryItemKind.Coal), boosterGenerator.Cell + Vector2I.Left, _simulation);
+            boosterGenerator?.TryAcceptItem(_simulation.CreateItem(BuildPrototypeKind.MiningDrill, FactoryItemKind.Coal), boosterGenerator.Cell + Vector2I.Left, _simulation);
+            reserveGenerator?.TryAcceptItem(_simulation.CreateItem(BuildPrototypeKind.MiningDrill, FactoryItemKind.Coal), reserveGenerator.Cell + Vector2I.Left, _simulation);
+            reserveGenerator?.TryAcceptItem(_simulation.CreateItem(BuildPrototypeKind.MiningDrill, FactoryItemKind.Coal), reserveGenerator.Cell + Vector2I.Left, _simulation);
+            if (ammoAssembler is not null)
+            {
+                for (var index = 0; index < 4; index++)
+                {
+                    ammoAssembler.TryReceiveProvidedItem(
+                        _simulation.CreateItem(BuildPrototypeKind.Smelter, FactoryItemKind.IronPlate),
+                        ammoAssembler.Cell + Vector2I.Left,
+                        _simulation);
+                }
+
+                for (var index = 0; index < 4; index++)
+                {
+                    ammoAssembler.TryReceiveProvidedItem(
+                        _simulation.CreateItem(BuildPrototypeKind.Assembler, FactoryItemKind.CopperWire),
+                        ammoAssembler.Cell + Vector2I.Left,
+                        _simulation);
+                }
+            }
         }
 
         PlaceStructure(BuildPrototypeKind.MiningDrill, -36, -14, FacingDirection.East);
@@ -866,6 +890,7 @@ public partial class FactoryDemo : Node3D
         PlaceStructure(BuildPrototypeKind.PowerPole, -31, -17, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.PowerPole, -31, -13, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.PowerPole, -31, -9, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.PowerPole, -27, -13, FacingDirection.East);
     }
 
     private void AddMaintenanceDepotDistrict()
@@ -1174,20 +1199,40 @@ public partial class FactoryDemo : Node3D
         PlaceStructure(BuildPrototypeKind.Belt, 7, 16, FacingDirection.East);
         var wireAssembler = PlaceStructure(BuildPrototypeKind.Assembler, 8, 16, FacingDirection.East) as AssemblerStructure;
         wireAssembler?.TrySetDetailRecipe("copper-wire");
-        PlaceStructure(BuildPrototypeKind.Belt, 9, 16, FacingDirection.South);
-        PlaceStructure(BuildPrototypeKind.Belt, 9, 17, FacingDirection.South);
         PlaceStructure(BuildPrototypeKind.Belt, 9, 18, FacingDirection.South);
-        PlaceStructure(BuildPrototypeKind.Belt, 9, 19, FacingDirection.South);
 
-        PlaceStructure(BuildPrototypeKind.Merger, 9, 20, FacingDirection.East);
-        var ammoAssembler = PlaceStructure(BuildPrototypeKind.AmmoAssembler, 10, 20, FacingDirection.East) as AmmoAssemblerStructure;
+        var ammoAssembler = PlaceStructure(BuildPrototypeKind.AmmoAssembler, 10, 19, FacingDirection.East) as AmmoAssemblerStructure;
         ammoAssembler?.TrySetDetailRecipe("standard-ammo");
-        PlaceStructure(BuildPrototypeKind.Belt, 11, 20, FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Storage, 12, 20, FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Inserter, 13, 20, FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.GunTurret, 14, 20, FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Wall, 15, 20, FacingDirection.East);
+        var successStorage = PlaceStructure(BuildPrototypeKind.Storage, 13, 20, FacingDirection.East) as StorageStructure;
+        PlaceStructure(BuildPrototypeKind.Inserter, 14, 20, FacingDirection.East);
+        var successTurret = PlaceStructure(BuildPrototypeKind.GunTurret, 15, 20, FacingDirection.East) as GunTurretStructure;
         PlaceStructure(BuildPrototypeKind.Wall, 16, 20, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Wall, 17, 20, FacingDirection.East);
+
+        if (_simulation is not null)
+        {
+            if (successStorage is not null)
+            {
+                for (var index = 0; index < 6; index++)
+                {
+                    successStorage.TryReceiveProvidedItem(
+                        _simulation.CreateItem(BuildPrototypeKind.AmmoAssembler, FactoryItemKind.AmmoMagazine),
+                        successStorage.Cell + Vector2I.Left,
+                        _simulation);
+                }
+            }
+
+            if (successTurret is not null)
+            {
+                for (var index = 0; index < 4; index++)
+                {
+                    successTurret.TryReceiveProvidedItem(
+                        _simulation.CreateItem(BuildPrototypeKind.AmmoAssembler, FactoryItemKind.AmmoMagazine),
+                        successTurret.Cell + Vector2I.Left,
+                        _simulation);
+                }
+            }
+        }
     }
 
     private void AddHeavyTurretDefenseLane()
@@ -1222,14 +1267,13 @@ public partial class FactoryDemo : Node3D
         PlaceStructure(BuildPrototypeKind.Belt, 8, 14, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Belt, 9, 14, FacingDirection.East);
 
-        var ammoAssembler = PlaceStructure(BuildPrototypeKind.AmmoAssembler, 10, 14, FacingDirection.East) as AmmoAssemblerStructure;
+        var ammoAssembler = PlaceStructure(BuildPrototypeKind.AmmoAssembler, 10, 13, FacingDirection.East) as AmmoAssemblerStructure;
         ammoAssembler?.TrySetDetailRecipe("standard-ammo");
-        PlaceStructure(BuildPrototypeKind.Belt, 11, 14, FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Storage, 12, 14, FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Inserter, 13, 14, FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.GunTurret, 14, 14, FacingDirection.East);
-        PlaceStructure(BuildPrototypeKind.Wall, 15, 14, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Storage, 13, 14, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Inserter, 14, 14, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.GunTurret, 15, 14, FacingDirection.East);
         PlaceStructure(BuildPrototypeKind.Wall, 16, 14, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Wall, 17, 14, FacingDirection.East);
     }
 
     private void ConfigureCombatScenarios()
@@ -1242,7 +1286,7 @@ public partial class FactoryDemo : Node3D
         _combatDirector.ClearLanes();
         _combatDirector.AddLane(new FactoryEnemyLaneDefinition(
             "success_lane",
-            BuildLanePath(new Vector2I(18, 20), new Vector2I(17, 20), new Vector2I(16, 20), new Vector2I(14, 20)),
+            BuildLanePath(new Vector2I(19, 20), new Vector2I(18, 20), new Vector2I(17, 20), new Vector2I(15, 20)),
             new FactoryEnemySpawnRule[]
             {
                 new("melee", 4.2f),
@@ -1251,7 +1295,7 @@ public partial class FactoryDemo : Node3D
             }));
         _combatDirector.AddLane(new FactoryEnemyLaneDefinition(
             "starved_lane",
-            BuildLanePath(new Vector2I(18, 14), new Vector2I(17, 14), new Vector2I(16, 14), new Vector2I(14, 14)),
+            BuildLanePath(new Vector2I(19, 14), new Vector2I(18, 14), new Vector2I(17, 14), new Vector2I(15, 14)),
             new FactoryEnemySpawnRule[]
             {
                 new("melee", 5.0f),
@@ -1274,8 +1318,8 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        PrimeTurretAmmo(new Vector2I(14, 20), 8, FactoryItemKind.AmmoMagazine);
-        PrimeTurretAmmo(new Vector2I(14, 14), 2, FactoryItemKind.AmmoMagazine);
+        PrimeTurretAmmo(new Vector2I(15, 20), 8, FactoryItemKind.AmmoMagazine);
+        PrimeTurretAmmo(new Vector2I(15, 14), 2, FactoryItemKind.AmmoMagazine);
         PrimeTurretAmmo(new Vector2I(-16, 19), 10, FactoryItemKind.HighVelocityAmmo);
         PrimeAmmoAssemblerRecipe(new Vector2I(-12, 19), "high-velocity-ammo");
     }
@@ -1465,6 +1509,7 @@ public partial class FactoryDemo : Node3D
 
         UpdateBlueprintPreview();
         _previewPowerRange.Visible = false;
+        SetPreviewPortHintCount(0);
 
         if (_blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview)
         {
@@ -1557,6 +1602,7 @@ public partial class FactoryDemo : Node3D
         ApplyPreviewColor(_previewCell, tint);
         ApplyPreviewColor(_previewArrow, tint.Lightened(0.1f));
         UpdatePreviewPowerRange(previewKind, _grid, _previewPowerRange, tint);
+        UpdatePreviewPortHints(previewKind);
     }
 
     private void UpdateBlueprintPreview()
@@ -2795,6 +2841,77 @@ public partial class FactoryDemo : Node3D
         _previewRoot.Visible = false;
     }
 
+    private void UpdatePreviewPortHints(BuildPrototypeKind previewKind)
+    {
+        if (_grid is null || _previewPortHintRoot is null || !_hasHoveredCell || !FactoryLogisticsPreview.IsLogisticsKind(previewKind))
+        {
+            SetPreviewPortHintCount(0);
+            return;
+        }
+
+        var markers = FactoryLogisticsPreview.CollectNearbyPortMarkers(_grid, _hoveredCell);
+        EnsurePreviewPortHintMeshCount(markers.Count);
+        var visibleCount = 0;
+        for (var index = 0; index < markers.Count; index++)
+        {
+            var marker = markers[index];
+            var mesh = _previewPortHintMeshes[index];
+            mesh.Visible = true;
+            mesh.Position = _grid.CellToWorld(marker.Cell) + new Vector3(0.0f, marker.IsHighlighted ? 0.13f : 0.10f, 0.0f);
+            mesh.Mesh = new BoxMesh
+            {
+                Size = Vector3.One * (marker.IsHighlighted ? FactoryConstants.CellSize * 0.30f : FactoryConstants.CellSize * 0.22f)
+            };
+            ApplyPreviewColor(
+                mesh,
+                marker.IsInput
+                    ? marker.IsHighlighted
+                        ? new Color(0.38f, 0.78f, 1.0f, 0.82f)
+                        : new Color(0.38f, 0.78f, 1.0f, 0.52f)
+                    : marker.IsHighlighted
+                        ? new Color(1.0f, 0.68f, 0.26f, 0.82f)
+                        : new Color(1.0f, 0.68f, 0.26f, 0.52f));
+            visibleCount++;
+        }
+
+        SetPreviewPortHintCount(visibleCount);
+    }
+
+    private void EnsurePreviewPortHintMeshCount(int count)
+    {
+        if (_previewPortHintRoot is null)
+        {
+            return;
+        }
+
+        while (_previewPortHintMeshes.Count < count)
+        {
+            var mesh = new MeshInstance3D
+            {
+                Name = $"PreviewPortHint_{_previewPortHintMeshes.Count}",
+                Visible = false,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
+            };
+            _previewPortHintRoot.AddChild(mesh);
+            _previewPortHintMeshes.Add(mesh);
+        }
+    }
+
+    private void SetPreviewPortHintCount(int visibleCount)
+    {
+        if (_previewPortHintRoot is null)
+        {
+            return;
+        }
+
+        for (var index = visibleCount; index < _previewPortHintMeshes.Count; index++)
+        {
+            _previewPortHintMeshes[index].Visible = false;
+        }
+
+        _previewPortHintRoot.Visible = visibleCount > 0;
+    }
+
     private static void ApplyPreviewColor(MeshInstance3D meshInstance, Color color)
     {
         var material = new StandardMaterial3D();
@@ -3235,14 +3352,14 @@ public partial class FactoryDemo : Node3D
         var copperSmelterFound = _grid.TryGetStructure(new Vector2I(-30, -18), out var copperSmelterStructure) && copperSmelterStructure is SmelterStructure;
         var wireAssemblerFound = _grid.TryGetStructure(new Vector2I(-28, -18), out var wireAssemblerStructure) && wireAssemblerStructure is AssemblerStructure;
         var ammoAssemblerFound = _grid.TryGetStructure(new Vector2I(-26, -20), out var ammoAssemblerStructure) && ammoAssemblerStructure is AmmoAssemblerStructure;
-        var sinkFound = _grid.TryGetStructure(new Vector2I(-23, -20), out var sinkStructure) && sinkStructure is SinkStructure;
         var maintenanceGeneratorFound = _grid.TryGetStructure(new Vector2I(10, 8), out var maintenanceGeneratorStructure) && maintenanceGeneratorStructure is GeneratorStructure;
         var batteryAssemblerFound = _grid.TryGetStructure(new Vector2I(14, 2), out var batteryAssemblerStructure) && batteryAssemblerStructure is AssemblerStructure;
         var maintenanceSinkFound = _grid.TryGetStructure(new Vector2I(23, 2), out var maintenanceSinkStructure) && maintenanceSinkStructure is SinkStructure;
-        var successTurretFound = _grid.TryGetStructure(new Vector2I(14, 20), out var successTurretStructure) && successTurretStructure is GunTurretStructure;
-        if (!coalDrillFound || !generatorFound || !ironDrillFound || !copperDrillFound || !ironSmelterFound || !copperSmelterFound || !wireAssemblerFound || !ammoAssemblerFound || !sinkFound || !maintenanceGeneratorFound || !batteryAssemblerFound || !maintenanceSinkFound || !successTurretFound)
+        var successStorageFound = _grid.TryGetStructure(new Vector2I(13, 20), out var successStorageStructure) && successStorageStructure is StorageStructure;
+        var successTurretFound = _grid.TryGetStructure(new Vector2I(15, 20), out var successTurretStructure) && successTurretStructure is GunTurretStructure;
+        if (!coalDrillFound || !generatorFound || !ironDrillFound || !copperDrillFound || !ironSmelterFound || !copperSmelterFound || !wireAssemblerFound || !ammoAssemblerFound || !maintenanceGeneratorFound || !batteryAssemblerFound || !maintenanceSinkFound || !successStorageFound || !successTurretFound)
         {
-            GD.Print($"FACTORY_POWERED_SMOKE_MISSING coalDrill={coalDrillFound} generator={generatorFound} ironDrill={ironDrillFound} copperDrill={copperDrillFound} ironSmelter={ironSmelterFound} copperSmelter={copperSmelterFound} wireAssembler={wireAssemblerFound} ammoAssembler={ammoAssemblerFound} sink={sinkFound} maintenanceGenerator={maintenanceGeneratorFound} batteryAssembler={batteryAssemblerFound} maintenanceSink={maintenanceSinkFound} successTurret={successTurretFound}");
+            GD.Print($"FACTORY_POWERED_SMOKE_MISSING coalDrill={coalDrillFound} generator={generatorFound} ironDrill={ironDrillFound} copperDrill={copperDrillFound} ironSmelter={ironSmelterFound} copperSmelter={copperSmelterFound} wireAssembler={wireAssemblerFound} ammoAssembler={ammoAssemblerFound} maintenanceGenerator={maintenanceGeneratorFound} batteryAssembler={batteryAssemblerFound} maintenanceSink={maintenanceSinkFound} successStorage={successStorageFound} successTurret={successTurretFound}");
             return false;
         }
 
@@ -3254,10 +3371,10 @@ public partial class FactoryDemo : Node3D
         var copperSmelter = (SmelterStructure)copperSmelterStructure!;
         var wireAssembler = (AssemblerStructure)wireAssemblerStructure!;
         var ammoAssembler = (AmmoAssemblerStructure)ammoAssemblerStructure!;
-        var sink = (SinkStructure)sinkStructure!;
         var maintenanceGenerator = (GeneratorStructure)maintenanceGeneratorStructure!;
         var batteryAssembler = (AssemblerStructure)batteryAssemblerStructure!;
         var maintenanceSink = (SinkStructure)maintenanceSinkStructure!;
+        var successStorage = (StorageStructure)successStorageStructure!;
         var successTurret = (GunTurretStructure)successTurretStructure!;
 
         await ToSignal(GetTree().CreateTimer(40.0f), SceneTreeTimer.SignalName.Timeout);
@@ -3266,10 +3383,38 @@ public partial class FactoryDemo : Node3D
         var wireSummary = wireAssembler.GetDetailModel().SummaryLines;
         var ammoSummary = ammoAssembler.GetDetailModel().SummaryLines;
         var batterySummary = batteryAssembler.GetDetailModel().SummaryLines;
+        var totalDeliveredToSinks = 0;
+        for (var x = _grid.MinCell.X; x <= _grid.MaxCell.X; x++)
+        {
+            for (var y = _grid.MinCell.Y; y <= _grid.MaxCell.Y; y++)
+            {
+                if (_grid.TryGetStructure(new Vector2I(x, y), out var structure) && structure is SinkStructure sink)
+                {
+                    totalDeliveredToSinks += sink.DeliveredTotal;
+                }
+            }
+        }
+
+        var successStorageHasAmmo = false;
+        var successStorageDetail = successStorage.GetDetailModel();
+        if (successStorageDetail.InventorySections.Count > 0)
+        {
+            var slots = successStorageDetail.InventorySections[0].Slots;
+            for (var index = 0; index < slots.Count; index++)
+            {
+                if ((slots[index].ItemLabel?.Contains("弹药", global::System.StringComparison.Ordinal) ?? false)
+                    && slots[index].StackCount > 0)
+                {
+                    successStorageHasAmmo = true;
+                    break;
+                }
+            }
+        }
+
         var verified = coalDrill.ResourceKind == FactoryResourceKind.Coal
             && ironDrill.ResourceKind == FactoryResourceKind.IronOre
             && copperDrill.ResourceKind == FactoryResourceKind.CopperOre
-            && sink.DeliveredTotal > 0
+            && totalDeliveredToSinks > 0
             && (generator.IsGenerating || generator.HasFuelBuffered)
             && ContainsSummaryLine(ironSummary, "铁板")
             && ContainsSummaryLine(copperSummary, "铜板")
@@ -3278,11 +3423,11 @@ public partial class FactoryDemo : Node3D
             && (maintenanceGenerator.IsGenerating || maintenanceGenerator.HasFuelBuffered)
             && maintenanceSink.DeliveredTotal > 0
             && ContainsSummaryLine(batterySummary, "电池组")
-            && (successTurret.BufferedAmmo > 0 || successTurret.ShotsFired > 0);
+            && (successStorageHasAmmo || successTurret.BufferedAmmo > 0 || successTurret.ShotsFired > 0);
 
         if (!verified)
         {
-            GD.Print($"FACTORY_POWERED_SMOKE coalKind={coalDrill.ResourceKind} ironKind={ironDrill.ResourceKind} copperKind={copperDrill.ResourceKind} sink={sink.DeliveredTotal} generator={generator.IsGenerating} generatorFuel={generator.HasFuelBuffered} maintenanceGenerator={maintenanceGenerator.IsGenerating} maintenanceFuel={maintenanceGenerator.HasFuelBuffered} maintenanceSink={maintenanceSink.DeliveredTotal} successShots={successTurret.ShotsFired} ironSummary={string.Join('|', ironSummary)} copperSummary={string.Join('|', copperSummary)} wireSummary={string.Join('|', wireSummary)} ammoSummary={string.Join('|', ammoSummary)} batterySummary={string.Join('|', batterySummary)}");
+            GD.Print($"FACTORY_POWERED_SMOKE coalKind={coalDrill.ResourceKind} ironKind={ironDrill.ResourceKind} copperKind={copperDrill.ResourceKind} totalSinks={totalDeliveredToSinks} generator={generator.IsGenerating} generatorFuel={generator.HasFuelBuffered} maintenanceGenerator={maintenanceGenerator.IsGenerating} maintenanceFuel={maintenanceGenerator.HasFuelBuffered} maintenanceSink={maintenanceSink.DeliveredTotal} successStorageHasAmmo={successStorageHasAmmo} successShots={successTurret.ShotsFired} ironSummary={string.Join('|', ironSummary)} copperSummary={string.Join('|', copperSummary)} wireSummary={string.Join('|', wireSummary)} ammoSummary={string.Join('|', ammoSummary)} batterySummary={string.Join('|', batterySummary)}");
         }
 
         return verified;
@@ -3490,11 +3635,39 @@ public partial class FactoryDemo : Node3D
             return false;
         }
 
+        var blueprintOrigin = new Vector2I(30, 34);
+        var blueprintAnchors = new[]
+        {
+            blueprintOrigin,
+            blueprintOrigin + new Vector2I(1, 0),
+            blueprintOrigin + new Vector2I(2, 0),
+            blueprintOrigin + new Vector2I(3, 0),
+            blueprintOrigin + new Vector2I(0, 2),
+            blueprintOrigin + new Vector2I(2, 2)
+        };
+        for (var index = 0; index < blueprintAnchors.Length; index++)
+        {
+            if (!_grid.CanPlace(blueprintAnchors[index]))
+            {
+                return false;
+            }
+        }
+
+        if (PlaceStructure(BuildPrototypeKind.Storage, blueprintOrigin.X, blueprintOrigin.Y, FacingDirection.East) is null
+            || PlaceStructure(BuildPrototypeKind.Inserter, blueprintOrigin.X + 1, blueprintOrigin.Y, FacingDirection.East) is null
+            || PlaceStructure(BuildPrototypeKind.Belt, blueprintOrigin.X + 2, blueprintOrigin.Y, FacingDirection.East) is null
+            || PlaceStructure(BuildPrototypeKind.Sink, blueprintOrigin.X + 3, blueprintOrigin.Y, FacingDirection.East) is null
+            || PlaceStructure(BuildPrototypeKind.LargeStorageDepot, blueprintOrigin.X, blueprintOrigin.Y + 2, FacingDirection.East) is null
+            || PlaceStructure(BuildPrototypeKind.PowerPole, blueprintOrigin.X + 2, blueprintOrigin.Y + 2, FacingDirection.East) is null)
+        {
+            return false;
+        }
+
         var captured = FactoryBlueprintCaptureService.CaptureSelection(
             _blueprintSite,
-            new Rect2I(14, 0, 10, 5),
-            "Smoke Maintenance Depot Blueprint");
-        if (captured is null || captured.StructureCount < 8)
+            new Rect2I(blueprintOrigin.X, blueprintOrigin.Y, 4, 4),
+            "Smoke Utility Blueprint");
+        if (captured is null || captured.StructureCount < 6)
         {
             return false;
         }
@@ -3504,12 +3677,12 @@ public partial class FactoryDemo : Node3D
 
         var invalidPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintSite, captured.SuggestedAnchorCell);
         var structureCountBefore = _simulation.RegisteredStructureCount;
-        if (!TryFindBlueprintAnchor(captured, FacingDirection.South, out var validAnchor))
+        if (!TryFindBlueprintAnchor(captured, FacingDirection.East, out var validAnchor))
         {
             return false;
         }
 
-        var validPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintSite, validAnchor, FacingDirection.South);
+        var validPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintSite, validAnchor, FacingDirection.East);
         var committed = validPlan.IsValid && FactoryBlueprintPlanner.CommitPlan(validPlan, _blueprintSite);
         if (!committed)
         {
@@ -3811,8 +3984,8 @@ public partial class FactoryDemo : Node3D
             new Vector2I(26, 26),
             new Vector2I(27, 26),
             new Vector2I(26, 28),
-            new Vector2I(26, 30),
-            new Vector2I(27, 30)
+            new Vector2I(26, 32),
+            new Vector2I(29, 32)
         };
 
         foreach (var cell in requiredCells)
@@ -3828,8 +4001,8 @@ public partial class FactoryDemo : Node3D
         var generator = PlaceStructure(BuildPrototypeKind.Generator, 24, 28, FacingDirection.East) as GeneratorStructure;
         PlaceStructure(BuildPrototypeKind.PowerPole, 25, 29, FacingDirection.East);
         var recipeAssembler = PlaceStructure(BuildPrototypeKind.Assembler, 26, 28, FacingDirection.East) as AssemblerStructure;
-        var ammoAssembler = PlaceStructure(BuildPrototypeKind.AmmoAssembler, 26, 30, FacingDirection.East) as AmmoAssemblerStructure;
-        var turret = PlaceStructure(BuildPrototypeKind.GunTurret, 27, 30, FacingDirection.East) as GunTurretStructure;
+        var ammoAssembler = PlaceStructure(BuildPrototypeKind.AmmoAssembler, 26, 32, FacingDirection.East) as AmmoAssemblerStructure;
+        var turret = PlaceStructure(BuildPrototypeKind.GunTurret, 29, 32, FacingDirection.East) as GunTurretStructure;
 
         if (feederStorage is null
             || storage is null
@@ -3866,7 +4039,7 @@ public partial class FactoryDemo : Node3D
         if (turret.BufferedAmmo <= 0)
         {
             var injectedAmmo = _simulation.CreateItem(BuildPrototypeKind.AmmoAssembler, FactoryItemKind.HighVelocityAmmo);
-            turret.TryReceiveProvidedItem(injectedAmmo, ammoAssembler.Cell, _simulation);
+            turret.TryReceiveProvidedItem(injectedAmmo, ammoAssembler.GetTransferOutputCell(turret.Cell), _simulation);
         }
 
         _selectedStructure = storage;
@@ -3991,7 +4164,7 @@ public partial class FactoryDemo : Node3D
 
         _selectedStructure = recipeAssembler;
         UpdateHud();
-        recipeAssembler.TryPeekProvidedItem(new Vector2I(27, 28), _simulation, out var producedItem);
+        recipeAssembler.TryPeekProvidedItem(new Vector2I(29, 28), _simulation, out var producedItem);
         var assemblerRecipeVerified = assemblerRecipeChanged
             && _hud.IsDetailVisible
             && _hud.DetailTitleText.Contains("组装机", global::System.StringComparison.Ordinal)
@@ -4039,7 +4212,7 @@ public partial class FactoryDemo : Node3D
             return false;
         }
 
-        _grid.TryGetStructure(new Vector2I(14, 14), out var breachWallStructure);
+        _grid.TryGetStructure(new Vector2I(16, 14), out var breachWallStructure);
         var breachWall = breachWallStructure as WallStructure;
 
         await ToSignal(GetTree().CreateTimer(20.0f), SceneTreeTimer.SignalName.Timeout);

@@ -161,24 +161,24 @@ public static class MobileFactoryScenarioLibrary
     {
         return new MobileFactoryInteriorPreset(
             id: "focused-dual-logistics",
-            displayName: "野外熔炼转运样板",
-            description: "玩家移动工厂把世界侧输入矿石导入内部熔炉与组装工位，再经东侧输出端口把产物送往接收站。",
-            recoverySummary: "西侧输入端口接收野外矿石，底部发电机维持内部供电，主线在熔炼后转入组装和仓储，再通过东侧输出端口外送。",
+            displayName: "野外加工转运样板",
+            description: "玩家移动工厂把野外矿石导入熔炼与组装主线，同时在下层维持弹药补给支线，再经东侧双输出端口把产物送往接收站。",
+            recoverySummary: "西侧输入端口接收矿石，中央熔炉把原矿送入组装机，主输出端口负责向站点外送；下层双仓储和弹药组装器组成内部防务补给支线。",
             placements: new[]
             {
+                new FactoryPlacementSpec(BuildPrototypeKind.GunTurret, new Vector2I(1, 0), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(1, 3), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.Smelter, new Vector2I(2, 3), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 3), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(4, 3), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(5, 3), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Assembler, new Vector2I(6, 3), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(7, 3), FacingDirection.South),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 3), FacingDirection.North),
+                new FactoryPlacementSpec(BuildPrototypeKind.Assembler, new Vector2I(4, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(1, 4), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(2, 4), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(1, 5), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(2, 5), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.AmmoAssembler, new Vector2I(4, 4), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.Generator, new Vector2I(1, 7), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.PowerPole, new Vector2I(3, 6), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(4, 1), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(5, 1), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(6, 1), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Sink, new Vector2I(1, 1), FacingDirection.East)
+                new FactoryPlacementSpec(BuildPrototypeKind.LargeStorageDepot, new Vector2I(5, 6), FacingDirection.East)
             },
             attachmentPlacements: new[]
             {
@@ -192,25 +192,24 @@ public static class MobileFactoryScenarioLibrary
     {
         return new MobileFactoryInteriorPreset(
             id: "expedition-input-verification",
-            displayName: "远征输入熔炼线",
-            description: "中型移动工厂把世界输入直接接入熔炼与转运链，用于观察输入端口、缓存和输出端口的联动。",
-            recoverySummary: "主线在仓储缓冲后进入熔炉，再送入东侧端口；顶部电杆保证外出工位在部署后稳定运作。",
+            displayName: "远征熔炼装配线",
+            description: "中型移动工厂把世界输入抬升进熔炉，再接入中段组装机和双输出端口，用于观察真实端口与配方链联动。",
+            recoverySummary: "西侧输入先经北向抬升送入熔炉，熔炼产物再进入组装机，东侧双端口承担对外输出与站点交换。",
             placements: new[]
             {
                 new FactoryPlacementSpec(BuildPrototypeKind.Generator, new Vector2I(1, 0), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.PowerPole, new Vector2I(3, 1), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(1, 3), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(2, 3), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Smelter, new Vector2I(3, 3), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(4, 3), FacingDirection.North),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(4, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Assembler, new Vector2I(4, 1), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Sink, new Vector2I(1, 4), FacingDirection.East)
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(1, 3), FacingDirection.North),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(1, 2), FacingDirection.North),
+                new FactoryPlacementSpec(BuildPrototypeKind.Smelter, new Vector2I(2, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Assembler, new Vector2I(2, 2), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(0, 0), FacingDirection.East)
             },
             attachmentPlacements: new[]
             {
                 new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.InputPort, new Vector2I(0, 3), FacingDirection.West),
-                new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.OutputPort, new Vector2I(5, 2), FacingDirection.East)
+                new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.OutputPort, new Vector2I(5, 2), FacingDirection.East),
+                new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.OutputPort, new Vector2I(5, 3), FacingDirection.East)
             });
     }
 
@@ -292,25 +291,22 @@ public static class MobileFactoryScenarioLibrary
         return new MobileFactoryInteriorPreset(
             id: "wide-buffer-loop",
             displayName: "前线补给回路",
-            description: "重载工厂在输入端口接收物资后，内部完成弹药缓存、组装和前线炮位补给，再把余量送往外部世界。",
-            recoverySummary: "上层负责仓储缓冲和炮位补给，下层负责主线输出与回收，适合承担防线支援或大型站点转运角色。",
+            description: "重载工厂在输入端口接收矿区物资后，内部用双缓冲与弹药组装器支撑防线补给，并保留对外输出能力。",
+            recoverySummary: "左侧输入带和双仓储把物资送入主弹药组装器，东侧双输出端口负责向前线或站点外送，顶部炮塔展示防务支援角色。",
             placements: new[]
             {
                 new FactoryPlacementSpec(BuildPrototypeKind.Generator, new Vector2I(1, 0), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.PowerPole, new Vector2I(3, 1), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(1, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(2, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.AmmoAssembler, new Vector2I(3, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(4, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(5, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(5, 1), FacingDirection.North),
+                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(0, 3), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(1, 3), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(1, 4), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(4, 1), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(4, 2), FacingDirection.South),
+                new FactoryPlacementSpec(BuildPrototypeKind.AmmoAssembler, new Vector2I(3, 3), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.GunTurret, new Vector2I(5, 0), FacingDirection.East),
                 new FactoryPlacementSpec(BuildPrototypeKind.Wall, new Vector2I(4, 0), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(5, 3), FacingDirection.South),
-                new FactoryPlacementSpec(BuildPrototypeKind.GunTurret, new Vector2I(5, 4), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Wall, new Vector2I(4, 4), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(6, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Sink, new Vector2I(1, 4), FacingDirection.East)
+                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(4, 5), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(5, 5), FacingDirection.East)
             },
             attachmentPlacements: new[]
             {
@@ -337,7 +333,7 @@ public static class MobileFactoryScenarioLibrary
         {
             new MobileFactoryScenarioActorDefinition(
                 actorId: "player-expedition",
-                displayLabel: "玩家工厂",
+                displayLabel: "玩家转运工厂",
                 profile: focused,
                 interiorPreset: focusedDemo,
                 isPlayerControlled: true,
@@ -349,7 +345,7 @@ public static class MobileFactoryScenarioLibrary
                 labelColor: new Color("FDE68A")),
             new MobileFactoryScenarioActorDefinition(
                 actorId: "heavy-output-east",
-                displayLabel: "重载外输站",
+                displayLabel: "重载防务补给站",
                 profile: heavy,
                 interiorPreset: wideLoop,
                 isPlayerControlled: false,
@@ -361,7 +357,7 @@ public static class MobileFactoryScenarioLibrary
                 labelColor: new Color("FB923C")),
             new MobileFactoryScenarioActorDefinition(
                 actorId: "compact-patrol",
-                displayLabel: "巡航采样站",
+                displayLabel: "石英巡航采样站",
                 profile: compact,
                 interiorPreset: relay,
                 isPlayerControlled: false,
@@ -377,7 +373,7 @@ public static class MobileFactoryScenarioLibrary
                 labelColor: new Color("5EEAD4")),
             new MobileFactoryScenarioActorDefinition(
                 actorId: "medium-output-north",
-                displayLabel: "双源中继站",
+                displayLabel: "双源加工中继站",
                 profile: medium,
                 interiorPreset: dualFeed,
                 isPlayerControlled: false,
@@ -389,7 +385,7 @@ public static class MobileFactoryScenarioLibrary
                 labelColor: new Color("93C5FD")),
             new MobileFactoryScenarioActorDefinition(
                 actorId: "compact-observer-loop",
-                displayLabel: "轻型回路站",
+                displayLabel: "轻型维修回收站",
                 profile: compact,
                 interiorPreset: branch,
                 isPlayerControlled: false,

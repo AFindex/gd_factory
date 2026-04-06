@@ -9,18 +9,20 @@ public sealed class FactoryStructureFootprint
     public FactoryStructureFootprint(
         IReadOnlyList<Vector2I> occupiedOffsetsEast,
         Vector2I? inputOffsetEast = null,
-        Vector2I? outputOffsetEast = null)
+        Vector2I? outputOffsetEast = null,
+        IReadOnlyList<Vector2I>? inputOffsetsEast = null,
+        IReadOnlyList<Vector2I>? outputOffsetsEast = null)
     {
         OccupiedOffsetsEast = occupiedOffsetsEast.Count > 0
             ? occupiedOffsetsEast
             : new[] { Vector2I.Zero };
-        InputOffsetEast = inputOffsetEast;
-        OutputOffsetEast = outputOffsetEast;
+        InputOffsetsEast = BuildPortOffsets(inputOffsetsEast, inputOffsetEast);
+        OutputOffsetsEast = BuildPortOffsets(outputOffsetsEast, outputOffsetEast);
     }
 
     public IReadOnlyList<Vector2I> OccupiedOffsetsEast { get; }
-    public Vector2I? InputOffsetEast { get; }
-    public Vector2I? OutputOffsetEast { get; }
+    public IReadOnlyList<Vector2I> InputOffsetsEast { get; }
+    public IReadOnlyList<Vector2I> OutputOffsetsEast { get; }
 
     public IReadOnlyList<Vector2I> ResolveOccupiedOffsets(FacingDirection facing)
     {
@@ -86,23 +88,129 @@ public sealed class FactoryStructureFootprint
         return Mathf.Max(size.X, size.Y) * 0.5f;
     }
 
-    public Vector2I ResolveInputCell(Vector2I anchorCell, FacingDirection facing)
+    public Vector2 GetOccupiedCenterOffsetEast()
     {
-        if (InputOffsetEast is Vector2I inputOffset)
+        var sum = Vector2.Zero;
+        for (var index = 0; index < OccupiedOffsetsEast.Count; index++)
         {
-            return anchorCell + FactoryDirection.RotateOffset(inputOffset, facing);
+            sum += new Vector2(OccupiedOffsetsEast[index].X, OccupiedOffsetsEast[index].Y);
         }
 
-        return anchorCell - FactoryDirection.ToCellOffset(facing);
+        return sum / OccupiedOffsetsEast.Count;
+    }
+
+    public Vector3 GetLocalCellCenterOffset(Vector2I offsetEast, float cellSize)
+    {
+        var center = GetOccupiedCenterOffsetEast();
+        return new Vector3(
+            (offsetEast.X - center.X) * cellSize,
+            0.0f,
+            (offsetEast.Y - center.Y) * cellSize);
+    }
+
+    public IReadOnlyList<Vector2I> ResolveInputOffsets(FacingDirection facing)
+    {
+        return ResolvePortOffsets(InputOffsetsEast, facing, -FactoryDirection.ToCellOffset(facing));
+    }
+
+    public IReadOnlyList<Vector2I> ResolveOutputOffsets(FacingDirection facing)
+    {
+        return ResolvePortOffsets(OutputOffsetsEast, facing, FactoryDirection.ToCellOffset(facing));
+    }
+
+    public Vector2I ResolveInputCell(Vector2I anchorCell, FacingDirection facing)
+    {
+        return ResolveInputCells(anchorCell, facing)[0];
     }
 
     public Vector2I ResolveOutputCell(Vector2I anchorCell, FacingDirection facing)
     {
-        if (OutputOffsetEast is Vector2I outputOffset)
+        return ResolveOutputCells(anchorCell, facing)[0];
+    }
+
+    public IReadOnlyList<Vector2I> ResolveInputCells(Vector2I anchorCell, FacingDirection facing)
+    {
+        var offsets = ResolveInputOffsets(facing);
+        var cells = new Vector2I[offsets.Count];
+        for (var index = 0; index < offsets.Count; index++)
         {
-            return anchorCell + FactoryDirection.RotateOffset(outputOffset, facing);
+            cells[index] = anchorCell + offsets[index];
         }
 
-        return anchorCell + FactoryDirection.ToCellOffset(facing);
+        return cells;
+    }
+
+    public IReadOnlyList<Vector2I> ResolveOutputCells(Vector2I anchorCell, FacingDirection facing)
+    {
+        var offsets = ResolveOutputOffsets(facing);
+        var cells = new Vector2I[offsets.Count];
+        for (var index = 0; index < offsets.Count; index++)
+        {
+            cells[index] = anchorCell + offsets[index];
+        }
+
+        return cells;
+    }
+
+    public Vector2I ResolveOutputTransferCell(Vector2I anchorCell, FacingDirection facing, Vector2I targetCell)
+    {
+        var outputOffsets = ResolveOutputOffsets(facing);
+        var occupiedOffsets = ResolveOccupiedOffsets(facing);
+        for (var outputIndex = 0; outputIndex < outputOffsets.Count; outputIndex++)
+        {
+            if (anchorCell + outputOffsets[outputIndex] != targetCell)
+            {
+                continue;
+            }
+
+            for (var occupiedIndex = 0; occupiedIndex < occupiedOffsets.Count; occupiedIndex++)
+            {
+                if (!IsOrthogonallyAdjacent(outputOffsets[outputIndex], occupiedOffsets[occupiedIndex]))
+                {
+                    continue;
+                }
+
+                return anchorCell + occupiedOffsets[occupiedIndex];
+            }
+        }
+
+        return anchorCell;
+    }
+
+    private static IReadOnlyList<Vector2I> BuildPortOffsets(IReadOnlyList<Vector2I>? preferredOffsets, Vector2I? fallbackOffset)
+    {
+        if (preferredOffsets is not null && preferredOffsets.Count > 0)
+        {
+            return preferredOffsets;
+        }
+
+        if (fallbackOffset is Vector2I singleOffset)
+        {
+            return new[] { singleOffset };
+        }
+
+        return System.Array.Empty<Vector2I>();
+    }
+
+    private static IReadOnlyList<Vector2I> ResolvePortOffsets(IReadOnlyList<Vector2I> eastOffsets, FacingDirection facing, Vector2I fallbackOffset)
+    {
+        if (eastOffsets.Count == 0)
+        {
+            return new[] { fallbackOffset };
+        }
+
+        var resolved = new Vector2I[eastOffsets.Count];
+        for (var index = 0; index < eastOffsets.Count; index++)
+        {
+            resolved[index] = FactoryDirection.RotateOffset(eastOffsets[index], facing);
+        }
+
+        return resolved;
+    }
+
+    private static bool IsOrthogonallyAdjacent(Vector2I a, Vector2I b)
+    {
+        var delta = a - b;
+        return Mathf.Abs(delta.X) + Mathf.Abs(delta.Y) == 1;
     }
 }

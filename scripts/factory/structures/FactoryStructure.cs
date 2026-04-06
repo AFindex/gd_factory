@@ -159,24 +159,57 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
         return Footprint.ResolveOutputCell(Cell, Facing);
     }
 
+    public IReadOnlyList<Vector2I> GetOutputCells()
+    {
+        return Footprint.ResolveOutputCells(Cell, Facing);
+    }
+
     public Vector2I GetInputCell()
     {
         return Footprint.ResolveInputCell(Cell, Facing);
     }
 
+    public IReadOnlyList<Vector2I> GetInputCells()
+    {
+        return Footprint.ResolveInputCells(Cell, Facing);
+    }
+
     public bool AcceptsFrom(Vector2I sourceCell)
     {
-        return sourceCell == GetInputCell();
+        return CanReceiveFrom(sourceCell);
     }
 
     public virtual bool CanReceiveFrom(Vector2I sourceCell)
     {
-        return sourceCell == GetInputCell();
+        var inputCells = GetInputCells();
+        for (var index = 0; index < inputCells.Count; index++)
+        {
+            if (inputCells[index] == sourceCell)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public virtual bool CanOutputTo(Vector2I targetCell)
     {
-        return GetOutputCell() == targetCell;
+        var outputCells = GetOutputCells();
+        for (var index = 0; index < outputCells.Count; index++)
+        {
+            if (outputCells[index] == targetCell)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public virtual Vector2I GetTransferOutputCell(Vector2I targetCell)
+    {
+        return Footprint.ResolveOutputTransferCell(Cell, Facing, targetCell);
     }
 
     public void AdvanceCombatState(double stepSeconds)
