@@ -238,7 +238,7 @@ public static class FactoryPresentation
     public static string GetItemDisplayName(FactoryItem item)
     {
         return item.ItemKind == FactoryItemKind.BuildingKit
-            ? $"{GetBuildPrototypeDisplayName(item.SourceKind)}套件"
+            ? GetBuildPrototypeDisplayName(item.SourceKind)
             : GetItemKindLabel(item.ItemKind);
     }
 

@@ -2893,6 +2893,7 @@ public partial class MobileFactoryDemo : Node3D
             Key.Key7 => 6,
             Key.Key8 => 7,
             Key.Key9 => 8,
+            Key.Key0 => 9,
             _ => -1
         };
 
@@ -5510,7 +5511,7 @@ public partial class MobileFactoryDemo : Node3D
     {
         return _controlMode switch
         {
-            MobileFactoryControlMode.Player => "玩家模式：WASD 移动主角，镜头跟随角色；用底部热栏切换建筑套件，用左上按钮或 C 进入工厂控制。",
+            MobileFactoryControlMode.Player => "玩家模式：WASD 移动主角，镜头跟随角色；用底部热栏切换建筑，用左上按钮或 C 进入工厂控制。",
             MobileFactoryControlMode.Observer => "观察模式：WASD/方向键移动相机 | 滚轮缩放 | Tab 返回玩家控制 | F 内部编辑",
             MobileFactoryControlMode.DeployPreview => "部署预览：左键确认 | Q/E/R 旋转朝向 | G/Esc 取消并返回玩家控制 | F 内部编辑",
             _ => "工厂控制：W/S 前进后退 | A/D 转向 | C 返回玩家控制 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器里和 sandbox 一样，X 进删除模式，右键或 Esc 回交互，Delete 拆除悬停建筑"

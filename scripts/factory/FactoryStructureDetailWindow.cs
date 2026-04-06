@@ -5,6 +5,12 @@ using System.Collections.Generic;
 public partial class FactoryStructureDetailWindow : PanelContainer
 {
     private const double InventoryDragHoldSeconds = 0.18;
+    private const float DetailWindowMinWidth = 220.0f;
+    private const float DetailWindowViewportMargin = 24.0f;
+    private const float DetailWindowHorizontalChrome = 40.0f;
+    private const float InventoryGridGap = 4.0f;
+    private const float InventorySlotPreferredSize = 58.0f;
+    private const float InventorySlotMinSize = 44.0f;
     private static readonly Vector2 DragPreviewOffset = new(18.0f, 18.0f);
     private static void TraceLog(string message) => GD.Print($"[FactoryStructureDetailWindow] {message}");
 
@@ -41,6 +47,13 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                 && ItemKind == source.ItemKind
                 && StackCount < MaxStackSize;
         }
+    }
+
+    private sealed class InventoryGridLayout
+    {
+        public required GridContainer Grid { get; init; }
+        public required int Columns { get; init; }
+        public required List<PanelContainer> SlotPanels { get; init; }
     }
 
     private readonly struct InventorySlotReference
@@ -112,6 +125,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
     private Label? _dragPreviewTitle;
     private Label? _dragPreviewCount;
     private readonly List<InventorySlotWidget> _slotWidgets = new();
+    private readonly List<InventoryGridLayout> _inventoryLayouts = new();
     private Rect2 _dragBounds = new(Vector2.Zero, new Vector2(900.0f, 600.0f));
     private bool _draggingWindow;
     private bool _windowMovedByUser;
@@ -122,6 +136,10 @@ public partial class FactoryStructureDetailWindow : PanelContainer
     private InventorySlotWidget? _hoveredSlot;
     private string? _modelSignature;
     private bool _leftMouseHeld;
+    private int _inventoryLayoutRevision;
+    private int _lastSyncedInventoryLayoutRevision = -1;
+    private float _lastSyncedWindowWidth = -1.0f;
+    private float _lastSyncedBodyWidth = -1.0f;
 
     public event Action<string, Vector2I, Vector2I, bool>? InventoryMoveRequested;
     public event Action<string, Vector2I, string, Vector2I, bool>? InventoryTransferRequested;
@@ -139,7 +157,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         Name = "FactoryStructureDetailWindow";
         Visible = false;
         MouseFilter = MouseFilterEnum.Stop;
-        CustomMinimumSize = new Vector2(522.0f, 560.0f);
+        CustomMinimumSize = new Vector2(DetailWindowMinWidth, 560.0f);
         Size = CustomMinimumSize;
         AddThemeStyleboxOverride("panel", CreatePanelStyle(new Color("0F172A"), new Color("60A5FA"), 2));
 
@@ -194,6 +212,9 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         var scroll = new ScrollContainer();
         scroll.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         scroll.SizeFlagsVertical = SizeFlags.ExpandFill;
+        scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+        scroll.VerticalScrollMode = ScrollContainer.ScrollMode.Auto;
+        scroll.ClipContents = true;
         scroll.CustomMinimumSize = new Vector2(480.0f, 0.0f);
         root.AddChild(scroll);
         _scroll = scroll;
@@ -221,14 +242,17 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         body.AddChild(_summaryLabel);
 
         _recipeSections = new VBoxContainer();
+        _recipeSections.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _recipeSections.AddThemeConstantOverride("separation", 6);
         body.AddChild(_recipeSections);
 
         _inventorySections = new VBoxContainer();
+        _inventorySections.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _inventorySections.AddThemeConstantOverride("separation", 8);
         body.AddChild(_inventorySections);
 
         _actionSections = new VBoxContainer();
+        _actionSections.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _actionSections.AddThemeConstantOverride("separation", 6);
         body.AddChild(_actionSections);
 
@@ -587,35 +611,47 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         }
 
         _slotWidgets.Clear();
+        _inventoryLayouts.Clear();
         _hoveredSlot = null;
 
         for (var index = 0; index < sections.Count; index++)
         {
             var section = sections[index];
             var title = CreateTextLabel(13, new Color("FDE68A"));
+            title.SizeFlagsHorizontal = SizeFlags.ExpandFill;
             title.Text = section.Title;
             _inventorySections.AddChild(title);
 
             var grid = new GridContainer();
             grid.Columns = Mathf.Max(1, section.GridSize.X);
-            grid.AddThemeConstantOverride("h_separation", 6);
-            grid.AddThemeConstantOverride("v_separation", 6);
+            grid.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            grid.AddThemeConstantOverride("h_separation", (int)InventoryGridGap);
+            grid.AddThemeConstantOverride("v_separation", (int)InventoryGridGap);
             _inventorySections.AddChild(grid);
+
+            var layout = new InventoryGridLayout
+            {
+                Grid = grid,
+                Columns = grid.Columns,
+                SlotPanels = new List<PanelContainer>()
+            };
+            _inventoryLayouts.Add(layout);
 
             for (var slotIndex = 0; slotIndex < section.Slots.Count; slotIndex++)
             {
                 var slot = section.Slots[slotIndex];
                 var slotPanel = new PanelContainer();
                 slotPanel.MouseFilter = MouseFilterEnum.Stop;
-                slotPanel.CustomMinimumSize = new Vector2(72.0f, 72.0f);
+                slotPanel.CustomMinimumSize = new Vector2(InventorySlotPreferredSize, InventorySlotPreferredSize);
                 grid.AddChild(slotPanel);
+                layout.SlotPanels.Add(slotPanel);
 
                 var margin = new MarginContainer();
                 margin.MouseFilter = MouseFilterEnum.Ignore;
-                margin.AddThemeConstantOverride("margin_left", 5);
-                margin.AddThemeConstantOverride("margin_top", 5);
-                margin.AddThemeConstantOverride("margin_right", 5);
-                margin.AddThemeConstantOverride("margin_bottom", 5);
+                margin.AddThemeConstantOverride("margin_left", 4);
+                margin.AddThemeConstantOverride("margin_top", 4);
+                margin.AddThemeConstantOverride("margin_right", 4);
+                margin.AddThemeConstantOverride("margin_bottom", 4);
                 slotPanel.AddChild(margin);
 
                 var body = new VBoxContainer();
@@ -625,34 +661,37 @@ public partial class FactoryStructureDetailWindow : PanelContainer
 
                 var iconFrame = new PanelContainer();
                 iconFrame.MouseFilter = MouseFilterEnum.Ignore;
-                iconFrame.CustomMinimumSize = new Vector2(28.0f, 28.0f);
+                iconFrame.CustomMinimumSize = new Vector2(24.0f, 24.0f);
                 iconFrame.SizeFlagsHorizontal = SizeFlags.ShrinkBegin;
                 body.AddChild(iconFrame);
 
                 var iconMargin = new MarginContainer();
                 iconMargin.MouseFilter = MouseFilterEnum.Ignore;
                 iconMargin.SetAnchorsPreset(LayoutPreset.FullRect);
-                iconMargin.AddThemeConstantOverride("margin_left", 3);
-                iconMargin.AddThemeConstantOverride("margin_top", 3);
-                iconMargin.AddThemeConstantOverride("margin_right", 3);
-                iconMargin.AddThemeConstantOverride("margin_bottom", 3);
+                iconMargin.AddThemeConstantOverride("margin_left", 2);
+                iconMargin.AddThemeConstantOverride("margin_top", 2);
+                iconMargin.AddThemeConstantOverride("margin_right", 2);
+                iconMargin.AddThemeConstantOverride("margin_bottom", 2);
                 iconFrame.AddChild(iconMargin);
 
                 var iconRect = new TextureRect();
                 iconRect.MouseFilter = MouseFilterEnum.Ignore;
                 iconRect.ExpandMode = TextureRect.ExpandModeEnum.FitWidthProportional;
                 iconRect.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
-                iconRect.CustomMinimumSize = new Vector2(20.0f, 20.0f);
+                iconRect.CustomMinimumSize = new Vector2(18.0f, 18.0f);
                 iconRect.Texture = slot.IconTexture;
                 iconRect.Visible = slot.IconTexture is not null;
                 iconMargin.AddChild(iconRect);
 
-                var itemLabel = CreateTextLabel(10, slot.HasItem ? Colors.White : new Color("7B8DA1"));
+                var itemLabel = CreateTextLabel(9, slot.HasItem ? Colors.White : new Color("7B8DA1"));
+                itemLabel.AutowrapMode = TextServer.AutowrapMode.Off;
+                itemLabel.ClipText = true;
+                itemLabel.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
                 itemLabel.Text = slot.HasItem ? slot.ItemLabel ?? string.Empty : "空槽位";
                 body.AddChild(itemLabel);
 
                 var stackLabel = CreateTextLabel(9, slot.HasItem ? new Color("FDE68A") : new Color("64748B"));
-                stackLabel.Text = slot.HasItem ? $"x{slot.StackCount}/{slot.MaxStackSize}" : "--";
+                stackLabel.Text = slot.HasItem ? $"{slot.StackCount}/{slot.MaxStackSize}" : "--";
                 body.AddChild(stackLabel);
 
                 var posLabel = CreateTextLabel(1, new Color("9FB6C9"));
@@ -682,6 +721,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
             }
         }
 
+        _inventoryLayoutRevision++;
         RestoreInventoryInteractionState(pendingDragReference, dragReference, hoveredReference, pendingDragElapsed);
         RefreshSlotVisuals();
     }
@@ -1056,7 +1096,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                 borderColor = new Color("93C5FD");
             }
 
-            widget.Panel.AddThemeStyleboxOverride("panel", CreatePanelStyle(backgroundColor, borderColor, borderWidth));
+            widget.Panel.AddThemeStyleboxOverride("panel", CreateInventorySlotStyle(backgroundColor, borderColor, borderWidth));
             widget.Label.Modulate = widget.HasItem ? Colors.White : new Color("7B8DA1");
             widget.StackLabel.Modulate = widget.HasItem ? new Color("FDE68A") : new Color("64748B");
             widget.SubLabel.Modulate = new Color("9FB6C9");
@@ -1102,12 +1142,12 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                     ? "并入目标堆叠"
                     : "移动到空槽位"
                 : "目标无效";
-            var splitText = IsSplitModifierHeld() ? $"半堆 x{GetRequestedMoveCount(_dragSourceSlot)}" : $"整堆 x{GetRequestedMoveCount(_dragSourceSlot)}";
+            var splitText = IsSplitModifierHeld() ? $"半堆 {GetRequestedMoveCount(_dragSourceSlot)}" : $"整堆 {GetRequestedMoveCount(_dragSourceSlot)}";
             _dragStateLabel.Text = $"正在拖动物品：从 ({_dragSourceSlot.SlotPosition.X}, {_dragSourceSlot.SlotPosition.Y}) 移向 ({_hoveredSlot.SlotPosition.X}, {_hoveredSlot.SlotPosition.Y})，{action}，{splitText}";
             return;
         }
 
-        _dragStateLabel.Text = $"正在拖动物品：源槽位 ({_dragSourceSlot.SlotPosition.X}, {_dragSourceSlot.SlotPosition.Y})，数量 x{GetRequestedMoveCount(_dragSourceSlot)}";
+        _dragStateLabel.Text = $"正在拖动物品：源槽位 ({_dragSourceSlot.SlotPosition.X}, {_dragSourceSlot.SlotPosition.Y})，数量 {GetRequestedMoveCount(_dragSourceSlot)}";
     }
 
     private void BeginInventoryDrag(InventorySlotWidget source)
@@ -1215,8 +1255,8 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         _dragPreviewIcon.Modulate = _dragSourceSlot.Icon.Texture is null ? _dragSourceSlot.AccentColor : Colors.White;
         _dragPreviewTitle.Text = _dragSourceSlot.Label.Text;
         _dragPreviewCount.Text = IsSplitModifierHeld()
-            ? $"分半拖拽 x{GetRequestedMoveCount(_dragSourceSlot)}"
-            : $"整堆拖拽 x{GetRequestedMoveCount(_dragSourceSlot)}";
+            ? $"分半拖拽 {GetRequestedMoveCount(_dragSourceSlot)}"
+            : $"整堆拖拽 {GetRequestedMoveCount(_dragSourceSlot)}";
     }
 
     private void UpdateHoveredSlotFromPointer()
@@ -1474,10 +1514,63 @@ public partial class FactoryStructureDetailWindow : PanelContainer
             return;
         }
 
-        var availableWidth = Mathf.Max(260.0f, Size.X - 20.0f);
+        var viewportWidth = GetViewport().GetVisibleRect().Size.X;
+        var maxWindowWidth = Mathf.Max(180.0f, viewportWidth - DetailWindowViewportMargin);
+        var minWindowWidth = Mathf.Min(DetailWindowMinWidth, maxWindowWidth);
+
+        var maxColumns = 0;
+        for (var index = 0; index < _inventoryLayouts.Count; index++)
+        {
+            maxColumns = Mathf.Max(maxColumns, _inventoryLayouts[index].Columns);
+        }
+
+        var maxBodyWidth = Mathf.Max(140.0f, maxWindowWidth - DetailWindowHorizontalChrome);
+        var resolvedSlotSize = InventorySlotPreferredSize;
+        if (maxColumns > 0)
+        {
+            var maxBodyWidthForSlots = maxBodyWidth - (Mathf.Max(0, maxColumns - 1) * InventoryGridGap);
+            resolvedSlotSize = Mathf.Clamp(maxBodyWidthForSlots / maxColumns, InventorySlotMinSize, InventorySlotPreferredSize);
+        }
+
+        var bodyWidth = maxColumns > 0
+            ? (maxColumns * resolvedSlotSize) + (Mathf.Max(0, maxColumns - 1) * InventoryGridGap)
+            : Mathf.Max(140.0f, DetailWindowMinWidth - DetailWindowHorizontalChrome);
+        var preferredWindowWidth = Mathf.Max(DetailWindowMinWidth, bodyWidth + DetailWindowHorizontalChrome);
+        var resolvedWindowWidth = Mathf.Clamp(preferredWindowWidth, minWindowWidth, maxWindowWidth);
+        var availableWidth = Mathf.Max(160.0f, resolvedWindowWidth - 20.0f);
+
+        if (_inventoryLayoutRevision == _lastSyncedInventoryLayoutRevision
+            && Mathf.IsEqualApprox(resolvedWindowWidth, _lastSyncedWindowWidth)
+            && Mathf.IsEqualApprox(bodyWidth, _lastSyncedBodyWidth))
+        {
+            return;
+        }
+
+        if (!Mathf.IsEqualApprox(Size.X, resolvedWindowWidth))
+        {
+            Size = new Vector2(resolvedWindowWidth, Size.Y);
+        }
+
         _scroll.CustomMinimumSize = new Vector2(availableWidth, 0.0f);
         _bodyMargin.CustomMinimumSize = new Vector2(availableWidth, 0.0f);
-        _body.CustomMinimumSize = new Vector2(Mathf.Max(360.0f, availableWidth - 20.0f), 0.0f);
+        _body.CustomMinimumSize = new Vector2(bodyWidth, 0.0f);
+
+        for (var layoutIndex = 0; layoutIndex < _inventoryLayouts.Count; layoutIndex++)
+        {
+            var layout = _inventoryLayouts[layoutIndex];
+            var columns = Mathf.Max(1, layout.Columns);
+            var gridWidth = (columns * resolvedSlotSize) + (Mathf.Max(0, columns - 1) * InventoryGridGap);
+            layout.Grid.CustomMinimumSize = new Vector2(gridWidth, 0.0f);
+
+            for (var slotIndex = 0; slotIndex < layout.SlotPanels.Count; slotIndex++)
+            {
+                layout.SlotPanels[slotIndex].CustomMinimumSize = new Vector2(resolvedSlotSize, resolvedSlotSize);
+            }
+        }
+
+        _lastSyncedInventoryLayoutRevision = _inventoryLayoutRevision;
+        _lastSyncedWindowWidth = resolvedWindowWidth;
+        _lastSyncedBodyWidth = bodyWidth;
     }
 
     private static Label CreateTextLabel(int fontSize, Color color)
@@ -1518,6 +1611,27 @@ public partial class FactoryStructureDetailWindow : PanelContainer
             ContentMarginLeft = 2,
             ContentMarginRight = 2,
             ContentMarginTop = 2
+        };
+    }
+
+    private static StyleBoxFlat CreateInventorySlotStyle(Color backgroundColor, Color borderColor, int borderWidth)
+    {
+        return new StyleBoxFlat
+        {
+            BgColor = backgroundColor,
+            BorderColor = borderColor,
+            BorderWidthBottom = borderWidth,
+            BorderWidthLeft = borderWidth,
+            BorderWidthRight = borderWidth,
+            BorderWidthTop = borderWidth,
+            CornerRadiusBottomLeft = 0,
+            CornerRadiusBottomRight = 0,
+            CornerRadiusTopLeft = 0,
+            CornerRadiusTopRight = 0,
+            ContentMarginBottom = 1,
+            ContentMarginLeft = 1,
+            ContentMarginRight = 1,
+            ContentMarginTop = 1
         };
     }
 }

@@ -620,6 +620,7 @@ public partial class FactoryDemo : Node3D
             Key.Key7 => 6,
             Key.Key8 => 7,
             Key.Key9 => 8,
+            Key.Key0 => 9,
             _ => -1
         };
 
@@ -1248,7 +1249,7 @@ public partial class FactoryDemo : Node3D
             _canPlaceCurrentCell = TryValidateWorldPlacement(placementKind, cell, _selectedFacing, out var placementIssue);
             _previewMessage = _canPlaceCurrentCell
                 ? usesPlayerInventory
-                    ? $"可在 ({cell.X}, {cell.Y}) 放置{FactoryPresentation.GetBuildPrototypeDisplayName(placementKind)}套件，朝向 {FactoryDirection.ToLabel(_selectedFacing)}"
+                    ? $"可在 ({cell.X}, {cell.Y}) 放置{FactoryPresentation.GetBuildPrototypeDisplayName(placementKind)}，朝向 {FactoryDirection.ToLabel(_selectedFacing)}"
                     : $"可在 ({cell.X}, {cell.Y}) 放置{_definitions[placementKind].DisplayName}，朝向 {FactoryDirection.ToLabel(_selectedFacing)}"
                 : placementIssue;
             return;

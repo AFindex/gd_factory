@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 public partial class LargeStorageDepotStructure : FactoryStructure, IFactoryItemProvider, IFactoryItemReceiver
 {
-    private readonly FactorySlottedItemInventory _inventory = new(5, 4);
+    private readonly FactorySlottedItemInventory _inventory = new(8, 6);
     private readonly List<MeshInstance3D> _fillIndicators = new();
     private double _dispatchCooldown;
     private MeshInstance3D? _statusBeacon;
@@ -87,8 +87,7 @@ public partial class LargeStorageDepotStructure : FactoryStructure, IFactoryItem
             yield return line;
         }
 
-        yield return $"容量：{BufferedCount} 件 | 槽位：{OccupiedSlotCount}/{Capacity}";
-        yield return $"输出方向：{FactoryDirection.ToLabel(Facing)}";
+        yield return $"容量：{BufferedCount}/{Capacity} 件 | 占用槽位：{OccupiedSlotCount}/{Capacity}";
     }
 
     public override FactoryStructureDetailModel GetDetailModel()
@@ -102,7 +101,7 @@ public partial class LargeStorageDepotStructure : FactoryStructure, IFactoryItem
         var inventorySection = CreateInventorySection("large-storage-buffer", "大型仓储库存", _inventory, true);
         return new FactoryStructureDetailModel(
             InspectionTitle,
-            "大型缓存区与多格占地状态",
+            "大容量缓存与转运",
             summaryLines,
             new[] { inventorySection });
     }

@@ -5,6 +5,10 @@ using System.Collections.Generic;
 public partial class FactoryPlayerHud : CanvasLayer
 {
     private const double HotbarDragHoldSeconds = 0.18;
+    private const float HotbarSlotGap = 4.0f;
+    private const float HotbarPreferredSlotSize = 58.0f;
+    private const float HotbarMinSlotSize = 44.0f;
+    private const float HotbarPanelHorizontalPadding = 20.0f;
     private static void TraceLog(string message) => GD.Print($"[FactoryPlayerHud] {message}");
 
     private sealed class HotbarSlotWidget
@@ -21,6 +25,7 @@ public partial class FactoryPlayerHud : CanvasLayer
 
     private Control? _root;
     private PanelContainer? _barPanel;
+    private HBoxContainer? _hotbarRow;
     private HBoxContainer? _buttonRow;
     private Label? _statusLabel;
     private PanelContainer? _hotbarDragPreview;
@@ -44,6 +49,8 @@ public partial class FactoryPlayerHud : CanvasLayer
     private string? _lastBackpackWindowSignature;
     private string? _lastItemInfoWindowSignature;
     private string? _lastStatsWindowSignature;
+    private float _lastHotbarSlotSize = -1.0f;
+    private float _lastHotbarPanelWidth = -1.0f;
 
     public event Action<int>? HotbarSlotPressed;
     public event Action<string, Vector2I, Vector2I, bool>? BackpackInventoryMoveRequested;
@@ -81,25 +88,30 @@ public partial class FactoryPlayerHud : CanvasLayer
 
         var barBody = new VBoxContainer();
         barBody.MouseFilter = Control.MouseFilterEnum.Ignore;
-        barBody.AddThemeConstantOverride("separation", 8);
+        barBody.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        barBody.AddThemeConstantOverride("separation", 6);
         barMargin.AddChild(barBody);
 
         _statusLabel = CreateLabel(11, new Color("D7E6F2"));
+        _statusLabel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         barBody.AddChild(_statusLabel);
 
         var hotbarRow = new HBoxContainer();
         hotbarRow.MouseFilter = Control.MouseFilterEnum.Ignore;
-        hotbarRow.AddThemeConstantOverride("separation", 6);
+        hotbarRow.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        hotbarRow.AddThemeConstantOverride("separation", 4);
         barBody.AddChild(hotbarRow);
+        _hotbarRow = hotbarRow;
 
-        for (var index = 0; index < 9; index++)
+        for (var index = 0; index < FactoryPlayerController.HotbarSlotCount; index++)
         {
             hotbarRow.AddChild(CreateHotbarSlot(index));
         }
 
         var buttonRow = new HBoxContainer();
         buttonRow.MouseFilter = Control.MouseFilterEnum.Ignore;
-        buttonRow.AddThemeConstantOverride("separation", 6);
+        buttonRow.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        buttonRow.AddThemeConstantOverride("separation", 4);
         barBody.AddChild(buttonRow);
         _buttonRow = buttonRow;
 
@@ -299,52 +311,56 @@ public partial class FactoryPlayerHud : CanvasLayer
     {
         var panel = new PanelContainer();
         panel.MouseFilter = Control.MouseFilterEnum.Stop;
-        panel.CustomMinimumSize = new Vector2(84.0f, 84.0f);
-        panel.TooltipText = $"快捷栏 {index + 1}";
+        panel.CustomMinimumSize = new Vector2(66.0f, 66.0f);
+        panel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        panel.TooltipText = $"快捷栏 {FactoryPlayerController.GetHotbarSlotLabel(index)}";
         panel.GuiInput += @event => HandleHotbarSlotGuiInput(index, @event);
 
         var margin = new MarginContainer();
         margin.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         margin.MouseFilter = Control.MouseFilterEnum.Ignore;
-        margin.AddThemeConstantOverride("margin_left", 6);
-        margin.AddThemeConstantOverride("margin_top", 6);
-        margin.AddThemeConstantOverride("margin_right", 6);
-        margin.AddThemeConstantOverride("margin_bottom", 6);
+        margin.AddThemeConstantOverride("margin_left", 3);
+        margin.AddThemeConstantOverride("margin_top", 3);
+        margin.AddThemeConstantOverride("margin_right", 3);
+        margin.AddThemeConstantOverride("margin_bottom", 3);
         panel.AddChild(margin);
 
         var body = new VBoxContainer();
         body.MouseFilter = Control.MouseFilterEnum.Ignore;
-        body.AddThemeConstantOverride("separation", 2);
+        body.AddThemeConstantOverride("separation", 1);
         margin.AddChild(body);
 
         var topRow = new HBoxContainer();
         topRow.MouseFilter = Control.MouseFilterEnum.Ignore;
-        topRow.AddThemeConstantOverride("separation", 4);
+        topRow.AddThemeConstantOverride("separation", 2);
         body.AddChild(topRow);
 
-        var indexLabel = CreateLabel(10, new Color("FDE68A"));
-        indexLabel.Text = $"{index + 1}";
+        var indexLabel = CreateLabel(8, new Color("FDE68A"));
+        indexLabel.Text = FactoryPlayerController.GetHotbarSlotLabel(index);
         topRow.AddChild(indexLabel);
 
-        var countLabel = CreateLabel(10, Colors.White);
+        var countLabel = CreateLabel(8, Colors.White);
         countLabel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         countLabel.HorizontalAlignment = HorizontalAlignment.Right;
         topRow.AddChild(countLabel);
 
         var iconHost = new CenterContainer();
         iconHost.MouseFilter = Control.MouseFilterEnum.Ignore;
-        iconHost.CustomMinimumSize = new Vector2(0.0f, 32.0f);
+        iconHost.CustomMinimumSize = new Vector2(0.0f, 20.0f);
         body.AddChild(iconHost);
 
         var icon = new TextureRect();
         icon.MouseFilter = Control.MouseFilterEnum.Ignore;
-        icon.CustomMinimumSize = new Vector2(32.0f, 32.0f);
+        icon.CustomMinimumSize = new Vector2(18.0f, 18.0f);
         icon.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
         icon.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
         iconHost.AddChild(icon);
 
-        var nameLabel = CreateLabel(10, new Color("D7E6F2"));
+        var nameLabel = CreateLabel(8, new Color("D7E6F2"));
         nameLabel.HorizontalAlignment = HorizontalAlignment.Center;
+        nameLabel.AutowrapMode = TextServer.AutowrapMode.Off;
+        nameLabel.ClipText = true;
+        nameLabel.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
         body.AddChild(nameLabel);
 
         var widget = new HotbarSlotWidget
@@ -381,10 +397,30 @@ public partial class FactoryPlayerHud : CanvasLayer
         }
 
         var viewportSize = GetViewport().GetVisibleRect().Size;
-        var panelWidth = Mathf.Min(viewportSize.X - 20.0f, 960.0f);
-        var panelHeight = 156.0f;
-        _barPanel.Size = new Vector2(Mathf.Max(520.0f, panelWidth), panelHeight);
+        var maxPanelWidth = Mathf.Max(320.0f, viewportSize.X - 20.0f);
+        var availableSlotWidth = (maxPanelWidth - HotbarPanelHorizontalPadding - (Mathf.Max(0, FactoryPlayerController.HotbarSlotCount - 1) * HotbarSlotGap)) / FactoryPlayerController.HotbarSlotCount;
+        var slotSize = Mathf.Clamp(availableSlotWidth, HotbarMinSlotSize, HotbarPreferredSlotSize);
+        var panelWidth = (slotSize * FactoryPlayerController.HotbarSlotCount) + (Mathf.Max(0, FactoryPlayerController.HotbarSlotCount - 1) * HotbarSlotGap) + HotbarPanelHorizontalPadding;
+        var panelHeight = slotSize + 80.0f;
+        _barPanel.Size = new Vector2(panelWidth, panelHeight);
         _barPanel.Position = new Vector2((viewportSize.X - _barPanel.Size.X) * 0.5f, viewportSize.Y - panelHeight - 18.0f);
+
+        if (_hotbarRow is not null)
+        {
+            _hotbarRow.CustomMinimumSize = new Vector2(panelWidth - HotbarPanelHorizontalPadding, 0.0f);
+        }
+
+        if (!Mathf.IsEqualApprox(slotSize, _lastHotbarSlotSize) || !Mathf.IsEqualApprox(panelWidth, _lastHotbarPanelWidth))
+        {
+            for (var index = 0; index < _hotbarSlots.Count; index++)
+            {
+                _hotbarSlots[index].Panel.CustomMinimumSize = new Vector2(slotSize, slotSize);
+                _hotbarSlots[index].Panel.Size = new Vector2(slotSize, slotSize);
+            }
+
+            _lastHotbarSlotSize = slotSize;
+            _lastHotbarPanelWidth = panelWidth;
+        }
 
         var dragBounds = new Rect2(Vector2.Zero, viewportSize);
         _backpackWindow?.SetDragBounds(dragBounds);
@@ -410,7 +446,7 @@ public partial class FactoryPlayerHud : CanvasLayer
             ? "玩家未初始化。"
             : activePrototype.HasValue
                 ? $"当前就绪：{FactoryPresentation.GetBuildPrototypeDisplayName(activePrototype.Value)}，左键可在有效地格放置。"
-                : "当前未就绪放置物；点击快捷栏切换或开关建筑套件。";
+                : "当前未就绪放置物；点击快捷栏切换建筑。";
 
         for (var index = 0; index < _hotbarSlots.Count; index++)
         {
@@ -453,7 +489,7 @@ public partial class FactoryPlayerHud : CanvasLayer
                 backgroundColor = acceptsSharedDrop ? new Color("122A23") : new Color("2A1717");
             }
 
-            widget.Panel.AddThemeStyleboxOverride("panel", CreatePanelStyle(backgroundColor, borderColor, isSelected ? 2 : 1, 8));
+            widget.Panel.AddThemeStyleboxOverride("panel", CreatePanelStyle(backgroundColor, borderColor, isSelected ? 2 : 1, 0));
             widget.Icon.Texture = item is null ? null : FactoryPresentation.GetItemIcon(item);
             widget.Icon.Visible = item is not null;
             widget.Icon.Modulate = item is null
@@ -462,13 +498,13 @@ public partial class FactoryPlayerHud : CanvasLayer
             widget.NameLabel.Text = item is null ? "空槽位" : FactoryPresentation.GetItemDisplayName(item);
             widget.CountLabel.Text = item is null
                 ? "--"
-                : $"x{stackCount}/{FactoryItemCatalog.GetMaxStackSize(item.ItemKind)}";
+                : $"{stackCount}/{FactoryItemCatalog.GetMaxStackSize(item.ItemKind)}";
             widget.Panel.TooltipText = item is null
                 ? isDropHovered
                     ? acceptsSharedDrop
-                        ? $"快捷栏 {index + 1} 可接收当前拖拽物品"
-                        : $"快捷栏 {index + 1} 不能接收当前拖拽物品"
-                    : $"快捷栏 {index + 1} 为空"
+                        ? $"快捷栏 {FactoryPlayerController.GetHotbarSlotLabel(index)} 可接收当前拖拽物品"
+                        : $"快捷栏 {FactoryPlayerController.GetHotbarSlotLabel(index)} 不能接收当前拖拽物品"
+                    : $"快捷栏 {FactoryPlayerController.GetHotbarSlotLabel(index)} 为空"
                 : isDropHovered
                     ? acceptsSharedDrop
                         ? $"{FactoryPresentation.GetItemDisplayName(item)} | 松开左键可放入这个快捷栏槽位"
@@ -716,8 +752,8 @@ public partial class FactoryPlayerHud : CanvasLayer
         _hotbarDragPreviewIcon.Modulate = _hotbarDragPreviewIcon.Texture is null ? FactoryPresentation.GetItemAccentColor(item) : Colors.White;
         _hotbarDragPreviewTitle.Text = FactoryPresentation.GetItemDisplayName(item);
         _hotbarDragPreviewCount.Text = Input.IsKeyPressed(Key.Ctrl)
-            ? $"分半拖拽 x{Mathf.Max(1, Mathf.CeilToInt(CountHotbarStack(_activeHotbarDragIndex) * 0.5f))}"
-            : $"整堆拖拽 x{CountHotbarStack(_activeHotbarDragIndex)}";
+            ? $"分半拖拽 {Mathf.Max(1, Mathf.CeilToInt(CountHotbarStack(_activeHotbarDragIndex) * 0.5f))}"
+            : $"整堆拖拽 {CountHotbarStack(_activeHotbarDragIndex)}";
     }
 
     private void ClearHotbarDragState()

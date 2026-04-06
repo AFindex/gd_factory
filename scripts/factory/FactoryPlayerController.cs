@@ -5,11 +5,12 @@ using System.Text;
 public partial class FactoryPlayerController : CharacterBody3D, IFactoryInventoryEndpointProvider
 {
     public const string BackpackInventoryId = "player-backpack";
+    public const int HotbarSlotCount = 10;
     private const float MoveSpeed = 6.8f;
     private const float BodyRadius = 0.28f;
     private const float BodyHeight = 1.18f;
 
-    private readonly FactorySlottedItemInventory _inventory = new(9, 4);
+    private readonly FactorySlottedItemInventory _inventory = new(10, 4);
     private int _activeHotbarIndex;
     private bool _hotbarPlacementArmed = true;
 
@@ -152,7 +153,7 @@ public partial class FactoryPlayerController : CharacterBody3D, IFactoryInventor
 
     public bool SelectHotbarIndex(int index)
     {
-        if (index < 0 || index >= 9)
+        if (index < 0 || index >= HotbarSlotCount)
         {
             return false;
         }
@@ -166,7 +167,7 @@ public partial class FactoryPlayerController : CharacterBody3D, IFactoryInventor
 
     public bool ToggleHotbarIndex(int index)
     {
-        if (index < 0 || index >= 9)
+        if (index < 0 || index >= HotbarSlotCount)
         {
             return false;
         }
@@ -207,7 +208,7 @@ public partial class FactoryPlayerController : CharacterBody3D, IFactoryInventor
 
     public FactoryItem? GetHotbarItem(int index)
     {
-        if (index < 0 || index >= 9)
+        if (index < 0 || index >= HotbarSlotCount)
         {
             return null;
         }
@@ -251,7 +252,7 @@ public partial class FactoryPlayerController : CharacterBody3D, IFactoryInventor
     {
         var summaryLines = new List<string>
         {
-            $"快捷栏：{_activeHotbarIndex + 1} 号槽位{(GetArmedPlaceablePrototype().HasValue ? $"，已就绪 {FactoryPresentation.GetBuildPrototypeDisplayName(GetArmedPlaceablePrototype()!.Value)}" : "，当前未就绪建筑放置")}",
+            $"快捷栏：{GetHotbarSlotLabel(_activeHotbarIndex)} 号槽位{(GetArmedPlaceablePrototype().HasValue ? $"，已就绪 {FactoryPresentation.GetBuildPrototypeDisplayName(GetArmedPlaceablePrototype()!.Value)}" : "，当前未就绪建筑放置")}",
             $"背包物品总数：{_inventory.Count} | 占用槽位：{_inventory.OccupiedSlotCount}/{_inventory.Capacity}"
         };
 
@@ -260,18 +261,9 @@ public partial class FactoryPlayerController : CharacterBody3D, IFactoryInventor
             BuildBackpackSection()
         };
 
-        if (linkedStructureModel is not null && linkedStructureModel.InventorySections.Count > 0)
-        {
-            summaryLines.Add($"联动容器：{linkedStructureModel.Title}");
-            for (var index = 0; index < linkedStructureModel.InventorySections.Count; index++)
-            {
-                sections.Add(linkedStructureModel.InventorySections[index]);
-            }
-        }
-
         return new FactoryStructureDetailModel(
             "玩家背包",
-            "主角背包与选中容器联动视图",
+            "主角基础携行栏位",
             summaryLines,
             sections);
     }
@@ -304,7 +296,6 @@ public partial class FactoryPlayerController : CharacterBody3D, IFactoryInventor
                 .Append(';');
         }
 
-        builder.Append('#').Append(linkedStructureModel?.BuildSignature() ?? "none");
         return builder.ToString();
     }
 
@@ -331,15 +322,14 @@ public partial class FactoryPlayerController : CharacterBody3D, IFactoryInventor
         {
             $"名称：{FactoryPresentation.GetItemDisplayName(item)}",
             $"来源：{FactoryPresentation.GetBuildPrototypeDisplayName(item.SourceKind)}",
-            $"物品类型：{item.ItemKind}",
             FactoryPresentation.IsPlaceableStructureItem(item)
-                ? "用途：左键在有效地格放置对应建筑。"
-                : "用途：可被库存或结构作为普通物品处理。"
+                ? "说明：可直接放置。"
+                : "说明：可在容器间转移。"
         };
 
         return new FactoryStructureDetailModel(
             "物品信息",
-            "当前快捷栏选中物品",
+            "当前选中物品",
             lines,
             new[]
             {
@@ -381,7 +371,7 @@ public partial class FactoryPlayerController : CharacterBody3D, IFactoryInventor
                 "状态：可移动胶囊占位主角",
                 $"位置：X {GlobalPosition.X:0.0} | Z {GlobalPosition.Z:0.0}",
                 $"背包占用：{_inventory.OccupiedSlotCount}/{_inventory.Capacity}",
-                $"当前快捷栏：{_activeHotbarIndex + 1} 号槽位"
+                $"当前快捷栏：{GetHotbarSlotLabel(_activeHotbarIndex)} 号槽位"
             });
     }
 
@@ -405,7 +395,7 @@ public partial class FactoryPlayerController : CharacterBody3D, IFactoryInventor
                 item is null ? null : FactoryPresentation.GetItemDisplayName(item),
                 item is null
                     ? "空槽位"
-                    : $"{FactoryPresentation.GetItemDisplayName(item)} x{state.StackCount}/{state.MaxStackSize} | 槽位 ({state.Position.X}, {state.Position.Y})",
+                    : $"{FactoryPresentation.GetItemDisplayName(item)} {state.StackCount}/{state.MaxStackSize} | 槽位 ({state.Position.X}, {state.Position.Y})",
                 item is null ? new Color("475569") : FactoryPresentation.GetItemAccentColor(item),
                 state.StackCount,
                 state.MaxStackSize,
@@ -421,5 +411,12 @@ public partial class FactoryPlayerController : CharacterBody3D, IFactoryInventor
         {
             _inventory.TryAddItem(simulation.CreateItem(kind, FactoryItemKind.BuildingKit));
         }
+    }
+
+    public static string GetHotbarSlotLabel(int index)
+    {
+        return index == HotbarSlotCount - 1
+            ? "0"
+            : $"{index + 1}";
     }
 }

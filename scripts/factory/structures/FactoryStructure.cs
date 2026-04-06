@@ -106,7 +106,6 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
     {
         yield return $"生命：{CurrentHealth:0}/{MaxHealth:0}";
         yield return $"状态：{(IsDestroyed ? "已摧毁" : IsUnderAttack ? "遭受攻击" : "稳定")}";
-        yield return $"朝向：{FactoryDirection.ToLabel(Facing)}";
         yield return Description;
     }
 

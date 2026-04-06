@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, IFactoryItemReceiver
 {
-    private readonly FactorySlottedItemInventory _inventory = new(4, 2);
+    private readonly FactorySlottedItemInventory _inventory = new(8, 3);
     private readonly List<MeshInstance3D> _fillIndicators = new();
 
     private double _dispatchCooldown;
@@ -90,27 +90,7 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
             yield return line;
         }
 
-        yield return $"容量：{BufferedCount} 件 | 槽位：{OccupiedSlotCount}/{Capacity}";
-        yield return $"输出方向：{FactoryDirection.ToLabel(Facing)}";
-
-        var snapshot = _inventory.Snapshot();
-        if (_inventory.IsEmpty)
-        {
-            yield return "库存为空";
-            yield break;
-        }
-
-        for (var index = 0; index < snapshot.Length; index++)
-        {
-            var state = snapshot[index];
-            var item = state.Item;
-            if (!state.HasItem || item is null)
-            {
-                continue;
-            }
-
-            yield return $"{index + 1}. {FactoryPresentation.GetItemKindLabel(item.ItemKind)} x{state.StackCount}/{state.MaxStackSize} @ ({state.Position.X}, {state.Position.Y})";
-        }
+        yield return $"容量：{BufferedCount}/{Capacity} 件 | 占用槽位：{OccupiedSlotCount}/{Capacity}";
     }
 
     public override FactoryStructureDetailModel GetDetailModel()
@@ -124,7 +104,7 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
         var inventorySection = CreateInventorySection("storage-buffer", "仓储库存", _inventory, true);
         return new FactoryStructureDetailModel(
             InspectionTitle,
-            "缓存物流与机械臂抓取槽位",
+            "基础缓存与转运",
             summaryLines,
             new[] { inventorySection });
     }

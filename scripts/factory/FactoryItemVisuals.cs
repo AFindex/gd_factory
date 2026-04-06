@@ -123,7 +123,7 @@ public static partial class FactoryItemCatalog
                 maxStackSize: 8),
             [FactoryItemKind.BuildingKit] = new FactoryItemDefinition(
                 FactoryItemKind.BuildingKit,
-                "建筑套件",
+                "建筑",
                 new Color("60A5FA"),
                 new FactoryTransportVisualProfile(new Color("60A5FA"), placeholderScale: new Vector3(0.28f, 0.20f, 0.28f)),
                 iconTexture: textures["building-kit"],
