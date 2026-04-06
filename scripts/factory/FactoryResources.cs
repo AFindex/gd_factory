@@ -5,7 +5,10 @@ public enum FactoryResourceKind
 {
     Coal,
     IronOre,
-    CopperOre
+    CopperOre,
+    StoneOre,
+    SulfurOre,
+    QuartzOre
 }
 
 public sealed class FactoryResourceDepositDefinition
@@ -39,7 +42,10 @@ public static class FactoryResourceCatalog
         {
             FactoryResourceKind.Coal => FactoryItemKind.Coal,
             FactoryResourceKind.IronOre => FactoryItemKind.IronOre,
-            _ => FactoryItemKind.CopperOre
+            FactoryResourceKind.CopperOre => FactoryItemKind.CopperOre,
+            FactoryResourceKind.StoneOre => FactoryItemKind.StoneOre,
+            FactoryResourceKind.SulfurOre => FactoryItemKind.SulfurOre,
+            _ => FactoryItemKind.QuartzOre
         };
     }
 
@@ -49,7 +55,10 @@ public static class FactoryResourceCatalog
         {
             FactoryResourceKind.Coal => "煤层",
             FactoryResourceKind.IronOre => "铁矿区",
-            _ => "铜矿区"
+            FactoryResourceKind.CopperOre => "铜矿区",
+            FactoryResourceKind.StoneOre => "石矿区",
+            FactoryResourceKind.SulfurOre => "硫矿区",
+            _ => "石英矿区"
         };
     }
 
@@ -58,6 +67,9 @@ public static class FactoryResourceCatalog
         return (kind == BuildPrototypeKind.MiningDrill || kind == BuildPrototypeKind.MiningInputPort)
             && (resourceKind == FactoryResourceKind.Coal
                 || resourceKind == FactoryResourceKind.IronOre
-                || resourceKind == FactoryResourceKind.CopperOre);
+                || resourceKind == FactoryResourceKind.CopperOre
+                || resourceKind == FactoryResourceKind.StoneOre
+                || resourceKind == FactoryResourceKind.SulfurOre
+                || resourceKind == FactoryResourceKind.QuartzOre);
     }
 }

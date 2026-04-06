@@ -85,20 +85,29 @@ public static class FactoryRecipeCatalog
         new FactoryRecipeDefinition(
             "standard-ammo",
             "标准弹药",
-            "兼容型弹药输出，供旧防线回归线使用。",
+            "压装铁板与铜线，形成稳定的炮塔补给弹药。",
             BuildPrototypeKind.AmmoAssembler,
             FactoryConstants.AmmoAssemblerSpawnSeconds,
-            0.0f,
-            null,
+            22.0f,
+            new[]
+            {
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.IronPlate, 1),
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.CopperWire, 1)
+            },
             new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.AmmoMagazine, 1) }),
         new FactoryRecipeDefinition(
             "high-velocity-ammo",
             "高速弹药",
-            "兼容型强化弹药输出。",
+            "进一步压装钢板与硫晶，制造高压穿透弹药。",
             BuildPrototypeKind.AmmoAssembler,
             1.15f,
-            0.0f,
-            null,
+            28.0f,
+            new[]
+            {
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.AmmoMagazine, 1),
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.SteelPlate, 1),
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.SulfurCrystal, 1)
+            },
             new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.HighVelocityAmmo, 1) })
     };
 
@@ -131,7 +140,34 @@ public static class FactoryRecipeCatalog
             1.00f,
             13.0f,
             null,
-            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.CopperOre, 1) })
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.CopperOre, 1) }),
+        new FactoryRecipeDefinition(
+            "stone-ore-extraction",
+            "石矿开采",
+            "从石矿带持续采出重型建材原矿。",
+            BuildPrototypeKind.MiningDrill,
+            1.05f,
+            13.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.StoneOre, 1) }),
+        new FactoryRecipeDefinition(
+            "sulfur-ore-extraction",
+            "硫矿开采",
+            "从硫矿区持续采出弹药与化工支援原料。",
+            BuildPrototypeKind.MiningDrill,
+            1.10f,
+            14.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.SulfurOre, 1) }),
+        new FactoryRecipeDefinition(
+            "quartz-ore-extraction",
+            "石英开采",
+            "从石英矿带持续采出电子与维护支援原料。",
+            BuildPrototypeKind.MiningDrill,
+            1.10f,
+            14.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.QuartzOre, 1) })
     };
 
     public static readonly IReadOnlyList<FactoryRecipeDefinition> SmelterRecipes = new[]
@@ -162,7 +198,34 @@ public static class FactoryRecipeCatalog
             2.10f,
             26.0f,
             new[] { new FactoryRecipeIngredientDefinition(FactoryItemKind.IronPlate, 2) },
-            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.SteelPlate, 1) })
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.SteelPlate, 1) }),
+        new FactoryRecipeDefinition(
+            "stone-brick",
+            "烧结石砖",
+            "把石矿石烧结为稳定的站点与防线建材。",
+            BuildPrototypeKind.Smelter,
+            1.45f,
+            18.0f,
+            new[] { new FactoryRecipeIngredientDefinition(FactoryItemKind.StoneOre, 1) },
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.StoneBrick, 1) }),
+        new FactoryRecipeDefinition(
+            "sulfur-crystal",
+            "提纯硫晶",
+            "把硫矿石提纯为弹药链使用的硫晶。",
+            BuildPrototypeKind.Smelter,
+            1.40f,
+            19.0f,
+            new[] { new FactoryRecipeIngredientDefinition(FactoryItemKind.SulfurOre, 1) },
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.SulfurCrystal, 1) }),
+        new FactoryRecipeDefinition(
+            "glass-smelting",
+            "熔融玻璃板",
+            "把石英矿石熔融成用于维护与电子链的玻璃板。",
+            BuildPrototypeKind.Smelter,
+            1.50f,
+            20.0f,
+            new[] { new FactoryRecipeIngredientDefinition(FactoryItemKind.QuartzOre, 1) },
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.Glass, 1) })
     };
 
     public static readonly IReadOnlyList<FactoryRecipeDefinition> AssemblerRecipes = new[]
@@ -228,7 +291,7 @@ public static class FactoryRecipeCatalog
         new FactoryRecipeDefinition(
             "high-velocity-ammo",
             "高速弹药",
-            "高压装配强化弹药，进一步消耗钢板与煤。",
+            "高压装配强化弹药，进一步消耗钢板与硫晶。",
             BuildPrototypeKind.Assembler,
             1.65f,
             28.0f,
@@ -236,9 +299,36 @@ public static class FactoryRecipeCatalog
             {
                 new FactoryRecipeIngredientDefinition(FactoryItemKind.AmmoMagazine, 1),
                 new FactoryRecipeIngredientDefinition(FactoryItemKind.SteelPlate, 1),
-                new FactoryRecipeIngredientDefinition(FactoryItemKind.Coal, 1)
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.SulfurCrystal, 1)
             },
-            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.HighVelocityAmmo, 1) })
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.HighVelocityAmmo, 1) }),
+        new FactoryRecipeDefinition(
+            "battery-pack",
+            "电池组",
+            "把铜板与玻璃板组装成电力维护使用的电池组。",
+            BuildPrototypeKind.Assembler,
+            1.25f,
+            19.0f,
+            new[]
+            {
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.CopperPlate, 1),
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.Glass, 1)
+            },
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.BatteryPack, 1) }),
+        new FactoryRecipeDefinition(
+            "repair-kit",
+            "维护包",
+            "把石砖、齿轮与电池组组装成站点与电网维护物资。",
+            BuildPrototypeKind.Assembler,
+            1.55f,
+            22.0f,
+            new[]
+            {
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.StoneBrick, 1),
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.Gear, 1),
+                new FactoryRecipeIngredientDefinition(FactoryItemKind.BatteryPack, 1)
+            },
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.RepairKit, 1) })
     };
 }
 

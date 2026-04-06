@@ -31,7 +31,8 @@ public partial class MobileFactoryHud : CanvasLayer
             BuildPrototypeKind.Generator,
             BuildPrototypeKind.PowerPole,
             BuildPrototypeKind.Smelter,
-            BuildPrototypeKind.Assembler
+            BuildPrototypeKind.Assembler,
+            BuildPrototypeKind.AmmoAssembler
         }),
         ("防御", new[]
         {
@@ -39,12 +40,11 @@ public partial class MobileFactoryHud : CanvasLayer
             BuildPrototypeKind.GunTurret,
             BuildPrototypeKind.HeavyGunTurret
         }),
-        ("测试建筑", new[]
+        ("站点与验证", new[]
         {
             BuildPrototypeKind.Loader,
             BuildPrototypeKind.Unloader,
-            BuildPrototypeKind.Producer,
-            BuildPrototypeKind.AmmoAssembler
+            BuildPrototypeKind.LargeStorageDepot
         }),
         ("边界接口", new[]
         {

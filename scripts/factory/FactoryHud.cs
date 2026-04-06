@@ -29,7 +29,8 @@ public partial class FactoryHud : CanvasLayer
             BuildPrototypeKind.Generator,
             BuildPrototypeKind.PowerPole,
             BuildPrototypeKind.Smelter,
-            BuildPrototypeKind.Assembler
+            BuildPrototypeKind.Assembler,
+            BuildPrototypeKind.AmmoAssembler
         }),
         ("防御与设施", new[]
         {
@@ -37,12 +38,11 @@ public partial class FactoryHud : CanvasLayer
             BuildPrototypeKind.GunTurret,
             BuildPrototypeKind.HeavyGunTurret
         }),
-        ("测试建筑", new[]
+        ("站点与验证", new[]
         {
             BuildPrototypeKind.Loader,
             BuildPrototypeKind.Unloader,
-            BuildPrototypeKind.Producer,
-            BuildPrototypeKind.AmmoAssembler
+            BuildPrototypeKind.LargeStorageDepot
         })
     };
 
@@ -179,7 +179,7 @@ public partial class FactoryHud : CanvasLayer
         SetSinkStats(0, 0, 0);
         SetProfilerStats(0, 0.0, 0, 0, 0.0, 0.0, 0.0);
         SetCombatStats(0, 0, 0);
-        SetNote("默认场景现在包含煤炭供电、铁/铜双矿支路、铜线与弹药组装主循环，同时保留部分 legacy 回归线用于 smoke 和蓝图验证。");
+        SetNote("默认场景现在围绕真实采矿、冶炼、弹药补给、维护站与接收站循环组织；验证工作区主要用于观察这些链路。");
         SetInspection(null, null);
         UpdateLayout();
         GetViewport().SizeChanged += UpdateLayout;
@@ -416,7 +416,7 @@ public partial class FactoryHud : CanvasLayer
             new FactoryWorkspaceDescriptor(BlueprintWorkspaceId, "蓝图"),
             new FactoryWorkspaceDescriptor(TelemetryWorkspaceId, "遥测"),
             new FactoryWorkspaceDescriptor(CombatWorkspaceId, "战斗"),
-            new FactoryWorkspaceDescriptor(TestingWorkspaceId, "测试")
+            new FactoryWorkspaceDescriptor(TestingWorkspaceId, "验证")
         };
     }
 
@@ -550,8 +550,8 @@ public partial class FactoryHud : CanvasLayer
     private Control BuildTestingWorkspace()
     {
         var (workspace, body) = CreateWorkspacePanel(TestingWorkspaceId);
-        body.AddChild(CreateSectionLabel("测试工作区", 14, FactoryUiTheme.Text));
-        body.AddChild(CreateValueLabel("把常见的 build/inspect/blueprint 验证路径整理成一个独立面板，而不是默认摊开在主 HUD 上。", FactoryUiTheme.TextSubtle));
+        body.AddChild(CreateSectionLabel("验证工作区", 14, FactoryUiTheme.Text));
+        body.AddChild(CreateValueLabel("把 sandbox 案例观察、建造验证和蓝图验证整理成一个独立面板，而不是默认摊开在主 HUD 上。", FactoryUiTheme.TextSubtle));
 
         var jumpRow = new HBoxContainer();
         jumpRow.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
@@ -570,7 +570,7 @@ public partial class FactoryHud : CanvasLayer
         body.AddChild(_testingPreviewLabel);
 
         body.AddChild(CreateDivider());
-        body.AddChild(CreateValueLabel("建议验证路径：Shift+左键框选蓝图、点击建筑查看详情、Delete/X 验证拆除与恢复。", FactoryUiTheme.TextSubtle));
+        body.AddChild(CreateValueLabel("建议验证路径：观察采矿与接收站吞吐、点击建筑查看详情、Shift+左键框选蓝图、Delete/X 验证拆除与恢复。", FactoryUiTheme.TextSubtle));
 
         return workspace;
     }
@@ -713,7 +713,6 @@ public partial class FactoryHud : CanvasLayer
     {
         return kind switch
         {
-            BuildPrototypeKind.Producer => "1 兼容生产器",
             BuildPrototypeKind.Belt => "2 传送带",
             BuildPrototypeKind.Sink => "3 回收站",
             BuildPrototypeKind.Splitter => "4 分流器",

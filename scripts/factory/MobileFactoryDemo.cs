@@ -29,7 +29,6 @@ public partial class MobileFactoryDemo : Node3D
     private static readonly Vector2I BlockedAnchor = new(-1, 1);
     private static readonly BuildPrototypeKind[] InteriorPalette =
     {
-        BuildPrototypeKind.Producer,
         BuildPrototypeKind.Belt,
         BuildPrototypeKind.Splitter,
         BuildPrototypeKind.Merger,
@@ -74,7 +73,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private readonly Dictionary<BuildPrototypeKind, BuildPrototypeDefinition> _definitions = new()
     {
-        [BuildPrototypeKind.Producer] = new BuildPrototypeDefinition(BuildPrototypeKind.Producer, "生产器", new Color("9DC08B"), "持续向前方投放原料。"),
+        [BuildPrototypeKind.Producer] = new BuildPrototypeDefinition(BuildPrototypeKind.Producer, "兼容生产器", new Color("9DC08B"), "兼容型占位产物流，仅用于 legacy 验证。"),
         [BuildPrototypeKind.Belt] = new BuildPrototypeDefinition(BuildPrototypeKind.Belt, "传送带", new Color("7DD3FC"), "将物品沿直线向前输送。"),
         [BuildPrototypeKind.Splitter] = new BuildPrototypeDefinition(BuildPrototypeKind.Splitter, "分流器", new Color("C4B5FD"), "将后方输入分到左右两路。"),
         [BuildPrototypeKind.Merger] = new BuildPrototypeDefinition(BuildPrototypeKind.Merger, "合并器", new Color("99F6E4"), "把左右两路物流汇成前方一路。"),
@@ -551,10 +550,9 @@ public partial class MobileFactoryDemo : Node3D
         CreatePreparedMountOutputLine(focusedProfile, AnchorB, FacingDirection.East, "east-output-aux", 1);
         CreatePreparedInputLine(focusedProfile, AnchorA, FacingDirection.East, 1);
         CreatePreparedInputLine(focusedProfile, AnchorB, FacingDirection.East, 3);
-        CreateAmbientBranchDepot(new Vector2I(4, -9));
-        CreateAmbientStorageDepot(new Vector2I(4, 8));
-        CreateAmbientBridgeCrossing(new Vector2I(-1, 8));
-        CreateAmbientLoaderRelay(new Vector2I(-10, 6));
+        CreateReceivingStationLandmark(new Vector2I(4, -9));
+        CreateReceivingStationLandmark(new Vector2I(4, 8));
+        CreateReceivingStationLandmark(new Vector2I(-10, 6));
         ConfigureWorldCombatScenarios();
         _simulation!.RebuildTopology();
     }
@@ -688,14 +686,10 @@ public partial class MobileFactoryDemo : Node3D
         CreatePreparedMountOutputLine(focused, new Vector2I(-12, 3), FacingDirection.East, "east-output-aux", 1);
         CreatePreparedOutputLine(medium, new Vector2I(4, 10), FacingDirection.East, 2);
         CreatePreparedInputLine(focused, new Vector2I(-12, 3), FacingDirection.East, 3);
-
-        CreateAmbientWorldLine(new Vector2I(-18, -1), 5, FacingDirection.East);
-        CreateAmbientWorldLine(new Vector2I(12, -12), 4, FacingDirection.North);
-        CreateAmbientWorldLine(new Vector2I(-3, -14), 6, FacingDirection.East);
-        CreateAmbientBranchDepot(new Vector2I(12, 14));
-        CreateAmbientStorageDepot(new Vector2I(-19, 14));
-        CreateAmbientBridgeCrossing(new Vector2I(16, -15));
-        CreateAmbientLoaderRelay(new Vector2I(-18, -15));
+        CreateReceivingStationLandmark(new Vector2I(12, 14));
+        CreateReceivingStationLandmark(new Vector2I(-19, 14));
+        CreateReceivingStationLandmark(new Vector2I(16, -15));
+        CreateReceivingStationLandmark(new Vector2I(-18, -15));
         ConfigureWorldCombatScenarios();
 
         _simulation!.RebuildTopology();
@@ -750,9 +744,10 @@ public partial class MobileFactoryDemo : Node3D
             }
         }
 
-        if (factory.TryGetInteriorStructure(new Vector2I(4, 5), out var smelterStructure)
+        if (factory.TryGetInteriorStructure(new Vector2I(2, 3), out var smelterStructure)
             && smelterStructure is SmelterStructure smelter)
         {
+            smelter.TrySetDetailRecipe("iron-smelting");
             for (var i = 0; i < 5; i++)
             {
                 smelter.TryReceiveProvidedItem(
@@ -762,13 +757,13 @@ public partial class MobileFactoryDemo : Node3D
             }
         }
 
-        if (factory.TryGetInteriorStructure(new Vector2I(6, 5), out var assemblerStructure)
+        if (factory.TryGetInteriorStructure(new Vector2I(6, 3), out var assemblerStructure)
             && assemblerStructure is AssemblerStructure assembler)
         {
-            assembler.TrySetDetailRecipe("machine-parts");
+            assembler.TrySetDetailRecipe("gear");
         }
 
-        factory.PlaceInteriorStructure(BuildPrototypeKind.LargeStorageDepot, new Vector2I(2, 6), FacingDirection.East);
+        factory.PlaceInteriorStructure(BuildPrototypeKind.LargeStorageDepot, new Vector2I(4, 0), FacingDirection.East);
     }
 
     private SinkStructure? CreatePreparedOutputLine(MobileFactoryProfile profile, Vector2I anchorCell, FacingDirection facing, int beltCount)
@@ -832,7 +827,11 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        PlaceWorldStructure(BuildPrototypeKind.Producer, cells[^1], inboundFacing);
+        var drill = PlaceWorldStructure(BuildPrototypeKind.MiningDrill, cells[^1], inboundFacing);
+        if (drill is null)
+        {
+            return;
+        }
         for (var i = 0; i < cells.Count - 1; i++)
         {
             PlaceWorldStructure(BuildPrototypeKind.Belt, cells[i], inboundFacing);
@@ -862,11 +861,23 @@ public partial class MobileFactoryDemo : Node3D
                     new Color("64748B"),
                     BuildRectCells(new Vector2I(-10, 8), new Vector2I(5, 4))),
                 new FactoryResourceDepositDefinition(
+                    "mobile_large_player_iron",
+                    FactoryResourceKind.IronOre,
+                    "玩家部署铁带",
+                    new Color("64748B"),
+                    BuildRectCells(new Vector2I(-18, 3), new Vector2I(5, 3))),
+                new FactoryResourceDepositDefinition(
                     "mobile_large_farwest_iron",
                     FactoryResourceKind.IronOre,
                     "远西空场铁矿区",
                     new Color("64748B"),
                     BuildRectCells(new Vector2I(-24, -18), new Vector2I(4, 4))),
+                new FactoryResourceDepositDefinition(
+                    "mobile_large_farwest_stone",
+                    FactoryResourceKind.StoneOre,
+                    "远西石矿区",
+                    new Color("A8A29E"),
+                    BuildRectCells(new Vector2I(-24, -10), new Vector2I(4, 4))),
                 new FactoryResourceDepositDefinition(
                     "mobile_large_farwest_coal",
                     FactoryResourceKind.Coal,
@@ -874,11 +885,23 @@ public partial class MobileFactoryDemo : Node3D
                     new Color("8B5A2B"),
                     BuildRectCells(new Vector2I(-24, 15), new Vector2I(4, 4))),
                 new FactoryResourceDepositDefinition(
+                    "mobile_large_mid_quartz",
+                    FactoryResourceKind.QuartzOre,
+                    "中部石英带",
+                    new Color("67E8F9"),
+                    BuildRectCells(new Vector2I(-2, -4), new Vector2I(5, 3))),
+                new FactoryResourceDepositDefinition(
                     "mobile_large_east_coal",
                     FactoryResourceKind.Coal,
                     "东侧空地煤带",
                     new Color("8B5A2B"),
                     BuildRectCells(new Vector2I(16, 10), new Vector2I(4, 4))),
+                new FactoryResourceDepositDefinition(
+                    "mobile_large_east_sulfur",
+                    FactoryResourceKind.SulfurOre,
+                    "东侧硫矿带",
+                    new Color("FDE047"),
+                    BuildRectCells(new Vector2I(12, 14), new Vector2I(4, 3))),
                 new FactoryResourceDepositDefinition(
                     "mobile_large_southeast_iron",
                     FactoryResourceKind.IronOre,
@@ -889,17 +912,29 @@ public partial class MobileFactoryDemo : Node3D
             : new List<FactoryResourceDepositDefinition>
             {
                 new FactoryResourceDepositDefinition(
-                    "mobile_anchor_a_coal",
-                    FactoryResourceKind.Coal,
-                    "A 锚点西侧煤带",
+                    "mobile_anchor_a_iron",
+                    FactoryResourceKind.IronOre,
+                    "A 锚点西侧铁带",
                     new Color("8B5A2B"),
-                    BuildRectCells(new Vector2I(-10, -5), new Vector2I(4, 3))),
+                    BuildRectCells(new Vector2I(-10, -4), new Vector2I(5, 3))),
                 new FactoryResourceDepositDefinition(
                     "mobile_anchor_b_iron",
                     FactoryResourceKind.IronOre,
-                    "B 锚点西侧铁矿带",
+                    "B 锚点西侧铁带",
                     new Color("64748B"),
-                    BuildRectCells(new Vector2I(-2, 1), new Vector2I(4, 3))),
+                    BuildRectCells(new Vector2I(-2, 3), new Vector2I(5, 3))),
+                new FactoryResourceDepositDefinition(
+                    "mobile_anchor_b_quartz",
+                    FactoryResourceKind.QuartzOre,
+                    "B 锚点东侧石英带",
+                    new Color("67E8F9"),
+                    BuildRectCells(new Vector2I(6, 6), new Vector2I(4, 3))),
+                new FactoryResourceDepositDefinition(
+                    "mobile_anchor_a_stone",
+                    FactoryResourceKind.StoneOre,
+                    "A 锚点南侧石带",
+                    new Color("A8A29E"),
+                    BuildRectCells(new Vector2I(-16, -10), new Vector2I(4, 3))),
                 new FactoryResourceDepositDefinition(
                     "mobile_farwest_iron",
                     FactoryResourceKind.IronOre,
@@ -911,7 +946,13 @@ public partial class MobileFactoryDemo : Node3D
                     FactoryResourceKind.Coal,
                     "东北空场煤层",
                     new Color("8B5A2B"),
-                    BuildRectCells(new Vector2I(14, 12), new Vector2I(4, 4)))
+                    BuildRectCells(new Vector2I(14, 12), new Vector2I(4, 4))),
+                new FactoryResourceDepositDefinition(
+                    "mobile_northeast_sulfur",
+                    FactoryResourceKind.SulfurOre,
+                    "东北硫矿带",
+                    new Color("FDE047"),
+                    BuildRectCells(new Vector2I(10, 14), new Vector2I(4, 3)))
             };
 
         _grid.SetResourceDeposits(deposits);
@@ -1051,6 +1092,16 @@ public partial class MobileFactoryDemo : Node3D
         PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(2, 1), FacingDirection.South);
         PlaceWorldStructure(BuildPrototypeKind.Loader, originCell + new Vector2I(2, 2), FacingDirection.South);
         RegisterScenarioSink(PlaceWorldStructure(BuildPrototypeKind.Sink, originCell + new Vector2I(2, 3), FacingDirection.South) as SinkStructure);
+    }
+
+    private void CreateReceivingStationLandmark(Vector2I originCell)
+    {
+        PlaceWorldStructure(BuildPrototypeKind.LargeStorageDepot, originCell, FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Storage, originCell + new Vector2I(-2, 0), FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Inserter, originCell + new Vector2I(-1, 0), FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Inserter, originCell + new Vector2I(2, 0), FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(3, 0), FacingDirection.East);
+        RegisterScenarioSink(PlaceWorldStructure(BuildPrototypeKind.Sink, originCell + new Vector2I(4, 0), FacingDirection.East) as SinkStructure);
     }
 
     private void AddFactoryLabel(MobileFactoryInstance factory, string labelText, Color color)
@@ -4784,31 +4835,43 @@ public partial class MobileFactoryDemo : Node3D
             return false;
         }
 
-        var placedRecipeProducer = _mobileFactory.PlaceInteriorStructure(BuildPrototypeKind.Producer, new Vector2I(2, 2), FacingDirection.East);
-        if (!placedRecipeProducer
-            || !_mobileFactory.TryGetInteriorStructure(new Vector2I(2, 2), out var recipeProducerStructure)
-            || recipeProducerStructure is not ProducerStructure recipeProducer
-            || !_mobileFactory.TryGetInteriorStructure(new Vector2I(1, 1), out var storageStructure)
+        var placedRecipeAssembler = _mobileFactory.PlaceInteriorStructure(BuildPrototypeKind.Assembler, new Vector2I(2, 2), FacingDirection.East);
+        var placedAmmoAssembler = _mobileFactory.PlaceInteriorStructure(BuildPrototypeKind.AmmoAssembler, new Vector2I(2, 0), FacingDirection.East);
+        var placedTurret = _mobileFactory.PlaceInteriorStructure(BuildPrototypeKind.GunTurret, new Vector2I(3, 0), FacingDirection.East);
+        if (!placedRecipeAssembler
+            || !placedAmmoAssembler
+            || !placedTurret
+            || !_mobileFactory.TryGetInteriorStructure(new Vector2I(2, 2), out var recipeAssemblerStructure)
+            || recipeAssemblerStructure is not AssemblerStructure recipeAssembler
+            || !_mobileFactory.TryGetInteriorStructure(new Vector2I(4, 3), out var storageStructure)
             || storageStructure is not StorageStructure storage
-            || !_mobileFactory.TryGetInteriorStructure(new Vector2I(3, 0), out var ammoAssemblerStructure)
+            || !_mobileFactory.TryGetInteriorStructure(new Vector2I(2, 0), out var ammoAssemblerStructure)
             || ammoAssemblerStructure is not AmmoAssemblerStructure ammoAssembler
-            || !_mobileFactory.TryGetInteriorStructure(new Vector2I(4, 0), out var turretStructure)
+            || !_mobileFactory.TryGetInteriorStructure(new Vector2I(3, 0), out var turretStructure)
             || turretStructure is not GunTurretStructure turret)
         {
             return false;
         }
 
-        var producerRecipeChanged = recipeProducer.TrySetDetailRecipe("machine-parts");
-        ammoAssembler.TrySetDetailRecipe("high-velocity-ammo");
+        var assemblerRecipeChanged = recipeAssembler.TrySetDetailRecipe("gear");
+        ammoAssembler.TrySetDetailRecipe("standard-ammo");
 
         await ToSignal(GetTree().CreateTimer(2.4f), SceneTreeTimer.SignalName.Timeout);
 
+        recipeAssembler.TryReceiveProvidedItem(
+            _simulation.CreateItem(BuildPrototypeKind.Smelter, FactoryItemKind.IronPlate),
+            recipeAssembler.Cell + Vector2I.Left,
+            _simulation);
+        recipeAssembler.TryReceiveProvidedItem(
+            _simulation.CreateItem(BuildPrototypeKind.Smelter, FactoryItemKind.IronPlate),
+            recipeAssembler.Cell + Vector2I.Left,
+            _simulation);
         storage.TryReceiveProvidedItem(
             _simulation.CreateItem(BuildPrototypeKind.Storage, FactoryItemKind.GenericCargo),
             storage.Cell + Vector2I.Left,
             _simulation);
         turret.TryReceiveProvidedItem(
-            _simulation.CreateItem(BuildPrototypeKind.AmmoAssembler, FactoryItemKind.HighVelocityAmmo),
+            _simulation.CreateItem(BuildPrototypeKind.AmmoAssembler, FactoryItemKind.AmmoMagazine),
             turret.Cell + Vector2I.Left,
             _simulation);
 
@@ -4825,7 +4888,7 @@ public partial class MobileFactoryDemo : Node3D
         var stackLimit = FactoryItemCatalog.GetMaxStackSize(FactoryItemKind.GenericCargo);
         for (var index = 0; index < stackLimit + 2; index++)
         {
-            var seededCargo = _simulation.CreateItem(BuildPrototypeKind.Producer, FactoryItemKind.GenericCargo);
+            var seededCargo = _simulation.CreateItem(BuildPrototypeKind.Storage, FactoryItemKind.GenericCargo);
             if (!storage.TryReceiveProvidedItem(seededCargo, storage.Cell + Vector2I.Left, _simulation))
             {
                 return false;
@@ -4940,13 +5003,15 @@ public partial class MobileFactoryDemo : Node3D
             }
         }
 
-        _selectedInteriorStructure = recipeProducer;
+        await ToSignal(GetTree().CreateTimer(1.6f), SceneTreeTimer.SignalName.Timeout);
+
+        _selectedInteriorStructure = recipeAssembler;
         UpdateHud();
-        recipeProducer.TryPeekProvidedItem(new Vector2I(3, 2), _simulation, out var producedItem);
-        var producerRecipeVerified = producerRecipeChanged
+        recipeAssembler.TryPeekProvidedItem(new Vector2I(3, 2), _simulation, out var producedItem);
+        var assemblerRecipeVerified = assemblerRecipeChanged
             && _hud.IsDetailVisible
-            && _hud.DetailTitleText.Contains("生产器", global::System.StringComparison.Ordinal)
-            && producedItem?.ItemKind == FactoryItemKind.MachinePart;
+            && _hud.DetailTitleText.Contains("组装机", global::System.StringComparison.Ordinal)
+            && producedItem?.ItemKind == FactoryItemKind.Gear;
 
         _selectedInteriorStructure = turret;
         UpdateHud();
@@ -4957,7 +5022,7 @@ public partial class MobileFactoryDemo : Node3D
             for (var index = 0; index < turretDetail.InventorySections[0].Slots.Count; index++)
             {
                 var slot = turretDetail.InventorySections[0].Slots[index];
-                if (slot.ItemLabel?.Contains("高速弹药", global::System.StringComparison.Ordinal) ?? false)
+                if (slot.ItemLabel?.Contains("弹药", global::System.StringComparison.Ordinal) ?? false)
                 {
                     turretShowsHighVelocityAmmo = true;
                     break;
@@ -4976,7 +5041,7 @@ public partial class MobileFactoryDemo : Node3D
             && splitTargetCount < splitSourceCountBefore
             && splitSourceCountAfter > 0
             && splitTotalStackCount == totalStackCountBeforeMove
-            && producerRecipeVerified
+            && assemblerRecipeVerified
             && turret.BufferedAmmo > 0
             && turretShowsHighVelocityAmmo
             && _hud.IsEditorVisible;
@@ -4989,15 +5054,15 @@ public partial class MobileFactoryDemo : Node3D
             return false;
         }
 
-        if (!_mobileFactory.TryGetInteriorStructure(new Vector2I(2, 2), out var producerStructure)
-            || producerStructure is not ProducerStructure producer
-            || !_mobileFactory.TryGetInteriorStructure(new Vector2I(3, 0), out var ammoAssemblerStructure)
+        if (!_mobileFactory.TryGetInteriorStructure(new Vector2I(2, 2), out var assemblerStructure)
+            || assemblerStructure is not AssemblerStructure assembler
+            || !_mobileFactory.TryGetInteriorStructure(new Vector2I(2, 0), out var ammoAssemblerStructure)
             || ammoAssemblerStructure is not AmmoAssemblerStructure ammoAssembler)
         {
             return false;
         }
 
-        if (!producer.TrySetDetailRecipe("machine-parts") || !ammoAssembler.TrySetDetailRecipe("high-velocity-ammo"))
+        if (!assembler.TrySetDetailRecipe("gear") || !ammoAssembler.TrySetDetailRecipe("standard-ammo"))
         {
             return false;
         }
@@ -5080,24 +5145,24 @@ public partial class MobileFactoryDemo : Node3D
             }
         }
 
-        var producerRecipeRestored =
-            _mobileFactory.TryGetInteriorStructure(new Vector2I(2, 2), out var restoredProducerStructure)
-            && restoredProducerStructure is ProducerStructure restoredProducer
-            && restoredProducer.CaptureBlueprintConfiguration().TryGetValue("recipe_id", out var restoredProducerRecipe)
-            && restoredProducerRecipe == "machine-parts";
+        var assemblerRecipeRestored =
+            _mobileFactory.TryGetInteriorStructure(new Vector2I(2, 2), out var restoredAssemblerStructure)
+            && restoredAssemblerStructure is AssemblerStructure restoredAssembler
+            && restoredAssembler.CaptureBlueprintConfiguration().TryGetValue("recipe_id", out var restoredAssemblerRecipe)
+            && restoredAssemblerRecipe == "gear";
         var ammoRecipeRestored =
-            _mobileFactory.TryGetInteriorStructure(new Vector2I(3, 0), out var restoredAmmoAssemblerStructure)
+            _mobileFactory.TryGetInteriorStructure(new Vector2I(2, 0), out var restoredAmmoAssemblerStructure)
             && restoredAmmoAssemblerStructure is AmmoAssemblerStructure restoredAmmoAssembler
             && restoredAmmoAssembler.CaptureBlueprintConfiguration().TryGetValue("recipe_id", out var restoredAmmoRecipe)
-            && restoredAmmoRecipe == "high-velocity-ammo";
+            && restoredAmmoRecipe == "standard-ammo";
         var turretPrimed = false;
-        if (_mobileFactory.TryGetInteriorStructure(new Vector2I(4, 0), out var restoredTurretStructure)
+        if (_mobileFactory.TryGetInteriorStructure(new Vector2I(3, 0), out var restoredTurretStructure)
             && restoredTurretStructure is GunTurretStructure restoredTurret)
         {
             if (restoredTurret.BufferedAmmo <= 0)
             {
                 restoredTurret.TryReceiveProvidedItem(
-                    _simulation.CreateItem(BuildPrototypeKind.AmmoAssembler, FactoryItemKind.HighVelocityAmmo),
+                    _simulation.CreateItem(BuildPrototypeKind.AmmoAssembler, FactoryItemKind.AmmoMagazine),
                     restoredTurret.Cell + Vector2I.Left,
                     _simulation);
             }
@@ -5109,7 +5174,7 @@ public partial class MobileFactoryDemo : Node3D
             && attachmentRejected
             && structureCountRestored
             && attachmentsRestored
-            && producerRecipeRestored
+            && assemblerRecipeRestored
             && ammoRecipeRestored
             && turretPrimed;
     }

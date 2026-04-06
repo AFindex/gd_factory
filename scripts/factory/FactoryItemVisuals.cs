@@ -157,6 +157,36 @@ public static partial class FactoryItemCatalog
                     texturedMeshScale: new Vector3(0.20f, 0.18f, 0.20f)),
                 iconTexture: textures["copper-ore"],
                 maxStackSize: 12),
+            [FactoryItemKind.StoneOre] = new FactoryItemDefinition(
+                FactoryItemKind.StoneOre,
+                "石矿石",
+                new Color("78716C"),
+                new FactoryTransportVisualProfile(
+                    new Color("78716C"),
+                    texture: textures["stone-ore"],
+                    texturedMeshScale: new Vector3(0.22f, 0.18f, 0.20f)),
+                iconTexture: textures["stone-ore"],
+                maxStackSize: 12),
+            [FactoryItemKind.SulfurOre] = new FactoryItemDefinition(
+                FactoryItemKind.SulfurOre,
+                "硫矿石",
+                new Color("EAB308"),
+                new FactoryTransportVisualProfile(
+                    new Color("EAB308"),
+                    texture: textures["sulfur-ore"],
+                    texturedMeshScale: new Vector3(0.22f, 0.18f, 0.20f)),
+                iconTexture: textures["sulfur-ore"],
+                maxStackSize: 12),
+            [FactoryItemKind.QuartzOre] = new FactoryItemDefinition(
+                FactoryItemKind.QuartzOre,
+                "石英矿石",
+                new Color("7DD3FC"),
+                new FactoryTransportVisualProfile(
+                    new Color("7DD3FC"),
+                    texture: textures["quartz-ore"],
+                    texturedMeshScale: new Vector3(0.22f, 0.18f, 0.20f)),
+                iconTexture: textures["quartz-ore"],
+                maxStackSize: 12),
             [FactoryItemKind.IronPlate] = new FactoryItemDefinition(
                 FactoryItemKind.IronPlate,
                 "铁板",
@@ -170,6 +200,35 @@ public static partial class FactoryItemCatalog
                 new Color("FB923C"),
                 new FactoryTransportVisualProfile(new Color("FB923C"), placeholderScale: new Vector3(0.24f, 0.08f, 0.18f)),
                 iconTexture: textures["copper-plate"],
+                maxStackSize: 10),
+            [FactoryItemKind.StoneBrick] = new FactoryItemDefinition(
+                FactoryItemKind.StoneBrick,
+                "石砖",
+                new Color("A8A29E"),
+                new FactoryTransportVisualProfile(new Color("A8A29E"), placeholderScale: new Vector3(0.26f, 0.10f, 0.20f)),
+                iconTexture: textures["stone-brick"],
+                maxStackSize: 10),
+            [FactoryItemKind.SulfurCrystal] = new FactoryItemDefinition(
+                FactoryItemKind.SulfurCrystal,
+                "硫晶",
+                new Color("FDE047"),
+                new FactoryTransportVisualProfile(
+                    new Color("FDE047"),
+                    texture: textures["sulfur-crystal"],
+                    billboardScale: new Vector2(0.32f, 0.32f),
+                    allowTexturedMeshFallback: false,
+                    allowBillboardFallback: true),
+                iconTexture: textures["sulfur-crystal"],
+                maxStackSize: 12),
+            [FactoryItemKind.Glass] = new FactoryItemDefinition(
+                FactoryItemKind.Glass,
+                "玻璃板",
+                new Color("67E8F9"),
+                new FactoryTransportVisualProfile(
+                    new Color("67E8F9"),
+                    texture: textures["glass"],
+                    billboardScale: new Vector2(0.34f, 0.24f)),
+                iconTexture: textures["glass"],
                 maxStackSize: 10),
             [FactoryItemKind.SteelPlate] = new FactoryItemDefinition(
                 FactoryItemKind.SteelPlate,
@@ -212,6 +271,26 @@ public static partial class FactoryItemCatalog
                     allowBillboardFallback: true),
                 iconTexture: textures["circuit-board"],
                 maxStackSize: 8),
+            [FactoryItemKind.BatteryPack] = new FactoryItemDefinition(
+                FactoryItemKind.BatteryPack,
+                "电池组",
+                new Color("38BDF8"),
+                new FactoryTransportVisualProfile(
+                    new Color("38BDF8"),
+                    texture: textures["battery-pack"],
+                    texturedMeshScale: new Vector3(0.20f, 0.18f, 0.16f)),
+                iconTexture: textures["battery-pack"],
+                maxStackSize: 8),
+            [FactoryItemKind.RepairKit] = new FactoryItemDefinition(
+                FactoryItemKind.RepairKit,
+                "维护包",
+                new Color("22C55E"),
+                new FactoryTransportVisualProfile(
+                    new Color("22C55E"),
+                    texture: textures["repair-kit"],
+                    texturedMeshScale: new Vector3(0.20f, 0.18f, 0.20f)),
+                iconTexture: textures["repair-kit"],
+                maxStackSize: 6),
             [FactoryItemKind.MachinePart] = new FactoryItemDefinition(
                 FactoryItemKind.MachinePart,
                 "机加工件",
@@ -364,12 +443,20 @@ internal static class FactoryGeneratedItemTextureLibrary
             ["coal"] = CreateCoalTexture(),
             ["iron-ore"] = CreateIronOreTexture(),
             ["copper-ore"] = CreateCopperOreTexture(),
+            ["stone-ore"] = CreateStoneOreTexture(),
+            ["sulfur-ore"] = CreateSulfurOreTexture(),
+            ["quartz-ore"] = CreateQuartzOreTexture(),
             ["iron-plate"] = CreatePlateTexture(new Color("CBD5E1"), new Color("64748B")),
             ["copper-plate"] = CreatePlateTexture(new Color("FB923C"), new Color("9A3412")),
+            ["stone-brick"] = CreatePlateTexture(new Color("A8A29E"), new Color("57534E")),
+            ["sulfur-crystal"] = CreateCrystalTexture(new Color("FDE047"), new Color("CA8A04")),
+            ["glass"] = CreateGlassTexture(),
             ["steel-plate"] = CreatePlateTexture(new Color("94A3B8"), new Color("475569")),
             ["gear"] = CreateGearTexture(),
             ["copper-wire"] = CreateCopperWireTexture(),
             ["circuit-board"] = CreateCircuitBoardTexture(),
+            ["battery-pack"] = CreateBatteryPackTexture(),
+            ["repair-kit"] = CreateRepairKitTexture(),
             ["machine-part"] = CreateMachinePartTexture(),
             ["ammo-magazine"] = CreateAmmoTexture(new Color("FACC15"), new Color("78350F")),
             ["high-velocity-ammo"] = CreateAmmoTexture(new Color("F97316"), new Color("5B4636")),
@@ -419,6 +506,33 @@ internal static class FactoryGeneratedItemTextureLibrary
         FillCircle(image, 10, 12, 6, new Color("475569"));
         FillCircle(image, 18, 12, 6, new Color("64748B"));
         FillCircle(image, 14, 19, 7, new Color("94A3B8"));
+        return ImageTexture.CreateFromImage(image);
+    }
+
+    private static Texture2D CreateStoneOreTexture()
+    {
+        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
+        FillCircle(image, 10, 13, 6, new Color("57534E"));
+        FillCircle(image, 18, 12, 6, new Color("78716C"));
+        FillCircle(image, 15, 20, 7, new Color("A8A29E"));
+        return ImageTexture.CreateFromImage(image);
+    }
+
+    private static Texture2D CreateSulfurOreTexture()
+    {
+        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
+        FillCircle(image, 10, 12, 6, new Color("CA8A04"));
+        FillCircle(image, 18, 13, 6, new Color("EAB308"));
+        FillCircle(image, 14, 20, 7, new Color("FDE047"));
+        return ImageTexture.CreateFromImage(image);
+    }
+
+    private static Texture2D CreateQuartzOreTexture()
+    {
+        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
+        FillCircle(image, 10, 12, 6, new Color("7DD3FC"));
+        FillCircle(image, 18, 12, 6, new Color("BAE6FD"));
+        FillCircle(image, 14, 19, 7, new Color("E0F2FE"));
         return ImageTexture.CreateFromImage(image);
     }
 
@@ -473,6 +587,43 @@ internal static class FactoryGeneratedItemTextureLibrary
         FillRect(image, new Rect2I(5, 8, 22, 16), new Color("8B5CF6"));
         FillRect(image, new Rect2I(11, 4, 10, 24), new Color("A78BFA"));
         FillRect(image, new Rect2I(13, 10, 6, 12), new Color("EDE9FE"));
+        return ImageTexture.CreateFromImage(image);
+    }
+
+    private static Texture2D CreateCrystalTexture(Color body, Color accent)
+    {
+        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
+        FillTriangleUp(image, new Vector2I(16, 4), 6, body);
+        FillRect(image, new Rect2I(11, 10, 10, 10), body);
+        FillRect(image, new Rect2I(13, 12, 6, 8), accent);
+        return ImageTexture.CreateFromImage(image);
+    }
+
+    private static Texture2D CreateGlassTexture()
+    {
+        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
+        FillRect(image, new Rect2I(5, 7, 22, 18), new Color("CFFAFE"));
+        FillRect(image, new Rect2I(8, 10, 16, 12), new Color("67E8F9"));
+        FillRect(image, new Rect2I(11, 6, 4, 20), new Color("ECFEFF"));
+        return ImageTexture.CreateFromImage(image);
+    }
+
+    private static Texture2D CreateBatteryPackTexture()
+    {
+        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
+        FillRect(image, new Rect2I(7, 8, 18, 16), new Color("38BDF8"));
+        FillRect(image, new Rect2I(12, 4, 8, 6), new Color("0F172A"));
+        FillRect(image, new Rect2I(11, 12, 10, 8), new Color("E0F2FE"));
+        FillRect(image, new Rect2I(14, 14, 4, 4), new Color("22C55E"));
+        return ImageTexture.CreateFromImage(image);
+    }
+
+    private static Texture2D CreateRepairKitTexture()
+    {
+        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
+        FillRect(image, new Rect2I(6, 10, 20, 12), new Color("22C55E"));
+        FillRect(image, new Rect2I(13, 5, 6, 22), new Color("DCFCE7"));
+        FillRect(image, new Rect2I(9, 13, 14, 6), new Color("DCFCE7"));
         return ImageTexture.CreateFromImage(image);
     }
 

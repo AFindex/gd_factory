@@ -11,16 +11,16 @@ public partial class AmmoAssemblerStructure : FactoryRecipeMachineStructure
     }
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.AmmoAssembler;
-    public override string Description => "兼容型弹药组装器，保留给旧防线和移动工厂回归线。";
+    public override string Description => "消耗金属、导线与硫晶，持续组装炮塔补给弹药。";
     public override float MaxHealth => 62.0f;
 
     protected override IReadOnlyList<FactoryRecipeDefinition> AvailableRecipes => FactoryRecipeCatalog.AmmoAssemblerRecipes;
-    protected override string DetailSubtitle => "兼容型弹药缓存与配方";
+    protected override string DetailSubtitle => "弹药缓存、供电与配方";
     protected override string OutputSectionTitle => "弹药缓存";
     protected override string OutputInventoryId => "ammo-output";
     protected override string RecipeSectionTitle => "弹药方案";
-    protected override string RecipeSectionDescription => "切换 legacy 弹药输出方案。";
-    protected override int MachinePowerRangeCells => 0;
+    protected override string RecipeSectionDescription => "切换当前弹药生产方案。";
+    protected override int MachinePowerRangeCells => 3;
 
     public override void UpdateVisuals(float tickAlpha)
     {

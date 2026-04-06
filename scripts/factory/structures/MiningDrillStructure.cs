@@ -62,6 +62,9 @@ public partial class MiningDrillStructure : FactoryRecipeMachineStructure
                     FactoryResourceKind.Coal => new Color("FBBF24"),
                     FactoryResourceKind.IronOre => new Color("93C5FD"),
                     FactoryResourceKind.CopperOre => new Color("FB923C"),
+                    FactoryResourceKind.StoneOre => new Color("D6D3D1"),
+                    FactoryResourceKind.SulfurOre => new Color("FDE047"),
+                    FactoryResourceKind.QuartzOre => new Color("67E8F9"),
                     _ => new Color("FCA5A5")
                 };
             }
@@ -98,7 +101,10 @@ public partial class MiningDrillStructure : FactoryRecipeMachineStructure
         {
             FactoryResourceKind.Coal => "coal-extraction",
             FactoryResourceKind.IronOre => "iron-ore-extraction",
-            _ => "copper-ore-extraction"
+            FactoryResourceKind.CopperOre => "copper-ore-extraction",
+            FactoryResourceKind.StoneOre => "stone-ore-extraction",
+            FactoryResourceKind.SulfurOre => "sulfur-ore-extraction",
+            _ => "quartz-ore-extraction"
         });
     }
 }

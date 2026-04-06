@@ -10,7 +10,7 @@ public partial class MobileFactoryHud
         topChrome.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
         topChrome.MouseFilter = Control.MouseFilterEnum.Stop;
         topChrome.TooltipText = UseLargeScenarioWorkspaces
-            ? "切换总览、建造测试、蓝图、诊断和工厂详情工作区。"
+            ? "切换总览、场景验证、蓝图、诊断和工厂详情工作区。"
             : "切换指挥、内部编辑、蓝图和工厂详情工作区。";
         AddChild(topChrome);
         _topChromePanel = topChrome;
@@ -241,7 +241,7 @@ public partial class MobileFactoryHud
             ? new[]
             {
                 new FactoryWorkspaceDescriptor(OverviewWorkspaceId, "总览"),
-                new FactoryWorkspaceDescriptor(BuildTestWorkspaceId, "建造测试"),
+                new FactoryWorkspaceDescriptor(BuildTestWorkspaceId, "场景验证"),
                 new FactoryWorkspaceDescriptor(BlueprintWorkspaceId, "蓝图"),
                 new FactoryWorkspaceDescriptor(DiagnosticsWorkspaceId, "诊断"),
                 new FactoryWorkspaceDescriptor(DetailsWorkspaceId, "工厂详情")
@@ -328,9 +328,9 @@ public partial class MobileFactoryHud
     private Control BuildEditorToolWorkspace(string workspaceId)
     {
         var (workspace, body) = CreateWorkspacePanel(_editorWorkspacePanels, workspaceId);
-        body.AddChild(CreateEditorLabel(UseLargeScenarioWorkspaces ? "建造测试面板" : "内部编辑工作区", 14, FactoryUiTheme.Text));
+        body.AddChild(CreateEditorLabel(UseLargeScenarioWorkspaces ? "场景验证面板" : "内部编辑工作区", 14, FactoryUiTheme.Text));
         body.AddChild(CreateEditorLabel(
-            UseLargeScenarioWorkspaces ? "把各类建造测试工具拆到独立 panel 中，便于在 large scenario 里做定向验证。" : "内部建造、删除和结构观察集中在这里，蓝图工作流则通过独立菜单切换。",
+            UseLargeScenarioWorkspaces ? "把接收站、部署、内部布局和长时间流转观察拆到独立 panel 中，便于在 large scenario 里做定向验证。" : "内部建造、删除和结构观察集中在这里，蓝图工作流则通过独立菜单切换。",
             11,
             FactoryUiTheme.TextSubtle));
 
@@ -681,7 +681,6 @@ public partial class MobileFactoryHud
     {
         return kind switch
         {
-            BuildPrototypeKind.Producer => "生产器",
             BuildPrototypeKind.Belt => "传送带",
             BuildPrototypeKind.Splitter => "分流器",
             BuildPrototypeKind.Merger => "合并器",

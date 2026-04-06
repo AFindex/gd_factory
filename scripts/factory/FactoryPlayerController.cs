@@ -73,7 +73,6 @@ public partial class FactoryPlayerController : CharacterBody3D, IFactoryInventor
             return;
         }
 
-        AddStructureKitStack(simulation, BuildPrototypeKind.Producer, 8);
         AddStructureKitStack(simulation, BuildPrototypeKind.Belt, 24);
         AddStructureKitStack(simulation, BuildPrototypeKind.Sink, 8);
         AddStructureKitStack(simulation, BuildPrototypeKind.Splitter, 8);

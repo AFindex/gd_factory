@@ -724,18 +724,16 @@ public static class FactoryBlueprintLibrary
         _seeded = true;
         AddSeed(FactoryBlueprintCaptureService.CreateRecordFromPlacements(
             "seed-world-storage-output-corridor",
-            "仓储输出走廊",
+            "维护仓储接收站",
             FactoryBlueprintSiteKind.WorldGrid,
             new[]
             {
-                new FactoryPlacementSpec(BuildPrototypeKind.Producer, new Vector2I(-8, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(-7, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(-6, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(-5, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(-4, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(-3, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(-2, 2), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Sink, new Vector2I(-1, 2), FacingDirection.East)
+                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(17, 2), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(18, 2), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.LargeStorageDepot, new Vector2I(19, 2), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(21, 2), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(22, 2), FacingDirection.East),
+                new FactoryPlacementSpec(BuildPrototypeKind.Sink, new Vector2I(23, 2), FacingDirection.East)
             }));
 
         AddSeed(FactoryBlueprintCaptureService.CreateRecordFromPreset(
