@@ -80,29 +80,9 @@ public partial class LauncherNavigationOverlay : CanvasLayer
         button.OffsetTop = TopMargin;
         button.OffsetBottom = TopMargin + 38.0f;
         button.AddThemeFontSizeOverride("font_size", 14);
-        button.AddThemeColorOverride("font_color", Colors.White);
+        FactoryUiTheme.ApplyButtonTheme(button);
         button.Pressed += ReturnToLauncher;
         root.AddChild(button);
-
-        var style = new StyleBoxFlat();
-        style.BgColor = new Color("14324A");
-        style.BorderColor = new Color("5EEAD4");
-        style.BorderWidthLeft = 1;
-        style.BorderWidthTop = 1;
-        style.BorderWidthRight = 1;
-        style.BorderWidthBottom = 1;
-        style.CornerRadiusTopLeft = 10;
-        style.CornerRadiusTopRight = 10;
-        style.CornerRadiusBottomRight = 10;
-        style.CornerRadiusBottomLeft = 10;
-        style.ContentMarginLeft = 14;
-        style.ContentMarginRight = 14;
-        style.ContentMarginTop = 8;
-        style.ContentMarginBottom = 8;
-        button.AddThemeStyleboxOverride("normal", style);
-        button.AddThemeStyleboxOverride("hover", CreateVariant(style, new Color("1D4C66"), new Color("A7F3D0")));
-        button.AddThemeStyleboxOverride("pressed", CreateVariant(style, new Color("0F2436"), new Color("99F6E4")));
-        button.AddThemeStyleboxOverride("focus", CreateVariant(style, new Color("1D4C66"), new Color("CCFBF1")));
     }
 
     private void ReturnToLauncher()
@@ -117,25 +97,5 @@ public partial class LauncherNavigationOverlay : CanvasLayer
         {
             GD.PushError($"Unable to return to launcher scene '{DemoCatalog.LauncherScenePath}': {error}");
         }
-    }
-
-    private static StyleBoxFlat CreateVariant(StyleBoxFlat source, Color background, Color border)
-    {
-        var clone = new StyleBoxFlat();
-        clone.BgColor = background;
-        clone.BorderColor = border;
-        clone.BorderWidthLeft = source.BorderWidthLeft;
-        clone.BorderWidthTop = source.BorderWidthTop;
-        clone.BorderWidthRight = source.BorderWidthRight;
-        clone.BorderWidthBottom = source.BorderWidthBottom;
-        clone.CornerRadiusTopLeft = source.CornerRadiusTopLeft;
-        clone.CornerRadiusTopRight = source.CornerRadiusTopRight;
-        clone.CornerRadiusBottomRight = source.CornerRadiusBottomRight;
-        clone.CornerRadiusBottomLeft = source.CornerRadiusBottomLeft;
-        clone.ContentMarginLeft = source.ContentMarginLeft;
-        clone.ContentMarginRight = source.ContentMarginRight;
-        clone.ContentMarginTop = source.ContentMarginTop;
-        clone.ContentMarginBottom = source.ContentMarginBottom;
-        return clone;
     }
 }

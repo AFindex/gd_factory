@@ -17,6 +17,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
     private sealed class InventorySlotWidget
     {
         public required PanelContainer Panel { get; init; }
+        public required StyleBoxFlat PanelStyle { get; init; }
         public required string InventoryId { get; init; }
         public required Vector2I SlotPosition { get; init; }
         public required bool HasItem { get; init; }
@@ -159,7 +160,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         MouseFilter = MouseFilterEnum.Stop;
         CustomMinimumSize = new Vector2(DetailWindowMinWidth, 560.0f);
         Size = CustomMinimumSize;
-        AddThemeStyleboxOverride("panel", CreatePanelStyle(new Color("0F172A"), new Color("60A5FA"), 2));
+        AddThemeStyleboxOverride("panel", CreatePanelStyle(FactoryUiTheme.SurfaceOverlay, FactoryUiTheme.BorderStrong, 2));
 
         var root = new VBoxContainer();
         root.MouseFilter = MouseFilterEnum.Stop;
@@ -170,7 +171,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
 
         var titleBar = new PanelContainer();
         titleBar.MouseFilter = MouseFilterEnum.Stop;
-        titleBar.AddThemeStyleboxOverride("panel", CreatePanelStyle(new Color("13253A"), new Color("93C5FD"), 1));
+        titleBar.AddThemeStyleboxOverride("panel", FactoryUiTheme.CreateTitleBarStyle());
         titleBar.GuiInput += HandleTitleBarGuiInput;
         root.AddChild(titleBar);
         _titleBar = titleBar;
@@ -192,8 +193,8 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         titleColumn.AddThemeConstantOverride("separation", 2);
         titleRow.AddChild(titleColumn);
 
-        _titleLabel = CreateTextLabel(16, Colors.White);
-        _subtitleLabel = CreateTextLabel(11, new Color("A5C8E1"));
+        _titleLabel = CreateTextLabel(16, FactoryUiTheme.Text);
+        _subtitleLabel = CreateTextLabel(11, FactoryUiTheme.TextSubtle);
         titleColumn.AddChild(_titleLabel);
         titleColumn.AddChild(_subtitleLabel);
 
@@ -202,6 +203,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
             Text = "关闭",
             CustomMinimumSize = new Vector2(56.0f, 28.0f)
         };
+        FactoryUiTheme.ApplyButtonTheme(closeButton, compact: true);
         closeButton.Pressed += () =>
         {
             HideWindow();
@@ -238,7 +240,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         bodyMargin.AddChild(body);
         _body = body;
 
-        _summaryLabel = CreateTextLabel(12, new Color("D7E6F2"));
+        _summaryLabel = CreateTextLabel(12, FactoryUiTheme.TextMuted);
         body.AddChild(_summaryLabel);
 
         _recipeSections = new VBoxContainer();
@@ -256,7 +258,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         _actionSections.AddThemeConstantOverride("separation", 6);
         body.AddChild(_actionSections);
 
-        _dragStateLabel = CreateTextLabel(11, new Color("FDE68A"));
+        _dragStateLabel = CreateTextLabel(11, FactoryUiTheme.TextSubtle);
         body.AddChild(_dragStateLabel);
 
         var dragPreview = new PanelContainer
@@ -267,7 +269,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
             CustomMinimumSize = new Vector2(170.0f, 52.0f),
             ZIndex = 128
         };
-        dragPreview.AddThemeStyleboxOverride("panel", CreatePanelStyle(new Color(0.03f, 0.07f, 0.11f, 0.92f), new Color("38BDF8"), 2));
+        dragPreview.AddThemeStyleboxOverride("panel", CreatePanelStyle(FactoryUiTheme.SurfaceOverlay, FactoryUiTheme.BorderStrong, 2));
         AddChild(dragPreview);
         _dragPreview = dragPreview;
 
@@ -299,8 +301,8 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         dragPreviewText.AddThemeConstantOverride("separation", 2);
         dragPreviewRow.AddChild(dragPreviewText);
 
-        _dragPreviewTitle = CreatePreviewTextLabel(11, Colors.White);
-        _dragPreviewCount = CreatePreviewTextLabel(10, new Color("FDE68A"));
+        _dragPreviewTitle = CreatePreviewTextLabel(11, FactoryUiTheme.Text);
+        _dragPreviewCount = CreatePreviewTextLabel(10, FactoryUiTheme.TextSubtle);
         dragPreviewText.AddChild(_dragPreviewTitle);
         dragPreviewText.AddChild(_dragPreviewCount);
 
@@ -617,7 +619,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         for (var index = 0; index < sections.Count; index++)
         {
             var section = sections[index];
-            var title = CreateTextLabel(13, new Color("FDE68A"));
+            var title = CreateTextLabel(13, FactoryUiTheme.Text);
             title.SizeFlagsHorizontal = SizeFlags.ExpandFill;
             title.Text = section.Title;
             _inventorySections.AddChild(title);
@@ -643,6 +645,8 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                 var slotPanel = new PanelContainer();
                 slotPanel.MouseFilter = MouseFilterEnum.Stop;
                 slotPanel.CustomMinimumSize = new Vector2(InventorySlotPreferredSize, InventorySlotPreferredSize);
+                var slotStyle = CreateInventorySlotStyle(FactoryUiTheme.SurfaceInset, FactoryUiTheme.BorderMuted, 1);
+                slotPanel.AddThemeStyleboxOverride("panel", slotStyle);
                 grid.AddChild(slotPanel);
                 layout.SlotPanels.Add(slotPanel);
 
@@ -683,18 +687,18 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                 iconRect.Visible = slot.IconTexture is not null;
                 iconMargin.AddChild(iconRect);
 
-                var itemLabel = CreateTextLabel(9, slot.HasItem ? Colors.White : new Color("7B8DA1"));
+                var itemLabel = CreateTextLabel(9, slot.HasItem ? FactoryUiTheme.Text : FactoryUiTheme.TextFaint);
                 itemLabel.AutowrapMode = TextServer.AutowrapMode.Off;
                 itemLabel.ClipText = true;
                 itemLabel.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
                 itemLabel.Text = slot.HasItem ? slot.ItemLabel ?? string.Empty : "空槽位";
                 body.AddChild(itemLabel);
 
-                var stackLabel = CreateTextLabel(9, slot.HasItem ? new Color("FDE68A") : new Color("64748B"));
+                var stackLabel = CreateTextLabel(9, slot.HasItem ? FactoryUiTheme.TextMuted : FactoryUiTheme.TextFaint);
                 stackLabel.Text = slot.HasItem ? $"{slot.StackCount}/{slot.MaxStackSize}" : "--";
                 body.AddChild(stackLabel);
 
-                var posLabel = CreateTextLabel(1, new Color("9FB6C9"));
+                var posLabel = CreateTextLabel(1, FactoryUiTheme.TextSubtle);
                 posLabel.Visible = false;
 
                 slotPanel.TooltipText = slot.ItemDescription ?? string.Empty;
@@ -702,6 +706,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                 var widget = new InventorySlotWidget
                 {
                     Panel = slotPanel,
+                    PanelStyle = slotStyle,
                     InventoryId = section.InventoryId,
                     SlotPosition = slot.Position,
                     HasItem = slot.HasItem,
@@ -745,13 +750,13 @@ public partial class FactoryStructureDetailWindow : PanelContainer
             return;
         }
 
-        var title = CreateTextLabel(13, new Color("FDE68A"));
+        var title = CreateTextLabel(13, FactoryUiTheme.Text);
         title.Text = section.Title;
         _recipeSections.AddChild(title);
 
         if (!string.IsNullOrWhiteSpace(section.Description))
         {
-            var description = CreateTextLabel(11, new Color("A5C8E1"));
+            var description = CreateTextLabel(11, FactoryUiTheme.TextSubtle);
             description.Text = section.Description;
             _recipeSections.AddChild(description);
         }
@@ -799,21 +804,21 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         activeRecipeText.AddThemeConstantOverride("separation", 2);
         triggerRow.AddChild(activeRecipeText);
 
-        var activeTitle = CreateTextLabel(12, Colors.White);
+        var activeTitle = CreateTextLabel(12, FactoryUiTheme.Text);
         activeTitle.Text = $"当前配方：{activeOption.DisplayName}";
         activeRecipeText.AddChild(activeTitle);
 
-        var activeSummary = CreateTextLabel(10, new Color("A5C8E1"));
+        var activeSummary = CreateTextLabel(10, FactoryUiTheme.TextMuted);
         activeSummary.Text = activeOption.Summary;
         activeRecipeText.AddChild(activeSummary);
 
-        var activeHint = CreateTextLabel(10, new Color("93C5FD"));
+        var activeHint = CreateTextLabel(10, FactoryUiTheme.TextSubtle);
         activeHint.Text = "点击左侧图标打开配方面板";
         activeRecipeText.AddChild(activeHint);
 
         var pickerPanel = new PanelContainer();
         pickerPanel.Visible = false;
-        pickerPanel.AddThemeStyleboxOverride("panel", CreatePanelStyle(new Color("10243A"), new Color("4DA8DA"), 1));
+        pickerPanel.AddThemeStyleboxOverride("panel", CreatePanelStyle(FactoryUiTheme.SurfaceBase, FactoryUiTheme.BorderStrong, 1));
         _recipeSections.AddChild(pickerPanel);
         _recipePickerPanel = pickerPanel;
 
@@ -832,7 +837,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         pickerHeader.AddThemeConstantOverride("separation", 6);
         pickerBody.AddChild(pickerHeader);
 
-        var pickerTitle = CreateTextLabel(12, new Color("FDE68A"));
+        var pickerTitle = CreateTextLabel(12, FactoryUiTheme.Text);
         pickerTitle.Text = $"{section.Title} 列表";
         pickerTitle.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         pickerHeader.AddChild(pickerTitle);
@@ -842,6 +847,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
             Text = "收起",
             CustomMinimumSize = new Vector2(56.0f, 26.0f)
         };
+        FactoryUiTheme.ApplyButtonTheme(closeButton, compact: true);
         closeButton.Pressed += () =>
         {
             if (_recipePickerPanel is not null)
@@ -853,7 +859,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
 
         if (!string.IsNullOrWhiteSpace(section.Description))
         {
-            var pickerDescription = CreateTextLabel(10, new Color("9FB6C9"));
+            var pickerDescription = CreateTextLabel(10, FactoryUiTheme.TextSubtle);
             pickerDescription.Text = section.Description;
             pickerBody.AddChild(pickerDescription);
         }
@@ -903,7 +909,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
             return;
         }
 
-        var title = CreateTextLabel(13, new Color("FDE68A"));
+        var title = CreateTextLabel(13, FactoryUiTheme.Text);
         title.Text = "操作";
         _actionSections.AddChild(title);
 
@@ -916,13 +922,14 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                 Disabled = !action.IsEnabled,
                 CustomMinimumSize = new Vector2(0.0f, 34.0f)
             };
+            FactoryUiTheme.ApplyButtonTheme(button);
             button.Alignment = HorizontalAlignment.Left;
             button.Pressed += () => DetailActionRequested?.Invoke(action.ActionId);
             _actionSections.AddChild(button);
 
             if (!string.IsNullOrWhiteSpace(action.Description))
             {
-                var description = CreateTextLabel(10, new Color("9FB6C9"));
+                var description = CreateTextLabel(10, FactoryUiTheme.TextSubtle);
                 description.Text = action.Description;
                 _actionSections.AddChild(description);
             }
@@ -938,8 +945,8 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         panel.AddThemeStyleboxOverride(
             "panel",
             CreatePanelStyle(
-                isActive ? new Color("13253A") : new Color("0F172A"),
-                isActive ? option.AccentColor.Lightened(0.12f) : new Color("475569"),
+                isActive ? FactoryUiTheme.SurfaceBase : FactoryUiTheme.SurfaceInset,
+                isActive ? FactoryUiTheme.BorderStrong : FactoryUiTheme.BorderMuted,
                 isActive ? 2 : 1));
 
         var margin = new MarginContainer();
@@ -966,17 +973,17 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         textColumn.AddThemeConstantOverride("separation", 2);
         row.AddChild(textColumn);
 
-        var title = CreateTextLabel(11, isActive ? Colors.White : new Color("D7E6F2"));
+        var title = CreateTextLabel(11, isActive ? FactoryUiTheme.Text : FactoryUiTheme.TextMuted);
         title.Text = option.DisplayName;
         textColumn.AddChild(title);
 
-        var summary = CreateTextLabel(10, new Color("9FB6C9"));
+        var summary = CreateTextLabel(10, FactoryUiTheme.TextSubtle);
         summary.Text = option.Summary;
         textColumn.AddChild(summary);
 
         if (isActive)
         {
-            var badge = CreateTextLabel(10, option.AccentColor.Lightened(0.2f));
+            var badge = CreateTextLabel(10, FactoryUiTheme.Text);
             badge.Text = "当前配方";
             textColumn.AddChild(badge);
         }
@@ -1067,40 +1074,45 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         for (var index = 0; index < _slotWidgets.Count; index++)
         {
             var widget = _slotWidgets[index];
-            var borderColor = widget.HasItem ? widget.AccentColor : new Color("475569");
-            var backgroundColor = widget.HasItem ? new Color("172236") : new Color("0F172A");
+            var borderColor = widget.HasItem ? FactoryUiTheme.Border : FactoryUiTheme.BorderMuted;
+            var backgroundColor = widget.HasItem ? FactoryUiTheme.SurfaceRaised : FactoryUiTheme.SurfaceInset;
             var borderWidth = 1;
 
             if (_dragSourceSlot is not null && widget == _dragSourceSlot)
             {
-                borderColor = new Color("38BDF8");
-                backgroundColor = new Color("10243C");
+                borderColor = FactoryUiTheme.BorderStrong;
+                backgroundColor = FactoryUiTheme.SurfaceBase;
                 borderWidth = 2;
             }
             else if (_pendingDragSourceSlot is not null && widget == _pendingDragSourceSlot)
             {
-                borderColor = new Color("7DD3FC");
-                backgroundColor = new Color("12253A");
+                borderColor = FactoryUiTheme.TextMuted;
+                backgroundColor = FactoryUiTheme.SurfaceBase;
                 borderWidth = 2;
             }
             else if (activeDragPayload.HasValue
                 && _hoveredSlot == widget
                 && CanAcceptPayload(activeDragPayload.Value, widget))
             {
-                borderColor = new Color("4ADE80");
-                backgroundColor = new Color("122A23");
+                borderColor = FactoryUiTheme.BorderStrong;
+                backgroundColor = FactoryUiTheme.SurfaceInverse;
                 borderWidth = 2;
             }
             else if (_hoveredSlot == widget)
             {
-                borderColor = new Color("93C5FD");
+                borderColor = FactoryUiTheme.Text;
             }
 
-            widget.Panel.AddThemeStyleboxOverride("panel", CreateInventorySlotStyle(backgroundColor, borderColor, borderWidth));
-            widget.Label.Modulate = widget.HasItem ? Colors.White : new Color("7B8DA1");
-            widget.StackLabel.Modulate = widget.HasItem ? new Color("FDE68A") : new Color("64748B");
-            widget.SubLabel.Modulate = new Color("9FB6C9");
-            widget.Icon.Modulate = widget.HasItem ? Colors.White : new Color(0.55f, 0.62f, 0.70f, 0.72f);
+            FactoryUiTheme.ConfigurePanelStyle(widget.PanelStyle, backgroundColor, borderColor, borderWidth, FactoryUiTheme.RadiusNone, contentMargin: 1);
+            var isInverse = backgroundColor == FactoryUiTheme.SurfaceInverse;
+            widget.Label.Modulate = widget.HasItem
+                ? (isInverse ? FactoryUiTheme.TextInverse : FactoryUiTheme.Text)
+                : FactoryUiTheme.TextFaint;
+            widget.StackLabel.Modulate = widget.HasItem
+                ? (isInverse ? FactoryUiTheme.TextInverse : FactoryUiTheme.TextMuted)
+                : FactoryUiTheme.TextFaint;
+            widget.SubLabel.Modulate = isInverse ? FactoryUiTheme.TextInverse : FactoryUiTheme.TextSubtle;
+            widget.Icon.Modulate = widget.HasItem ? (isInverse ? FactoryUiTheme.TextInverse : FactoryUiTheme.Text) : FactoryUiTheme.TextFaint;
         }
     }
 
@@ -1595,43 +1607,11 @@ public partial class FactoryStructureDetailWindow : PanelContainer
 
     private static StyleBoxFlat CreatePanelStyle(Color backgroundColor, Color borderColor, int borderWidth)
     {
-        return new StyleBoxFlat
-        {
-            BgColor = backgroundColor,
-            BorderColor = borderColor,
-            BorderWidthBottom = borderWidth,
-            BorderWidthLeft = borderWidth,
-            BorderWidthRight = borderWidth,
-            BorderWidthTop = borderWidth,
-            CornerRadiusBottomLeft = 6,
-            CornerRadiusBottomRight = 6,
-            CornerRadiusTopLeft = 6,
-            CornerRadiusTopRight = 6,
-            ContentMarginBottom = 2,
-            ContentMarginLeft = 2,
-            ContentMarginRight = 2,
-            ContentMarginTop = 2
-        };
+        return FactoryUiTheme.CreatePanelStyle(backgroundColor, borderColor, borderWidth, FactoryUiTheme.RadiusNone, contentMargin: 2);
     }
 
     private static StyleBoxFlat CreateInventorySlotStyle(Color backgroundColor, Color borderColor, int borderWidth)
     {
-        return new StyleBoxFlat
-        {
-            BgColor = backgroundColor,
-            BorderColor = borderColor,
-            BorderWidthBottom = borderWidth,
-            BorderWidthLeft = borderWidth,
-            BorderWidthRight = borderWidth,
-            BorderWidthTop = borderWidth,
-            CornerRadiusBottomLeft = 0,
-            CornerRadiusBottomRight = 0,
-            CornerRadiusTopLeft = 0,
-            CornerRadiusTopRight = 0,
-            ContentMarginBottom = 1,
-            ContentMarginLeft = 1,
-            ContentMarginRight = 1,
-            ContentMarginTop = 1
-        };
+        return FactoryUiTheme.CreateSlotStyle(backgroundColor, borderColor, borderWidth);
     }
 }

@@ -36,7 +36,7 @@ public partial class FactoryWorkspaceChrome : PanelContainer
     public override void _Ready()
     {
         MouseFilter = Control.MouseFilterEnum.Stop;
-        AddThemeStyleboxOverride("panel", CreatePanelStyle());
+        AddThemeStyleboxOverride("panel", FactoryUiTheme.CreateChromePanelStyle());
 
         var margin = new MarginContainer();
         margin.MouseFilter = Control.MouseFilterEnum.Ignore;
@@ -55,10 +55,10 @@ public partial class FactoryWorkspaceChrome : PanelContainer
         margin.AddChild(body);
         _body = body;
 
-        _titleLabel = CreateLabel(string.Empty, 18, Colors.White);
+        _titleLabel = CreateLabel(string.Empty, 18, FactoryUiTheme.Text);
         body.AddChild(_titleLabel);
 
-        _subtitleLabel = CreateLabel(string.Empty, 11, new Color("A8B8C6"));
+        _subtitleLabel = CreateLabel(string.Empty, 11, FactoryUiTheme.TextSubtle);
         body.AddChild(_subtitleLabel);
 
         _workspaceRow = new HBoxContainer();
@@ -118,9 +118,7 @@ public partial class FactoryWorkspaceChrome : PanelContainer
         _activeWorkspaceId = workspaceId;
         foreach (var pair in _workspaceButtons)
         {
-            var isActive = pair.Key == workspaceId;
-            pair.Value.ButtonPressed = isActive;
-            pair.Value.Modulate = isActive ? Colors.White : new Color("C6D4E1");
+            pair.Value.ButtonPressed = pair.Key == workspaceId;
         }
 
         if (emitSignal)
@@ -156,6 +154,7 @@ public partial class FactoryWorkspaceChrome : PanelContainer
                 CustomMinimumSize = new Vector2(0.0f, isCompact ? 26.0f : 30.0f)
             };
             button.AddThemeFontSizeOverride("font_size", isCompact ? 10 : 11);
+            FactoryUiTheme.ApplyButtonTheme(button, compact: isCompact);
             button.Pressed += () => SetActiveWorkspace(workspaceId);
             _workspaceRow.AddChild(button);
             _workspaceButtons[workspaceId] = button;
@@ -202,22 +201,5 @@ public partial class FactoryWorkspaceChrome : PanelContainer
         label.AddThemeFontSizeOverride("font_size", fontSize);
         label.Modulate = color;
         return label;
-    }
-
-    private static StyleBoxFlat CreatePanelStyle()
-    {
-        return new StyleBoxFlat
-        {
-            BgColor = new Color(0.05f, 0.08f, 0.12f, 0.92f),
-            BorderColor = new Color("4DA8DA"),
-            BorderWidthLeft = 1,
-            BorderWidthTop = 1,
-            BorderWidthRight = 1,
-            BorderWidthBottom = 1,
-            CornerRadiusTopLeft = 10,
-            CornerRadiusTopRight = 10,
-            CornerRadiusBottomRight = 10,
-            CornerRadiusBottomLeft = 10
-        };
     }
 }

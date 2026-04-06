@@ -41,15 +41,26 @@ The game SHALL show a live preview for the currently selected structure or deplo
 - **THEN** the preview remains deployable, uses a distinct warning state instead of the blocked state, and shows that the mining input is not yet connected
 
 ### Requirement: Placement requires explicit build selection
-The game SHALL default the static factory demo to a non-build interaction mode and only place structures when the player has explicitly selected a buildable prototype or deployment action.
+The game SHALL default the static factory demo to a non-build interaction mode and only place structures when the player has explicitly selected a buildable prototype or a placeable building item from the player hotbar or backpack.
 
 #### Scenario: Default clicks interact instead of placing
-- **WHEN** the player has not selected a buildable prototype and clicks on the factory floor or an existing structure
+- **WHEN** the player has not selected a buildable prototype and has not armed a placeable building item, then clicks on the factory floor or an existing structure
 - **THEN** the game stays in interaction mode and does not place a new structure
 
-#### Scenario: Selecting a prototype enables placement
-- **WHEN** the player explicitly selects a buildable prototype and targets a valid empty cell
+#### Scenario: Selecting a prototype or building item enables placement
+- **WHEN** the player explicitly selects a buildable prototype from the build UI or a placeable building item from the player inventory and targets a valid empty cell
 - **THEN** the game enters build mode and allows the selected structure to be placed according to the normal snapped placement rules
+
+### Requirement: Placing from player inventory consumes the selected structure item
+The game SHALL resolve hotbar-driven building placement against the selected player inventory stack so successful placements consume the held structure item and failed placements do not.
+
+#### Scenario: Valid placement removes one structure item from the selected stack
+- **WHEN** the player left-clicks a valid target cell while a placeable structure item is selected in the hotbar
+- **THEN** the world places that structure and the selected inventory stack is reduced by exactly one item
+
+#### Scenario: Invalid placement preserves the selected structure item
+- **WHEN** the player attempts to place a selected structure item onto an invalid or occupied target cell
+- **THEN** no structure is created and the selected inventory stack remains unchanged
 
 ### Requirement: Structures can be removed for iteration
 The game SHALL allow the player to remove placed prototype structures during the demo so layout iteration is possible without restarting the scene.

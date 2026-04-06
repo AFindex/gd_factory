@@ -22,7 +22,9 @@ public sealed class FactoryBlueprintPanelState
 public partial class FactoryBlueprintPanel : PanelContainer
 {
     private PanelContainer? _headerPanel;
+    private MarginContainer? _outerMargin;
     private ScrollContainer? _scrollContainer;
+    private VBoxContainer? _body;
     private Control? _dragHandle;
     private Label? _dragHintLabel;
     private Label? _modeLabel;
@@ -58,7 +60,7 @@ public partial class FactoryBlueprintPanel : PanelContainer
     {
         Name = "BlueprintPanel";
         MouseFilter = Control.MouseFilterEnum.Stop;
-        AddThemeStyleboxOverride("panel", CreatePanelStyle());
+        AddThemeStyleboxOverride("panel", FactoryUiTheme.CreateChromePanelStyle());
         SetProcess(true);
 
         var margin = new MarginContainer();
@@ -70,6 +72,7 @@ public partial class FactoryBlueprintPanel : PanelContainer
         margin.AddThemeConstantOverride("margin_right", 10);
         margin.AddThemeConstantOverride("margin_bottom", 10);
         AddChild(margin);
+        _outerMargin = margin;
 
         var root = new VBoxContainer();
         root.MouseFilter = Control.MouseFilterEnum.Stop;
@@ -80,7 +83,7 @@ public partial class FactoryBlueprintPanel : PanelContainer
 
         var header = new PanelContainer();
         header.MouseFilter = Control.MouseFilterEnum.Stop;
-        header.AddThemeStyleboxOverride("panel", CreateHeaderStyle());
+        header.AddThemeStyleboxOverride("panel", FactoryUiTheme.CreateTitleBarStyle());
         root.AddChild(header);
         _headerPanel = header;
 
@@ -106,9 +109,9 @@ public partial class FactoryBlueprintPanel : PanelContainer
         headerRow.AddThemeConstantOverride("separation", 8);
         headerMargin.AddChild(headerRow);
 
-        headerRow.AddChild(CreateSectionLabel("蓝图工作台", 18, Colors.White));
+        headerRow.AddChild(CreateSectionLabel("蓝图工作台", 18, FactoryUiTheme.Text));
 
-        var dragHint = CreateValueLabel("拖动标题栏可移动窗口", new Color("8FD3FF"));
+        var dragHint = CreateValueLabel("拖动标题栏可移动窗口", FactoryUiTheme.TextSubtle);
         dragHint.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         dragHint.HorizontalAlignment = HorizontalAlignment.Right;
         headerRow.AddChild(dragHint);
@@ -130,11 +133,11 @@ public partial class FactoryBlueprintPanel : PanelContainer
         body.AddThemeConstantOverride("separation", 8);
         body.CustomMinimumSize = new Vector2(228.0f, 0.0f);
         _scrollContainer.AddChild(body);
+        _body = body;
 
-        _modeLabel = CreateValueLabel("蓝图待命", new Color("8FD3FF"));
+        _modeLabel = CreateValueLabel("[MODE] 蓝图待命", FactoryUiTheme.TextMuted);
         body.AddChild(_modeLabel);
-        _activeLabel = CreateValueLabel("当前蓝图：未选择", new Color("FDE68A"));
-        body.AddChild(_activeLabel);
+        _activeLabel = CreateValueLabel("[ACTIVE] 当前蓝图：未选择", FactoryUiTheme.Text);
 
         var captureRow = new HBoxContainer();
         captureRow.SizeFlagsHorizontal = SizeFlags.ExpandFill;
@@ -149,7 +152,7 @@ public partial class FactoryBlueprintPanel : PanelContainer
         _captureFullButton.Pressed += () => CaptureFullRequested?.Invoke();
         captureRow.AddChild(_captureFullButton);
 
-        _captureSummaryLabel = CreateValueLabel("未捕获待保存蓝图。", new Color("D7E6F2"));
+        _captureSummaryLabel = CreateValueLabel("未捕获待保存蓝图。", FactoryUiTheme.TextMuted);
         body.AddChild(_captureSummaryLabel);
 
         var saveRow = new HBoxContainer();
@@ -163,13 +166,14 @@ public partial class FactoryBlueprintPanel : PanelContainer
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
             MouseFilter = Control.MouseFilterEnum.Stop
         };
+        FactoryUiTheme.ApplyLineEditTheme(_nameEdit);
         saveRow.AddChild(_nameEdit);
 
         _saveButton = CreateActionButton("保存");
         _saveButton.Pressed += () => SaveCaptureRequested?.Invoke(_nameEdit?.Text?.Trim() ?? string.Empty);
         saveRow.AddChild(_saveButton);
 
-        body.AddChild(CreateSectionLabel("蓝图库", 13, new Color("F8FAFC")));
+        body.AddChild(CreateSectionLabel("蓝图库", 13, FactoryUiTheme.Text));
         _blueprintList = new ItemList
         {
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
@@ -177,6 +181,7 @@ public partial class FactoryBlueprintPanel : PanelContainer
             CustomMinimumSize = new Vector2(0.0f, 216.0f),
             MouseFilter = Control.MouseFilterEnum.Stop
         };
+        FactoryUiTheme.ApplyItemListTheme(_blueprintList);
         _blueprintList.ItemSelected += index =>
         {
             if (TryGetBlueprintId(index, out var blueprintId))
@@ -217,7 +222,7 @@ public partial class FactoryBlueprintPanel : PanelContainer
         _cancelButton.Pressed += () => CancelRequested?.Invoke();
         actionGrid.AddChild(_cancelButton);
 
-        _issueLabel = CreateValueLabel("选择蓝图后可以进入预览和应用。", new Color("EED49F"));
+        _issueLabel = CreateValueLabel("[HINT] 选择蓝图后可以进入预览和应用。", FactoryUiTheme.TextSubtle);
         body.AddChild(_issueLabel);
 
         RefreshSelectionActions();
@@ -297,23 +302,24 @@ public partial class FactoryBlueprintPanel : PanelContainer
 
         if (_modeLabel is not null)
         {
-            _modeLabel.Text = state.ModeText;
+            _modeLabel.Text = $"[MODE] {state.ModeText}";
         }
 
         if (_activeLabel is not null)
         {
-            _activeLabel.Text = state.ActiveBlueprintText;
-        }
+            _activeLabel.Text = $"[ACTIVE] {state.ActiveBlueprintText}";
+            _activeLabel.Visible = false;
+        }        
 
         if (_captureSummaryLabel is not null)
         {
-            _captureSummaryLabel.Text = state.CaptureSummaryText;
+            _captureSummaryLabel.Text = $"[CAPTURE] {state.CaptureSummaryText}";
         }
 
         if (_issueLabel is not null)
         {
-            _issueLabel.Text = state.IssueText;
-            _issueLabel.Modulate = state.CanConfirmApply ? new Color("A7F3A0") : new Color("EED49F");
+            _issueLabel.Text = $"[STATE] {state.IssueText}";
+            _issueLabel.Modulate = state.CanConfirmApply ? FactoryUiTheme.StatusOk : FactoryUiTheme.TextSubtle;
         }
 
         if (_captureSelectionButton is not null)
@@ -360,7 +366,7 @@ public partial class FactoryBlueprintPanel : PanelContainer
             _blueprintList.SetItemMetadata(itemIndex, blueprint.Id);
             if (blueprint.Id == activeBlueprintId)
             {
-                _blueprintList.SetItemCustomBgColor(itemIndex, new Color(0.15f, 0.28f, 0.18f, 0.75f));
+                _blueprintList.SetItemCustomBgColor(itemIndex, new Color(FactoryUiTheme.SurfaceInverse, 0.22f));
             }
         }
 
@@ -540,16 +546,46 @@ public partial class FactoryBlueprintPanel : PanelContainer
         if (_scrollContainer is not null)
         {
             _scrollContainer.CustomMinimumSize = _docked
-                ? new Vector2(220.0f, 0.0f)
+                ? Vector2.Zero
                 : new Vector2(220.0f, 0.0f);
         }
 
         if (_docked)
         {
+            AddThemeStyleboxOverride("panel", FactoryUiTheme.CreatePanelStyle(Colors.Transparent, Colors.Transparent, borderWidth: 0));
+            if (_outerMargin is not null)
+            {
+                _outerMargin.AddThemeConstantOverride("margin_left", 2);
+                _outerMargin.AddThemeConstantOverride("margin_top", 2);
+                _outerMargin.AddThemeConstantOverride("margin_right", 2);
+                _outerMargin.AddThemeConstantOverride("margin_bottom", 2);
+            }
+
+            if (_body is not null)
+            {
+                _body.CustomMinimumSize = Vector2.Zero;
+                _body.AddThemeConstantOverride("separation", 6);
+            }
+
             Position = Vector2.Zero;
         }
         else
         {
+            AddThemeStyleboxOverride("panel", FactoryUiTheme.CreateChromePanelStyle());
+            if (_outerMargin is not null)
+            {
+                _outerMargin.AddThemeConstantOverride("margin_left", 10);
+                _outerMargin.AddThemeConstantOverride("margin_top", 10);
+                _outerMargin.AddThemeConstantOverride("margin_right", 10);
+                _outerMargin.AddThemeConstantOverride("margin_bottom", 10);
+            }
+
+            if (_body is not null)
+            {
+                _body.CustomMinimumSize = new Vector2(228.0f, 0.0f);
+                _body.AddThemeConstantOverride("separation", 8);
+            }
+
             Size = _defaultRect.Size;
             if (!_panelMovedByUser)
             {
@@ -562,30 +598,15 @@ public partial class FactoryBlueprintPanel : PanelContainer
 
     private static Button CreateActionButton(string text)
     {
-        return new Button
+        var button = new Button
         {
             Text = text,
             MouseFilter = Control.MouseFilterEnum.Stop,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
             CustomMinimumSize = new Vector2(0.0f, 30.0f)
         };
-    }
-
-    private static StyleBoxFlat CreateHeaderStyle()
-    {
-        return new StyleBoxFlat
-        {
-            BgColor = new Color(0.08f, 0.14f, 0.20f, 0.98f),
-            BorderColor = new Color("5DB5E8"),
-            BorderWidthLeft = 1,
-            BorderWidthTop = 1,
-            BorderWidthRight = 1,
-            BorderWidthBottom = 1,
-            CornerRadiusTopLeft = 8,
-            CornerRadiusTopRight = 8,
-            CornerRadiusBottomRight = 8,
-            CornerRadiusBottomLeft = 8
-        };
+        FactoryUiTheme.ApplyButtonTheme(button);
+        return button;
     }
 
     private static Label CreateSectionLabel(string text, int fontSize, Color color)
@@ -613,20 +634,4 @@ public partial class FactoryBlueprintPanel : PanelContainer
         return label;
     }
 
-    private static StyleBoxFlat CreatePanelStyle()
-    {
-        return new StyleBoxFlat
-        {
-            BgColor = new Color(0.05f, 0.08f, 0.12f, 0.92f),
-            BorderColor = new Color("4DA8DA"),
-            BorderWidthLeft = 1,
-            BorderWidthTop = 1,
-            BorderWidthRight = 1,
-            BorderWidthBottom = 1,
-            CornerRadiusTopLeft = 10,
-            CornerRadiusTopRight = 10,
-            CornerRadiusBottomRight = 10,
-            CornerRadiusBottomLeft = 10
-        };
-    }
 }

@@ -19,7 +19,7 @@ public partial class DemoLauncher : Control
     {
         var background = new ColorRect();
         background.SetAnchorsPreset(LayoutPreset.FullRect);
-        background.Color = new Color("08141C");
+        background.Color = FactoryUiTheme.Canvas;
         AddChild(background);
 
         var backdrop = new Control();
@@ -27,9 +27,9 @@ public partial class DemoLauncher : Control
         backdrop.MouseFilter = MouseFilterEnum.Ignore;
         AddChild(backdrop);
 
-        AddGlow(backdrop, new Vector2(0.14f, 0.18f), new Vector2(320.0f, 320.0f), new Color(0.16f, 0.76f, 0.80f, 0.18f));
-        AddGlow(backdrop, new Vector2(0.82f, 0.20f), new Vector2(260.0f, 260.0f), new Color(0.96f, 0.66f, 0.24f, 0.16f));
-        AddGlow(backdrop, new Vector2(0.74f, 0.78f), new Vector2(420.0f, 420.0f), new Color(0.22f, 0.52f, 0.96f, 0.12f));
+        AddGlow(backdrop, new Vector2(0.14f, 0.18f), new Vector2(320.0f, 320.0f), new Color(1.0f, 1.0f, 1.0f, 0.05f));
+        AddGlow(backdrop, new Vector2(0.82f, 0.20f), new Vector2(260.0f, 260.0f), new Color(1.0f, 1.0f, 1.0f, 0.03f));
+        AddGlow(backdrop, new Vector2(0.74f, 0.78f), new Vector2(420.0f, 420.0f), new Color(1.0f, 1.0f, 1.0f, 0.02f));
 
         var margin = new MarginContainer();
         margin.SetAnchorsPreset(LayoutPreset.FullRect);
@@ -75,7 +75,7 @@ public partial class DemoLauncher : Control
         header.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         header.AddThemeConstantOverride("separation", 18);
 
-        var titlePanel = CreatePanel(new Color("102433"), new Color("4FD1C5"));
+        var titlePanel = CreatePanel(FactoryUiTheme.SurfaceRaised, FactoryUiTheme.BorderStrong);
         titlePanel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         header.AddChild(titlePanel);
 
@@ -84,34 +84,34 @@ public partial class DemoLauncher : Control
         titlePanel.AddChild(WrapInMargin(titleBody, 20));
 
         titleBody.AddChild(CreateTag("NET FACTORY DEMOS"));
-        titleBody.AddChild(CreateLabel("Launcher", 34, Colors.White));
-        titleBody.AddChild(CreateLabel("从这里进入各个演示场景。每个场景都带有返回 Launcher 的可见按钮，方便切换和回归测试。", 15, new Color("B9CBDA"), true));
+        titleBody.AddChild(CreateLabel("Launcher", 34, FactoryUiTheme.Text));
+        titleBody.AddChild(CreateLabel("从这里进入各个演示场景。每个场景都带有返回 Launcher 的可见按钮，方便切换和回归测试。", 15, FactoryUiTheme.TextMuted, true));
 
-        var statsPanel = CreatePanel(new Color("132B3B"), new Color("F6AD55"));
+        var statsPanel = CreatePanel(FactoryUiTheme.SurfaceBase, FactoryUiTheme.Border);
         statsPanel.CustomMinimumSize = new Vector2(220.0f, 0.0f);
         header.AddChild(statsPanel);
 
         var statsBody = new VBoxContainer();
         statsBody.AddThemeConstantOverride("separation", 6);
         statsPanel.AddChild(WrapInMargin(statsBody, 18));
-        statsBody.AddChild(CreateLabel("Active Scenes", 13, new Color("F6E05E")));
-        statsBody.AddChild(CreateLabel($"{DemoCatalog.LauncherEntries.Count:0}", 30, Colors.White));
-        statsBody.AddChild(CreateLabel("Factory, Mobile, Scenario, UI", 13, new Color("B9CBDA"), true));
+        statsBody.AddChild(CreateLabel("Active Scenes", 13, FactoryUiTheme.TextSubtle));
+        statsBody.AddChild(CreateLabel($"{DemoCatalog.LauncherEntries.Count:0}", 30, FactoryUiTheme.Text));
+        statsBody.AddChild(CreateLabel("Factory, Mobile, Scenario, UI", 13, FactoryUiTheme.TextMuted, true));
 
         return header;
     }
 
     private Control BuildHeroCard()
     {
-        var panel = CreatePanel(new Color("0D1C29"), new Color("63B3ED"));
+        var panel = CreatePanel(FactoryUiTheme.SurfaceBase, FactoryUiTheme.Border);
 
         var body = new VBoxContainer();
         body.AddThemeConstantOverride("separation", 10);
         panel.AddChild(WrapInMargin(body, 20));
 
-        body.AddChild(CreateLabel("快速入口", 22, Colors.White));
-        body.AddChild(CreateLabel("适合在 Godot 编辑器之外浏览各个演示切片，或在验证改动时反复往返多个场景。", 14, new Color("B7CAD8"), true));
-        body.AddChild(CreateLabel("建议先进入 Factory Sandbox 观察基准物流，再切到移动工厂和 UI 展示页检查单独功能。", 13, new Color("7DD3FC"), true));
+        body.AddChild(CreateLabel("快速入口", 22, FactoryUiTheme.Text));
+        body.AddChild(CreateLabel("适合在 Godot 编辑器之外浏览各个演示切片，或在验证改动时反复往返多个场景。", 14, FactoryUiTheme.TextMuted, true));
+        body.AddChild(CreateLabel("建议先进入 Factory Sandbox 观察基准物流，再切到移动工厂和 UI 展示页检查单独功能。", 13, FactoryUiTheme.TextSubtle, true));
 
         return panel;
     }
@@ -120,13 +120,13 @@ public partial class DemoLauncher : Control
     {
         var accent = (index % 4) switch
         {
-            0 => new Color("5EEAD4"),
-            1 => new Color("F6AD55"),
-            2 => new Color("90CDF4"),
-            _ => new Color("F9A8D4")
+            0 => FactoryUiTheme.BorderStrong,
+            1 => FactoryUiTheme.Border,
+            2 => FactoryUiTheme.TextMuted,
+            _ => FactoryUiTheme.BorderMuted
         };
 
-        var panel = CreatePanel(new Color("0F202D"), accent);
+        var panel = CreatePanel(FactoryUiTheme.SurfaceBase, accent);
 
         var row = new HBoxContainer();
         row.SizeFlagsHorizontal = SizeFlags.ExpandFill;
@@ -138,9 +138,9 @@ public partial class DemoLauncher : Control
         copy.AddThemeConstantOverride("separation", 8);
         row.AddChild(copy);
 
-        copy.AddChild(CreateLabel(entry.Title, 24, Colors.White));
-        copy.AddChild(CreateLabel(entry.Description, 14, new Color("C8D7E3"), true));
-        copy.AddChild(CreateLabel(entry.ScenePath, 12, accent));
+        copy.AddChild(CreateLabel(entry.Title, 24, FactoryUiTheme.Text));
+        copy.AddChild(CreateLabel(entry.Description, 14, FactoryUiTheme.TextMuted, true));
+        copy.AddChild(CreateLabel(entry.ScenePath, 12, FactoryUiTheme.TextSubtle));
 
         var actions = new VBoxContainer();
         actions.CustomMinimumSize = new Vector2(180.0f, 0.0f);
@@ -152,12 +152,10 @@ public partial class DemoLauncher : Control
         launchButton.CustomMinimumSize = new Vector2(0.0f, 42.0f);
         launchButton.AddThemeFontSizeOverride("font_size", 15);
         launchButton.Pressed += () => OpenDemo(entry.ScenePath);
-        launchButton.AddThemeStyleboxOverride("normal", CreateButtonStyle(new Color("12344C"), accent));
-        launchButton.AddThemeStyleboxOverride("hover", CreateButtonStyle(new Color("1B4965"), Colors.White));
-        launchButton.AddThemeStyleboxOverride("pressed", CreateButtonStyle(new Color("0B2233"), accent.Lightened(0.2f)));
+        FactoryUiTheme.ApplyButtonTheme(launchButton);
         actions.AddChild(launchButton);
 
-        actions.AddChild(CreateLabel("场景支持单独运行，也支持从 Launcher 反复进入。", 12, new Color("9BB3C7"), true));
+        actions.AddChild(CreateLabel("场景支持单独运行，也支持从 Launcher 反复进入。", 12, FactoryUiTheme.TextSubtle, true));
 
         return panel;
     }
@@ -168,7 +166,7 @@ public partial class DemoLauncher : Control
         footer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         footer.AddThemeConstantOverride("separation", 12);
 
-        var note = CreateLabel("提示：如果你是从编辑器直接打开某个 demo，也仍然可以通过右上角按钮回到 Launcher。", 12, new Color("9FB7C9"), true);
+        var note = CreateLabel("提示：如果你是从编辑器直接打开某个 demo，也仍然可以通过右上角按钮回到 Launcher。", 12, FactoryUiTheme.TextSubtle, true);
         note.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         footer.AddChild(note);
 
@@ -176,8 +174,7 @@ public partial class DemoLauncher : Control
         quitButton.Text = "退出";
         quitButton.CustomMinimumSize = new Vector2(110.0f, 36.0f);
         quitButton.Pressed += () => GetTree().Quit();
-        quitButton.AddThemeStyleboxOverride("normal", CreateButtonStyle(new Color("1F2937"), new Color("64748B")));
-        quitButton.AddThemeStyleboxOverride("hover", CreateButtonStyle(new Color("334155"), Colors.White));
+        FactoryUiTheme.ApplyButtonTheme(quitButton);
         footer.AddChild(quitButton);
 
         return footer;
@@ -230,21 +227,7 @@ public partial class DemoLauncher : Control
     {
         var panel = new PanelContainer();
         panel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-
-        var style = new StyleBoxFlat();
-        style.BgColor = background;
-        style.BorderColor = accent;
-        style.BorderWidthLeft = 1;
-        style.BorderWidthTop = 1;
-        style.BorderWidthRight = 1;
-        style.BorderWidthBottom = 1;
-        style.CornerRadiusTopLeft = 18;
-        style.CornerRadiusTopRight = 18;
-        style.CornerRadiusBottomRight = 18;
-        style.CornerRadiusBottomLeft = 18;
-        style.ShadowColor = new Color(0.0f, 0.0f, 0.0f, 0.22f);
-        style.ShadowSize = 8;
-        panel.AddThemeStyleboxOverride("panel", style);
+        panel.AddThemeStyleboxOverride("panel", FactoryUiTheme.CreatePanelStyle(background, accent, borderWidth: 1, cornerRadius: FactoryUiTheme.RadiusNone));
 
         return panel;
     }
@@ -262,7 +245,7 @@ public partial class DemoLauncher : Control
 
     private static Label CreateTag(string text)
     {
-        var label = CreateLabel(text, 12, new Color("8DECE1"));
+        var label = CreateLabel(text, 12, FactoryUiTheme.TextSubtle);
         label.Uppercase = true;
         return label;
     }
@@ -277,23 +260,4 @@ public partial class DemoLauncher : Control
         return label;
     }
 
-    private static StyleBoxFlat CreateButtonStyle(Color background, Color border)
-    {
-        var style = new StyleBoxFlat();
-        style.BgColor = background;
-        style.BorderColor = border;
-        style.BorderWidthLeft = 1;
-        style.BorderWidthTop = 1;
-        style.BorderWidthRight = 1;
-        style.BorderWidthBottom = 1;
-        style.CornerRadiusTopLeft = 12;
-        style.CornerRadiusTopRight = 12;
-        style.CornerRadiusBottomRight = 12;
-        style.CornerRadiusBottomLeft = 12;
-        style.ContentMarginLeft = 14;
-        style.ContentMarginRight = 14;
-        style.ContentMarginTop = 9;
-        style.ContentMarginBottom = 9;
-        return style;
-    }
 }

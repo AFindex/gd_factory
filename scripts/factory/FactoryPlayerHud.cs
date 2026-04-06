@@ -15,6 +15,7 @@ public partial class FactoryPlayerHud : CanvasLayer
     {
         public required int Index { get; init; }
         public required PanelContainer Panel { get; init; }
+        public required StyleBoxFlat PanelStyle { get; init; }
         public required TextureRect Icon { get; init; }
         public required Label IndexLabel { get; init; }
         public required Label NameLabel { get; init; }
@@ -73,7 +74,7 @@ public partial class FactoryPlayerHud : CanvasLayer
 
         var barPanel = new PanelContainer();
         barPanel.MouseFilter = Control.MouseFilterEnum.Ignore;
-        barPanel.AddThemeStyleboxOverride("panel", CreatePanelStyle(new Color(0.04f, 0.08f, 0.11f, 0.94f), new Color("38BDF8"), 2, 10));
+        barPanel.AddThemeStyleboxOverride("panel", CreatePanelStyle(FactoryUiTheme.SurfaceOverlay, FactoryUiTheme.BorderStrong, 2, FactoryUiTheme.RadiusNone));
         root.AddChild(barPanel);
         _barPanel = barPanel;
 
@@ -92,7 +93,7 @@ public partial class FactoryPlayerHud : CanvasLayer
         barBody.AddThemeConstantOverride("separation", 6);
         barMargin.AddChild(barBody);
 
-        _statusLabel = CreateLabel(11, new Color("D7E6F2"));
+        _statusLabel = CreateLabel(11, FactoryUiTheme.TextMuted);
         _statusLabel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         barBody.AddChild(_statusLabel);
 
@@ -142,7 +143,7 @@ public partial class FactoryPlayerHud : CanvasLayer
             CustomMinimumSize = new Vector2(170.0f, 52.0f),
             ZIndex = 128
         };
-        hotbarDragPreview.AddThemeStyleboxOverride("panel", CreatePanelStyle(new Color(0.03f, 0.07f, 0.11f, 0.92f), new Color("38BDF8"), 2, 8));
+        hotbarDragPreview.AddThemeStyleboxOverride("panel", CreatePanelStyle(FactoryUiTheme.SurfaceOverlay, FactoryUiTheme.BorderStrong, 2, FactoryUiTheme.RadiusNone));
         root.AddChild(hotbarDragPreview);
         _hotbarDragPreview = hotbarDragPreview;
 
@@ -174,14 +175,14 @@ public partial class FactoryPlayerHud : CanvasLayer
         dragPreviewText.AddThemeConstantOverride("separation", 2);
         dragPreviewRow.AddChild(dragPreviewText);
 
-        _hotbarDragPreviewTitle = CreateLabel(11, Colors.White);
+        _hotbarDragPreviewTitle = CreateLabel(11, FactoryUiTheme.Text);
         _hotbarDragPreviewTitle.AutowrapMode = TextServer.AutowrapMode.Off;
         _hotbarDragPreviewTitle.ClipText = true;
         _hotbarDragPreviewTitle.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
         _hotbarDragPreviewTitle.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         dragPreviewText.AddChild(_hotbarDragPreviewTitle);
 
-        _hotbarDragPreviewCount = CreateLabel(10, new Color("FDE68A"));
+        _hotbarDragPreviewCount = CreateLabel(10, FactoryUiTheme.TextSubtle);
         dragPreviewText.AddChild(_hotbarDragPreviewCount);
 
         UpdateLayout();
@@ -335,11 +336,11 @@ public partial class FactoryPlayerHud : CanvasLayer
         topRow.AddThemeConstantOverride("separation", 2);
         body.AddChild(topRow);
 
-        var indexLabel = CreateLabel(8, new Color("FDE68A"));
+        var indexLabel = CreateLabel(8, FactoryUiTheme.TextSubtle);
         indexLabel.Text = FactoryPlayerController.GetHotbarSlotLabel(index);
         topRow.AddChild(indexLabel);
 
-        var countLabel = CreateLabel(8, Colors.White);
+        var countLabel = CreateLabel(8, FactoryUiTheme.Text);
         countLabel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         countLabel.HorizontalAlignment = HorizontalAlignment.Right;
         topRow.AddChild(countLabel);
@@ -356,17 +357,21 @@ public partial class FactoryPlayerHud : CanvasLayer
         icon.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
         iconHost.AddChild(icon);
 
-        var nameLabel = CreateLabel(8, new Color("D7E6F2"));
+        var nameLabel = CreateLabel(8, FactoryUiTheme.TextMuted);
         nameLabel.HorizontalAlignment = HorizontalAlignment.Center;
         nameLabel.AutowrapMode = TextServer.AutowrapMode.Off;
         nameLabel.ClipText = true;
         nameLabel.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
         body.AddChild(nameLabel);
 
+        var panelStyle = CreatePanelStyle(FactoryUiTheme.SurfaceInset, FactoryUiTheme.BorderMuted, 1, 0);
+        panel.AddThemeStyleboxOverride("panel", panelStyle);
+
         var widget = new HotbarSlotWidget
         {
             Index = index,
             Panel = panel,
+            PanelStyle = panelStyle,
             Icon = icon,
             IndexLabel = indexLabel,
             NameLabel = nameLabel,
@@ -385,6 +390,7 @@ public partial class FactoryPlayerHud : CanvasLayer
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
             CustomMinimumSize = new Vector2(0.0f, 30.0f)
         };
+        FactoryUiTheme.ApplyButtonTheme(button);
         button.Pressed += onPressed;
         return button;
     }
@@ -443,10 +449,10 @@ public partial class FactoryPlayerHud : CanvasLayer
 
         var activePrototype = _player?.GetArmedPlaceablePrototype();
         _statusLabel.Text = _player is null
-            ? "玩家未初始化。"
+            ? "[INIT] 玩家未初始化。"
             : activePrototype.HasValue
-                ? $"当前就绪：{FactoryPresentation.GetBuildPrototypeDisplayName(activePrototype.Value)}，左键可在有效地格放置。"
-                : "当前未就绪放置物；点击快捷栏切换建筑。";
+                ? $"[READY] {FactoryPresentation.GetBuildPrototypeDisplayName(activePrototype.Value)}，左键可在有效地格放置。"
+                : "[IDLE] 当前未就绪放置物；点击快捷栏切换建筑。";
 
         for (var index = 0; index < _hotbarSlots.Count; index++)
         {
@@ -454,13 +460,13 @@ public partial class FactoryPlayerHud : CanvasLayer
             var item = _player?.GetHotbarItem(index);
             var isSelected = _player is not null && index == _player.ActiveHotbarIndex;
             var isArmed = isSelected && (_player?.IsHotbarPlacementArmed ?? false);
-            var accentColor = item is null ? new Color("475569") : FactoryPresentation.GetItemAccentColor(item);
+            var accentColor = item is null ? FactoryUiTheme.BorderMuted : FactoryUiTheme.Border;
             var borderColor = isArmed
-                ? new Color("4ADE80")
+                ? FactoryUiTheme.BorderStrong
                 : isSelected
-                    ? new Color("FDE68A")
+                    ? FactoryUiTheme.Text
                     : accentColor;
-            var backgroundColor = isSelected ? new Color("13253A") : new Color("0F172A");
+            var backgroundColor = isSelected ? FactoryUiTheme.SurfaceBase : FactoryUiTheme.SurfaceInset;
             var stackCount = CountHotbarStack(index);
             var isDropHovered = FactoryStructureDetailWindow.HasSharedInventoryDrag
                 && widget.Panel.GetGlobalRect().HasPoint(GetViewport().GetMousePosition());
@@ -474,31 +480,38 @@ public partial class FactoryPlayerHud : CanvasLayer
                     item is null ? null : FactoryPresentation.GetItemDisplayName(item));
             if (_activeHotbarDragIndex == index)
             {
-                borderColor = new Color("38BDF8");
-                backgroundColor = new Color("10243C");
+                borderColor = FactoryUiTheme.BorderStrong;
+                backgroundColor = FactoryUiTheme.SurfaceBase;
             }
             else if (_pendingHotbarDragIndex == index)
             {
-                borderColor = new Color("7DD3FC");
-                backgroundColor = new Color("12253A");
+                borderColor = FactoryUiTheme.TextMuted;
+                backgroundColor = FactoryUiTheme.SurfaceBase;
             }
 
             if (isDropHovered)
             {
-                borderColor = acceptsSharedDrop ? new Color("4ADE80") : new Color("FCA5A5");
-                backgroundColor = acceptsSharedDrop ? new Color("122A23") : new Color("2A1717");
+                borderColor = acceptsSharedDrop ? FactoryUiTheme.BorderStrong : FactoryUiTheme.StatusError;
+                backgroundColor = acceptsSharedDrop ? FactoryUiTheme.SurfaceInverse : FactoryUiTheme.SurfaceBase;
             }
 
-            widget.Panel.AddThemeStyleboxOverride("panel", CreatePanelStyle(backgroundColor, borderColor, isSelected ? 2 : 1, 0));
+            FactoryUiTheme.ConfigurePanelStyle(widget.PanelStyle, backgroundColor, borderColor, isSelected ? 2 : 1, 0, contentMargin: 2);
             widget.Icon.Texture = item is null ? null : FactoryPresentation.GetItemIcon(item);
             widget.Icon.Visible = item is not null;
+            var isInverse = backgroundColor == FactoryUiTheme.SurfaceInverse;
             widget.Icon.Modulate = item is null
-                ? new Color(0.6f, 0.66f, 0.74f, 0.8f)
-                : Colors.White;
+                ? FactoryUiTheme.TextFaint
+                : (isInverse ? FactoryUiTheme.TextInverse : FactoryUiTheme.Text);
             widget.NameLabel.Text = item is null ? "空槽位" : FactoryPresentation.GetItemDisplayName(item);
+            widget.NameLabel.Modulate = item is null
+                ? FactoryUiTheme.TextFaint
+                : (isInverse ? FactoryUiTheme.TextInverse : FactoryUiTheme.TextMuted);
             widget.CountLabel.Text = item is null
                 ? "--"
                 : $"{stackCount}/{FactoryItemCatalog.GetMaxStackSize(item.ItemKind)}";
+            widget.CountLabel.Modulate = item is null
+                ? FactoryUiTheme.TextFaint
+                : (isInverse ? FactoryUiTheme.TextInverse : FactoryUiTheme.Text);
             widget.Panel.TooltipText = item is null
                 ? isDropHovered
                     ? acceptsSharedDrop
@@ -749,7 +762,7 @@ public partial class FactoryPlayerHud : CanvasLayer
         _hotbarDragPreview.Visible = true;
         _hotbarDragPreview.Position = GetViewport().GetMousePosition() + new Vector2(18.0f, 18.0f);
         _hotbarDragPreviewIcon.Texture = FactoryPresentation.GetItemIcon(item);
-        _hotbarDragPreviewIcon.Modulate = _hotbarDragPreviewIcon.Texture is null ? FactoryPresentation.GetItemAccentColor(item) : Colors.White;
+        _hotbarDragPreviewIcon.Modulate = _hotbarDragPreviewIcon.Texture is null ? FactoryUiTheme.Text : FactoryUiTheme.Text;
         _hotbarDragPreviewTitle.Text = FactoryPresentation.GetItemDisplayName(item);
         _hotbarDragPreviewCount.Text = Input.IsKeyPressed(Key.Ctrl)
             ? $"分半拖拽 {Mathf.Max(1, Mathf.CeilToInt(CountHotbarStack(_activeHotbarDragIndex) * 0.5f))}"
@@ -822,22 +835,6 @@ public partial class FactoryPlayerHud : CanvasLayer
 
     private static StyleBoxFlat CreatePanelStyle(Color backgroundColor, Color borderColor, int borderWidth, int radius)
     {
-        return new StyleBoxFlat
-        {
-            BgColor = backgroundColor,
-            BorderColor = borderColor,
-            BorderWidthBottom = borderWidth,
-            BorderWidthLeft = borderWidth,
-            BorderWidthRight = borderWidth,
-            BorderWidthTop = borderWidth,
-            CornerRadiusBottomLeft = radius,
-            CornerRadiusBottomRight = radius,
-            CornerRadiusTopLeft = radius,
-            CornerRadiusTopRight = radius,
-            ContentMarginBottom = 2,
-            ContentMarginLeft = 2,
-            ContentMarginRight = 2,
-            ContentMarginTop = 2
-        };
+        return FactoryUiTheme.CreatePanelStyle(backgroundColor, borderColor, borderWidth, radius, contentMargin: 2);
     }
 }

@@ -217,15 +217,15 @@ public partial class FactoryHud : CanvasLayer
 
         _modeLabel.Text = mode switch
         {
-            FactoryInteractionMode.Build => "当前模式: 建造模式",
-            FactoryInteractionMode.Delete => "当前模式: 删除模式",
-            _ => "当前模式: 交互模式"
+            FactoryInteractionMode.Build => "[BUILD] 当前模式：建造模式",
+            FactoryInteractionMode.Delete => "[DELETE] 当前模式：删除模式",
+            _ => "[INTERACT] 当前模式：交互模式"
         };
         _modeLabel.Modulate = mode switch
         {
-            FactoryInteractionMode.Build => new Color("A7F3A0"),
-            FactoryInteractionMode.Delete => new Color("FCA5A5"),
-            _ => new Color("FDE68A")
+            FactoryInteractionMode.Build => FactoryUiTheme.StatusOk,
+            FactoryInteractionMode.Delete => FactoryUiTheme.StatusError,
+            _ => FactoryUiTheme.StatusWarn
         };
     }
 
@@ -234,7 +234,6 @@ public partial class FactoryHud : CanvasLayer
         foreach (var pair in _selectionButtons)
         {
             pair.Value.ButtonPressed = kind.HasValue && pair.Key == kind.Value;
-            pair.Value.Modulate = pair.Value.ButtonPressed ? Colors.White : new Color(0.72f, 0.78f, 0.86f);
         }
 
         if (_selectedLabel is null)
@@ -244,13 +243,13 @@ public partial class FactoryHud : CanvasLayer
 
         if (!kind.HasValue)
         {
-            _selectedLabel.Text = "当前建造: 未选择";
+            _selectedLabel.Text = "[SELECT] 当前建造：未选择";
             _selectedLabel.TooltipText = "交互模式下点击建筑查看详情。";
             return;
         }
 
         var detailText = details ?? string.Empty;
-        _selectedLabel.Text = $"当前建造: {FactoryPresentation.GetKindLabel(kind.Value)}\n{detailText}";
+        _selectedLabel.Text = $"[SELECT] 当前建造：{FactoryPresentation.GetKindLabel(kind.Value)}\n{detailText}";
         _selectedLabel.TooltipText = detailText;
     }
 
@@ -258,12 +257,12 @@ public partial class FactoryHud : CanvasLayer
     {
         if (_selectionTargetLabel is not null)
         {
-            _selectionTargetLabel.Text = $"当前选中: {text}";
+            _selectionTargetLabel.Text = $"[TARGET] 当前选中: {text}";
         }
 
         if (_testingTargetLabel is not null)
         {
-            _testingTargetLabel.Text = $"验证目标: {text}";
+            _testingTargetLabel.Text = $"[TARGET] 验证目标: {text}";
         }
     }
 
@@ -271,7 +270,7 @@ public partial class FactoryHud : CanvasLayer
     {
         if (_hoverLabel is not null)
         {
-            _hoverLabel.Text = hasHover ? $"格子: ({cell.X}, {cell.Y})" : "格子: 超出可建造区域";
+            _hoverLabel.Text = hasHover ? $"[CELL] 格子: ({cell.X}, {cell.Y})" : "[CELL] 格子: 超出可建造区域";
         }
     }
 
@@ -279,14 +278,14 @@ public partial class FactoryHud : CanvasLayer
     {
         if (_previewLabel is not null)
         {
-            _previewLabel.Text = $"提示: {text}";
-            _previewLabel.Modulate = isValid ? new Color("A7F3A0") : new Color("FFB4A2");
+            _previewLabel.Text = $"{(isValid ? "[OK]" : "[BLOCK]")} 提示：{text}";
+            _previewLabel.Modulate = FactoryUiTheme.GetStatusTone(isValid);
         }
 
         if (_testingPreviewLabel is not null)
         {
-            _testingPreviewLabel.Text = $"验证提示: {text}";
-            _testingPreviewLabel.Modulate = isValid ? new Color("A7F3A0") : new Color("FFB4A2");
+            _testingPreviewLabel.Text = $"{(isValid ? "[OK]" : "[BLOCK]")} 验证提示：{text}";
+            _testingPreviewLabel.Modulate = FactoryUiTheme.GetStatusTone(isValid);
         }
     }
 
@@ -294,7 +293,7 @@ public partial class FactoryHud : CanvasLayer
     {
         if (_rotationLabel is not null)
         {
-            _rotationLabel.Text = $"朝向: {FactoryDirection.ToLabel(facing)}";
+            _rotationLabel.Text = $"[FACING] 朝向: {FactoryDirection.ToLabel(facing)}";
         }
     }
 
@@ -302,7 +301,7 @@ public partial class FactoryHud : CanvasLayer
     {
         if (_deliveryLabel is not null)
         {
-            _deliveryLabel.Text = $"活跃回收端: {sinkCount} | 累计: {deliveredTotal} | 最近: {deliveredRate}/秒";
+            _deliveryLabel.Text = $"[FLOW] 活跃回收端: {sinkCount} | 累计: {deliveredTotal} | 最近: {deliveredRate}/秒";
         }
     }
 
@@ -324,7 +323,8 @@ public partial class FactoryHud : CanvasLayer
     {
         if (_combatLabel is not null)
         {
-            _combatLabel.Text = $"敌人 {activeEnemies} | 击杀 {kills} | 损失建筑 {structuresLost}";
+            _combatLabel.Text = $"[{(activeEnemies > 0 ? "THREAT" : "CLEAR")}] 敌人 {activeEnemies} | 击杀 {kills} | 损失建筑 {structuresLost}";
+            _combatLabel.Modulate = activeEnemies > 0 ? FactoryUiTheme.StatusError : FactoryUiTheme.StatusWarn;
         }
     }
 
@@ -423,8 +423,8 @@ public partial class FactoryHud : CanvasLayer
     private Control BuildBuildWorkspace()
     {
         var (workspace, body) = CreateWorkspacePanel(BuildWorkspaceId);
-        body.AddChild(CreateSectionLabel("建造工作区", 14, Colors.White));
-        body.AddChild(CreateValueLabel("默认交互模式下可选中建筑，显式选择原型后才进入建造模式。", new Color("A8B8C6")));
+        body.AddChild(CreateSectionLabel("建造工作区", 14, FactoryUiTheme.Text));
+        body.AddChild(CreateValueLabel("默认交互模式下可选中建筑，显式选择原型后才进入建造模式。", FactoryUiTheme.TextSubtle));
 
         body.AddChild(CreateDivider());
         _modeLabel = CreateValueLabel(string.Empty);
@@ -441,12 +441,12 @@ public partial class FactoryHud : CanvasLayer
         body.AddChild(_previewLabel);
 
         body.AddChild(CreateDivider());
-        body.AddChild(CreateSectionLabel("建造面板", 12, new Color("F8FAFC")));
-        body.AddChild(CreateValueLabel("按功能拆成页签；多格建筑会保留在各自所属功能分类中。", new Color("8EA4B8")));
+        body.AddChild(CreateSectionLabel("建造面板", 12, FactoryUiTheme.Text));
+        body.AddChild(CreateValueLabel("按功能拆成页签；多格建筑会保留在各自所属功能分类中。", FactoryUiTheme.TextSubtle));
         BuildSelectionCategories(body);
 
         body.AddChild(CreateDivider());
-        body.AddChild(CreateSectionLabel("快速观察", 12, new Color("F8FAFC")));
+        body.AddChild(CreateSectionLabel("快速观察", 12, FactoryUiTheme.Text));
         var inspectionPanel = new PanelContainer();
         inspectionPanel.MouseFilter = Control.MouseFilterEnum.Ignore;
         inspectionPanel.Visible = false;
@@ -458,8 +458,8 @@ public partial class FactoryHud : CanvasLayer
         inspectionBody.AddThemeConstantOverride("separation", 4);
         inspectionPanel.AddChild(inspectionBody);
 
-        _inspectionTitleLabel = CreateValueLabel(string.Empty, new Color("FDE68A"));
-        _inspectionBodyLabel = CreateValueLabel(string.Empty, new Color("D7E3EE"));
+        _inspectionTitleLabel = CreateValueLabel(string.Empty, FactoryUiTheme.Text);
+        _inspectionBodyLabel = CreateValueLabel(string.Empty, FactoryUiTheme.TextMuted);
         inspectionBody.AddChild(_inspectionTitleLabel);
         inspectionBody.AddChild(_inspectionBodyLabel);
 
@@ -481,28 +481,23 @@ public partial class FactoryHud : CanvasLayer
         body.AddThemeConstantOverride("separation", 8);
         workspace.AddChild(body);
 
-        body.AddChild(CreateSectionLabel("蓝图工作区", 14, Colors.White));
-        body.AddChild(CreateValueLabel("框选保存、库浏览和应用预览都集中在这里，不再单独弹出默认常驻窗口。", new Color("A8B8C6")));
-
-        var blueprintHost = new PanelContainer();
-        blueprintHost.MouseFilter = Control.MouseFilterEnum.Ignore;
-        blueprintHost.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        blueprintHost.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
-        blueprintHost.ClipContents = true;
-        blueprintHost.AddThemeStyleboxOverride("panel", CreateWorkspaceBodyStyle());
-        body.AddChild(blueprintHost);
+        body.AddChild(CreateSectionLabel("蓝图工作区", 14, FactoryUiTheme.Text));
+        body.AddChild(CreateValueLabel("框选保存、库浏览和应用预览都集中在这里，不再单独弹出默认常驻窗口。", FactoryUiTheme.TextSubtle));
 
         var blueprintMargin = new MarginContainer();
-        blueprintMargin.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         blueprintMargin.MouseFilter = Control.MouseFilterEnum.Ignore;
-        blueprintMargin.AddThemeConstantOverride("margin_left", 8);
-        blueprintMargin.AddThemeConstantOverride("margin_top", 8);
-        blueprintMargin.AddThemeConstantOverride("margin_right", 8);
-        blueprintMargin.AddThemeConstantOverride("margin_bottom", 8);
-        blueprintHost.AddChild(blueprintMargin);
+        blueprintMargin.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        blueprintMargin.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        blueprintMargin.AddThemeConstantOverride("margin_left", 2);
+        blueprintMargin.AddThemeConstantOverride("margin_top", 2);
+        blueprintMargin.AddThemeConstantOverride("margin_right", 2);
+        blueprintMargin.AddThemeConstantOverride("margin_bottom", 2);
+        body.AddChild(blueprintMargin);
 
         _blueprintPanel = new FactoryBlueprintPanel();
         _blueprintPanel.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _blueprintPanel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _blueprintPanel.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         _blueprintPanel.SetDocked(true);
         _blueprintPanel.CaptureSelectionRequested += () => BlueprintCaptureRequested?.Invoke();
         _blueprintPanel.BlueprintSelected += blueprintId => BlueprintSelected?.Invoke(blueprintId);
@@ -520,17 +515,17 @@ public partial class FactoryHud : CanvasLayer
     private Control BuildTelemetryWorkspace()
     {
         var (workspace, body) = CreateWorkspacePanel(TelemetryWorkspaceId);
-        body.AddChild(CreateSectionLabel("遥测工作区", 14, Colors.White));
-        body.AddChild(CreateValueLabel("把吞吐、性能和稳定性读数收敛在一个面板里，方便观察 sandbox 当前运行状态。", new Color("A8B8C6")));
+        body.AddChild(CreateSectionLabel("遥测工作区", 14, FactoryUiTheme.Text));
+        body.AddChild(CreateValueLabel("把吞吐、性能和稳定性读数收敛在一个面板里，方便观察 sandbox 当前运行状态。", FactoryUiTheme.TextSubtle));
 
         body.AddChild(CreateDivider());
         _deliveryLabel = CreateValueLabel(string.Empty);
-        _profilerLabel = CreateValueLabel(string.Empty, new Color("CFE7FF"));
+        _profilerLabel = CreateValueLabel(string.Empty, FactoryUiTheme.TextMuted);
         body.AddChild(_deliveryLabel);
         body.AddChild(_profilerLabel);
 
         body.AddChild(CreateDivider());
-        _noteLabel = CreateValueLabel(string.Empty, new Color("EED49F"));
+        _noteLabel = CreateValueLabel(string.Empty, FactoryUiTheme.TextSubtle);
         body.AddChild(_noteLabel);
 
         return workspace;
@@ -539,15 +534,15 @@ public partial class FactoryHud : CanvasLayer
     private Control BuildCombatWorkspace()
     {
         var (workspace, body) = CreateWorkspacePanel(CombatWorkspaceId);
-        body.AddChild(CreateSectionLabel("战斗工作区", 14, Colors.White));
-        body.AddChild(CreateValueLabel("把威胁与损失读数从主建造界面中分离出来，便于在需要时单独盯防。", new Color("A8B8C6")));
+        body.AddChild(CreateSectionLabel("战斗工作区", 14, FactoryUiTheme.Text));
+        body.AddChild(CreateValueLabel("把威胁与损失读数从主建造界面中分离出来，便于在需要时单独盯防。", FactoryUiTheme.TextSubtle));
 
         body.AddChild(CreateDivider());
-        _combatLabel = CreateValueLabel(string.Empty, new Color("FCA5A5"));
+        _combatLabel = CreateValueLabel(string.Empty, FactoryUiTheme.StatusError);
         body.AddChild(_combatLabel);
 
         body.AddChild(CreateDivider());
-        body.AddChild(CreateValueLabel("验证炮塔供弹、敌潮压力和防线破口时，可将视图切到这个工作区。", new Color("8EA4B8")));
+        body.AddChild(CreateValueLabel("验证炮塔供弹、敌潮压力和防线破口时，可将视图切到这个工作区。", FactoryUiTheme.TextSubtle));
 
         return workspace;
     }
@@ -555,8 +550,8 @@ public partial class FactoryHud : CanvasLayer
     private Control BuildTestingWorkspace()
     {
         var (workspace, body) = CreateWorkspacePanel(TestingWorkspaceId);
-        body.AddChild(CreateSectionLabel("测试工作区", 14, Colors.White));
-        body.AddChild(CreateValueLabel("把常见的 build/inspect/blueprint 验证路径整理成一个独立面板，而不是默认摊开在主 HUD 上。", new Color("A8B8C6")));
+        body.AddChild(CreateSectionLabel("测试工作区", 14, FactoryUiTheme.Text));
+        body.AddChild(CreateValueLabel("把常见的 build/inspect/blueprint 验证路径整理成一个独立面板，而不是默认摊开在主 HUD 上。", FactoryUiTheme.TextSubtle));
 
         var jumpRow = new HBoxContainer();
         jumpRow.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
@@ -567,15 +562,15 @@ public partial class FactoryHud : CanvasLayer
         jumpRow.AddChild(CreateWorkspaceJumpButton("打开蓝图工作区", BlueprintWorkspaceId));
 
         body.AddChild(CreateDivider());
-        _testingNoteLabel = CreateValueLabel(string.Empty, new Color("EED49F"));
-        _testingTargetLabel = CreateValueLabel("验证目标: 未选中建筑", new Color("D7E3EE"));
-        _testingPreviewLabel = CreateValueLabel("验证提示: 等待状态更新。", new Color("D7E3EE"));
+        _testingNoteLabel = CreateValueLabel(string.Empty, FactoryUiTheme.TextSubtle);
+        _testingTargetLabel = CreateValueLabel("验证目标: 未选中建筑", FactoryUiTheme.TextMuted);
+        _testingPreviewLabel = CreateValueLabel("验证提示: 等待状态更新。", FactoryUiTheme.TextMuted);
         body.AddChild(_testingNoteLabel);
         body.AddChild(_testingTargetLabel);
         body.AddChild(_testingPreviewLabel);
 
         body.AddChild(CreateDivider());
-        body.AddChild(CreateValueLabel("建议验证路径：Shift+左键框选蓝图、点击建筑查看详情、Delete/X 验证拆除与恢复。", new Color("8EA4B8")));
+        body.AddChild(CreateValueLabel("建议验证路径：Shift+左键框选蓝图、点击建筑查看详情、Delete/X 验证拆除与恢复。", FactoryUiTheme.TextSubtle));
 
         return workspace;
     }
@@ -611,6 +606,7 @@ public partial class FactoryHud : CanvasLayer
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
             CustomMinimumSize = new Vector2(0.0f, 30.0f)
         };
+        FactoryUiTheme.ApplyButtonTheme(button);
         button.Pressed += () => SetActiveWorkspace(workspaceId);
         return button;
     }
@@ -667,6 +663,7 @@ public partial class FactoryHud : CanvasLayer
         button.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         button.CustomMinimumSize = new Vector2(0.0f, 30.0f);
         button.AddThemeFontSizeOverride("font_size", 12);
+        FactoryUiTheme.ApplyButtonTheme(button);
         button.Pressed += () =>
         {
             BuildPrototypeKind? nextKind = button.ButtonPressed ? localKind : null;
@@ -683,6 +680,7 @@ public partial class FactoryHud : CanvasLayer
         tabs.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         tabs.AddThemeFontSizeOverride("font_size", CompactTabFontSize);
         tabs.AddThemeConstantOverride("side_margin", 2);
+        FactoryUiTheme.ApplyTabContainerTheme(tabs);
         parent.AddChild(tabs);
 
         for (var index = 0; index < BuildPaletteCategories.Length; index++)
@@ -805,52 +803,23 @@ public partial class FactoryHud : CanvasLayer
         label.MouseFilter = Control.MouseFilterEnum.Ignore;
         label.Text = text;
         label.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-        label.Modulate = color ?? new Color("D7E3EE");
+        label.Modulate = color ?? FactoryUiTheme.TextMuted;
         label.AddThemeFontSizeOverride("font_size", 12);
         return label;
     }
 
     private static ColorRect CreateDivider()
     {
-        return new ColorRect
-        {
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-            CustomMinimumSize = new Vector2(0.0f, 1.0f),
-            Color = new Color(0.45f, 0.53f, 0.61f, 0.28f)
-        };
+        return FactoryUiTheme.CreateDivider();
     }
 
     private static StyleBoxFlat CreatePanelStyle()
     {
-        return new StyleBoxFlat
-        {
-            BgColor = new Color(0.05f, 0.08f, 0.12f, 0.90f),
-            BorderColor = new Color("4DA8DA"),
-            BorderWidthLeft = 1,
-            BorderWidthTop = 1,
-            BorderWidthRight = 1,
-            BorderWidthBottom = 1,
-            CornerRadiusTopLeft = 10,
-            CornerRadiusTopRight = 10,
-            CornerRadiusBottomRight = 10,
-            CornerRadiusBottomLeft = 10
-        };
+        return FactoryUiTheme.CreateChromePanelStyle();
     }
 
     private static StyleBoxFlat CreateWorkspaceBodyStyle()
     {
-        return new StyleBoxFlat
-        {
-            BgColor = new Color(0.03f, 0.05f, 0.08f, 0.72f),
-            BorderColor = new Color(0.45f, 0.53f, 0.61f, 0.28f),
-            BorderWidthLeft = 1,
-            BorderWidthTop = 1,
-            BorderWidthRight = 1,
-            BorderWidthBottom = 1,
-            CornerRadiusTopLeft = 8,
-            CornerRadiusTopRight = 8,
-            CornerRadiusBottomRight = 8,
-            CornerRadiusBottomLeft = 8
-        };
+        return FactoryUiTheme.CreateWorkspaceBodyStyle();
     }
 }

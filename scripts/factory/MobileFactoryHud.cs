@@ -54,8 +54,8 @@ public partial class MobileFactoryHud : CanvasLayer
         })
     };
 
-    private static readonly Color EditorFocusColor = new("7DD3FC");
-    private static readonly Color WorldFocusColor = new("FDE68A");
+    private static readonly Color EditorFocusColor = FactoryUiTheme.BorderStrong;
+    private static readonly Color WorldFocusColor = FactoryUiTheme.Border;
 
     private readonly Dictionary<BuildPrototypeKind, Button> _paletteButtons = new();
     private readonly Dictionary<string, Control> _worldWorkspacePanels = new();
@@ -64,9 +64,11 @@ public partial class MobileFactoryHud : CanvasLayer
     private PanelContainer? _topChromePanel;
     private FactoryWorkspaceChrome? _workspaceChrome;
     private PanelContainer? _worldFocusFrame;
+    private StyleBoxFlat? _worldFocusFrameStyle;
     private Control? _overlayRoot;
     private PanelContainer? _infoPanel;
     private PanelContainer? _editorPanel;
+    private StyleBoxFlat? _editorPanelStyle;
     private TextureRect? _editorViewportRect;
     private SubViewport? _editorViewport;
     private Label? _modeLabel;
@@ -215,18 +217,18 @@ public partial class MobileFactoryHud : CanvasLayer
         {
             var modeText = controlMode switch
             {
-                MobileFactoryControlMode.Player => "玩家控制",
-                MobileFactoryControlMode.FactoryCommand => "工厂控制",
-                MobileFactoryControlMode.DeployPreview => "部署预览",
-                MobileFactoryControlMode.Observer => "观察模式",
-                _ => "工厂控制"
+                MobileFactoryControlMode.Player => "[PLAYER] 玩家控制",
+                MobileFactoryControlMode.FactoryCommand => "[COMMAND] 工厂控制",
+                MobileFactoryControlMode.DeployPreview => "[DEPLOY] 部署预览",
+                MobileFactoryControlMode.Observer => "[OBSERVE] 观察模式",
+                _ => "[COMMAND] 工厂控制"
             };
-            _modeLabel.Text = $"当前模式：{modeText} | 行进朝向：{FactoryDirection.ToLabel(transitFacing)} | 部署朝向：{FactoryDirection.ToLabel(deployFacing)}";
+            _modeLabel.Text = $"{modeText} | 行进朝向：{FactoryDirection.ToLabel(transitFacing)} | 部署朝向：{FactoryDirection.ToLabel(deployFacing)}";
             _modeLabel.Modulate = controlMode switch
             {
-                MobileFactoryControlMode.Player => new Color("A7F3A0"),
-                MobileFactoryControlMode.Observer => new Color("7DD3FC"),
-                _ => new Color("FDE68A")
+                MobileFactoryControlMode.Player => FactoryUiTheme.StatusOk,
+                MobileFactoryControlMode.Observer => FactoryUiTheme.Text,
+                _ => FactoryUiTheme.StatusWarn
             };
         }
 
@@ -263,10 +265,10 @@ public partial class MobileFactoryHud : CanvasLayer
 
         _stateLabel.Text = state switch
         {
-            MobileFactoryLifecycleState.Deployed when anchorCell is not null => $"工厂状态：已部署于 ({anchorCell.Value.X}, {anchorCell.Value.Y})",
-            MobileFactoryLifecycleState.AutoDeploying => "工厂状态：自动部署中，正在进场并对齐朝向",
-            MobileFactoryLifecycleState.Recalling => "工厂状态：切回移动态中，部署机构正在收拢",
-            _ => "工厂状态：运输中，可自由移动或下达部署命令"
+            MobileFactoryLifecycleState.Deployed when anchorCell is not null => $"[DEPLOYED] 工厂状态：已部署于 ({anchorCell.Value.X}, {anchorCell.Value.Y})",
+            MobileFactoryLifecycleState.AutoDeploying => "[AUTO] 工厂状态：自动部署中，正在进场并对齐朝向",
+            MobileFactoryLifecycleState.Recalling => "[RECALL] 工厂状态：切回移动态中，部署机构正在收拢",
+            _ => "[TRANSIT] 工厂状态：运输中，可自由移动或下达部署命令"
         };
     }
 
@@ -274,7 +276,7 @@ public partial class MobileFactoryHud : CanvasLayer
     {
         if (_hoverLabel is not null)
         {
-            _hoverLabel.Text = hasHover ? $"当前锚点：({anchorCell.X}, {anchorCell.Y})" : "当前锚点：未选择";
+            _hoverLabel.Text = hasHover ? $"[ANCHOR] 当前锚点：({anchorCell.X}, {anchorCell.Y})" : "[ANCHOR] 当前锚点：未选择";
         }
     }
 
@@ -282,13 +284,14 @@ public partial class MobileFactoryHud : CanvasLayer
     {
         if (_previewLabel is not null)
         {
-            _previewLabel.Text = $"世界提示：{text}";
-            _previewLabel.Modulate = tone switch
+            var prefix = tone switch
             {
-                FactoryStatusTone.Positive => new Color("A7F3A0"),
-                FactoryStatusTone.Warning => new Color("FDE68A"),
-                _ => new Color("FFB4A2")
+                FactoryStatusTone.Positive => "[OK]",
+                FactoryStatusTone.Warning => "[WARN]",
+                _ => "[BLOCK]"
             };
+            _previewLabel.Text = $"{prefix} 世界提示：{text}";
+            _previewLabel.Modulate = FactoryUiTheme.GetStatusTone(tone);
         }
     }
 
@@ -314,17 +317,17 @@ public partial class MobileFactoryHud : CanvasLayer
 
         if (interactionMode == FactoryInteractionMode.Build && kind.HasValue)
         {
-            _selectionLabel.Text = $"内部模式：建造 | {GetKindLabel(kind.Value)} | 朝向 {FactoryDirection.ToLabel(facing)}";
+            _selectionLabel.Text = $"[BUILD] 内部模式：建造 | {GetKindLabel(kind.Value)} | 朝向 {FactoryDirection.ToLabel(facing)}";
             RefreshPaletteButtons(kind.Value);
         }
         else if (interactionMode == FactoryInteractionMode.Delete)
         {
-            _selectionLabel.Text = "内部模式：删除 | X 切换，右键退出，Shift 可框选删除";
+            _selectionLabel.Text = "[DELETE] 内部模式：删除 | X 切换，右键退出，Shift 可框选删除";
             RefreshPaletteButtons(null);
         }
         else
         {
-            _selectionLabel.Text = "内部模式：交互 | 点击建筑查看状态";
+            _selectionLabel.Text = "[INTERACT] 内部模式：交互 | 点击建筑查看状态";
             RefreshPaletteButtons(null);
         }
     }
@@ -333,8 +336,8 @@ public partial class MobileFactoryHud : CanvasLayer
     {
         if (_editorPreviewLabel is not null)
         {
-            _editorPreviewLabel.Text = $"内部预览：{text}";
-            _editorPreviewLabel.Modulate = isValid ? new Color("A7F3A0") : new Color("FFB4A2");
+            _editorPreviewLabel.Text = $"{(isValid ? "[OK]" : "[BLOCK]")} 内部预览：{text}";
+            _editorPreviewLabel.Modulate = FactoryUiTheme.GetStatusTone(isValid);
         }
     }
 
@@ -342,8 +345,8 @@ public partial class MobileFactoryHud : CanvasLayer
     {
         if (_portStatusLabel is not null)
         {
-            _portStatusLabel.Text = text;
-            _portStatusLabel.Modulate = new Color("FDE68A");
+            _portStatusLabel.Text = $"[PORT] {text}";
+            _portStatusLabel.Modulate = FactoryUiTheme.TextSubtle;
         }
     }
 
@@ -351,14 +354,14 @@ public partial class MobileFactoryHud : CanvasLayer
     {
         if (_combatLabel is not null)
         {
-            _combatLabel.Text = $"世界威胁：敌人 {activeEnemies} | 击杀 {kills} | 损失建筑 {structuresLost}";
-            _combatLabel.Modulate = activeEnemies > 0 ? new Color("FCA5A5") : new Color("FDE68A");
+            _combatLabel.Text = $"[{(activeEnemies > 0 ? "THREAT" : "CLEAR")}] 世界威胁：敌人 {activeEnemies} | 击杀 {kills} | 损失建筑 {structuresLost}";
+            _combatLabel.Modulate = activeEnemies > 0 ? FactoryUiTheme.StatusError : FactoryUiTheme.StatusWarn;
         }
 
         if (_diagnosticsCombatLabel is not null)
         {
-            _diagnosticsCombatLabel.Text = $"世界威胁：敌人 {activeEnemies} | 击杀 {kills} | 损失建筑 {structuresLost}";
-            _diagnosticsCombatLabel.Modulate = activeEnemies > 0 ? new Color("FCA5A5") : new Color("FDE68A");
+            _diagnosticsCombatLabel.Text = $"[{(activeEnemies > 0 ? "THREAT" : "CLEAR")}] 世界威胁：敌人 {activeEnemies} | 击杀 {kills} | 损失建筑 {structuresLost}";
+            _diagnosticsCombatLabel.Modulate = activeEnemies > 0 ? FactoryUiTheme.StatusError : FactoryUiTheme.StatusWarn;
         }
     }
 
@@ -366,7 +369,7 @@ public partial class MobileFactoryHud : CanvasLayer
     {
         if (_selectionTargetLabel is not null)
         {
-            _selectionTargetLabel.Text = $"内部选中：{text}";
+            _selectionTargetLabel.Text = $"[TARGET] 内部选中：{text}";
         }
     }
 
@@ -385,12 +388,12 @@ public partial class MobileFactoryHud : CanvasLayer
     {
         if (_focusLabel is not null)
         {
-            _focusLabel.Text = overEditor ? "鼠标焦点：内部编辑区" : "鼠标焦点：大世界";
+            _focusLabel.Text = overEditor ? "[FOCUS] 鼠标焦点：内部编辑区" : "[FOCUS] 鼠标焦点：大世界";
         }
 
         if (_diagnosticsFocusLabel is not null)
         {
-            _diagnosticsFocusLabel.Text = overEditor ? "鼠标焦点：内部编辑区" : "鼠标焦点：大世界";
+            _diagnosticsFocusLabel.Text = overEditor ? "[FOCUS] 鼠标焦点：内部编辑区" : "[FOCUS] 鼠标焦点：大世界";
         }
     }
 
@@ -415,7 +418,7 @@ public partial class MobileFactoryHud : CanvasLayer
             FactoryInteractionMode.Delete => "删除模式",
             _ => "交互模式"
         };
-        _editorModeLabel.Text = $"内部编辑：{paneText} | 生命周期：{stateText} | {interactionText} | 当前内部件数：{structureCount}";
+        _editorModeLabel.Text = $"[EDITOR] {paneText} | 生命周期：{stateText} | {interactionText} | 当前内部件数：{structureCount}";
     }
 
     public void SetHintText(string text)

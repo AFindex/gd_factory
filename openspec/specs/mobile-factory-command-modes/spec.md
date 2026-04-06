@@ -4,15 +4,15 @@
 TBD - created by archiving change redesign-mobile-factory-observer-deploy-controls. Update Purpose after archive.
 ## Requirements
 ### Requirement: Mobile factory demo exposes explicit control modes
-The mobile-factory demo SHALL expose explicit control modes so the player can tell whether movement input currently controls the factory, deployment preview, or the world camera.
+The mobile-factory demo SHALL expose explicit control modes so the player can tell whether movement input currently controls the player character, the mobile factory, deployment preview, or the world camera.
 
-#### Scenario: Demo starts in factory command mode
+#### Scenario: Demo starts in player control mode
 - **WHEN** the player opens the dedicated mobile-factory demo scene
-- **THEN** the HUD shows that factory command mode is active and the movement controls are routed to the mobile factory instead of the world camera
+- **THEN** the HUD shows that player control mode is active and movement input is routed to the player character instead of the mobile factory or the world camera
 
-#### Scenario: Player toggles observer mode
-- **WHEN** the player activates the observer-mode button or its matching hotkey
-- **THEN** the HUD indicates observer mode is active and provides a clear way to return to factory command mode
+#### Scenario: Player toggles factory or observer context
+- **WHEN** the player activates the factory-command button, deploy workflow, or observer-mode button
+- **THEN** the HUD indicates the newly active control mode and provides a clear way to return to player control mode
 
 ### Requirement: Command mode routes WASD to the mobile factory while in transit
 The mobile-factory demo SHALL route WASD input to the mobile factory's world-side movement controls whenever the player is in factory command mode and the factory is not currently deployed.
@@ -32,3 +32,13 @@ The mobile-factory demo SHALL provide a deploy preview mode that lets the player
 - **WHEN** the player confirms a valid deployment preview
 - **THEN** the game exits manual movement control for that factory, starts the auto-deploy sequence, and preserves the selected anchor and facing as the deployment target
 
+### Requirement: Player mode routes WASD to the player character by default
+The mobile-factory demo SHALL treat player-character movement as the default owner of WASD until the player explicitly enters another mobile-factory control context.
+
+#### Scenario: Default movement input moves the player
+- **WHEN** the focused mobile-factory demo is in player control mode and the player presses WASD
+- **THEN** the player character moves through the world and the mobile factory remains unchanged unless separately commanded
+
+#### Scenario: Leaving factory context restores player control
+- **WHEN** the player exits factory command mode, deploy preview, or observer mode
+- **THEN** subsequent WASD input returns to moving the player character

@@ -30,9 +30,9 @@ public partial class UiShowcase : Control
 
     private readonly Palette[] _palettes =
     {
-        new("Amber Grid", Hex("07131F"), Hex("102339"), Hex("15314D"), Hex("FF9F43"), Hex("FFD6A0"), Hex("F4F7FB"), Hex("9FB3C8")),
-        new("Cyan Flux", Hex("071017"), Hex("0F2532"), Hex("133345"), Hex("32D1FF"), Hex("9BE9FF"), Hex("F2F8FA"), Hex("A7BECC")),
-        new("Lime Pulse", Hex("09140D"), Hex("142A19"), Hex("1C3823"), Hex("B7FF35"), Hex("E1FF9C"), Hex("F7FBF5"), Hex("B4C7B6"))
+        new("Mono Grid", Hex("050505"), Hex("101010"), Hex("161616"), Hex("F2F2F2"), Hex("D4D4D4"), Hex("F5F5F5"), Hex("A0A0A0")),
+        new("Paper Inverse", Hex("F2F2F2"), Hex("E0E0E0"), Hex("D2D2D2"), Hex("111111"), Hex("444444"), Hex("0A0A0A"), Hex("4A4A4A")),
+        new("CRT Slate", Hex("090909"), Hex("111111"), Hex("1B1B1B"), Hex("FFFFFF"), Hex("B8B8B8"), Hex("F7F7F7"), Hex("8E8E8E"))
     };
 
     private readonly List<Control> _introNodes = new();
@@ -103,12 +103,6 @@ public partial class UiShowcase : Control
         backgroundDecor.SetAnchorsPreset(LayoutPreset.FullRect);
         backgroundDecor.MouseFilter = MouseFilterEnum.Ignore;
         AddChild(backgroundDecor);
-
-        CreateOrb(backgroundDecor, new Vector2(0.16f, 0.18f), 240, 0.08f);
-        CreateOrb(backgroundDecor, new Vector2(0.81f, 0.16f), 180, -0.06f);
-        CreateOrb(backgroundDecor, new Vector2(0.72f, 0.74f), 280, 0.09f);
-        CreateOrb(backgroundDecor, new Vector2(0.28f, 0.82f), 140, -0.05f);
-        CreateOrb(backgroundDecor, new Vector2(0.52f, 0.50f), 96, 0.04f);
 
         var chromeLine = new ColorRect();
         chromeLine.AnchorLeft = 0.05f;
@@ -258,12 +252,14 @@ public partial class UiShowcase : Control
 
         var lineEdit = new LineEdit();
         lineEdit.PlaceholderText = "Send a short test note into the event log";
+        FactoryUiTheme.ApplyLineEditTheme(lineEdit);
         lineEdit.TextSubmitted += OnNoteSubmitted;
         controlsBody.AddChild(lineEdit);
 
         var checkBox = new CheckBox();
         checkBox.Text = "Enable telemetry layer";
         checkBox.ButtonPressed = true;
+        FactoryUiTheme.ApplyButtonTheme(checkBox);
         checkBox.Toggled += pressed =>
         {
             AppendLog(pressed ? "Telemetry layer enabled" : "Telemetry layer disabled");
@@ -274,6 +270,7 @@ public partial class UiShowcase : Control
         _autoToggle = new CheckButton();
         _autoToggle.Text = "Auto animate metrics";
         _autoToggle.ButtonPressed = true;
+        FactoryUiTheme.ApplyButtonTheme(_autoToggle);
         _autoToggle.Toggled += pressed =>
         {
             AppendLog(pressed ? "Auto animation resumed" : "Auto animation paused");
@@ -281,9 +278,10 @@ public partial class UiShowcase : Control
         controlsBody.AddChild(_autoToggle);
 
         _paletteOption = new OptionButton();
-        _paletteOption.AddItem("Amber Grid");
-        _paletteOption.AddItem("Cyan Flux");
-        _paletteOption.AddItem("Lime Pulse");
+        FactoryUiTheme.ApplyButtonTheme(_paletteOption);
+        _paletteOption.AddItem("Mono Grid");
+        _paletteOption.AddItem("Paper Inverse");
+        _paletteOption.AddItem("CRT Slate");
         _paletteOption.ItemSelected += OnPaletteSelected;
         controlsBody.AddChild(CreateLabeledControl("Palette Profile", _paletteOption));
 
@@ -386,6 +384,7 @@ public partial class UiShowcase : Control
         _tabContainer = new TabContainer();
         _tabContainer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _tabContainer.SizeFlagsVertical = SizeFlags.ExpandFill;
+        FactoryUiTheme.ApplyTabContainerTheme(_tabContainer);
         tabsBody.AddChild(_tabContainer);
 
         _tabContainer.AddChild(BuildOverviewTab());
@@ -423,6 +422,7 @@ public partial class UiShowcase : Control
         _tree.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _tree.SizeFlagsVertical = SizeFlags.ExpandFill;
         _tree.CustomMinimumSize = new Vector2(0, 220);
+        _tree.AddThemeStyleboxOverride("panel", FactoryUiTheme.CreateWorkspaceBodyStyle());
         treeBody.AddChild(_tree);
 
         right.AddChild(treePanel);
@@ -532,6 +532,7 @@ public partial class UiShowcase : Control
 
         var itemList = new ItemList();
         itemList.CustomMinimumSize = new Vector2(0, 120);
+        FactoryUiTheme.ApplyItemListTheme(itemList);
         itemList.AddItem("Primary button states");
         itemList.AddItem("CheckBox and CheckButton focus chain");
         itemList.AddItem("Slider drag visuals");
@@ -657,7 +658,7 @@ public partial class UiShowcase : Control
         var eyebrow = new Label();
         eyebrow.Text = text;
         eyebrow.AddThemeFontSizeOverride("font_size", 12);
-        eyebrow.AddThemeColorOverride("font_color", Hex("B8C8D7"));
+        eyebrow.AddThemeColorOverride("font_color", FactoryUiTheme.TextSubtle);
         return eyebrow;
     }
 
@@ -676,7 +677,7 @@ public partial class UiShowcase : Control
         var label = new Label();
         label.Text = text;
         label.AddThemeFontSizeOverride("font_size", 12);
-        label.AddThemeColorOverride("font_color", Hex("07131F"));
+        label.AddThemeColorOverride("font_color", FactoryUiTheme.TextInverse);
         badge.AddChild(label);
         return badge;
     }
@@ -741,6 +742,7 @@ public partial class UiShowcase : Control
         button.Text = text;
         button.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         button.CustomMinimumSize = new Vector2(0, 40);
+        FactoryUiTheme.ApplyButtonTheme(button);
         button.Pressed += callback;
         button.Resized += () => button.PivotOffset = button.Size * 0.5f;
         button.MouseEntered += () => AnimateButtonScale(button, 1.04f);
@@ -767,6 +769,7 @@ public partial class UiShowcase : Control
         bar.Value = 0;
         bar.ShowPercentage = false;
         bar.CustomMinimumSize = new Vector2(0, 14);
+        FactoryUiTheme.ApplyProgressBarTheme(bar);
         return bar;
     }
 
@@ -851,92 +854,28 @@ public partial class UiShowcase : Control
 
     private static StyleBoxFlat CreateSurfaceStyle(Color fill, Color accent, int cornerRadius)
     {
-        var style = new StyleBoxFlat();
-        style.BgColor = fill;
-        style.CornerRadiusTopLeft = cornerRadius;
-        style.CornerRadiusTopRight = cornerRadius;
-        style.CornerRadiusBottomRight = cornerRadius;
-        style.CornerRadiusBottomLeft = cornerRadius;
-        style.BorderColor = accent.Lightened(0.2f);
-        style.BorderWidthLeft = 1;
-        style.BorderWidthTop = 1;
-        style.BorderWidthRight = 1;
-        style.BorderWidthBottom = 1;
-        style.ShadowColor = new Color(0, 0, 0, 0.22f);
-        style.ShadowSize = 16;
-        style.ContentMarginLeft = 18;
-        style.ContentMarginTop = 18;
-        style.ContentMarginRight = 18;
-        style.ContentMarginBottom = 18;
-        return style;
+        return FactoryUiTheme.CreatePanelStyle(fill, accent, borderWidth: 1, cornerRadius: FactoryUiTheme.RadiusNone, contentMargin: 18);
     }
 
     private static StyleBoxFlat CreateButtonStyle(Color fill, Color textGlow, float alpha)
     {
-        var style = new StyleBoxFlat();
-        style.BgColor = new Color(fill, alpha);
-        style.CornerRadiusTopLeft = 14;
-        style.CornerRadiusTopRight = 14;
-        style.CornerRadiusBottomRight = 14;
-        style.CornerRadiusBottomLeft = 14;
-        style.BorderWidthLeft = 1;
-        style.BorderWidthTop = 1;
-        style.BorderWidthRight = 1;
-        style.BorderWidthBottom = 1;
-        style.BorderColor = textGlow;
-        style.ShadowColor = new Color(0, 0, 0, 0.18f);
-        style.ShadowSize = 10;
-        style.ContentMarginLeft = 16;
-        style.ContentMarginRight = 16;
-        style.ContentMarginTop = 10;
-        style.ContentMarginBottom = 10;
-        return style;
+        return FactoryUiTheme.CreateButtonStyle(new Color(fill, alpha), textGlow, borderWidth: 1, horizontalPadding: 16, verticalPadding: 10);
     }
 
     private static StyleBoxFlat CreateChipStyle(Color accent)
     {
-        var style = new StyleBoxFlat();
-        style.BgColor = accent;
-        style.CornerRadiusTopLeft = 999;
-        style.CornerRadiusTopRight = 999;
-        style.CornerRadiusBottomRight = 999;
-        style.CornerRadiusBottomLeft = 999;
-        style.ContentMarginLeft = 12;
-        style.ContentMarginRight = 12;
-        style.ContentMarginTop = 7;
-        style.ContentMarginBottom = 7;
-        return style;
+        return FactoryUiTheme.CreateButtonStyle(accent, FactoryUiTheme.BorderStrong, borderWidth: 1, horizontalPadding: 12, verticalPadding: 7);
     }
 
     private static StyleBoxFlat CreateOrbStyle(Color accent, float alpha)
     {
-        var style = new StyleBoxFlat();
-        style.BgColor = new Color(accent, alpha);
-        style.CornerRadiusTopLeft = 999;
-        style.CornerRadiusTopRight = 999;
-        style.CornerRadiusBottomRight = 999;
-        style.CornerRadiusBottomLeft = 999;
-        return style;
+        return FactoryUiTheme.CreatePanelStyle(new Color(accent, alpha), FactoryUiTheme.BorderSoft, borderWidth: 1, cornerRadius: FactoryUiTheme.RadiusNone);
     }
 
     private static void StyleProgressBar(ProgressBar bar, Color fill, Color background)
     {
-        var fillStyle = new StyleBoxFlat();
-        fillStyle.BgColor = fill;
-        fillStyle.CornerRadiusTopLeft = 999;
-        fillStyle.CornerRadiusTopRight = 999;
-        fillStyle.CornerRadiusBottomRight = 999;
-        fillStyle.CornerRadiusBottomLeft = 999;
-
-        var backgroundStyle = new StyleBoxFlat();
-        backgroundStyle.BgColor = background.Lightened(0.12f);
-        backgroundStyle.CornerRadiusTopLeft = 999;
-        backgroundStyle.CornerRadiusTopRight = 999;
-        backgroundStyle.CornerRadiusBottomRight = 999;
-        backgroundStyle.CornerRadiusBottomLeft = 999;
-
-        bar.AddThemeStyleboxOverride("fill", fillStyle);
-        bar.AddThemeStyleboxOverride("background", backgroundStyle);
+        bar.AddThemeStyleboxOverride("fill", FactoryUiTheme.CreatePanelStyle(fill, FactoryUiTheme.BorderStrong, borderWidth: 1));
+        bar.AddThemeStyleboxOverride("background", FactoryUiTheme.CreatePanelStyle(background.Lightened(0.12f), FactoryUiTheme.BorderMuted, borderWidth: 1));
     }
 
     private void PopulateTree()

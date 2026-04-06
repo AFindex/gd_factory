@@ -35,6 +35,8 @@ public partial class MobileFactoryHud
         var worldFocusFrame = new PanelContainer();
         worldFocusFrame.MouseFilter = Control.MouseFilterEnum.Ignore;
         worldFocusFrame.Visible = false;
+        _worldFocusFrameStyle = CreateOutlineOnlyStyle(Colors.Transparent);
+        worldFocusFrame.AddThemeStyleboxOverride("panel", _worldFocusFrameStyle);
         AddChild(worldFocusFrame);
         _worldFocusFrame = worldFocusFrame;
 
@@ -42,7 +44,7 @@ public partial class MobileFactoryHud
         panel.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
         panel.MouseFilter = Control.MouseFilterEnum.Ignore;
         panel.ClipContents = true;
-        panel.AddThemeStyleboxOverride("panel", CreatePanelStyle(new Color("4DA8DA")));
+        panel.AddThemeStyleboxOverride("panel", CreatePanelStyle(FactoryUiTheme.BorderStrong));
         AddChild(panel);
         _infoPanel = panel;
 
@@ -72,7 +74,7 @@ public partial class MobileFactoryHud
         body.CustomMinimumSize = new Vector2(0.0f, 0.0f);
         bodyScroll.AddChild(body);
 
-        body.AddChild(CreateInfoLabel("移动工厂总览", 14, Colors.White));
+        body.AddChild(CreateInfoLabel("移动工厂总览", 14, FactoryUiTheme.Text));
         _modeLabel = CreateInfoLabel(string.Empty);
         _stateLabel = CreateInfoLabel(string.Empty);
         _hoverLabel = CreateInfoLabel(string.Empty);
@@ -97,7 +99,7 @@ public partial class MobileFactoryHud
         }
         workspaceHost.AddChild(BuildWorldDetailWorkspace());
 
-        _worldWorkspaceHintLabel = CreateInfoLabel("当前工作区主要显示在右侧编辑面板。", 11, new Color("8EA4B8"));
+        _worldWorkspaceHintLabel = CreateInfoLabel("当前工作区主要显示在右侧编辑面板。", 11, FactoryUiTheme.TextSubtle);
         _worldWorkspaceHintLabel.Visible = false;
         body.AddChild(_worldWorkspaceHintLabel);
     }
@@ -108,6 +110,8 @@ public partial class MobileFactoryHud
         panel.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
         panel.MouseFilter = Control.MouseFilterEnum.Ignore;
         panel.ClipContents = true;
+        _editorPanelStyle = CreatePanelStyle(Colors.Transparent);
+        panel.AddThemeStyleboxOverride("panel", _editorPanelStyle);
         AddChild(panel);
         _editorPanel = panel;
 
@@ -133,7 +137,7 @@ public partial class MobileFactoryHud
         viewportPanel.ClipContents = true;
         viewportPanel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         viewportPanel.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
-        viewportPanel.AddThemeStyleboxOverride("panel", CreatePanelStyle(new Color("2A4E66")));
+        viewportPanel.AddThemeStyleboxOverride("panel", CreatePanelStyle(FactoryUiTheme.Border));
         body.AddChild(viewportPanel);
 
         var viewportMargin = new MarginContainer();
@@ -166,7 +170,7 @@ public partial class MobileFactoryHud
         sidebarPanel.ClipContents = true;
         sidebarPanel.CustomMinimumSize = new Vector2(EditorSidebarWidth, 0.0f);
         sidebarPanel.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
-        sidebarPanel.AddThemeStyleboxOverride("panel", CreatePanelStyle(new Color("3F6D8D")));
+        sidebarPanel.AddThemeStyleboxOverride("panel", CreatePanelStyle(FactoryUiTheme.Border));
         body.AddChild(sidebarPanel);
 
         var sidebarMargin = new MarginContainer();
@@ -195,11 +199,11 @@ public partial class MobileFactoryHud
         sidebar.CustomMinimumSize = new Vector2(EditorSidebarWidth - 20.0f, 0.0f);
         sidebarScroll.AddChild(sidebar);
 
-        sidebar.AddChild(CreateEditorLabel("内部编辑概览", 14, Colors.White));
-        _editorModeLabel = CreateEditorLabel(string.Empty, 12, new Color("D7E6F2"));
-        _selectionLabel = CreateEditorLabel(string.Empty, 12, new Color("FDE68A"));
-        _selectionTargetLabel = CreateEditorLabel(string.Empty, 12, new Color("D7E6F2"));
-        _portStatusLabel = CreateEditorLabel(string.Empty, 12, new Color("FDE68A"));
+        sidebar.AddChild(CreateEditorLabel("内部编辑概览", 14, FactoryUiTheme.Text));
+        _editorModeLabel = CreateEditorLabel(string.Empty, 12, FactoryUiTheme.TextMuted);
+        _selectionLabel = CreateEditorLabel(string.Empty, 12, FactoryUiTheme.Text);
+        _selectionTargetLabel = CreateEditorLabel(string.Empty, 12, FactoryUiTheme.TextMuted);
+        _portStatusLabel = CreateEditorLabel(string.Empty, 12, FactoryUiTheme.TextSubtle);
         sidebar.AddChild(_editorModeLabel);
         sidebar.AddChild(_selectionLabel);
         sidebar.AddChild(_selectionTargetLabel);
@@ -216,7 +220,7 @@ public partial class MobileFactoryHud
         workspaceHost.AddChild(BuildEditorToolWorkspace(GetPrimaryEditorWorkspaceId()));
         workspaceHost.AddChild(BuildBlueprintWorkspace());
 
-        _editorWorkspaceHintLabel = CreateEditorLabel("当前工作区主要在左侧世界信息面板中展开；右侧继续保留视口。", 11, new Color("8EA4B8"));
+        _editorWorkspaceHintLabel = CreateEditorLabel("当前工作区主要在左侧世界信息面板中展开；右侧继续保留视口。", 11, FactoryUiTheme.TextSubtle);
         _editorWorkspaceHintLabel.Visible = false;
         sidebar.AddChild(_editorWorkspaceHintLabel);
 
@@ -258,32 +262,35 @@ public partial class MobileFactoryHud
     private Control BuildWorldCommandWorkspace(string workspaceId)
     {
         var (workspace, body) = CreateWorkspacePanel(_worldWorkspacePanels, workspaceId);
-        body.AddChild(CreateInfoLabel(UseLargeScenarioWorkspaces ? "场景总览" : "指挥工作区", 14, Colors.White));
+        body.AddChild(CreateInfoLabel(UseLargeScenarioWorkspaces ? "场景总览" : "指挥工作区", 14, FactoryUiTheme.Text));
         body.AddChild(CreateInfoLabel(
             UseLargeScenarioWorkspaces ? "把移动工厂活动、回收统计和观察辅助集中到一个总览面板中。" : "把观察/部署控制与运行提示集中起来，而不是默认常驻在整块 HUD 上。",
             11,
-            new Color("A8B8C6")));
+            FactoryUiTheme.TextSubtle));
 
         var actionsRow = new HBoxContainer();
         actionsRow.AddThemeConstantOverride("separation", 8);
         body.AddChild(actionsRow);
 
         _factoryCommandButton = new Button { Text = "进入工厂控制 (C)", ToggleMode = true, CustomMinimumSize = new Vector2(146.0f, 34.0f), MouseFilter = Control.MouseFilterEnum.Stop };
+        FactoryUiTheme.ApplyButtonTheme(_factoryCommandButton);
         _factoryCommandButton.Pressed += () => FactoryCommandModeToggleRequested?.Invoke();
         actionsRow.AddChild(_factoryCommandButton);
 
         _observerButton = new Button { Text = "进入观察模式 (Tab)", ToggleMode = true, CustomMinimumSize = new Vector2(146.0f, 34.0f), MouseFilter = Control.MouseFilterEnum.Stop };
+        FactoryUiTheme.ApplyButtonTheme(_observerButton);
         _observerButton.Pressed += () => ObserverModeToggleRequested?.Invoke();
         actionsRow.AddChild(_observerButton);
 
         _deployButton = new Button { Text = "部署模式 (G)", ToggleMode = true, CustomMinimumSize = new Vector2(126.0f, 34.0f), MouseFilter = Control.MouseFilterEnum.Stop };
+        FactoryUiTheme.ApplyButtonTheme(_deployButton);
         _deployButton.Pressed += () => DeployModeToggleRequested?.Invoke();
         actionsRow.AddChild(_deployButton);
 
         _deliveryLabel = CreateInfoLabel(string.Empty);
-        _combatLabel = CreateInfoLabel(string.Empty, 12, new Color("FDE68A"));
+        _combatLabel = CreateInfoLabel(string.Empty, 12, FactoryUiTheme.TextSubtle);
         _focusLabel = CreateInfoLabel(string.Empty);
-        _hintLabel = CreateInfoLabel(string.Empty, 11, new Color("EED49F"));
+        _hintLabel = CreateInfoLabel(string.Empty, 11, FactoryUiTheme.TextSubtle);
         body.AddChild(_deliveryLabel);
         body.AddChild(_combatLabel);
         body.AddChild(_focusLabel);
@@ -294,13 +301,13 @@ public partial class MobileFactoryHud
     private Control BuildWorldDiagnosticsWorkspace()
     {
         var (workspace, body) = CreateWorkspacePanel(_worldWorkspacePanels, DiagnosticsWorkspaceId);
-        body.AddChild(CreateInfoLabel("诊断工作区", 14, Colors.White));
-        body.AddChild(CreateInfoLabel("把场景级观测信息单独拆出来，避免和建造测试工具混在一起。", 11, new Color("A8B8C6")));
-        body.AddChild(CreateInfoLabel("使用总览快速切换部署状态，再在这里观察吞吐、战斗与焦点变化。", 11, new Color("8EA4B8")));
+        body.AddChild(CreateInfoLabel("诊断工作区", 14, FactoryUiTheme.Text));
+        body.AddChild(CreateInfoLabel("把场景级观测信息单独拆出来，避免和建造测试工具混在一起。", 11, FactoryUiTheme.TextSubtle));
+        body.AddChild(CreateInfoLabel("使用总览快速切换部署状态，再在这里观察吞吐、战斗与焦点变化。", 11, FactoryUiTheme.TextSubtle));
         _diagnosticsDeliveryLabel = CreateInfoLabel(string.Empty);
-        _diagnosticsCombatLabel = CreateInfoLabel(string.Empty, 12, new Color("FDE68A"));
+        _diagnosticsCombatLabel = CreateInfoLabel(string.Empty, 12, FactoryUiTheme.TextSubtle);
         _diagnosticsFocusLabel = CreateInfoLabel(string.Empty);
-        _diagnosticsHintLabel = CreateInfoLabel(string.Empty, 11, new Color("EED49F"));
+        _diagnosticsHintLabel = CreateInfoLabel(string.Empty, 11, FactoryUiTheme.TextSubtle);
         body.AddChild(_diagnosticsDeliveryLabel);
         body.AddChild(_diagnosticsCombatLabel);
         body.AddChild(_diagnosticsFocusLabel);
@@ -311,8 +318,8 @@ public partial class MobileFactoryHud
     private Control BuildWorldDetailWorkspace()
     {
         var (workspace, body) = CreateWorkspacePanel(_worldWorkspacePanels, DetailsWorkspaceId);
-        body.AddChild(CreateInfoLabel("移动工厂详情", 14, Colors.White));
-        body.AddChild(CreateInfoLabel("在不打断当前控制模式和分屏编辑的前提下查看生命周期、挂点与内部布局摘要。", 11, new Color("A8B8C6")));
+        body.AddChild(CreateInfoLabel("移动工厂详情", 14, FactoryUiTheme.Text));
+        body.AddChild(CreateInfoLabel("在不打断当前控制模式和分屏编辑的前提下查看生命周期、挂点与内部布局摘要。", 11, FactoryUiTheme.TextSubtle));
         _factoryDetailLabel = CreateInfoLabel("等待工厂状态更新。");
         body.AddChild(_factoryDetailLabel);
         return workspace;
@@ -321,26 +328,26 @@ public partial class MobileFactoryHud
     private Control BuildEditorToolWorkspace(string workspaceId)
     {
         var (workspace, body) = CreateWorkspacePanel(_editorWorkspacePanels, workspaceId);
-        body.AddChild(CreateEditorLabel(UseLargeScenarioWorkspaces ? "建造测试面板" : "内部编辑工作区", 14, Colors.White));
+        body.AddChild(CreateEditorLabel(UseLargeScenarioWorkspaces ? "建造测试面板" : "内部编辑工作区", 14, FactoryUiTheme.Text));
         body.AddChild(CreateEditorLabel(
             UseLargeScenarioWorkspaces ? "把各类建造测试工具拆到独立 panel 中，便于在 large scenario 里做定向验证。" : "内部建造、删除和结构观察集中在这里，蓝图工作流则通过独立菜单切换。",
             11,
-            new Color("8FD3FF")));
+            FactoryUiTheme.TextSubtle));
 
         _inspectionPanel = new PanelContainer { Visible = false };
         body.AddChild(_inspectionPanel);
         var inspectionBody = new VBoxContainer();
         inspectionBody.AddThemeConstantOverride("separation", 4);
         _inspectionPanel.AddChild(inspectionBody);
-        _inspectionTitleLabel = CreateEditorLabel(string.Empty, 12, new Color("FDE68A"));
-        _inspectionBodyLabel = CreateEditorLabel(string.Empty, 11, new Color("D7E6F2"));
+        _inspectionTitleLabel = CreateEditorLabel(string.Empty, 12, FactoryUiTheme.Text);
+        _inspectionBodyLabel = CreateEditorLabel(string.Empty, 11, FactoryUiTheme.TextMuted);
         inspectionBody.AddChild(_inspectionTitleLabel);
         inspectionBody.AddChild(_inspectionBodyLabel);
 
-        body.AddChild(CreateEditorLabel("建造分类", 12, new Color("BFDBFE")));
+        body.AddChild(CreateEditorLabel("建造分类", 12, FactoryUiTheme.TextMuted));
         BuildEditorToolbar(body);
         body.AddChild(CreateDivider());
-        _editorPreviewLabel = CreateEditorLabel("内部预览：等待状态更新。", 12, new Color("D7E6F2"));
+        _editorPreviewLabel = CreateEditorLabel("内部预览：等待状态更新。", 12, FactoryUiTheme.TextMuted);
         body.AddChild(_editorPreviewLabel);
         return workspace;
     }
@@ -360,28 +367,23 @@ public partial class MobileFactoryHud
         body.AddThemeConstantOverride("separation", 8);
         workspace.AddChild(body);
 
-        body.AddChild(CreateEditorLabel("蓝图工作区", 14, Colors.White));
-        body.AddChild(CreateEditorLabel("从顶部菜单进入蓝图面板，保存内部布局或应用共享蓝图。", 11, new Color("8FD3FF")));
-
-        var blueprintHost = new PanelContainer();
-        blueprintHost.MouseFilter = Control.MouseFilterEnum.Ignore;
-        blueprintHost.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        blueprintHost.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
-        blueprintHost.ClipContents = true;
-        blueprintHost.AddThemeStyleboxOverride("panel", CreatePanelStyle(new Color("3F6D8D")));
-        body.AddChild(blueprintHost);
+        body.AddChild(CreateEditorLabel("蓝图工作区", 14, FactoryUiTheme.Text));
+        body.AddChild(CreateEditorLabel("从顶部菜单进入蓝图面板，保存内部布局或应用共享蓝图。", 11, FactoryUiTheme.TextSubtle));
 
         var blueprintMargin = new MarginContainer();
-        blueprintMargin.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         blueprintMargin.MouseFilter = Control.MouseFilterEnum.Ignore;
-        blueprintMargin.AddThemeConstantOverride("margin_left", 8);
-        blueprintMargin.AddThemeConstantOverride("margin_top", 8);
-        blueprintMargin.AddThemeConstantOverride("margin_right", 8);
-        blueprintMargin.AddThemeConstantOverride("margin_bottom", 8);
-        blueprintHost.AddChild(blueprintMargin);
+        blueprintMargin.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        blueprintMargin.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        blueprintMargin.AddThemeConstantOverride("margin_left", 2);
+        blueprintMargin.AddThemeConstantOverride("margin_top", 2);
+        blueprintMargin.AddThemeConstantOverride("margin_right", 2);
+        blueprintMargin.AddThemeConstantOverride("margin_bottom", 2);
+        body.AddChild(blueprintMargin);
 
         _blueprintPanel = new FactoryBlueprintPanel();
         _blueprintPanel.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _blueprintPanel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _blueprintPanel.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         _blueprintPanel.SetDocked(true);
         _blueprintPanel.CaptureSelectionRequested += () => BlueprintCaptureSelectionRequested?.Invoke();
         _blueprintPanel.CaptureFullRequested += () => BlueprintCaptureFullRequested?.Invoke();
@@ -510,6 +512,7 @@ public partial class MobileFactoryHud
         tabs.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         tabs.AddThemeFontSizeOverride("font_size", CompactTabFontSize);
         tabs.AddThemeConstantOverride("side_margin", 2);
+        FactoryUiTheme.ApplyTabContainerTheme(tabs);
         parent.AddChild(tabs);
 
         for (var categoryIndex = 0; categoryIndex < EditorPaletteCategories.Length; categoryIndex++)
@@ -542,6 +545,7 @@ public partial class MobileFactoryHud
                     CustomMinimumSize = new Vector2(0.0f, 28.0f)
                 };
                 button.AddThemeFontSizeOverride("font_size", 11);
+                FactoryUiTheme.ApplyButtonTheme(button, compact: true);
                 button.Pressed += () => EditorPaletteSelected?.Invoke(kind);
                 paletteGrid.AddChild(button);
                 _paletteButtons[kind] = button;
@@ -554,11 +558,13 @@ public partial class MobileFactoryHud
 
         var rotateLeft = new Button { Text = "旋左", MouseFilter = Control.MouseFilterEnum.Stop, CustomMinimumSize = new Vector2(0.0f, 28.0f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         rotateLeft.AddThemeFontSizeOverride("font_size", 11);
+        FactoryUiTheme.ApplyButtonTheme(rotateLeft, compact: true);
         rotateLeft.Pressed += () => EditorRotateRequested?.Invoke(-1);
         rotateRow.AddChild(rotateLeft);
 
         var rotateRight = new Button { Text = "旋右", MouseFilter = Control.MouseFilterEnum.Stop, CustomMinimumSize = new Vector2(0.0f, 28.0f), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         rotateRight.AddThemeFontSizeOverride("font_size", 11);
+        FactoryUiTheme.ApplyButtonTheme(rotateRight, compact: true);
         rotateRight.Pressed += () => EditorRotateRequested?.Invoke(1);
         rotateRow.AddChild(rotateRight);
     }
@@ -572,8 +578,15 @@ public partial class MobileFactoryHud
 
         var showFocus = _editorOpen && _editorProgress > 0.01f;
         _worldFocusFrame.Visible = showFocus;
-        _worldFocusFrame.AddThemeStyleboxOverride("panel", CreateOutlineOnlyStyle(showFocus && !_editorFocused ? WorldFocusColor : Colors.Transparent));
-        _editorPanel.AddThemeStyleboxOverride("panel", CreatePanelStyle(showFocus && _editorFocused ? EditorFocusColor : Colors.Transparent));
+        if (_worldFocusFrameStyle is not null)
+        {
+            FactoryUiTheme.ConfigureOutlineStyle(_worldFocusFrameStyle, showFocus && !_editorFocused ? WorldFocusColor : Colors.Transparent, borderWidth: 3, contentMargin: 12);
+        }
+
+        if (_editorPanelStyle is not null)
+        {
+            FactoryUiTheme.ConfigurePanelStyle(_editorPanelStyle, FactoryUiTheme.SurfaceOverlay, showFocus && _editorFocused ? EditorFocusColor : Colors.Transparent, borderWidth: 2, cornerRadius: FactoryUiTheme.RadiusNone, contentMargin: 12);
+        }
     }
 
     private void RefreshPaletteButtons(BuildPrototypeKind? selectedKind)
@@ -637,7 +650,7 @@ public partial class MobileFactoryHud
     {
         var label = new Label { MouseFilter = Control.MouseFilterEnum.Ignore, Text = text, AutowrapMode = TextServer.AutowrapMode.WordSmart };
         label.AddThemeFontSizeOverride("font_size", fontSize);
-        label.Modulate = color ?? new Color("D7E3EE");
+        label.Modulate = color ?? FactoryUiTheme.TextMuted;
         return label;
     }
 
@@ -645,46 +658,23 @@ public partial class MobileFactoryHud
     {
         var label = new Label { MouseFilter = Control.MouseFilterEnum.Ignore, Text = text, AutowrapMode = TextServer.AutowrapMode.WordSmart };
         label.AddThemeFontSizeOverride("font_size", fontSize);
-        label.Modulate = color ?? new Color("D7E6F2");
+        label.Modulate = color ?? FactoryUiTheme.TextMuted;
         return label;
     }
 
     private static ColorRect CreateDivider()
     {
-        return new ColorRect
-        {
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-            CustomMinimumSize = new Vector2(0.0f, 1.0f),
-            Color = new Color(0.45f, 0.53f, 0.61f, 0.28f)
-        };
+        return FactoryUiTheme.CreateDivider();
     }
 
     private static StyleBoxFlat CreateOutlineOnlyStyle(Color borderColor)
     {
-        return new StyleBoxFlat
-        {
-            BgColor = Colors.Transparent,
-            BorderColor = borderColor,
-            BorderWidthLeft = 3,
-            BorderWidthTop = 3,
-            BorderWidthRight = 3,
-            BorderWidthBottom = 3,
-            CornerRadiusTopLeft = 8,
-            CornerRadiusTopRight = 8,
-            CornerRadiusBottomRight = 8,
-            CornerRadiusBottomLeft = 8,
-            ContentMarginLeft = 12,
-            ContentMarginTop = 12,
-            ContentMarginRight = 12,
-            ContentMarginBottom = 12
-        };
+        return FactoryUiTheme.CreateOutlineStyle(borderColor, borderWidth: 3, contentMargin: 12);
     }
 
     private static StyleBoxFlat CreatePanelStyle(Color borderColor)
     {
-        var style = CreateOutlineOnlyStyle(borderColor);
-        style.BgColor = new Color(0.05f, 0.08f, 0.12f, 0.84f);
-        return style;
+        return FactoryUiTheme.CreatePanelStyle(FactoryUiTheme.SurfaceOverlay, borderColor, borderWidth: 2, cornerRadius: FactoryUiTheme.RadiusNone, contentMargin: 12);
     }
 
     private static string GetKindLabel(BuildPrototypeKind kind)
