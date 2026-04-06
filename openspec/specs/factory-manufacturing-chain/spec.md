@@ -2,18 +2,17 @@
 
 ## Purpose
 Define the recipe-driven manufacturing rules for the powered factory sandbox.
-
 ## Requirements
 ### Requirement: Manufacturing machines use declared recipe inputs and outputs
-The game SHALL allow manufacturing structures to run recipes that declare required input items, produced output items, cycle time, power demand, and balance-ready item relationships across a broader multi-stage catalog, and a machine SHALL only advance a recipe when those declared conditions are met.
+The game SHALL allow manufacturing structures to run recipes that declare required input items, produced output items, cycle time, power demand, and balance-ready item relationships across the expanded mineral catalog, and the authored demo loops SHALL use those declared recipes instead of producer-style direct spawning for their main products.
 
-#### Scenario: Smelting recipes convert different raw resources into distinct intermediates
-- **WHEN** a refining or smelting machine receives the required mined raw resource for an iron, copper, or steel-stage recipe and has power
-- **THEN** it consumes the declared input and produces that recipe's configured intermediate output after the configured cycle time
+#### Scenario: Expanded refining recipes convert newly mined resources into dedicated intermediates
+- **WHEN** a refining or smelting machine receives the required raw resource for one of the newly introduced mineral branches and has power
+- **THEN** it consumes the declared input and produces that branch's configured intermediate output after the configured cycle time
 
-#### Scenario: Assembly recipe consumes intermediates from more than one branch
-- **WHEN** an assembler receives the full declared set of intermediate ingredients from separate production branches for its active recipe and has power
-- **THEN** it consumes those declared ingredients and produces the recipe's configured higher-tier output item
+#### Scenario: Support or defense recipe consumes ingredients from multiple real branches
+- **WHEN** an assembler-capable machine receives the full declared ingredient set for a defense-supply or maintenance-oriented recipe and has power
+- **THEN** it consumes those real inputs and produces the configured output without bypassing the recipe system
 
 ### Requirement: Recipe-capable manufacturing machines can switch among valid recipes
 The game SHALL allow at least the primary assembler-capable manufacturing structure to expose multiple valid recipes and update its accepted ingredients and produced outputs when the active recipe changes.
@@ -41,16 +40,24 @@ The game SHALL keep manufacturing deterministic when a recipe is starved of ingr
 - **THEN** the completed output remains buffered or blocked at the machine instead of being deleted or duplicated
 
 ### Requirement: Starter manufacturing catalog includes branching multi-stage production paths
-The game SHALL define an authored starter manufacturing catalog that includes at least coal, iron ore, copper ore, iron plate, copper plate, steel plate, gear, copper wire, circuit board, machine part, ammo magazine, and high-velocity ammo, with recipes connecting them through more than one production branch.
+The game SHALL define an authored starter manufacturing catalog that keeps the baseline coal, iron, and copper branches and adds at least two additional mineable mineral families with downstream intermediates so the demo can sustain manufacturing loops for defense supply, power maintenance, and station logistics without relying on placeholder cargo.
 
-#### Scenario: Iron and copper branches create separate intermediate families
+#### Scenario: Expanded catalog includes more than the baseline mineral trio
 - **WHEN** the player inspects the starter manufacturing catalog
-- **THEN** it includes at least one iron-derived intermediate branch and one copper-derived intermediate branch before the final crafted outputs
+- **THEN** it includes the existing coal, iron, and copper branches plus at least two additional mineable mineral families that participate in downstream recipes instead of existing only as unused map resources
 
-#### Scenario: Machine part requires combined intermediate inputs
-- **WHEN** the machine-part recipe is active in the starter catalog
-- **THEN** it requires declared ingredients from more than one prior crafting step instead of being produced directly from a single mined raw resource
+#### Scenario: At least one new mineral branch contributes to support gameplay
+- **WHEN** the player inspects the authored recipes enabled by the expanded catalog
+- **THEN** at least one newly added mineral family feeds a defense-supply, maintenance, or power-support output that is used by a sandbox scenario
 
-#### Scenario: Upgraded ammo requires a higher-tier follow-up recipe
-- **WHEN** the player inspects the high-velocity ammo recipe in the starter catalog
-- **THEN** it depends on at least one previously crafted ingredient rather than being defined as a direct raw-resource output
+### Requirement: Manufacturing catalog supports authored non-placeholder sandbox loops
+The game SHALL provide enough real recipe variety for authored sandbox cases to cover extraction-to-delivery, defense resupply, and power-support loops without requiring placeholder cargo producers in the normal demo path.
+
+#### Scenario: Authored defense lane is fed by recipe outputs
+- **WHEN** the player inspects the authored defense-supporting production lane in the sandbox
+- **THEN** the lane's ammunition or support goods originate from declared machine recipes rather than from a placeholder source building
+
+#### Scenario: Authored maintenance lane is fed by recipe outputs
+- **WHEN** the player inspects the authored power-maintenance or depot-support lane in the sandbox
+- **THEN** its delivered goods originate from declared machine recipes built from mined or refined resources
+

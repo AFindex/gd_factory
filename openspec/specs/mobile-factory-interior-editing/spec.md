@@ -77,18 +77,26 @@ The game SHALL present a miniature world representation of the mobile factory th
 - **THEN** the world-side miniature shows a readable animated representation of that internal flow
 
 ### Requirement: Scenario mobile factories expose authored interior case studies
-The game SHALL allow the player to inspect different mobile factories in the large-scale scenario and find distinct pre-authored interior layouts intended as separate logistics test cases.
+The game SHALL allow the player to inspect different mobile factories in the large-scale scenario and find distinct pre-authored interior layouts intended as separate sandbox case studies, and those layouts SHALL be built from real transport, storage, port, refining, assembly, ammo, and support structures instead of placeholder producer-driven templates.
 
-#### Scenario: Different factories reveal different authored layouts
+#### Scenario: Different factories reveal different real-layout combinations
 - **WHEN** the player opens the interior editor for multiple mobile factories included in the large-scale scenario
-- **THEN** the inspected factories show different authored combinations of belts, splitters, mergers, loaders, unloaders, producers, sinks, or bridges instead of sharing one identical template
+- **THEN** the inspected factories show different authored combinations of belts, splitters, mergers, loaders, unloaders, storage, ports, smelters, assemblers, ammo lines, or equivalent real structures instead of sharing one producer-led template
+
+#### Scenario: Interior case studies match the factory's world role
+- **WHEN** the player inspects the authored interior layout of a mobile factory assigned to extraction, processing, support, or defense logistics in the large-scale scenario
+- **THEN** the internal layout reflects that world-side role through the structures and recipe flow it contains
 
 ### Requirement: Authored interior test cases sustain long-running flow
-The game SHALL ensure the authored interior test layouts used in the large-scale scenario include recovery paths that keep items moving or being consumed during extended unattended runs.
+The game SHALL ensure the authored interior sandbox layouts used in the large-scale scenario include recovery paths and real machine-state behavior that keep items moving or being consumed during extended unattended runs without depending on permanent blockage or producer-only shortcuts as the steady state.
 
 #### Scenario: Interior layouts include recovery or consumption paths
 - **WHEN** the player inspects a mobile factory interior layout that is meant to run continuously in the large-scale scenario
-- **THEN** that layout includes sink, recycler, recirculation, or equivalent recovery structures that prevent the test case from depending on permanent belt blockage as its steady state
+- **THEN** that layout includes sink, recycler, recirculation, buffering, or equivalent recovery structures that prevent the case from depending on permanent belt blockage as its steady state
+
+#### Scenario: Continuous interior flow survives without placeholder spawning
+- **WHEN** the large mobile factory scenario runs unattended for an extended period
+- **THEN** the authored interior cases continue to move or consume goods through their real structures without requiring a producer structure to keep the main loop alive
 
 ### Requirement: Mobile factory interiors can be saved as blueprints
 The game SHALL let the player capture the current mobile factory interior layout through the editor and save it as a reusable blueprint.
@@ -118,3 +126,4 @@ The game SHALL add a top workspace menu to the mobile factory interior editor so
 #### Scenario: Selecting factory detail workspace keeps the editor session active
 - **WHEN** the player opens the interior editor and switches to the factory detail workspace from the top menu
 - **THEN** the editor shows the current mobile factory detail content without closing the interior viewport or forcing the player out of the current edit session
+
