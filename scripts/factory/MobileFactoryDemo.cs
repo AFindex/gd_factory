@@ -179,6 +179,7 @@ public partial class MobileFactoryDemo : Node3D
     private string? _selectedPlayerItemInventoryId;
     private Vector2I _selectedPlayerItemSlot;
     private bool _hasSelectedPlayerItemSlot;
+    private bool _playerInteriorPlacementArmed;
 
     public override void _Ready()
     {
@@ -478,6 +479,7 @@ public partial class MobileFactoryDemo : Node3D
         _hud.ObserverModeToggleRequested += ToggleObserverMode;
         _hud.DeployModeToggleRequested += ToggleDeployPreview;
         _hud.EditorDetailInventoryMoveRequested += HandleEditorDetailInventoryMoveRequested;
+        _hud.EditorDetailInventoryTransferRequested += HandleEditorDetailInventoryTransferRequested;
         _hud.EditorDetailRecipeSelected += HandleEditorDetailRecipeSelected;
         _hud.EditorDetailActionRequested += HandleEditorDetailActionRequested;
         _hud.EditorDetailClosed += HandleEditorDetailClosed;
@@ -2459,7 +2461,7 @@ public partial class MobileFactoryDemo : Node3D
         _hud.SetHintText(GetHintText());
         _hud.SetFactoryDetails(BuildFactoryDetailText());
         _hud.SetBlueprintState(BuildInteriorBlueprintPanelState());
-        _playerHud?.SetContext(_playerController, null, ResolveSelectedPlayerItem());
+        _playerHud?.SetContext(_playerController, BuildSelectedInteriorStructureLinkedDetailModel(), ResolveSelectedPlayerItem());
     }
 
     private void HandleHudWorkspaceSelected(string workspaceId)
@@ -2758,10 +2760,23 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        if (_mobileFactory.PlaceInteriorStructure(_selectedInteriorKind, _hoveredInteriorCell, _selectedInteriorFacing))
+        if (!TryGetActiveInteriorPlacementKind(out var placementKind, out var usesPlayerInventory))
         {
-            _selectedInteriorStructure = null;
-            _interiorPreviewMessage = $"已在内部格 ({_hoveredInteriorCell.X}, {_hoveredInteriorCell.Y}) 放置{_definitions[_selectedInteriorKind].DisplayName}。";
+            TraceLog("PlaceInteriorStructure ignored because there is no active placement kind");
+            return;
+        }
+
+        var placed = _mobileFactory.PlaceInteriorStructure(placementKind, _hoveredInteriorCell, _selectedInteriorFacing);
+        TraceLog($"PlaceInteriorStructure cell={_hoveredInteriorCell} kind={placementKind} usesPlayerInventory={usesPlayerInventory} placed={placed}");
+        if (placed)
+        {
+            _interiorPreviewMessage = $"已在内部格 ({_hoveredInteriorCell.X}, {_hoveredInteriorCell.Y}) 放置{_definitions[placementKind].DisplayName}。";
+            if (usesPlayerInventory)
+            {
+                var consumed = TryConsumeSelectedPlayerPlaceable();
+                TraceLog($"PlaceInteriorStructure consumedPlayerPlaceable={consumed}");
+                RefreshInteriorInteractionModeFromBuildSource();
+            }
         }
     }
 
@@ -2854,6 +2869,14 @@ public partial class MobileFactoryDemo : Node3D
         _selectedPlayerItemInventoryId = FactoryPlayerController.BackpackInventoryId;
         _selectedPlayerItemSlot = new Vector2I(index, 0);
         _hasSelectedPlayerItemSlot = true;
+        _playerInteriorPlacementArmed = _playerController.IsHotbarPlacementArmed;
+        if (_playerInteriorPlacementArmed && TryResolveSelectedPlayerPlaceable(out var placementKind))
+        {
+            _selectedInteriorKind = placementKind;
+        }
+
+        TraceLog($"HandlePlayerHotbarPressed index={index} armed={_playerInteriorPlacementArmed} item={ResolveSelectedPlayerItem()?.ItemKind.ToString() ?? "none"}");
+        RefreshInteriorInteractionModeFromBuildSource();
         UpdateHud();
     }
 
@@ -2878,12 +2901,15 @@ public partial class MobileFactoryDemo : Node3D
 
     private void HandlePlayerInventoryMoveRequested(string inventoryId, Vector2I fromSlot, Vector2I toSlot, bool splitStack)
     {
-        if (_playerController?.TryResolveInventoryEndpoint(inventoryId, out var endpoint) != true)
+        if (!TryResolveInventoryEndpoint(inventoryId, out var endpoint))
         {
+            TraceLog($"HandlePlayerInventoryMoveRequested failed resolve inventory={inventoryId}");
             return;
         }
 
-        if (endpoint.Inventory.TryMoveItem(fromSlot, toSlot, splitStack))
+        var moved = endpoint.Inventory.TryMoveItem(fromSlot, toSlot, splitStack);
+        TraceLog($"HandlePlayerInventoryMoveRequested inventory={inventoryId} from={fromSlot} to={toSlot} split={splitStack} moved={moved}");
+        if (moved)
         {
             UpdateHud();
         }
@@ -2891,13 +2917,16 @@ public partial class MobileFactoryDemo : Node3D
 
     private void HandlePlayerInventoryTransferRequested(string fromInventoryId, Vector2I fromSlot, string toInventoryId, Vector2I toSlot, bool splitStack)
     {
-        if (_playerController?.TryResolveInventoryEndpoint(fromInventoryId, out var fromEndpoint) != true
-            || _playerController.TryResolveInventoryEndpoint(toInventoryId, out var toEndpoint) != true)
+        if (!TryResolveInventoryEndpoint(fromInventoryId, out var fromEndpoint)
+            || !TryResolveInventoryEndpoint(toInventoryId, out var toEndpoint))
         {
+            TraceLog($"HandlePlayerInventoryTransferRequested failed resolve from={fromInventoryId} to={toInventoryId}");
             return;
         }
 
-        if (fromEndpoint.Inventory.TryMoveItemTo(toEndpoint.Inventory, fromSlot, toSlot, splitStack, toEndpoint.CanInsert, fromEndpoint.CanInsert))
+        var moved = fromEndpoint.Inventory.TryMoveItemTo(toEndpoint.Inventory, fromSlot, toSlot, splitStack, toEndpoint.CanInsert, fromEndpoint.CanInsert);
+        TraceLog($"HandlePlayerInventoryTransferRequested from={fromInventoryId}@{fromSlot} to={toInventoryId}@{toSlot} split={splitStack} moved={moved}");
+        if (moved)
         {
             UpdateHud();
         }
@@ -2914,6 +2943,17 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
+        _playerController?.DisarmHotbarPlacement();
+        _playerInteriorPlacementArmed = inventoryId == FactoryPlayerController.BackpackInventoryId
+            && ResolveSelectedPlayerItem() is FactoryItem item
+            && FactoryPresentation.IsPlaceableStructureItem(item);
+        if (_playerInteriorPlacementArmed && TryResolveSelectedPlayerPlaceable(out var placementKind))
+        {
+            _selectedInteriorKind = placementKind;
+        }
+
+        TraceLog($"HandlePlayerInventorySlotActivated inventory={inventoryId} slot={slot} armedPlacement={_playerInteriorPlacementArmed} resolvedItem={ResolveSelectedPlayerItem()?.ItemKind.ToString() ?? "none"}");
+        RefreshInteriorInteractionModeFromBuildSource();
         UpdateHud();
     }
 
@@ -2929,7 +2969,7 @@ public partial class MobileFactoryDemo : Node3D
             return _playerController.GetActiveHotbarItem();
         }
 
-        return _playerController.TryResolveInventoryEndpoint(_selectedPlayerItemInventoryId!, out var endpoint)
+        return TryResolveInventoryEndpoint(_selectedPlayerItemInventoryId!, out var endpoint)
             ? endpoint.Inventory.GetItemOrDefault(_selectedPlayerItemSlot)
             : _playerController.GetActiveHotbarItem();
     }
@@ -2937,8 +2977,9 @@ public partial class MobileFactoryDemo : Node3D
     private bool IsPointerOverUi()
     {
         var hoveredControl = GetViewport().GuiGetHoveredControl();
-        return (_hud?.BlocksInput(hoveredControl) ?? false)
-            || (_playerHud?.BlocksWorldInput(hoveredControl) ?? false);
+        var pointer = GetViewport().GetMousePosition();
+        return (_hud?.BlocksInput(hoveredControl, pointer) ?? false)
+            || (_playerHud?.BlocksWorldInput(hoveredControl, pointer) ?? false);
     }
 
     private void OnEditorPaletteSelected(BuildPrototypeKind kind)
@@ -3036,6 +3077,8 @@ public partial class MobileFactoryDemo : Node3D
     private void SelectInteriorBuildKind(BuildPrototypeKind? kind)
     {
         CancelInteriorBlueprintWorkflow(clearActiveBlueprint: false);
+        _playerInteriorPlacementArmed = false;
+        _playerController?.DisarmHotbarPlacement();
         if (!kind.HasValue)
         {
             EnterInteriorInteractionMode();
@@ -3044,7 +3087,6 @@ public partial class MobileFactoryDemo : Node3D
 
         _selectedInteriorKind = kind.Value;
         _interiorInteractionMode = FactoryInteractionMode.Build;
-        _selectedInteriorStructure = null;
     }
 
     private void EnterInteriorInteractionMode()
@@ -3092,7 +3134,10 @@ public partial class MobileFactoryDemo : Node3D
 
         if (_interiorInteractionMode == FactoryInteractionMode.Build)
         {
+            _playerInteriorPlacementArmed = false;
+            _playerController?.DisarmHotbarPlacement();
             EnterInteriorInteractionMode();
+            UpdateHud();
             return;
         }
 
@@ -3580,7 +3625,32 @@ public partial class MobileFactoryDemo : Node3D
 
     private void HandleEditorDetailInventoryMoveRequested(string inventoryId, Vector2I fromSlot, Vector2I toSlot, bool splitStack)
     {
-        if (_selectedInteriorStructure is IFactoryStructureDetailProvider detailProvider && detailProvider.TryMoveDetailInventoryItem(inventoryId, fromSlot, toSlot, splitStack))
+        if (!TryResolveInventoryEndpoint(inventoryId, out var endpoint))
+        {
+            TraceLog($"HandleEditorDetailInventoryMoveRequested failed resolve inventory={inventoryId}");
+            return;
+        }
+
+        var moved = endpoint.Inventory.TryMoveItem(fromSlot, toSlot, splitStack);
+        TraceLog($"HandleEditorDetailInventoryMoveRequested inventory={inventoryId} from={fromSlot} to={toSlot} split={splitStack} moved={moved}");
+        if (moved)
+        {
+            UpdateHud();
+        }
+    }
+
+    private void HandleEditorDetailInventoryTransferRequested(string fromInventoryId, Vector2I fromSlot, string toInventoryId, Vector2I toSlot, bool splitStack)
+    {
+        if (!TryResolveInventoryEndpoint(fromInventoryId, out var fromEndpoint)
+            || !TryResolveInventoryEndpoint(toInventoryId, out var toEndpoint))
+        {
+            TraceLog($"HandleEditorDetailInventoryTransferRequested failed resolve from={fromInventoryId} to={toInventoryId}");
+            return;
+        }
+
+        var moved = fromEndpoint.Inventory.TryMoveItemTo(toEndpoint.Inventory, fromSlot, toSlot, splitStack, toEndpoint.CanInsert, fromEndpoint.CanInsert);
+        TraceLog($"HandleEditorDetailInventoryTransferRequested from={fromInventoryId}@{fromSlot} to={toInventoryId}@{toSlot} split={splitStack} moved={moved}");
+        if (moved)
         {
             UpdateHud();
         }
@@ -3606,6 +3676,105 @@ public partial class MobileFactoryDemo : Node3D
     {
         _selectedInteriorStructure = null;
         UpdateHud();
+    }
+
+    private FactoryStructureDetailModel? BuildSelectedInteriorStructureLinkedDetailModel()
+    {
+        return _selectedInteriorStructure is IFactoryStructureDetailProvider detailProvider
+            && GodotObject.IsInstanceValid(_selectedInteriorStructure)
+            && _selectedInteriorStructure.IsInsideTree()
+            ? detailProvider.GetDetailModel()
+            : null;
+    }
+
+    private bool TryResolveSelectedPlayerPlaceable(out BuildPrototypeKind kind)
+    {
+        return FactoryPresentation.TryGetPlaceableStructureKind(ResolveSelectedPlayerItem(), out kind);
+    }
+
+    private bool TryConsumeSelectedPlayerPlaceable()
+    {
+        if (!_hasSelectedPlayerItemSlot
+            || string.IsNullOrWhiteSpace(_selectedPlayerItemInventoryId)
+            || !TryResolveInventoryEndpoint(_selectedPlayerItemInventoryId!, out var endpoint))
+        {
+            _playerInteriorPlacementArmed = false;
+            TraceLog("TryConsumeSelectedPlayerPlaceable failed because selected slot or endpoint was invalid");
+            return false;
+        }
+
+        var consumed = endpoint.Inventory.TryTakeFromSlot(_selectedPlayerItemSlot, out _);
+        TraceLog($"TryConsumeSelectedPlayerPlaceable inventory={_selectedPlayerItemInventoryId} slot={_selectedPlayerItemSlot} consumed={consumed}");
+        _playerController?.RefreshActiveSlotState();
+
+        var remainingItem = endpoint.Inventory.GetItemOrDefault(_selectedPlayerItemSlot);
+        _playerInteriorPlacementArmed = remainingItem is not null && FactoryPresentation.IsPlaceableStructureItem(remainingItem);
+        if (!_playerInteriorPlacementArmed && _selectedPlayerItemSlot.Y == 0)
+        {
+            _playerController?.DisarmHotbarPlacement();
+        }
+
+        if (_playerInteriorPlacementArmed && TryResolveSelectedPlayerPlaceable(out var placementKind))
+        {
+            _selectedInteriorKind = placementKind;
+        }
+
+        return consumed;
+    }
+
+    private bool TryResolveInventoryEndpoint(string inventoryId, out FactoryInventoryTransferEndpoint endpoint)
+    {
+        if (_playerController?.TryResolveInventoryEndpoint(inventoryId, out endpoint) == true)
+        {
+            return true;
+        }
+
+        if (_selectedInteriorStructure is IFactoryInventoryEndpointProvider endpointProvider
+            && endpointProvider.TryResolveInventoryEndpoint(inventoryId, out endpoint))
+        {
+            return true;
+        }
+
+        endpoint = default;
+        return false;
+    }
+
+    private bool TryGetActiveInteriorPlacementKind(out BuildPrototypeKind kind, out bool usesPlayerInventory)
+    {
+        if (_playerInteriorPlacementArmed && TryResolveSelectedPlayerPlaceable(out var selectedPlayerKind))
+        {
+            kind = selectedPlayerKind;
+            usesPlayerInventory = true;
+            return true;
+        }
+
+        if (_interiorInteractionMode == FactoryInteractionMode.Build)
+        {
+            kind = _selectedInteriorKind;
+            usesPlayerInventory = false;
+            return true;
+        }
+
+        kind = default;
+        usesPlayerInventory = false;
+        return false;
+    }
+
+    private void RefreshInteriorInteractionModeFromBuildSource()
+    {
+        if (_interiorInteractionMode == FactoryInteractionMode.Delete)
+        {
+            return;
+        }
+
+        _interiorInteractionMode = TryGetActiveInteriorPlacementKind(out _, out _)
+            ? FactoryInteractionMode.Build
+            : FactoryInteractionMode.Interact;
+    }
+
+    private static void TraceLog(string message)
+    {
+        GD.Print($"[MobileFactoryDemo] {message}");
     }
 
     private string GetSelectedInteriorStructureText()

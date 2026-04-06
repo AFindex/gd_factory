@@ -115,6 +115,7 @@ public partial class MobileFactoryHud : CanvasLayer
     public event Action? ObserverModeToggleRequested;
     public event Action? DeployModeToggleRequested;
     public event Action<string, Vector2I, Vector2I, bool>? EditorDetailInventoryMoveRequested;
+    public event Action<string, Vector2I, string, Vector2I, bool>? EditorDetailInventoryTransferRequested;
     public event Action<string>? EditorDetailRecipeSelected;
     public event Action<string>? EditorDetailActionRequested;
     public event Action? EditorDetailClosed;
@@ -466,7 +467,13 @@ public partial class MobileFactoryHud : CanvasLayer
 
     public bool BlocksInput(Control? control)
     {
-        if (_detailWindow?.BlocksInput(control) ?? false)
+        return BlocksInput(control, GetViewport().GetMousePosition());
+    }
+
+    public bool BlocksInput(Control? control, Vector2 screenPoint)
+    {
+        if ((_detailWindow?.BlocksInput(control) ?? false)
+            || (_detailWindow?.ContainsScreenPoint(screenPoint) ?? false))
         {
             return true;
         }
@@ -478,6 +485,9 @@ public partial class MobileFactoryHud : CanvasLayer
 
         return BlocksInteractiveInput(control, _topChromePanel)
             || BlocksInteractiveInput(control, _infoPanel)
-            || BlocksInteractiveInput(control, _editorPanel);
+            || BlocksInteractiveInput(control, _editorPanel)
+            || ContainsScreenPoint(_topChromePanel, screenPoint)
+            || ContainsScreenPoint(_infoPanel, screenPoint)
+            || ContainsScreenPoint(_editorPanel, screenPoint);
     }
 }

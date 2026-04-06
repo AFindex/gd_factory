@@ -224,6 +224,7 @@ public partial class MobileFactoryHud
 
         _detailWindow = new FactoryStructureDetailWindow();
         _detailWindow.InventoryMoveRequested += (inventoryId, fromSlot, toSlot, splitStack) => EditorDetailInventoryMoveRequested?.Invoke(inventoryId, fromSlot, toSlot, splitStack);
+        _detailWindow.InventoryTransferRequested += (fromInventoryId, fromSlot, toInventoryId, toSlot, splitStack) => EditorDetailInventoryTransferRequested?.Invoke(fromInventoryId, fromSlot, toInventoryId, toSlot, splitStack);
         _detailWindow.RecipeSelected += recipeId => EditorDetailRecipeSelected?.Invoke(recipeId);
         _detailWindow.DetailActionRequested += actionId => EditorDetailActionRequested?.Invoke(actionId);
         _detailWindow.CloseRequested += () => EditorDetailClosed?.Invoke();
@@ -607,6 +608,13 @@ public partial class MobileFactoryHud
         }
 
         return false;
+    }
+
+    private static bool ContainsScreenPoint(Control? control, Vector2 screenPoint)
+    {
+        return control is not null
+            && control.Visible
+            && control.GetGlobalRect().HasPoint(screenPoint);
     }
 
     private static bool IsInside(Control control, Control container)
