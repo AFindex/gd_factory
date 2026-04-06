@@ -13,13 +13,13 @@ public partial class MobileFactoryDemo : Node3D
     private const string DiagnosticsWorkspaceId = "diagnostics";
     private const int InteriorRenderLayer = 1;
     private const int HullRenderLayer = 2;
-    private const float PowerDashBaseLength = FactoryConstants.CellSize * 0.52f;
-    private const float PowerDashGapLength = FactoryConstants.CellSize * 0.28f;
-    private const float PowerDashThickness = 0.08f;
-    private const float PowerDashWidth = 0.11f;
-    private const float PowerLinkEndpointInset = FactoryConstants.CellSize * 0.22f;
-    private const float PreviewPowerPoleWireHeight = 1.44f;
-    private const int PreviewPowerPoleConnectionRangeCells = 6;
+    private const float PowerDashBaseLength = FactoryPreviewOverlaySupport.PowerDashBaseLength;
+    private const float PowerDashGapLength = FactoryPreviewOverlaySupport.PowerDashGapLength;
+    private const float PowerDashThickness = FactoryPreviewOverlaySupport.PowerDashThickness;
+    private const float PowerDashWidth = FactoryPreviewOverlaySupport.PowerDashWidth;
+    private const float PowerLinkEndpointInset = FactoryPreviewOverlaySupport.PowerLinkEndpointInset;
+    private const float PreviewPowerPoleWireHeight = FactoryPreviewOverlaySupport.PreviewPowerPoleWireHeight;
+    private const int PreviewPowerPoleConnectionRangeCells = FactoryPreviewOverlaySupport.PreviewPowerPoleConnectionRangeCells;
     private const float MiningPortSmokeDeployTimeoutSeconds = 24.0f;
 
     private static readonly Vector2I AnchorA = new(-6, -3);
@@ -188,6 +188,7 @@ public partial class MobileFactoryDemo : Node3D
     private Vector2I _selectedPlayerItemSlot;
     private bool _hasSelectedPlayerItemSlot;
     private bool _playerInteriorPlacementArmed;
+    private readonly FactoryPlayerInventorySelectionState _playerSelectionState = new();
 
     public override void _Ready()
     {
@@ -432,53 +433,46 @@ public partial class MobileFactoryDemo : Node3D
 
     private void BuildSceneGraph()
     {
-        AddChild(CreateEnvironment());
-        AddChild(CreateDirectionalLight());
-        AddChild(CreateFloor(GetWorldMinCell(), GetWorldMaxCell()));
-        AddChild(CreateGridLines(GetWorldMinCell(), GetWorldMaxCell()));
+        var scaffold = FactoryDemoSceneScaffold.Build(
+            this,
+            GetWorldMinCell(),
+            GetWorldMaxCell(),
+            new[]
+            {
+                new FactoryDemoRootSpec("resource", "MobileResourceOverlayRoot"),
+                new FactoryDemoRootSpec("structure", "MobileDemoStructures"),
+                new FactoryDemoRootSpec("enemy", "MobileEnemyRoot"),
+                new FactoryDemoRootSpec("world-preview", "WorldPreviewRoot"),
+                new FactoryDemoRootSpec("interior-preview", "InteriorPreviewRoot", false),
+                new FactoryDemoRootSpec("interior-port-hints", "InteriorPortHintRoot", false),
+                new FactoryDemoRootSpec("interior-power-links", "InteriorPowerLinkOverlayRoot", false),
+                new FactoryDemoRootSpec("interior-blueprint-preview", "InteriorBlueprintPreviewRoot", false),
+                new FactoryDemoRootSpec("interior-blueprint-ghost-preview", "InteriorBlueprintGhostPreviewRoot", false)
+            },
+            combatDirectorName: "MobileCombatDirector");
 
         if (UseLargeTestScenario)
         {
             AddChild(CreateScenarioLandmarks());
         }
 
-        _resourceOverlayRoot = new Node3D { Name = "MobileResourceOverlayRoot" };
-        AddChild(_resourceOverlayRoot);
-
-        _structureRoot = new Node3D { Name = "MobileDemoStructures" };
-        AddChild(_structureRoot);
-
-        _enemyRoot = new Node3D { Name = "MobileEnemyRoot" };
-        AddChild(_enemyRoot);
-
-        _worldPreviewRoot = new Node3D { Name = "WorldPreviewRoot" };
-        AddChild(_worldPreviewRoot);
+        _resourceOverlayRoot = scaffold.GetRoot("resource");
+        _structureRoot = scaffold.GetRoot("structure");
+        _enemyRoot = scaffold.GetRoot("enemy");
+        _worldPreviewRoot = scaffold.GetRoot("world-preview");
         CreateWorldPreviewVisuals(4, 1);
 
-        _interiorPreviewRoot = new Node3D { Name = "InteriorPreviewRoot", Visible = false };
-        AddChild(_interiorPreviewRoot);
+        _interiorPreviewRoot = scaffold.GetRoot("interior-preview");
         CreateInteriorPreviewVisuals();
 
-        _interiorPortHintRoot = new Node3D { Name = "InteriorPortHintRoot", Visible = false };
-        AddChild(_interiorPortHintRoot);
-
-        _interiorPowerLinkOverlayRoot = new Node3D { Name = "InteriorPowerLinkOverlayRoot", Visible = false };
-        AddChild(_interiorPowerLinkOverlayRoot);
-
-        _interiorBlueprintPreviewRoot = new Node3D { Name = "InteriorBlueprintPreviewRoot", Visible = false };
-        AddChild(_interiorBlueprintPreviewRoot);
-
-        _interiorBlueprintGhostPreviewRoot = new Node3D { Name = "InteriorBlueprintGhostPreviewRoot", Visible = false };
-        AddChild(_interiorBlueprintGhostPreviewRoot);
-
-        _simulation = new SimulationController { Name = "SimulationController" };
-        AddChild(_simulation);
-
-        _combatDirector = new FactoryCombatDirector { Name = "MobileCombatDirector" };
-        AddChild(_combatDirector);
-
-        _cameraRig = new FactoryCameraRig();
-        AddChild(_cameraRig);
+        _interiorPortHintRoot = scaffold.GetRoot("interior-port-hints");
+        _interiorPowerLinkOverlayRoot = scaffold.GetRoot("interior-power-links");
+        _interiorBlueprintPreviewRoot = scaffold.GetRoot("interior-blueprint-preview");
+        _interiorBlueprintGhostPreviewRoot = scaffold.GetRoot("interior-blueprint-ghost-preview");
+        _simulation = scaffold.Simulation;
+        _combatDirector = scaffold.CombatDirector;
+        _cameraRig = scaffold.CameraRig;
+        _playerHud = scaffold.PlayerHud;
 
         _hud = new MobileFactoryHud
         {
@@ -505,14 +499,10 @@ public partial class MobileFactoryDemo : Node3D
         _hud.WorkspaceSelected += HandleHudWorkspaceSelected;
         AddChild(_hud);
 
-        _playerHud = new FactoryPlayerHud();
         _playerHud.HotbarSlotPressed += HandlePlayerHotbarPressed;
         _playerHud.BackpackInventoryMoveRequested += HandlePlayerInventoryMoveRequested;
         _playerHud.BackpackInventoryTransferRequested += HandlePlayerInventoryTransferRequested;
         _playerHud.BackpackSlotActivated += HandlePlayerInventorySlotActivated;
-        AddChild(_playerHud);
-
-        AddChild(new LauncherNavigationOverlay());
     }
 
     private void ConfigureGameplay()
@@ -1950,7 +1940,7 @@ public partial class MobileFactoryDemo : Node3D
             var mesh = _worldPreviewFootprintMeshes[index++];
             mesh.Visible = true;
             mesh.Position = _grid.CellToWorld(cell) + new Vector3(0.0f, 0.05f, 0.0f);
-            ApplyPreviewColor(mesh, footprintColor);
+            FactoryPreviewOverlaySupport.ApplyPreviewColor(mesh, footprintColor);
         }
 
         index = 0;
@@ -1959,7 +1949,7 @@ public partial class MobileFactoryDemo : Node3D
             var mesh = _worldPreviewPortMeshes[index++];
             mesh.Visible = true;
             mesh.Position = _grid.CellToWorld(cell) + new Vector3(0.0f, 0.08f, 0.0f);
-            ApplyPreviewColor(mesh, portColor);
+            FactoryPreviewOverlaySupport.ApplyPreviewColor(mesh, portColor);
         }
 
         index = 0;
@@ -1998,7 +1988,7 @@ public partial class MobileFactoryDemo : Node3D
             _worldPreviewFacingArrow.Visible = true;
             _worldPreviewFacingArrow.Position = GetPreviewFacingArrowPosition(_hoveredAnchor, _selectedDeployFacing);
             _worldPreviewFacingArrow.Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(_selectedDeployFacing), 0.0f);
-            ApplyPreviewColor(_worldPreviewFacingArrow, portColor.Lightened(0.08f));
+        FactoryPreviewOverlaySupport.ApplyPreviewColor(_worldPreviewFacingArrow, portColor.Lightened(0.08f));
         }
     }
 
@@ -2071,7 +2061,7 @@ public partial class MobileFactoryDemo : Node3D
             _interiorPreviewCell.Position = new Vector3(0.0f, 0.05f, 0.0f);
             _interiorPreviewArrow.Visible = false;
             var selectionTint = new Color(0.35f, 0.75f, 1.0f, 0.34f);
-            ApplyPreviewColor(_interiorPreviewCell, selectionTint);
+            FactoryPreviewOverlaySupport.ApplyPreviewColor(_interiorPreviewCell, selectionTint);
             return;
         }
 
@@ -2096,7 +2086,7 @@ public partial class MobileFactoryDemo : Node3D
             _interiorPreviewCell.Position = new Vector3(0.0f, 0.05f, 0.0f);
             _interiorPreviewArrow.Visible = false;
             var deleteTint = _canDeleteInteriorCell ? new Color(1.0f, 0.35f, 0.35f, 0.42f) : new Color(0.75f, 0.30f, 0.30f, 0.28f);
-            ApplyPreviewColor(_interiorPreviewCell, deleteTint);
+            FactoryPreviewOverlaySupport.ApplyPreviewColor(_interiorPreviewCell, deleteTint);
             return;
         }
 
@@ -2119,8 +2109,8 @@ public partial class MobileFactoryDemo : Node3D
         };
         _interiorPreviewCell.Position = new Vector3(0.0f, 0.04f, 0.0f);
         _interiorPreviewArrow.Visible = true;
-        ApplyPreviewColor(_interiorPreviewCell, tint);
-        ApplyPreviewColor(_interiorPreviewArrow, tint.Lightened(0.1f));
+        FactoryPreviewOverlaySupport.ApplyPreviewColor(_interiorPreviewCell, tint);
+        FactoryPreviewOverlaySupport.ApplyPreviewColor(_interiorPreviewArrow, tint.Lightened(0.1f));
         UpdatePreviewPowerRange(_selectedInteriorKind, _mobileFactory.InteriorSite, _interiorPreviewPowerRange, tint);
         UpdateInteriorPortHints(_selectedInteriorKind);
 
@@ -2149,7 +2139,7 @@ public partial class MobileFactoryDemo : Node3D
             var mesh = _interiorPreviewBoundaryMeshes[i];
             mesh.Visible = true;
             mesh.GlobalPosition = _mobileFactory.InteriorSite.CellToWorld(boundaryCells[i]) + new Vector3(0.0f, 0.05f, 0.0f);
-            ApplyPreviewColor(mesh, tint.Darkened(0.08f));
+            FactoryPreviewOverlaySupport.ApplyPreviewColor(mesh, tint.Darkened(0.08f));
         }
 
         for (var i = 0; i < exteriorCells.Count; i++)
@@ -2157,7 +2147,7 @@ public partial class MobileFactoryDemo : Node3D
             var mesh = _interiorPreviewExteriorMeshes[i];
             mesh.Visible = true;
             mesh.GlobalPosition = _mobileFactory.InteriorSite.CellToWorld(exteriorCells[i]) + new Vector3(0.0f, 0.08f, 0.0f);
-            ApplyPreviewColor(mesh, tint.Lightened(0.1f));
+            FactoryPreviewOverlaySupport.ApplyPreviewColor(mesh, tint.Lightened(0.1f));
         }
     }
 
@@ -2227,7 +2217,7 @@ public partial class MobileFactoryDemo : Node3D
                     0.08f,
                     Mathf.Max(_mobileFactory.InteriorSite.CellSize * 0.92f, previewSize.Y - (_mobileFactory.InteriorSite.CellSize * 0.08f)))
             };
-            ApplyPreviewColor(mesh, entry.IsValid
+            FactoryPreviewOverlaySupport.ApplyPreviewColor(mesh, entry.IsValid
                 ? new Color(0.35f, 0.95f, 0.55f, 0.36f)
                 : new Color(1.0f, 0.35f, 0.35f, 0.36f));
 
@@ -2470,82 +2460,19 @@ public partial class MobileFactoryDemo : Node3D
 
     private int DrawInteriorDashedPowerLink(Vector3 start, Vector3 end, Color color, int dashIndex)
     {
-        var startFlat = new Vector3(start.X, 0.0f, start.Z);
-        var endFlat = new Vector3(end.X, 0.0f, end.Z);
-        var delta = endFlat - startFlat;
-        var totalLength = delta.Length();
-        if (totalLength <= PowerLinkEndpointInset * 2.0f)
-        {
-            return dashIndex;
-        }
-
-        var direction = delta / totalLength;
-        var linkHeight = Mathf.Max(start.Y, end.Y);
-        var dashStart = new Vector3(start.X, linkHeight, start.Z) + (direction * PowerLinkEndpointInset);
-        var dashEnd = new Vector3(end.X, linkHeight, end.Z) - (direction * PowerLinkEndpointInset);
-        var dashVector = dashEnd - dashStart;
-        var dashDistance = dashVector.Length();
-        if (dashDistance <= 0.05f)
-        {
-            return dashIndex;
-        }
-
-        var rotationY = Mathf.Atan2(direction.X, direction.Z);
-        var step = PowerDashBaseLength + PowerDashGapLength;
-        var progress = 0.0f;
-        while (progress < dashDistance)
-        {
-            var dashLength = Mathf.Min(PowerDashBaseLength, dashDistance - progress);
-            if (dashLength <= 0.02f)
-            {
-                break;
-            }
-
-            EnsureInteriorPowerLinkDashCapacity(dashIndex + 1);
-            var dash = _interiorPowerLinkDashes[dashIndex];
-            dash.Visible = true;
-            dash.Position = dashStart + (direction * (progress + (dashLength * 0.5f)));
-            dash.Rotation = new Vector3(0.0f, rotationY, 0.0f);
-            dash.Scale = new Vector3(1.0f, 1.0f, dashLength / PowerDashBaseLength);
-            ApplyPowerLinkColor(dash, color);
-            dashIndex++;
-            progress += step;
-        }
-
-        return dashIndex;
+        return FactoryPreviewOverlaySupport.DrawDashedPowerLink(
+            start,
+            end,
+            color,
+            dashIndex,
+            EnsureInteriorPowerLinkDashCapacity,
+            _interiorPowerLinkDashes,
+            ApplyPowerLinkColor);
     }
 
     private void EnsureInteriorPowerLinkDashCapacity(int count)
     {
-        if (_interiorPowerLinkOverlayRoot is null)
-        {
-            return;
-        }
-
-        while (_interiorPowerLinkDashes.Count < count)
-        {
-            var dash = new MeshInstance3D
-            {
-                Name = $"InteriorPowerLinkDash_{_interiorPowerLinkDashes.Count}",
-                Visible = false,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-                Mesh = new BoxMesh
-                {
-                    Size = new Vector3(PowerDashWidth, PowerDashThickness, PowerDashBaseLength)
-                },
-                MaterialOverride = new StandardMaterial3D
-                {
-                    AlbedoColor = new Color(0.99f, 0.93f, 0.62f, 0.92f),
-                    Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-                    ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-                    Roughness = 0.15f,
-                    EmissionEnabled = true,
-                    Emission = new Color(0.99f, 0.93f, 0.62f)
-                }
-            };
-            _interiorPowerLinkOverlayRoot.AddChild(dash);
-            _interiorPowerLinkDashes.Add(dash);
-        }
+        FactoryPreviewOverlaySupport.EnsurePowerLinkDashCapacity(_interiorPowerLinkOverlayRoot, _interiorPowerLinkDashes, count, "InteriorPowerLinkDash");
     }
 
     private void SetInteriorPowerLinkDashCount(int visibleCount)
@@ -2600,7 +2527,7 @@ public partial class MobileFactoryDemo : Node3D
         };
         previewPowerRange.Position = new Vector3(0.0f, 0.02f, 0.0f);
         previewPowerRange.Visible = true;
-        ApplyPreviewColor(previewPowerRange, new Color(tint.R, tint.G, tint.B, 0.15f));
+        FactoryPreviewOverlaySupport.ApplyPreviewColor(previewPowerRange, new Color(tint.R, tint.G, tint.B, 0.15f));
     }
 
     private static bool TryGetPowerPreviewInfo(BuildPrototypeKind kind, out int rangeCells)
@@ -2749,37 +2676,34 @@ public partial class MobileFactoryDemo : Node3D
         _hud.SetEditorPreview(editorPreviewPositive, _interiorPreviewMessage);
         _hud.SetPortStatus(_mobileFactory.GetPortStatusLabel());
         _hud.SetCombatStats(_simulation?.ActiveEnemyCount ?? 0, _simulation?.DefeatedEnemyCount ?? 0, _simulation?.DestroyedStructureCount ?? 0);
-        if (_selectedInteriorStructure is not null && GodotObject.IsInstanceValid(_selectedInteriorStructure) && _selectedInteriorStructure.IsInsideTree() && _selectedInteriorStructure is IFactoryInspectable inspectable)
+        if (FactoryDemoInteractionBridge.TryGetInspection(_selectedInteriorStructure, out var inspectionTitle, out var inspectionBody))
         {
-            _hud.SetEditorInspection(inspectable.InspectionTitle, string.Join("\n", inspectable.GetInspectionLines()));
+            _hud.SetEditorInspection(inspectionTitle, inspectionBody);
         }
         else
         {
             _hud.SetEditorInspection(null, null);
         }
 
-        if (_selectedInteriorStructure is not null && GodotObject.IsInstanceValid(_selectedInteriorStructure) && _selectedInteriorStructure.IsInsideTree() && _selectedInteriorStructure is IFactoryStructureDetailProvider detailProvider)
-        {
-            _hud.SetEditorStructureDetails(detailProvider.GetDetailModel());
-        }
-        else
-        {
-            _hud.SetEditorStructureDetails(null);
-        }
+        _hud.SetEditorStructureDetails(FactoryDemoInteractionBridge.BuildLinkedDetailModel(_selectedInteriorStructure));
 
         _hud.SetEditorState(_editorOpen, _mobileFactory.State, CountEditableInteriorStructures(), _interiorInteractionMode);
         _hud.SetHintText(GetHintText());
         _hud.SetFactoryDetails(BuildFactoryDetailText());
         _hud.SetBlueprintState(BuildInteriorBlueprintPanelState());
-        _playerHud?.SetContext(_playerController, BuildSelectedInteriorStructureLinkedDetailModel(), ResolveSelectedPlayerItem());
+        _playerHud?.SetContext(_playerController, FactoryDemoInteractionBridge.BuildLinkedDetailModel(_selectedInteriorStructure), ResolveSelectedPlayerItem());
     }
 
     private void HandleHudWorkspaceSelected(string workspaceId)
     {
-        if (workspaceId != BlueprintWorkspaceId && HasActiveInteriorBlueprintWorkspaceState())
+        if (FactoryBlueprintWorkflowBridge.HandleBlueprintWorkspaceExit(
+                workspaceId,
+                BlueprintWorkspaceId,
+                HasActiveInteriorBlueprintWorkspaceState(),
+                () => CancelInteriorBlueprintWorkflow(clearActiveBlueprint: true),
+                out var exitMessage))
         {
-            CancelInteriorBlueprintWorkflow(clearActiveBlueprint: true);
-            _interiorPreviewMessage = "已切换离开蓝图工作区，并清除当前蓝图选择。";
+            _interiorPreviewMessage = exitMessage ?? string.Empty;
         }
 
         if (workspaceId == BlueprintWorkspaceId || workspaceId == GetHudBuildWorkspaceId())
@@ -2835,16 +2759,14 @@ public partial class MobileFactoryDemo : Node3D
 
     private FactoryBlueprintPanelState BuildInteriorBlueprintPanelState()
     {
-        var activeBlueprint = FactoryBlueprintLibrary.GetActive();
         var modeText = _blueprintMode switch
         {
             FactoryBlueprintWorkflowMode.CaptureSelection => "蓝图模式：内部框选保存",
             FactoryBlueprintWorkflowMode.ApplyPreview => $"蓝图模式：内部应用预览（旋转 {FactoryDirection.ToLabel(_interiorBlueprintRotation)}）",
             _ => "蓝图模式：待命"
         };
-        var activeText = activeBlueprint is null
-            ? "当前蓝图：未选择"
-            : $"当前蓝图：{activeBlueprint.DisplayName} ({activeBlueprint.GetSummaryText()})";
+        var activeBlueprint = FactoryBlueprintLibrary.GetActive();
+        var activeText = FactoryBlueprintWorkflowBridge.BuildActiveBlueprintText();
         var captureSummary = _pendingBlueprintCapture is null
             ? "可框选当前内部布局保存为蓝图，也可一键保存整个内部布局。"
             : $"待保存：{_pendingBlueprintCapture.DisplayName} | {_pendingBlueprintCapture.GetSummaryText()}";
@@ -3212,15 +3134,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private void HandlePlayerInventoryMoveRequested(string inventoryId, Vector2I fromSlot, Vector2I toSlot, bool splitStack)
     {
-        if (!TryResolveInventoryEndpoint(inventoryId, out var endpoint))
-        {
-            TraceLog($"HandlePlayerInventoryMoveRequested failed resolve inventory={inventoryId}");
-            return;
-        }
-
-        var moved = endpoint.Inventory.TryMoveItem(fromSlot, toSlot, splitStack);
-        TraceLog($"HandlePlayerInventoryMoveRequested inventory={inventoryId} from={fromSlot} to={toSlot} split={splitStack} moved={moved}");
-        if (moved)
+        if (FactoryDemoInteractionBridge.TryMoveInventoryItem(TryResolveInventoryEndpoint, inventoryId, fromSlot, toSlot, splitStack))
         {
             UpdateHud();
         }
@@ -3228,16 +3142,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private void HandlePlayerInventoryTransferRequested(string fromInventoryId, Vector2I fromSlot, string toInventoryId, Vector2I toSlot, bool splitStack)
     {
-        if (!TryResolveInventoryEndpoint(fromInventoryId, out var fromEndpoint)
-            || !TryResolveInventoryEndpoint(toInventoryId, out var toEndpoint))
-        {
-            TraceLog($"HandlePlayerInventoryTransferRequested failed resolve from={fromInventoryId} to={toInventoryId}");
-            return;
-        }
-
-        var moved = fromEndpoint.Inventory.TryMoveItemTo(toEndpoint.Inventory, fromSlot, toSlot, splitStack, toEndpoint.CanInsert, fromEndpoint.CanInsert);
-        TraceLog($"HandlePlayerInventoryTransferRequested from={fromInventoryId}@{fromSlot} to={toInventoryId}@{toSlot} split={splitStack} moved={moved}");
-        if (moved)
+        if (FactoryDemoInteractionBridge.TryTransferInventoryItem(TryResolveInventoryEndpoint, fromInventoryId, fromSlot, toInventoryId, toSlot, splitStack))
         {
             UpdateHud();
         }
@@ -3248,22 +3153,21 @@ public partial class MobileFactoryDemo : Node3D
         _selectedPlayerItemInventoryId = inventoryId;
         _selectedPlayerItemSlot = slot;
         _hasSelectedPlayerItemSlot = true;
+        _playerSelectionState.InventoryId = inventoryId;
+        _playerSelectionState.Slot = slot;
+        _playerSelectionState.HasSlot = true;
+        FactoryDemoInteractionBridge.ActivatePlayerInventorySlot(_playerController, TryResolveInventoryEndpoint, _playerSelectionState, inventoryId, slot, HandlePlayerHotbarPressed);
         if (inventoryId == FactoryPlayerController.BackpackInventoryId && slot.Y == 0)
         {
-            HandlePlayerHotbarPressed(slot.X);
             return;
         }
 
         _playerController?.DisarmHotbarPlacement();
-        _playerInteriorPlacementArmed = inventoryId == FactoryPlayerController.BackpackInventoryId
-            && ResolveSelectedPlayerItem() is FactoryItem item
-            && FactoryPresentation.IsPlaceableStructureItem(item);
+        _playerInteriorPlacementArmed = _playerSelectionState.PlacementArmed;
         if (_playerInteriorPlacementArmed && TryResolveSelectedPlayerPlaceable(out var placementKind))
         {
             _selectedInteriorKind = placementKind;
         }
-
-        TraceLog($"HandlePlayerInventorySlotActivated inventory={inventoryId} slot={slot} armedPlacement={_playerInteriorPlacementArmed} resolvedItem={ResolveSelectedPlayerItem()?.ItemKind.ToString() ?? "none"}");
         RefreshInteriorInteractionModeFromBuildSource();
         UpdateHud();
     }
@@ -3280,9 +3184,11 @@ public partial class MobileFactoryDemo : Node3D
             return _playerController.GetActiveHotbarItem();
         }
 
-        return TryResolveInventoryEndpoint(_selectedPlayerItemInventoryId!, out var endpoint)
-            ? endpoint.Inventory.GetItemOrDefault(_selectedPlayerItemSlot)
-            : _playerController.GetActiveHotbarItem();
+        _playerSelectionState.InventoryId = _selectedPlayerItemInventoryId;
+        _playerSelectionState.Slot = _selectedPlayerItemSlot;
+        _playerSelectionState.HasSlot = _hasSelectedPlayerItemSlot;
+        _playerSelectionState.PlacementArmed = _playerInteriorPlacementArmed;
+        return FactoryDemoInteractionBridge.ResolveSelectedPlayerItem(_playerController, TryResolveInventoryEndpoint, _playerSelectionState);
     }
 
     private bool IsPointerOverUi()
@@ -3810,19 +3716,7 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        var displayName = string.IsNullOrWhiteSpace(name)
-            ? _pendingBlueprintCapture.DisplayName
-            : name.Trim();
-        var savedRecord = new FactoryBlueprintRecord(
-            _pendingBlueprintCapture.Id,
-            displayName,
-            _pendingBlueprintCapture.SourceSiteKind,
-            _pendingBlueprintCapture.SuggestedAnchorCell,
-            _pendingBlueprintCapture.BoundsSize,
-            _pendingBlueprintCapture.Entries,
-            _pendingBlueprintCapture.RequiredAttachments);
-        FactoryBlueprintLibrary.AddOrUpdate(savedRecord);
-        FactoryBlueprintLibrary.SelectActive(savedRecord.Id);
+        var savedRecord = FactoryBlueprintWorkflowBridge.SavePendingCapture(_pendingBlueprintCapture, name);
         _pendingBlueprintCapture = null;
         _hasInteriorBlueprintSelectionRect = false;
         _blueprintMode = FactoryBlueprintWorkflowMode.None;
@@ -3831,11 +3725,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private void HandleInteriorBlueprintSelected(string blueprintId)
     {
-        FactoryBlueprintLibrary.SelectActive(blueprintId);
-        if (_blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview)
-        {
-            UpdateInteriorBlueprintPlan();
-        }
+        FactoryBlueprintWorkflowBridge.SelectBlueprint(blueprintId, _blueprintMode, UpdateInteriorBlueprintPlan);
     }
 
     private void EnterInteriorBlueprintApplyMode()
@@ -3872,11 +3762,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private void HandleInteriorBlueprintDeleteRequested(string blueprintId)
     {
-        FactoryBlueprintLibrary.Remove(blueprintId);
-        if (FactoryBlueprintLibrary.GetActive() is null)
-        {
-            _interiorBlueprintPlan = null;
-        }
+        FactoryBlueprintWorkflowBridge.DeleteBlueprint(blueprintId, () => _interiorBlueprintPlan = null);
     }
 
     private void CancelInteriorBlueprintWorkflow()
@@ -3936,15 +3822,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private void HandleEditorDetailInventoryMoveRequested(string inventoryId, Vector2I fromSlot, Vector2I toSlot, bool splitStack)
     {
-        if (!TryResolveInventoryEndpoint(inventoryId, out var endpoint))
-        {
-            TraceLog($"HandleEditorDetailInventoryMoveRequested failed resolve inventory={inventoryId}");
-            return;
-        }
-
-        var moved = endpoint.Inventory.TryMoveItem(fromSlot, toSlot, splitStack);
-        TraceLog($"HandleEditorDetailInventoryMoveRequested inventory={inventoryId} from={fromSlot} to={toSlot} split={splitStack} moved={moved}");
-        if (moved)
+        if (FactoryDemoInteractionBridge.TryMoveInventoryItem(TryResolveInventoryEndpoint, inventoryId, fromSlot, toSlot, splitStack))
         {
             UpdateHud();
         }
@@ -3952,16 +3830,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private void HandleEditorDetailInventoryTransferRequested(string fromInventoryId, Vector2I fromSlot, string toInventoryId, Vector2I toSlot, bool splitStack)
     {
-        if (!TryResolveInventoryEndpoint(fromInventoryId, out var fromEndpoint)
-            || !TryResolveInventoryEndpoint(toInventoryId, out var toEndpoint))
-        {
-            TraceLog($"HandleEditorDetailInventoryTransferRequested failed resolve from={fromInventoryId} to={toInventoryId}");
-            return;
-        }
-
-        var moved = fromEndpoint.Inventory.TryMoveItemTo(toEndpoint.Inventory, fromSlot, toSlot, splitStack, toEndpoint.CanInsert, fromEndpoint.CanInsert);
-        TraceLog($"HandleEditorDetailInventoryTransferRequested from={fromInventoryId}@{fromSlot} to={toInventoryId}@{toSlot} split={splitStack} moved={moved}");
-        if (moved)
+        if (FactoryDemoInteractionBridge.TryTransferInventoryItem(TryResolveInventoryEndpoint, fromInventoryId, fromSlot, toInventoryId, toSlot, splitStack))
         {
             UpdateHud();
         }
@@ -3969,7 +3838,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private void HandleEditorDetailRecipeSelected(string recipeId)
     {
-        if (_selectedInteriorStructure is IFactoryStructureDetailProvider detailProvider && detailProvider.TrySetDetailRecipe(recipeId))
+        if (FactoryDemoInteractionBridge.TrySetDetailRecipe(_selectedInteriorStructure, recipeId))
         {
             UpdateHud();
         }
@@ -3977,7 +3846,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private void HandleEditorDetailActionRequested(string actionId)
     {
-        if (_selectedInteriorStructure is IFactoryStructureDetailProvider detailProvider && detailProvider.TryInvokeDetailAction(actionId))
+        if (FactoryDemoInteractionBridge.TryInvokeDetailAction(_selectedInteriorStructure, actionId))
         {
             UpdateHud();
         }
@@ -3989,15 +3858,6 @@ public partial class MobileFactoryDemo : Node3D
         UpdateHud();
     }
 
-    private FactoryStructureDetailModel? BuildSelectedInteriorStructureLinkedDetailModel()
-    {
-        return _selectedInteriorStructure is IFactoryStructureDetailProvider detailProvider
-            && GodotObject.IsInstanceValid(_selectedInteriorStructure)
-            && _selectedInteriorStructure.IsInsideTree()
-            ? detailProvider.GetDetailModel()
-            : null;
-    }
-
     private bool TryResolveSelectedPlayerPlaceable(out BuildPrototypeKind kind)
     {
         return FactoryPresentation.TryGetPlaceableStructureKind(ResolveSelectedPlayerItem(), out kind);
@@ -4005,25 +3865,12 @@ public partial class MobileFactoryDemo : Node3D
 
     private bool TryConsumeSelectedPlayerPlaceable()
     {
-        if (!_hasSelectedPlayerItemSlot
-            || string.IsNullOrWhiteSpace(_selectedPlayerItemInventoryId)
-            || !TryResolveInventoryEndpoint(_selectedPlayerItemInventoryId!, out var endpoint))
-        {
-            _playerInteriorPlacementArmed = false;
-            TraceLog("TryConsumeSelectedPlayerPlaceable failed because selected slot or endpoint was invalid");
-            return false;
-        }
-
-        var consumed = endpoint.Inventory.TryTakeFromSlot(_selectedPlayerItemSlot, out _);
-        TraceLog($"TryConsumeSelectedPlayerPlaceable inventory={_selectedPlayerItemInventoryId} slot={_selectedPlayerItemSlot} consumed={consumed}");
-        _playerController?.RefreshActiveSlotState();
-
-        var remainingItem = endpoint.Inventory.GetItemOrDefault(_selectedPlayerItemSlot);
-        _playerInteriorPlacementArmed = remainingItem is not null && FactoryPresentation.IsPlaceableStructureItem(remainingItem);
-        if (!_playerInteriorPlacementArmed && _selectedPlayerItemSlot.Y == 0)
-        {
-            _playerController?.DisarmHotbarPlacement();
-        }
+        _playerSelectionState.InventoryId = _selectedPlayerItemInventoryId;
+        _playerSelectionState.Slot = _selectedPlayerItemSlot;
+        _playerSelectionState.HasSlot = _hasSelectedPlayerItemSlot;
+        _playerSelectionState.PlacementArmed = _playerInteriorPlacementArmed;
+        var consumed = FactoryDemoInteractionBridge.TryConsumeSelectedPlaceable(_playerController, TryResolveInventoryEndpoint, _playerSelectionState);
+        _playerInteriorPlacementArmed = _playerSelectionState.PlacementArmed;
 
         if (_playerInteriorPlacementArmed && TryResolveSelectedPlayerPlaceable(out var placementKind))
         {
@@ -4041,19 +3888,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private bool TryResolveInventoryEndpoint(string inventoryId, out FactoryInventoryTransferEndpoint endpoint)
     {
-        if (_playerController?.TryResolveInventoryEndpoint(inventoryId, out endpoint) == true)
-        {
-            return true;
-        }
-
-        if (_selectedInteriorStructure is IFactoryInventoryEndpointProvider endpointProvider
-            && endpointProvider.TryResolveInventoryEndpoint(inventoryId, out endpoint))
-        {
-            return true;
-        }
-
-        endpoint = default;
-        return false;
+        return FactoryDemoInteractionBridge.TryResolveInventoryEndpoint(_playerController, _selectedInteriorStructure, inventoryId, out endpoint);
     }
 
     private bool TryGetActiveInteriorPlacementKind(out BuildPrototypeKind kind, out bool usesPlayerInventory)
@@ -4201,11 +4036,8 @@ public partial class MobileFactoryDemo : Node3D
 
         for (var i = 0; i < footprintCount; i++)
         {
-            var footprint = new MeshInstance3D { Name = $"PreviewFootprint_{i}", Visible = false };
-            footprint.Mesh = new BoxMesh
-            {
-                Size = new Vector3(FactoryConstants.CellSize * 0.92f, 0.08f, FactoryConstants.CellSize * 0.92f)
-            };
+            var footprint = FactoryPreviewOverlaySupport.CreatePreviewCell($"PreviewFootprint_{i}", FactoryConstants.CellSize);
+            footprint.Visible = false;
             _worldPreviewRoot.AddChild(footprint);
             _worldPreviewFootprintMeshes.Add(footprint);
         }
@@ -4233,7 +4065,7 @@ public partial class MobileFactoryDemo : Node3D
             _worldPreviewMiningLinkMeshes.Add(link);
         }
 
-        _worldPreviewFacingArrow = FactoryPreviewVisuals.CreateFacingArrow("PreviewFacingArrow", FactoryConstants.CellSize, 0.32f);
+        _worldPreviewFacingArrow = FactoryPreviewOverlaySupport.CreateFacingArrow("PreviewFacingArrow", FactoryConstants.CellSize, 0.32f);
         _worldPreviewRoot.AddChild(_worldPreviewFacingArrow);
     }
 
@@ -4246,11 +4078,8 @@ public partial class MobileFactoryDemo : Node3D
 
         while (_worldPreviewFootprintMeshes.Count < footprintCount)
         {
-            var footprint = new MeshInstance3D { Name = $"PreviewFootprint_{_worldPreviewFootprintMeshes.Count}", Visible = false };
-            footprint.Mesh = new BoxMesh
-            {
-                Size = new Vector3(FactoryConstants.CellSize * 0.92f, 0.08f, FactoryConstants.CellSize * 0.92f)
-            };
+            var footprint = FactoryPreviewOverlaySupport.CreatePreviewCell($"PreviewFootprint_{_worldPreviewFootprintMeshes.Count}", FactoryConstants.CellSize);
+            footprint.Visible = false;
             _worldPreviewRoot.AddChild(footprint);
             _worldPreviewFootprintMeshes.Add(footprint);
         }
@@ -4294,19 +4123,16 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        _interiorPreviewCell = new MeshInstance3D { Name = "InteriorPreviewCell" };
-        _interiorPreviewCell.Mesh = new BoxMesh { Size = new Vector3(0.48f, 0.06f, 0.48f) };
-        _interiorPreviewCell.Position = new Vector3(0.0f, 0.04f, 0.0f);
+        _interiorPreviewCell = FactoryPreviewOverlaySupport.CreatePreviewCell("InteriorPreviewCell", 0.615f, scale: 0.78f, height: 0.06f, y: 0.04f);
         _interiorPreviewRoot.AddChild(_interiorPreviewCell);
 
-        _interiorPreviewArrow = FactoryPreviewVisuals.CreateFacingArrow("InteriorPreviewArrow", 0.5f, 0.12f);
+        _interiorPreviewArrow = FactoryPreviewOverlaySupport.CreateFacingArrow("InteriorPreviewArrow", 0.5f, 0.12f);
         _interiorPreviewRoot.AddChild(_interiorPreviewArrow);
 
-        _interiorPreviewPowerRange = new MeshInstance3D { Name = "InteriorPreviewPowerRange", Visible = false };
-        _interiorPreviewPowerRange.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+        _interiorPreviewPowerRange = FactoryPreviewOverlaySupport.CreatePreviewPowerRange("InteriorPreviewPowerRange");
         _interiorPreviewRoot.AddChild(_interiorPreviewPowerRange);
 
-        ApplyPreviewColor(_interiorPreviewPowerRange, new Color(0.35f, 0.95f, 0.55f, 0.15f));
+        FactoryPreviewOverlaySupport.ApplyPreviewColor(_interiorPreviewPowerRange, new Color(0.35f, 0.95f, 0.55f, 0.15f));
     }
 
     private void UpdateInteriorPreviewSizing()
@@ -4321,7 +4147,7 @@ public partial class MobileFactoryDemo : Node3D
         _interiorPreviewCell.Position = new Vector3(0.0f, 0.04f, 0.0f);
 
         _interiorPreviewArrow.QueueFree();
-        _interiorPreviewArrow = FactoryPreviewVisuals.CreateFacingArrow("InteriorPreviewArrow", cellSize * 0.6f, 0.12f);
+        _interiorPreviewArrow = FactoryPreviewOverlaySupport.CreateFacingArrow("InteriorPreviewArrow", cellSize * 0.6f, 0.12f);
         _interiorPreviewRoot.AddChild(_interiorPreviewArrow);
     }
 
@@ -4371,7 +4197,7 @@ public partial class MobileFactoryDemo : Node3D
             {
                 Size = Vector3.One * (marker.IsHighlighted ? _mobileFactory.InteriorSite.CellSize * 0.30f : _mobileFactory.InteriorSite.CellSize * 0.22f)
             };
-            ApplyPreviewColor(
+            FactoryPreviewOverlaySupport.ApplyPreviewColor(
                 mesh,
                 marker.IsInput
                     ? marker.IsHighlighted
@@ -4395,12 +4221,7 @@ public partial class MobileFactoryDemo : Node3D
 
         while (_interiorPortHintMeshes.Count < count)
         {
-            var mesh = new MeshInstance3D
-            {
-                Name = $"InteriorPortHint_{_interiorPortHintMeshes.Count}",
-                Visible = false,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
-            };
+            var mesh = FactoryPreviewOverlaySupport.CreatePortHintMesh($"InteriorPortHint_{_interiorPortHintMeshes.Count}");
             _interiorPortHintRoot.AddChild(mesh);
             _interiorPortHintMeshes.Add(mesh);
         }
@@ -4423,46 +4244,19 @@ public partial class MobileFactoryDemo : Node3D
 
     private void EnsureInputActions()
     {
-        EnsureAction("camera_pan_left", new InputEventKey { PhysicalKeycode = Key.A }, new InputEventKey { PhysicalKeycode = Key.Left });
-        EnsureAction("camera_pan_right", new InputEventKey { PhysicalKeycode = Key.D }, new InputEventKey { PhysicalKeycode = Key.Right });
-        EnsureAction("camera_pan_up", new InputEventKey { PhysicalKeycode = Key.W }, new InputEventKey { PhysicalKeycode = Key.Up });
-        EnsureAction("camera_pan_down", new InputEventKey { PhysicalKeycode = Key.S }, new InputEventKey { PhysicalKeycode = Key.Down });
-        EnsureAction("player_move_left", new InputEventKey { PhysicalKeycode = Key.A });
-        EnsureAction("player_move_right", new InputEventKey { PhysicalKeycode = Key.D });
-        EnsureAction("player_move_forward", new InputEventKey { PhysicalKeycode = Key.W });
-        EnsureAction("player_move_backward", new InputEventKey { PhysicalKeycode = Key.S });
-        EnsureAction("camera_zoom_in", new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true });
-        EnsureAction("camera_zoom_out", new InputEventMouseButton { ButtonIndex = MouseButton.WheelDown, Pressed = true });
-        EnsureAction("factory_move_forward", new InputEventKey { PhysicalKeycode = Key.W });
-        EnsureAction("factory_move_backward", new InputEventKey { PhysicalKeycode = Key.S });
-        EnsureAction("factory_turn_left", new InputEventKey { PhysicalKeycode = Key.A });
-        EnsureAction("factory_turn_right", new InputEventKey { PhysicalKeycode = Key.D });
-        EnsureAction("deploy_rotate_left", new InputEventKey { PhysicalKeycode = Key.Q });
-        EnsureAction("deploy_rotate_right", new InputEventKey { PhysicalKeycode = Key.E });
-        EnsureAction("toggle_factory_command", new InputEventKey { PhysicalKeycode = Key.C });
-        EnsureAction("toggle_observer_mode", new InputEventKey { PhysicalKeycode = Key.Tab });
-        EnsureAction("toggle_deploy_preview", new InputEventKey { PhysicalKeycode = Key.G });
-        EnsureAction("cancel_mobile_command", new InputEventKey { PhysicalKeycode = Key.Escape });
-        EnsureAction("mobile_factory_auxiliary_command", new InputEventKey { PhysicalKeycode = Key.R });
-        EnsureAction("toggle_mobile_editor", new InputEventKey { PhysicalKeycode = Key.F });
-    }
-
-    private static void EnsureAction(string actionName, params InputEvent[] events)
-    {
-        if (!InputMap.HasAction(actionName))
-        {
-            InputMap.AddAction(actionName);
-        }
-
-        if (InputMap.ActionGetEvents(actionName).Count > 0)
-        {
-            return;
-        }
-
-        foreach (var inputEvent in events)
-        {
-            InputMap.ActionAddEvent(actionName, inputEvent);
-        }
+        FactoryDemoInputActions.EnsureCommonActions();
+        FactoryDemoInputActions.EnsureAction("factory_move_forward", new InputEventKey { PhysicalKeycode = Key.W });
+        FactoryDemoInputActions.EnsureAction("factory_move_backward", new InputEventKey { PhysicalKeycode = Key.S });
+        FactoryDemoInputActions.EnsureAction("factory_turn_left", new InputEventKey { PhysicalKeycode = Key.A });
+        FactoryDemoInputActions.EnsureAction("factory_turn_right", new InputEventKey { PhysicalKeycode = Key.D });
+        FactoryDemoInputActions.EnsureAction("deploy_rotate_left", new InputEventKey { PhysicalKeycode = Key.Q });
+        FactoryDemoInputActions.EnsureAction("deploy_rotate_right", new InputEventKey { PhysicalKeycode = Key.E });
+        FactoryDemoInputActions.EnsureAction("toggle_factory_command", new InputEventKey { PhysicalKeycode = Key.C });
+        FactoryDemoInputActions.EnsureAction("toggle_observer_mode", new InputEventKey { PhysicalKeycode = Key.Tab });
+        FactoryDemoInputActions.EnsureAction("toggle_deploy_preview", new InputEventKey { PhysicalKeycode = Key.G });
+        FactoryDemoInputActions.EnsureAction("cancel_mobile_command", new InputEventKey { PhysicalKeycode = Key.Escape });
+        FactoryDemoInputActions.EnsureAction("mobile_factory_auxiliary_command", new InputEventKey { PhysicalKeycode = Key.R });
+        FactoryDemoInputActions.EnsureAction("toggle_mobile_editor", new InputEventKey { PhysicalKeycode = Key.F });
     }
 
     private static bool HasFocusedSmokeTestFlag()
@@ -5926,35 +5720,6 @@ public partial class MobileFactoryDemo : Node3D
         return count > 0 ? sum / count : _grid.CellToWorld(anchorCell);
     }
 
-    private static void ApplyPreviewColor(MeshInstance3D meshInstance, Color color)
-    {
-        meshInstance.MaterialOverride = new StandardMaterial3D
-        {
-            AlbedoColor = color,
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            Roughness = 0.4f
-        };
-    }
-
-    private static void ApplyPreviewColor(Node3D arrowRoot, Color color)
-    {
-        FactoryPreviewVisuals.ApplyArrowColor(arrowRoot, color);
-    }
-
-    private static void ApplyMiningPreviewColor(MeshInstance3D meshInstance, Color color)
-    {
-        meshInstance.MaterialOverride = new StandardMaterial3D
-        {
-            AlbedoColor = color,
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            Roughness = 0.28f,
-            NoDepthTest = true,
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            EmissionEnabled = true,
-            Emission = new Color(color.R, color.G, color.B, 1.0f)
-        };
-    }
-
     private void ConfigureMiningPreviewMarker(MeshInstance3D meshInstance, Vector2I cell, bool isEligible, bool isDeployed, Color color)
     {
         if (_grid is null)
@@ -5983,7 +5748,7 @@ public partial class MobileFactoryDemo : Node3D
             meshInstance.Position = _grid.CellToWorld(cell) + new Vector3(0.0f, 0.05f, 0.0f);
         }
 
-        ApplyMiningPreviewColor(meshInstance, color);
+        FactoryPreviewOverlaySupport.ApplyMiningPreviewColor(meshInstance, color);
     }
 
     private void ConfigureMiningPreviewLink(MeshInstance3D meshInstance, Vector2I portCell, Vector2I targetCell, Color color)
@@ -6008,7 +5773,7 @@ public partial class MobileFactoryDemo : Node3D
         meshInstance.Mesh = new BoxMesh { Size = new Vector3(0.10f, 0.04f, length) };
         meshInstance.Position = start + (delta * 0.5f);
         meshInstance.Rotation = new Vector3(0.0f, Mathf.Atan2(delta.X, delta.Z), 0.0f);
-        ApplyMiningPreviewColor(meshInstance, new Color(color.R, color.G, color.B, color.A * 0.82f));
+        FactoryPreviewOverlaySupport.ApplyMiningPreviewColor(meshInstance, new Color(color.R, color.G, color.B, color.A * 0.82f));
     }
 
     private int GetWorldMinCell()
@@ -6064,86 +5829,4 @@ public partial class MobileFactoryDemo : Node3D
         };
     }
 
-    private static WorldEnvironment CreateEnvironment()
-    {
-        var environment = new Environment
-        {
-            BackgroundMode = Environment.BGMode.Color,
-            BackgroundColor = new Color("111827"),
-            AmbientLightSource = Environment.AmbientSource.Color,
-            AmbientLightColor = new Color("D6E4F0"),
-            AmbientLightSkyContribution = 0.0f,
-            AmbientLightEnergy = 0.7f
-        };
-
-        return new WorldEnvironment
-        {
-            Name = "WorldEnvironment",
-            Environment = environment
-        };
-    }
-
-    private static DirectionalLight3D CreateDirectionalLight()
-    {
-        return new DirectionalLight3D
-        {
-            Name = "SunLight",
-            RotationDegrees = new Vector3(-56.0f, -34.0f, 0.0f),
-            LightEnergy = 1.45f,
-            ShadowEnabled = true
-        };
-    }
-
-    private static Node3D CreateFloor(int minCell, int maxCell)
-    {
-        var floorRoot = new Node3D { Name = "FloorRoot" };
-        var floor = new MeshInstance3D { Name = "FactoryFloor" };
-        floor.Mesh = new PlaneMesh
-        {
-            Size = new Vector2(
-                (maxCell - minCell + 1) * FactoryConstants.CellSize,
-                (maxCell - minCell + 1) * FactoryConstants.CellSize)
-        };
-
-        floor.MaterialOverride = new StandardMaterial3D
-        {
-            AlbedoColor = new Color("1F2937"),
-            Roughness = 1.0f
-        };
-        floorRoot.AddChild(floor);
-        return floorRoot;
-    }
-
-    private static Node3D CreateGridLines(int minCell, int maxCell)
-    {
-        var gridRoot = new Node3D { Name = "GridLines" };
-        var lineMaterial = new StandardMaterial3D
-        {
-            AlbedoColor = new Color(0.35f, 0.43f, 0.53f, 0.65f),
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            Roughness = 1.0f
-        };
-        var worldMin = (minCell - 0.5f) * FactoryConstants.CellSize;
-        var worldMax = (maxCell + 0.5f) * FactoryConstants.CellSize;
-        var lineLength = worldMax - worldMin;
-
-        for (var i = minCell; i <= maxCell + 1; i++)
-        {
-            var x = (i - 0.5f) * FactoryConstants.CellSize;
-            var vertical = new MeshInstance3D();
-            vertical.Mesh = new BoxMesh { Size = new Vector3(0.03f, 0.02f, lineLength) };
-            vertical.Position = new Vector3(x, 0.02f, 0.0f);
-            vertical.MaterialOverride = lineMaterial;
-            gridRoot.AddChild(vertical);
-
-            var z = (i - 0.5f) * FactoryConstants.CellSize;
-            var horizontal = new MeshInstance3D();
-            horizontal.Mesh = new BoxMesh { Size = new Vector3(lineLength, 0.02f, 0.03f) };
-            horizontal.Position = new Vector3(0.0f, 0.02f, z);
-            horizontal.MaterialOverride = lineMaterial;
-            gridRoot.AddChild(horizontal);
-        }
-
-        return gridRoot;
-    }
 }
