@@ -159,33 +159,12 @@ public static class MobileFactoryScenarioLibrary
 
     public static MobileFactoryInteriorPreset CreateFocusedDemoPreset()
     {
-        return new MobileFactoryInteriorPreset(
-            id: "focused-dual-logistics",
+        return FactoryMapRuntimeLoader.LoadInteriorPreset(
+            FactoryMapPaths.FocusedMobileInterior,
+            presetId: "focused-dual-logistics",
             displayName: "野外加工转运样板",
             description: "玩家移动工厂把野外矿石导入熔炼与组装主线，同时在下层维持弹药补给支线，再经东侧双输出端口把产物送往接收站。",
-            recoverySummary: "西侧输入端口接收矿石，中央熔炉把原矿送入组装机，主输出端口负责向站点外送；下层双仓储和弹药组装器组成内部防务补给支线。",
-            placements: new[]
-            {
-                new FactoryPlacementSpec(BuildPrototypeKind.GunTurret, new Vector2I(1, 0), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(1, 3), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Smelter, new Vector2I(2, 3), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Belt, new Vector2I(3, 3), FacingDirection.North),
-                new FactoryPlacementSpec(BuildPrototypeKind.Assembler, new Vector2I(4, 1), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(1, 4), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(2, 4), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Storage, new Vector2I(1, 5), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Inserter, new Vector2I(2, 5), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.AmmoAssembler, new Vector2I(4, 4), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.Generator, new Vector2I(1, 7), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.PowerPole, new Vector2I(3, 6), FacingDirection.East),
-                new FactoryPlacementSpec(BuildPrototypeKind.LargeStorageDepot, new Vector2I(5, 6), FacingDirection.East)
-            },
-            attachmentPlacements: new[]
-            {
-                new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.InputPort, new Vector2I(0, 3), FacingDirection.West),
-                new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.OutputPort, new Vector2I(7, 1), FacingDirection.East),
-                new MobileFactoryAttachmentPlacementSpec(BuildPrototypeKind.OutputPort, new Vector2I(7, 4), FacingDirection.East)
-            });
+            recoverySummary: "西侧输入端口接收矿石，中央熔炉把原矿送入组装机，主输出端口负责向站点外送；下层双仓储和弹药组装器组成内部防务补给支线。");
     }
 
     public static MobileFactoryInteriorPreset CreateExpeditionInputVerificationPreset()

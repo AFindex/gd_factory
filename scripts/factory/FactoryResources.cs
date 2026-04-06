@@ -62,6 +62,19 @@ public static class FactoryResourceCatalog
         };
     }
 
+    public static Color GetTint(FactoryResourceKind resourceKind)
+    {
+        return resourceKind switch
+        {
+            FactoryResourceKind.Coal => new Color("8B5A2B"),
+            FactoryResourceKind.IronOre => new Color("64748B"),
+            FactoryResourceKind.CopperOre => new Color("C2410C"),
+            FactoryResourceKind.StoneOre => new Color("A8A29E"),
+            FactoryResourceKind.SulfurOre => new Color("FDE047"),
+            _ => new Color("67E8F9")
+        };
+    }
+
     public static bool SupportsExtractor(BuildPrototypeKind kind, FactoryResourceKind resourceKind)
     {
         return (kind == BuildPrototypeKind.MiningDrill || kind == BuildPrototypeKind.MiningInputPort)

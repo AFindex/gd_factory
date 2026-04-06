@@ -511,8 +511,11 @@ public partial class MobileFactoryDemo : Node3D
         _combatDirector?.Configure(_simulation, _enemyRoot!);
         var cameraPadding = UseLargeTestScenario ? 6.0f : 4.0f;
         _cameraRig!.ConfigureBounds(_grid.GetWorldMin() + Vector2.One * cameraPadding, _grid.GetWorldMax() - Vector2.One * cameraPadding);
-        SeedMobileWorldResourceDeposits();
-        RebuildMobileResourceOverlayVisuals();
+        if (UseLargeTestScenario)
+        {
+            SeedMobileWorldResourceDeposits();
+            RebuildMobileResourceOverlayVisuals();
+        }
 
         _hud!.EditorViewport.World3D = GetWorld3D();
         _editorCamera = new Camera3D
@@ -540,18 +543,8 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        var focusedProfile = MobileFactoryScenarioLibrary.CreateFocusedDemoProfile();
-        _sinkA = CreatePreparedOutputLine(focusedProfile, AnchorA, FacingDirection.East, 2);
-        _sinkB = CreatePreparedOutputLine(focusedProfile, AnchorB, FacingDirection.East, 2);
-        CreatePreparedMountOutputLine(focusedProfile, AnchorA, FacingDirection.East, "east-output-aux", 1);
-        CreatePreparedMountOutputLine(focusedProfile, AnchorB, FacingDirection.East, "east-output-aux", 1);
-        CreatePreparedInputLine(focusedProfile, AnchorA, FacingDirection.East, 1);
-        CreatePreparedInputLine(focusedProfile, AnchorB, FacingDirection.East, 3);
-        CreateReceivingStationLandmark(new Vector2I(4, -9));
-        CreateReceivingStationLandmark(new Vector2I(4, 8));
-        CreateReceivingStationLandmark(new Vector2I(-10, 6));
-        CreateReceivingStationLandmark(new Vector2I(-16, -6));
-        CreateReceivingStationLandmark(new Vector2I(12, 2));
+        LoadFocusedWorldMap();
+        RebuildMobileResourceOverlayVisuals();
         ConfigureWorldCombatScenarios();
         _simulation!.RebuildTopology();
     }
@@ -574,6 +567,7 @@ public partial class MobileFactoryDemo : Node3D
                 _simulation!,
                 MobileFactoryScenarioLibrary.CreateFocusedDemoProfile(),
                 MobileFactoryScenarioLibrary.CreateFocusedDemoPreset());
+            ApplyFocusedInteriorMapRuntimeState();
         }
 
         if (_mobileFactory is not null)
@@ -737,82 +731,9 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        if (factory.TryGetInteriorStructure(new Vector2I(1, 7), out var focusedGeneratorStructure)
-            && focusedGeneratorStructure is GeneratorStructure focusedGenerator)
-        {
-            for (var i = 0; i < 3; i++)
-            {
-                focusedGenerator.TryReceiveProvidedItem(
-                    _simulation.CreateItem(BuildPrototypeKind.Generator, FactoryItemKind.Coal),
-                    focusedGenerator.Cell + Vector2I.Left,
-                    _simulation);
-            }
-        }
-
         switch (factory.InteriorPreset.Id)
         {
             case "focused-dual-logistics":
-                if (factory.TryGetInteriorStructure(new Vector2I(2, 3), out var smelterStructure)
-                    && smelterStructure is SmelterStructure smelter)
-                {
-                    smelter.TrySetDetailRecipe("iron-smelting");
-                    for (var i = 0; i < 5; i++)
-                    {
-                        smelter.TryReceiveProvidedItem(
-                            _simulation.CreateItem(BuildPrototypeKind.Smelter, FactoryItemKind.IronOre),
-                            smelter.Cell + Vector2I.Left,
-                            _simulation);
-                    }
-                }
-
-                if (factory.TryGetInteriorStructure(new Vector2I(4, 1), out var assemblerStructure)
-                    && assemblerStructure is AssemblerStructure assembler)
-                {
-                    assembler.TrySetDetailRecipe("gear");
-                }
-
-                if (factory.TryGetInteriorStructure(new Vector2I(4, 4), out var ammoAssemblerStructure)
-                    && ammoAssemblerStructure is AmmoAssemblerStructure ammoAssembler)
-                {
-                    ammoAssembler.TrySetDetailRecipe("standard-ammo");
-                }
-
-                if (factory.TryGetInteriorStructure(new Vector2I(1, 4), out var ironBufferStructure)
-                    && ironBufferStructure is StorageStructure ironBuffer)
-                {
-                    for (var i = 0; i < 5; i++)
-                    {
-                        ironBuffer.TryReceiveProvidedItem(
-                            _simulation.CreateItem(BuildPrototypeKind.Smelter, FactoryItemKind.IronPlate),
-                            ironBuffer.Cell + Vector2I.Left,
-                            _simulation);
-                    }
-                }
-
-                if (factory.TryGetInteriorStructure(new Vector2I(1, 5), out var wireBufferStructure)
-                    && wireBufferStructure is StorageStructure wireBuffer)
-                {
-                    for (var i = 0; i < 5; i++)
-                    {
-                        wireBuffer.TryReceiveProvidedItem(
-                            _simulation.CreateItem(BuildPrototypeKind.Assembler, FactoryItemKind.CopperWire),
-                            wireBuffer.Cell + Vector2I.Left,
-                            _simulation);
-                    }
-                }
-
-                if (factory.TryGetInteriorStructure(new Vector2I(1, 0), out var turretStructure)
-                    && turretStructure is GunTurretStructure turret)
-                {
-                    for (var i = 0; i < 6; i++)
-                    {
-                        turret.TryReceiveProvidedItem(
-                            _simulation.CreateItem(BuildPrototypeKind.AmmoAssembler, FactoryItemKind.AmmoMagazine),
-                            turret.Cell + Vector2I.Left,
-                            _simulation);
-                    }
-                }
-
                 if (HasFocusedSmokeTestFlag())
                 {
                     GD.Print(
@@ -4274,6 +4195,7 @@ public partial class MobileFactoryDemo : Node3D
             && !southPortCells.SetEquals(eastPortCells)
             && eastFootprintCells.Count == westFootprintCells.Count
             && westFootprintCells.Contains(AnchorA);
+        var mapFormatVerified = RunFactoryMapSmokeChecks();
         SetControlMode(MobileFactoryControlMode.DeployPreview);
         _selectedDeployFacing = FacingDirection.East;
         HandleCommandSlot(MobileFactoryCommandSlot.Auxiliary);
@@ -4348,14 +4270,14 @@ public partial class MobileFactoryDemo : Node3D
         await ToSignal(GetTree().CreateTimer(10.0f), SceneTreeTimer.SignalName.Timeout);
         var secondDelivered = GetScenarioDeliveryTotal() - secondDeliveredBaseline;
 
-        if (!startsInPlayerMode || !playerHudReady || !playerMoved || !cameraFollowedPlayer || !commandActive || !cameraLockedInCommand || !returnedToPlayerFromCommand || !observerActive || !returnedToPlayerFromObserver || !deployPreviewEntered || !returnedToPlayerFromDeploy || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !workspaceNavigationVerified || !rightPaneHover || !leftPaneHover || !detailWindowInTransit || !blueprintWorkflowInTransit || !multiCellInteriorVerified || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !contextualRotateWorks || !previewArrowTracksFacing || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !inputDeliveredWhileDeployed || !turretTrackedThreats || !mobileCombatActive || !recalled || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0)
+        if (!startsInPlayerMode || !playerHudReady || !playerMoved || !cameraFollowedPlayer || !commandActive || !cameraLockedInCommand || !returnedToPlayerFromCommand || !observerActive || !returnedToPlayerFromObserver || !deployPreviewEntered || !returnedToPlayerFromDeploy || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !workspaceNavigationVerified || !rightPaneHover || !leftPaneHover || !detailWindowInTransit || !blueprintWorkflowInTransit || !multiCellInteriorVerified || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !mapFormatVerified || !contextualRotateWorks || !previewArrowTracksFacing || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !inputDeliveredWhileDeployed || !turretTrackedThreats || !mobileCombatActive || !recalled || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0)
         {
-            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsPlayer={startsInPlayerMode} playerHudReady={playerHudReady} playerMoved={playerMoved} cameraFollowedPlayer={cameraFollowedPlayer} commandActive={commandActive} cameraLocked={cameraLockedInCommand} returnedPlayerFromCommand={returnedToPlayerFromCommand} observerActive={observerActive} observerCamera={observerCameraActive} returnedPlayerFromObserver={returnedToPlayerFromObserver} deployPreviewEntered={deployPreviewEntered} returnedPlayerFromDeploy={returnedToPlayerFromDeploy} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} workspaceNavigation={workspaceNavigationVerified} rightHover={rightPaneHover} leftHover={leftPaneHover} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} multiCellInterior={multiCellInteriorVerified} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} contextualRotateWorks={contextualRotateWorks} previewArrowTracksFacing={previewArrowTracksFacing} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered}");
+            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsPlayer={startsInPlayerMode} playerHudReady={playerHudReady} playerMoved={playerMoved} cameraFollowedPlayer={cameraFollowedPlayer} commandActive={commandActive} cameraLocked={cameraLockedInCommand} returnedPlayerFromCommand={returnedToPlayerFromCommand} observerActive={observerActive} observerCamera={observerCameraActive} returnedPlayerFromObserver={returnedToPlayerFromObserver} deployPreviewEntered={deployPreviewEntered} returnedPlayerFromDeploy={returnedToPlayerFromDeploy} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} workspaceNavigation={workspaceNavigationVerified} rightHover={rightPaneHover} leftHover={leftPaneHover} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} multiCellInterior={multiCellInteriorVerified} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} mapFormat={mapFormatVerified} contextualRotateWorks={contextualRotateWorks} previewArrowTracksFacing={previewArrowTracksFacing} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"MOBILE_FACTORY_SMOKE_OK playerMoved={playerMoved} commandActive={commandActive} observerActive={observerActive} firstDelivered={firstDelivered} secondDelivered={secondDelivered} workspaceNavigation={workspaceNavigationVerified} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} multiCellInterior={multiCellInteriorVerified} turretShots={(escortTurret?.ShotsFired ?? -1)} combatKills={_simulation.DefeatedEnemyCount}");
+        GD.Print($"MOBILE_FACTORY_SMOKE_OK playerMoved={playerMoved} commandActive={commandActive} observerActive={observerActive} mapFormat={mapFormatVerified} firstDelivered={firstDelivered} secondDelivered={secondDelivered} workspaceNavigation={workspaceNavigationVerified} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} multiCellInterior={multiCellInteriorVerified} turretShots={(escortTurret?.ShotsFired ?? -1)} combatKills={_simulation.DefeatedEnemyCount}");
         GetTree().Quit();
     }
 

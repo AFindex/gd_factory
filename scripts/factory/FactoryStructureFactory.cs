@@ -119,6 +119,11 @@ public static class FactoryStructureFactory
         return Definitions[kind];
     }
 
+    public static bool TryGetDefinition(BuildPrototypeKind kind, out FactoryStructureDefinition? definition)
+    {
+        return Definitions.TryGetValue(kind, out definition);
+    }
+
     public static FactoryStructure CreateGhostPreview(
         BuildPrototypeKind kind,
         FactoryStructurePlacement placement)

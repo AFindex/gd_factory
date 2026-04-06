@@ -402,7 +402,7 @@ public partial class FactoryDemo : Node3D
         _simulation!.Configure(_grid);
         _combatDirector?.Configure(_simulation, _enemyRoot!);
         _cameraRig!.ConfigureBounds(_grid.GetWorldMin() + Vector2.One * 4.0f, _grid.GetWorldMax() - Vector2.One * 4.0f);
-        SeedWorldResourceDeposits();
+        LoadStarterWorldMap();
         RebuildResourceOverlayVisuals();
         _blueprintSite = CreateBlueprintSiteAdapter();
         EnterInteractionMode();
@@ -645,13 +645,6 @@ public partial class FactoryDemo : Node3D
 
     private void CreateStarterLayout()
     {
-        AddPoweredBootstrapDistrict();
-        AddPoweredManufacturingDistrict();
-        AddMaintenanceDepotDistrict();
-        AddAmmoFedDefenseLane();
-        AddHeavyTurretDefenseLane();
-        AddAmmoStarvedBreachLane();
-        PrimeDefenseStocks();
         RefreshAllTopology();
         if (!HasSmokeTestFlag())
         {
@@ -2819,6 +2812,7 @@ public partial class FactoryDemo : Node3D
         var workspaceVerified = RunWorkspaceNavigationSmoke();
         var itemVisualProfilesVerified = RunItemVisualProfileSmoke();
         var structureVisualProfilesVerified = RunStructureVisualProfileSmoke();
+        var mapFormatVerified = RunFactoryMapSmokeChecks();
         var combatVerified = await VerifyCombatScenarios();
 
         if (!placed
@@ -2834,21 +2828,22 @@ public partial class FactoryDemo : Node3D
             || !inspectionVerified
             || !detailWindowVerified
             || !blueprintVerified
-            || !workspaceVerified
-            || !itemVisualProfilesVerified
-            || !structureVisualProfilesVerified
-            || !combatVerified
-            || !multiCellPlacementVerified
+              || !workspaceVerified
+              || !itemVisualProfilesVerified
+              || !structureVisualProfilesVerified
+              || !mapFormatVerified
+              || !combatVerified
+              || !multiCellPlacementVerified
             || !assemblerPortPreviewVerified
             || !previewArrowReady
             || !playerInteractionVerified)
         {
-            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} assemblerPortPreview={assemblerPortPreviewVerified} playerInteraction={playerInteractionVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
+              GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} assemblerPortPreview={assemblerPortPreviewVerified} playerInteraction={playerInteractionVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} mapFormat={mapFormatVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} assemblerPortPreview={assemblerPortPreviewVerified} previewArrowReady={previewArrowReady} playerInteraction={playerInteractionVerified}");
+          GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} mapFormat={mapFormatVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} assemblerPortPreview={assemblerPortPreviewVerified} previewArrowReady={previewArrowReady} playerInteraction={playerInteractionVerified}");
         GetTree().Quit();
     }
 
