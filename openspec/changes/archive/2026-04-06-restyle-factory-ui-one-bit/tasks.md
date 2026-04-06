@@ -16,5 +16,5 @@
 
 ## 4. Verification And Cleanup
 
-- [ ] 4.1 Run targeted verification for launcher navigation, static factory HUD workspace switching, mobile factory HUD/editor visibility, player inventory panels, structure detail windows, and blueprint actions to confirm business logic is unchanged after the visual refresh.
+- [x] 4.1 Run targeted verification for launcher navigation, static factory HUD workspace switching, mobile factory HUD/editor visibility, player inventory panels, structure detail windows, and blueprint actions to confirm business logic is unchanged after the visual refresh.
 - [x] 4.2 Sweep remaining duplicated rounded/color-heavy style definitions across the touched UI files and align them with the shared one bit helper so the final theme stays consistent.
