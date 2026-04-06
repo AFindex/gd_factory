@@ -130,6 +130,21 @@ public partial class HeavyGunTurretStructure : FactoryStructure, IFactoryItemRec
         return inventoryId == "heavy-turret-ammo" && _ammoInventory.TryMoveItem(fromSlot, toSlot, splitStack);
     }
 
+    public override bool TryResolveInventoryEndpoint(string inventoryId, out FactoryInventoryTransferEndpoint endpoint)
+    {
+        if (inventoryId == "heavy-turret-ammo")
+        {
+            endpoint = new FactoryInventoryTransferEndpoint(
+                inventoryId,
+                _ammoInventory,
+                item => FactoryPresentation.IsAmmoItem(item.ItemKind));
+            return true;
+        }
+
+        endpoint = default;
+        return false;
+    }
+
     public override void _Process(double delta)
     {
         var deltaF = (float)delta;

@@ -1,7 +1,7 @@
 using Godot;
 using System.Collections.Generic;
 
-public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IFactoryStructureDetailProvider
+public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IFactoryStructureDetailProvider, IFactoryInventoryEndpointProvider
 {
     private bool _visualsBuilt;
     private Node3D? _structureVisualRoot;
@@ -136,6 +136,12 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
 
     public virtual bool TryInvokeDetailAction(string actionId)
     {
+        return false;
+    }
+
+    public virtual bool TryResolveInventoryEndpoint(string inventoryId, out FactoryInventoryTransferEndpoint endpoint)
+    {
+        endpoint = default;
         return false;
     }
 
@@ -418,14 +424,14 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
                 state.Position,
                 item?.ItemKind,
                 item is null ? null : item.Id.ToString(),
-                item is null ? null : FactoryPresentation.GetItemKindLabel(item.ItemKind),
+                item is null ? null : FactoryPresentation.GetItemDisplayName(item),
                 item is null
                     ? "空槽位"
-                    : $"{FactoryPresentation.GetItemKindLabel(item.ItemKind)} x{state.StackCount}/{state.MaxStackSize} | 首件 #{item.Id} | 槽位 ({state.Position.X}, {state.Position.Y})",
-                item is null ? new Color("475569") : FactoryPresentation.GetItemAccentColor(item.ItemKind),
+                    : $"{FactoryPresentation.GetItemDisplayName(item)} x{state.StackCount}/{state.MaxStackSize} | 首件 #{item.Id} | 槽位 ({state.Position.X}, {state.Position.Y})",
+                item is null ? new Color("475569") : FactoryPresentation.GetItemAccentColor(item),
                 state.StackCount,
                 state.MaxStackSize,
-                item is null ? null : FactoryPresentation.GetItemIcon(item.ItemKind)));
+                item is null ? null : FactoryPresentation.GetItemIcon(item)));
         }
 
         return new FactoryInventorySectionModel(inventoryId, title, inventory.GridSize, slots, allowMove);

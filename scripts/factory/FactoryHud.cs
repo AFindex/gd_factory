@@ -74,6 +74,7 @@ public partial class FactoryHud : CanvasLayer
 
     public event Action<BuildPrototypeKind?>? SelectionChanged;
     public event Action<string, Vector2I, Vector2I, bool>? DetailInventoryMoveRequested;
+    public event Action<string, Vector2I, string, Vector2I, bool>? DetailInventoryTransferRequested;
     public event Action<string>? DetailRecipeSelected;
     public event Action? DetailClosed;
     public event Action? BlueprintCaptureRequested;
@@ -91,6 +92,7 @@ public partial class FactoryHud : CanvasLayer
     public bool IsDetailVisible => _detailWindow?.IsShowing ?? false;
     public string DetailTitleText => _detailWindow?.CurrentTitleText ?? string.Empty;
     public string ActiveWorkspaceId => _workspaceChrome?.ActiveWorkspaceId ?? string.Empty;
+    public bool HasActiveInventoryInteraction => _detailWindow?.HasActiveInventoryInteraction ?? false;
 
     public override void _Ready()
     {
@@ -163,6 +165,7 @@ public partial class FactoryHud : CanvasLayer
 
         _detailWindow = new FactoryStructureDetailWindow();
         _detailWindow.InventoryMoveRequested += (inventoryId, fromSlot, toSlot, splitStack) => DetailInventoryMoveRequested?.Invoke(inventoryId, fromSlot, toSlot, splitStack);
+        _detailWindow.InventoryTransferRequested += (fromInventoryId, fromSlot, toInventoryId, toSlot, splitStack) => DetailInventoryTransferRequested?.Invoke(fromInventoryId, fromSlot, toInventoryId, toSlot, splitStack);
         _detailWindow.RecipeSelected += recipeId => DetailRecipeSelected?.Invoke(recipeId);
         _detailWindow.CloseRequested += () => DetailClosed?.Invoke();
         root.AddChild(_detailWindow);
@@ -353,7 +356,13 @@ public partial class FactoryHud : CanvasLayer
 
     public bool BlocksWorldInput(Control? control)
     {
-        if (_detailWindow?.BlocksInput(control) ?? false)
+        return BlocksWorldInput(control, GetViewport().GetMousePosition());
+    }
+
+    public bool BlocksWorldInput(Control? control, Vector2 screenPoint)
+    {
+        if ((_detailWindow?.BlocksInput(control) ?? false)
+            || (_detailWindow?.ContainsScreenPoint(screenPoint) ?? false))
         {
             return true;
         }
@@ -364,7 +373,9 @@ public partial class FactoryHud : CanvasLayer
         }
 
         return BlocksInteractiveInput(control, _chromePanel)
-            || BlocksInteractiveInput(control, _panel);
+            || BlocksInteractiveInput(control, _panel)
+            || ContainsScreenPoint(_chromePanel, screenPoint)
+            || ContainsScreenPoint(_panel, screenPoint);
     }
 
     public void SetStructureDetails(FactoryStructureDetailModel? model)
@@ -768,6 +779,13 @@ public partial class FactoryHud : CanvasLayer
         }
 
         return false;
+    }
+
+    private static bool ContainsScreenPoint(Control? control, Vector2 screenPoint)
+    {
+        return control is not null
+            && control.Visible
+            && control.GetGlobalRect().HasPoint(screenPoint);
     }
 
     private static Label CreateSectionLabel(string text, int fontSize, Color color)

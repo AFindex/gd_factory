@@ -31,6 +31,7 @@ public enum BuildPrototypeKind
 public enum FactoryItemKind
 {
     GenericCargo,
+    BuildingKit,
     Coal,
     IronOre,
     CopperOre,
@@ -63,6 +64,7 @@ public enum MobileFactoryLifecycleState
 
 public enum MobileFactoryControlMode
 {
+    Player,
     FactoryCommand,
     DeployPreview,
     Observer
@@ -154,6 +156,43 @@ public sealed class BuildPrototypeDefinition
 
 public static class FactoryPresentation
 {
+    public static string GetBuildPrototypeDisplayName(BuildPrototypeKind kind)
+    {
+        return GetKindLabel(kind);
+    }
+
+    public static Color GetBuildPrototypeAccentColor(BuildPrototypeKind kind)
+    {
+        return kind switch
+        {
+            BuildPrototypeKind.Producer => new Color("9DC08B"),
+            BuildPrototypeKind.MiningDrill => new Color("FBBF24"),
+            BuildPrototypeKind.MiningStake => new Color("34D399"),
+            BuildPrototypeKind.Generator => new Color("FB923C"),
+            BuildPrototypeKind.PowerPole => new Color("FDE68A"),
+            BuildPrototypeKind.Smelter => new Color("CBD5E1"),
+            BuildPrototypeKind.Assembler => new Color("67E8F9"),
+            BuildPrototypeKind.Belt => new Color("7DD3FC"),
+            BuildPrototypeKind.Sink => new Color("FDE68A"),
+            BuildPrototypeKind.Splitter => new Color("C4B5FD"),
+            BuildPrototypeKind.Merger => new Color("99F6E4"),
+            BuildPrototypeKind.Bridge => new Color("F59E0B"),
+            BuildPrototypeKind.Loader => new Color("FDBA74"),
+            BuildPrototypeKind.Unloader => new Color("93C5FD"),
+            BuildPrototypeKind.Storage => new Color("94A3B8"),
+            BuildPrototypeKind.Inserter => new Color("FACC15"),
+            BuildPrototypeKind.Wall => new Color("D1D5DB"),
+            BuildPrototypeKind.AmmoAssembler => new Color("FB923C"),
+            BuildPrototypeKind.GunTurret => new Color("CBD5E1"),
+            BuildPrototypeKind.HeavyGunTurret => new Color("E2E8F0"),
+            BuildPrototypeKind.LargeStorageDepot => new Color("64748B"),
+            BuildPrototypeKind.OutputPort => new Color("FB923C"),
+            BuildPrototypeKind.InputPort => new Color("60A5FA"),
+            BuildPrototypeKind.MiningInputPort => new Color("34D399"),
+            _ => new Color("7DD3FC")
+        };
+    }
+
     public static string GetKindLabel(BuildPrototypeKind kind)
     {
         return kind switch
@@ -188,7 +227,7 @@ public static class FactoryPresentation
 
     public static string GetItemLabel(FactoryItem item)
     {
-        return $"{GetItemKindLabel(item.ItemKind)} #{item.Id}";
+        return $"{GetItemDisplayName(item)} #{item.Id}";
     }
 
     public static string GetItemKindLabel(FactoryItemKind itemKind)
@@ -196,9 +235,23 @@ public static class FactoryPresentation
         return FactoryItemCatalog.GetDisplayName(itemKind);
     }
 
+    public static string GetItemDisplayName(FactoryItem item)
+    {
+        return item.ItemKind == FactoryItemKind.BuildingKit
+            ? $"{GetBuildPrototypeDisplayName(item.SourceKind)}套件"
+            : GetItemKindLabel(item.ItemKind);
+    }
+
     public static Color GetItemAccentColor(FactoryItemKind itemKind)
     {
         return FactoryItemCatalog.GetAccentColor(itemKind);
+    }
+
+    public static Color GetItemAccentColor(FactoryItem item)
+    {
+        return item.ItemKind == FactoryItemKind.BuildingKit
+            ? GetBuildPrototypeAccentColor(item.SourceKind)
+            : GetItemAccentColor(item.ItemKind);
     }
 
     public static Texture2D? GetItemIcon(FactoryItemKind itemKind)
@@ -206,9 +259,33 @@ public static class FactoryPresentation
         return FactoryItemCatalog.GetIconTexture(itemKind);
     }
 
+    public static Texture2D? GetItemIcon(FactoryItem item)
+    {
+        return item.ItemKind == FactoryItemKind.BuildingKit
+            ? FactoryItemCatalog.GetStructureItemIcon(item.SourceKind)
+            : GetItemIcon(item.ItemKind);
+    }
+
     public static bool IsAmmoItem(FactoryItemKind itemKind)
     {
         return itemKind == FactoryItemKind.AmmoMagazine || itemKind == FactoryItemKind.HighVelocityAmmo;
+    }
+
+    public static bool IsPlaceableStructureItem(FactoryItem item)
+    {
+        return item.ItemKind == FactoryItemKind.BuildingKit;
+    }
+
+    public static bool TryGetPlaceableStructureKind(FactoryItem? item, out BuildPrototypeKind kind)
+    {
+        if (item is not null && item.ItemKind == FactoryItemKind.BuildingKit)
+        {
+            kind = item.SourceKind;
+            return true;
+        }
+
+        kind = default;
+        return false;
     }
 }
 

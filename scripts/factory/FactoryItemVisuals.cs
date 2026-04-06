@@ -121,6 +121,13 @@ public static partial class FactoryItemCatalog
                 new FactoryTransportVisualProfile(GenericTint),
                 iconTexture: textures["generic-cargo"],
                 maxStackSize: 8),
+            [FactoryItemKind.BuildingKit] = new FactoryItemDefinition(
+                FactoryItemKind.BuildingKit,
+                "建筑套件",
+                new Color("60A5FA"),
+                new FactoryTransportVisualProfile(new Color("60A5FA"), placeholderScale: new Vector3(0.28f, 0.20f, 0.28f)),
+                iconTexture: textures["building-kit"],
+                maxStackSize: 20),
             [FactoryItemKind.Coal] = new FactoryItemDefinition(
                 FactoryItemKind.Coal,
                 "煤矿",
@@ -353,6 +360,7 @@ internal static class FactoryGeneratedItemTextureLibrary
         return new Dictionary<string, Texture2D>
         {
             ["generic-cargo"] = CreateGenericCargoTexture(),
+            ["building-kit"] = CreateBuildingKitTexture(),
             ["coal"] = CreateCoalTexture(),
             ["iron-ore"] = CreateIronOreTexture(),
             ["copper-ore"] = CreateCopperOreTexture(),
@@ -383,6 +391,16 @@ internal static class FactoryGeneratedItemTextureLibrary
         FillCircle(image, 10, 13, 6, new Color("3F3A37"));
         FillCircle(image, 18, 14, 7, new Color("5B4636"));
         FillCircle(image, 14, 20, 6, new Color("1F1B18"));
+        return ImageTexture.CreateFromImage(image);
+    }
+
+    private static Texture2D CreateBuildingKitTexture()
+    {
+        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
+        FillRect(image, new Rect2I(5, 8, 22, 16), new Color("60A5FA"));
+        FillRect(image, new Rect2I(8, 11, 16, 10), new Color("DBEAFE"));
+        FillRect(image, new Rect2I(12, 4, 8, 6), new Color("1D4ED8"));
+        FillRect(image, new Rect2I(10, 16, 12, 4), new Color("1E3A8A"));
         return ImageTexture.CreateFromImage(image);
     }
 

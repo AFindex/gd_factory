@@ -24,6 +24,27 @@ public interface IFactoryCombatSystem
     void SimulationStep(SimulationController simulation, double stepSeconds);
 }
 
+public readonly struct FactoryInventoryTransferEndpoint
+{
+    public FactoryInventoryTransferEndpoint(string inventoryId, FactorySlottedItemInventory inventory, System.Func<FactoryItem, bool>? canInsert = null)
+    {
+        InventoryId = inventoryId;
+        Inventory = inventory;
+        CanInsert = canInsert;
+    }
+
+    public string InventoryId { get; }
+    public FactorySlottedItemInventory Inventory { get; }
+    public System.Func<FactoryItem, bool>? CanInsert { get; }
+
+    public bool Accepts(FactoryItem item) => CanInsert?.Invoke(item) ?? true;
+}
+
+public interface IFactoryInventoryEndpointProvider
+{
+    bool TryResolveInventoryEndpoint(string inventoryId, out FactoryInventoryTransferEndpoint endpoint);
+}
+
 public sealed class FactoryItemBuffer
 {
     private readonly Queue<FactoryItem> _items = new();
@@ -130,7 +151,9 @@ internal sealed class FactoryInventoryItemStack
 
     public bool CanAccept(FactoryItem item)
     {
-        return item.ItemKind == ItemKind && !IsFull;
+        return item.ItemKind == ItemKind
+            && (item.ItemKind != FactoryItemKind.BuildingKit || item.SourceKind == PeekFirst().SourceKind)
+            && !IsFull;
     }
 
     public bool TryAddItem(FactoryItem item)
@@ -339,8 +362,15 @@ public sealed class FactorySlottedItemInventory
             return true;
         }
 
-        if (toStack.ItemKind != fromStack.ItemKind || toStack.IsFull)
+        if (!toStack.CanAccept(fromStack.PeekFirst()))
         {
+            if (requestedCount >= fromStack.Count)
+            {
+                _items[fromSlot] = toStack;
+                _items[toSlot] = fromStack;
+                return true;
+            }
+
             return false;
         }
 
@@ -360,6 +390,201 @@ public sealed class FactorySlottedItemInventory
             _items.Remove(fromSlot);
         }
 
+        return moved > 0;
+    }
+
+    public bool TryPeekSlot(Vector2I slot, out FactoryItem? item)
+    {
+        item = null;
+        if (!IsValidSlot(slot) || !_items.TryGetValue(slot, out var stack))
+        {
+            return false;
+        }
+
+        item = stack.PeekFirst();
+        return true;
+    }
+
+    public bool TryTakeFromSlot(Vector2I slot, out FactoryItem? item)
+    {
+        item = null;
+        if (!IsValidSlot(slot) || !_items.TryGetValue(slot, out var stack))
+        {
+            return false;
+        }
+
+        if (!stack.TryTakeFirst(out item))
+        {
+            return false;
+        }
+
+        _itemCount--;
+        if (stack.IsEmpty)
+        {
+            _items.Remove(slot);
+        }
+
+        return true;
+    }
+
+    public bool TryMoveItemTo(
+        FactorySlottedItemInventory targetInventory,
+        Vector2I fromSlot,
+        Vector2I toSlot,
+        bool splitStack = false,
+        System.Func<FactoryItem, bool>? targetInsertRule = null,
+        System.Func<FactoryItem, bool>? sourceInsertRule = null)
+    {
+        if (!IsValidSlot(fromSlot)
+            || !targetInventory.IsValidSlot(toSlot)
+            || !_items.TryGetValue(fromSlot, out var fromStack))
+        {
+            return false;
+        }
+
+        if (ReferenceEquals(this, targetInventory))
+        {
+            return TryMoveItem(fromSlot, toSlot, splitStack);
+        }
+
+        var requestedCount = splitStack && fromStack.Count > 1
+            ? Mathf.Max(1, Mathf.CeilToInt(fromStack.Count * 0.5f))
+            : fromStack.Count;
+        var previewItem = fromStack.PeekFirst();
+        if (targetInsertRule is not null && !targetInsertRule(previewItem))
+        {
+            return false;
+        }
+
+        if (!targetInventory._items.TryGetValue(toSlot, out var toStack))
+        {
+            if (requestedCount >= fromStack.Count)
+            {
+                if (targetInsertRule is not null)
+                {
+                    var itemsToValidate = fromStack.TakeUpTo(fromStack.Count);
+                    var rebuiltSource = FactoryInventoryItemStack.CreateFromItems(itemsToValidate);
+                    if (rebuiltSource is null)
+                    {
+                        return false;
+                    }
+
+                    for (var index = 0; index < itemsToValidate.Count; index++)
+                    {
+                        if (!targetInsertRule(itemsToValidate[index]))
+                        {
+                            _items[fromSlot] = rebuiltSource;
+                            return false;
+                        }
+                    }
+
+                    _items.Remove(fromSlot);
+                    targetInventory._items[toSlot] = rebuiltSource;
+                }
+                else
+                {
+                    _items.Remove(fromSlot);
+                    targetInventory._items[toSlot] = fromStack;
+                }
+
+                _itemCount -= requestedCount;
+                targetInventory._itemCount += requestedCount;
+                return true;
+            }
+
+            var movedItems = fromStack.TakeUpTo(requestedCount);
+            for (var index = 0; index < movedItems.Count; index++)
+            {
+                if (targetInsertRule is not null && !targetInsertRule(movedItems[index]))
+                {
+                    for (var restoreIndex = movedItems.Count - 1; restoreIndex >= index; restoreIndex--)
+                    {
+                        fromStack.TryAddItem(movedItems[restoreIndex]);
+                    }
+
+                    return false;
+                }
+            }
+
+            var movedStack = FactoryInventoryItemStack.CreateFromItems(movedItems);
+            if (movedStack is null)
+            {
+                return false;
+            }
+
+            targetInventory._items[toSlot] = movedStack;
+            if (fromStack.IsEmpty)
+            {
+                _items.Remove(fromSlot);
+            }
+
+            _itemCount -= movedItems.Count;
+            targetInventory._itemCount += movedItems.Count;
+            return movedItems.Count > 0;
+        }
+
+        if (!toStack.CanAccept(previewItem))
+        {
+            if (requestedCount >= fromStack.Count)
+            {
+                var targetPreviewItem = toStack.PeekFirst();
+                if ((targetInsertRule is not null && !targetInsertRule(previewItem))
+                    || (sourceInsertRule is not null && !sourceInsertRule(targetPreviewItem)))
+                {
+                    return false;
+                }
+
+                _items[fromSlot] = toStack;
+                targetInventory._items[toSlot] = fromStack;
+
+                _itemCount = _itemCount - fromStack.Count + toStack.Count;
+                targetInventory._itemCount = targetInventory._itemCount - toStack.Count + fromStack.Count;
+                return true;
+            }
+
+            return false;
+        }
+
+        var maxToMove = Mathf.Min(requestedCount, toStack.SpaceLeft);
+        if (maxToMove <= 0)
+        {
+            return false;
+        }
+
+        var movedItemsToStack = fromStack.TakeUpTo(maxToMove);
+        for (var index = 0; index < movedItemsToStack.Count; index++)
+        {
+            if (targetInsertRule is not null && !targetInsertRule(movedItemsToStack[index]))
+            {
+                for (var restoreIndex = movedItemsToStack.Count - 1; restoreIndex >= index; restoreIndex--)
+                {
+                    fromStack.TryAddItem(movedItemsToStack[restoreIndex]);
+                }
+
+                return false;
+            }
+        }
+
+        var moved = 0;
+        for (var index = 0; index < movedItemsToStack.Count; index++)
+        {
+            if (toStack.TryAddItem(movedItemsToStack[index]))
+            {
+                moved++;
+            }
+            else
+            {
+                fromStack.TryAddItem(movedItemsToStack[index]);
+            }
+        }
+
+        if (fromStack.IsEmpty)
+        {
+            _items.Remove(fromSlot);
+        }
+
+        _itemCount -= moved;
+        targetInventory._itemCount += moved;
         return moved > 0;
     }
 

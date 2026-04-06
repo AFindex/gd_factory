@@ -102,6 +102,8 @@ public partial class MobileFactoryDemo : Node3D
     private SimulationController? _simulation;
     private FactoryCameraRig? _cameraRig;
     private MobileFactoryHud? _hud;
+    private FactoryPlayerController? _playerController;
+    private FactoryPlayerHud? _playerHud;
     private Node3D? _resourceOverlayRoot;
     private Node3D? _structureRoot;
     private Node3D? _enemyRoot;
@@ -135,7 +137,7 @@ public partial class MobileFactoryDemo : Node3D
     private readonly List<SinkStructure> _scenarioSinks = new();
     private SinkStructure? _sinkA;
     private SinkStructure? _sinkB;
-    private MobileFactoryControlMode _controlMode = MobileFactoryControlMode.FactoryCommand;
+    private MobileFactoryControlMode _controlMode = MobileFactoryControlMode.Player;
     private FacingDirection _selectedDeployFacing = FacingDirection.East;
     private Vector2I _hoveredAnchor;
     private bool _hasHoveredAnchor;
@@ -174,6 +176,9 @@ public partial class MobileFactoryDemo : Node3D
     private bool _hoveringEditorViewport;
     private Vector2 _mousePosition = Vector2.Zero;
     private Vector2 _editorCameraLocalOffset = Vector2.Zero;
+    private string? _selectedPlayerItemInventoryId;
+    private Vector2I _selectedPlayerItemSlot;
+    private bool _hasSelectedPlayerItemSlot;
 
     public override void _Ready()
     {
@@ -182,6 +187,7 @@ public partial class MobileFactoryDemo : Node3D
         ConfigureGameplay();
         CreateWorldLoops();
         SpawnMobileFactory();
+        SpawnPlayerController();
         PullFactoryStatusMessage();
         UpdateWorldStatusMessage(0.0);
         UpdateHud();
@@ -204,6 +210,11 @@ public partial class MobileFactoryDemo : Node3D
     {
         _mousePosition = GetViewport().GetMousePosition();
         HandleGlobalCommands();
+        if (_controlMode == MobileFactoryControlMode.Player)
+        {
+            _playerController?.ApplyMovement(GetPlayerMovementBounds(), delta, allowInput: true);
+        }
+
         _mobileFactory?.UpdateRuntime(delta);
         foreach (var factory in _backgroundFactories)
         {
@@ -249,6 +260,17 @@ public partial class MobileFactoryDemo : Node3D
 
     public override void _UnhandledInput(InputEvent @event)
     {
+        if (@event is InputEventKey hotbarKeyEvent
+            && hotbarKeyEvent.Pressed
+            && !hotbarKeyEvent.Echo
+            && !_editorOpen
+            && TryMapHotbarKey(hotbarKeyEvent.Keycode, out var hotbarIndex))
+        {
+            HandlePlayerHotbarPressed(hotbarIndex);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
         {
             if (HandleEditorKeyInput(keyEvent))
@@ -452,6 +474,7 @@ public partial class MobileFactoryDemo : Node3D
         };
         _hud.EditorPaletteSelected += OnEditorPaletteSelected;
         _hud.EditorRotateRequested += OnEditorRotateRequested;
+        _hud.FactoryCommandModeToggleRequested += ToggleFactoryCommandMode;
         _hud.ObserverModeToggleRequested += ToggleObserverMode;
         _hud.DeployModeToggleRequested += ToggleDeployPreview;
         _hud.EditorDetailInventoryMoveRequested += HandleEditorDetailInventoryMoveRequested;
@@ -468,6 +491,13 @@ public partial class MobileFactoryDemo : Node3D
         _hud.BlueprintCancelRequested += CancelInteriorBlueprintWorkflow;
         _hud.WorkspaceSelected += HandleHudWorkspaceSelected;
         AddChild(_hud);
+
+        _playerHud = new FactoryPlayerHud();
+        _playerHud.HotbarSlotPressed += HandlePlayerHotbarPressed;
+        _playerHud.BackpackInventoryMoveRequested += HandlePlayerInventoryMoveRequested;
+        _playerHud.BackpackInventoryTransferRequested += HandlePlayerInventoryTransferRequested;
+        _playerHud.BackpackSlotActivated += HandlePlayerInventorySlotActivated;
+        AddChild(_playerHud);
 
         AddChild(new LauncherNavigationOverlay());
     }
@@ -562,6 +592,67 @@ public partial class MobileFactoryDemo : Node3D
             UpdateInteriorPreviewSizing();
             _interiorBlueprintSite = CreateInteriorBlueprintSiteAdapter();
         }
+    }
+
+    private void SpawnPlayerController()
+    {
+        if (_playerController is not null)
+        {
+            return;
+        }
+
+        _playerController = new FactoryPlayerController();
+        AddChild(_playerController);
+        _playerController.GlobalPosition = FindPlayerSpawnPosition();
+        _playerController.EnsureStarterLoadout(_simulation);
+        _playerController.SelectHotbarIndex(0);
+        _cameraRig?.SetFollowTarget(_playerController, snapImmediately: true);
+        _cameraRig!.FollowTargetEnabled = true;
+        _selectedPlayerItemInventoryId = FactoryPlayerController.BackpackInventoryId;
+        _selectedPlayerItemSlot = new Vector2I(0, 0);
+        _hasSelectedPlayerItemSlot = true;
+    }
+
+    private Vector3 FindPlayerSpawnPosition()
+    {
+        var anchor = _mobileFactory?.WorldFocusPoint ?? Vector3.Zero;
+        if (_grid is null)
+        {
+            return anchor + new Vector3(-3.0f, 0.0f, 3.0f);
+        }
+
+        var preferredCell = _grid.WorldToCell(new Vector3(anchor.X - (FactoryConstants.CellSize * 3.0f), 0.0f, anchor.Z + (FactoryConstants.CellSize * 3.0f)));
+        for (var radius = 0; radius <= 18; radius++)
+        {
+            for (var y = preferredCell.Y - radius; y <= preferredCell.Y + radius; y++)
+            {
+                for (var x = preferredCell.X - radius; x <= preferredCell.X + radius; x++)
+                {
+                    var candidate = new Vector2I(x, y);
+                    if (!_grid.IsInBounds(candidate) || _grid.TryGetStructure(candidate, out _))
+                    {
+                        continue;
+                    }
+
+                    var world = _grid.CellToWorld(candidate);
+                    return new Vector3(world.X, 0.0f, world.Z);
+                }
+            }
+        }
+
+        return anchor + new Vector3(-3.0f, 0.0f, 3.0f);
+    }
+
+    private Rect2 GetPlayerMovementBounds()
+    {
+        if (_grid is null)
+        {
+            return new Rect2(-8.0f, -8.0f, 16.0f, 16.0f);
+        }
+
+        var min = _grid.GetWorldMin() + Vector2.One * 1.0f;
+        var max = _grid.GetWorldMax() - Vector2.One * 1.0f;
+        return new Rect2(min, max - min);
     }
 
     private FactoryStructure? PlaceWorldStructure(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
@@ -1087,6 +1178,11 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
+        if (Input.IsActionJustPressed("toggle_factory_command"))
+        {
+            ToggleFactoryCommandMode();
+        }
+
         if (Input.IsActionJustPressed("toggle_observer_mode"))
         {
             ToggleObserverMode();
@@ -1271,6 +1367,7 @@ public partial class MobileFactoryDemo : Node3D
         {
             _cameraRig.AllowPanInput = !hoveringUi && CanUseWorldInput() && _controlMode == MobileFactoryControlMode.Observer;
             _cameraRig.AllowZoomInput = !hoveringUi && CanUseWorldInput();
+            _cameraRig.FollowTargetEnabled = _controlMode == MobileFactoryControlMode.Player;
         }
 
         _hud?.SetPaneFocus(_editorOpen, _hoveringEditorPane);
@@ -2286,6 +2383,14 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
+        if (_controlMode == MobileFactoryControlMode.Player)
+        {
+            _cameraRig.SetFollowTarget(_playerController);
+            return;
+        }
+
+        _cameraRig.SetFollowTarget(null);
+
         if (_controlMode == MobileFactoryControlMode.Observer || _controlMode == MobileFactoryControlMode.DeployPreview)
         {
             return;
@@ -2354,6 +2459,7 @@ public partial class MobileFactoryDemo : Node3D
         _hud.SetHintText(GetHintText());
         _hud.SetFactoryDetails(BuildFactoryDetailText());
         _hud.SetBlueprintState(BuildInteriorBlueprintPanelState());
+        _playerHud?.SetContext(_playerController, null, ResolveSelectedPlayerItem());
     }
 
     private void HandleHudWorkspaceSelected(string workspaceId)
@@ -2465,13 +2571,31 @@ public partial class MobileFactoryDemo : Node3D
 
         if (_controlMode == MobileFactoryControlMode.Observer)
         {
-            SetControlMode(MobileFactoryControlMode.FactoryCommand);
-            ShowWorldEvent("已返回工厂控制模式。", true);
+            SetControlMode(MobileFactoryControlMode.Player);
+            ShowWorldEvent("已返回玩家控制模式。", true);
             return;
         }
 
         SetControlMode(MobileFactoryControlMode.Observer);
         ShowWorldEvent("已进入观察模式，现在 WASD 控制相机。", true);
+    }
+
+    private void ToggleFactoryCommandMode()
+    {
+        if (_mobileFactory is null)
+        {
+            return;
+        }
+
+        if (_controlMode == MobileFactoryControlMode.FactoryCommand)
+        {
+            SetControlMode(MobileFactoryControlMode.Player);
+            ShowWorldEvent("已返回玩家控制模式。", true);
+            return;
+        }
+
+        SetControlMode(MobileFactoryControlMode.FactoryCommand);
+        ShowWorldEvent("已进入工厂控制模式，WASD 现在控制移动工厂。", true);
     }
 
     private void ToggleDeployPreview()
@@ -2483,7 +2607,7 @@ public partial class MobileFactoryDemo : Node3D
 
         if (_controlMode == MobileFactoryControlMode.DeployPreview)
         {
-            SetControlMode(MobileFactoryControlMode.FactoryCommand);
+            SetControlMode(MobileFactoryControlMode.Player);
             ShowWorldEvent("已取消部署预览。", true);
             return;
         }
@@ -2576,21 +2700,28 @@ public partial class MobileFactoryDemo : Node3D
 
         if (_controlMode == MobileFactoryControlMode.DeployPreview)
         {
-            SetControlMode(MobileFactoryControlMode.FactoryCommand);
+            SetControlMode(MobileFactoryControlMode.Player);
             ShowWorldEvent("已取消部署预览。", true);
             return;
         }
 
         if (_mobileFactory.CancelAutoDeploy())
         {
-            SetControlMode(MobileFactoryControlMode.FactoryCommand);
+            SetControlMode(MobileFactoryControlMode.Player);
             return;
         }
 
         if (_controlMode == MobileFactoryControlMode.Observer)
         {
-            SetControlMode(MobileFactoryControlMode.FactoryCommand);
+            SetControlMode(MobileFactoryControlMode.Player);
             ShowWorldEvent("已退出观察模式。", true);
+            return;
+        }
+
+        if (_controlMode == MobileFactoryControlMode.FactoryCommand)
+        {
+            SetControlMode(MobileFactoryControlMode.Player);
+            ShowWorldEvent("已退出工厂控制模式。", true);
         }
     }
 
@@ -2604,7 +2735,7 @@ public partial class MobileFactoryDemo : Node3D
 
         if (_mobileFactory.TryStartAutoDeploy(_grid, _hoveredAnchor, _selectedDeployFacing))
         {
-            SetControlMode(MobileFactoryControlMode.FactoryCommand);
+            SetControlMode(MobileFactoryControlMode.Player);
         }
     }
 
@@ -2612,7 +2743,7 @@ public partial class MobileFactoryDemo : Node3D
     {
         if (_mobileFactory?.ReturnToTransitMode() == true)
         {
-            SetControlMode(MobileFactoryControlMode.FactoryCommand);
+            SetControlMode(MobileFactoryControlMode.Player);
         }
         else if (_mobileFactory is not null && _mobileFactory.State != MobileFactoryLifecycleState.Deployed)
         {
@@ -2712,9 +2843,102 @@ public partial class MobileFactoryDemo : Node3D
         return _editorOpen && _hoveringEditorViewport;
     }
 
+    private void HandlePlayerHotbarPressed(int index)
+    {
+        if (_playerController is null)
+        {
+            return;
+        }
+
+        _playerController.ToggleHotbarIndex(index);
+        _selectedPlayerItemInventoryId = FactoryPlayerController.BackpackInventoryId;
+        _selectedPlayerItemSlot = new Vector2I(index, 0);
+        _hasSelectedPlayerItemSlot = true;
+        UpdateHud();
+    }
+
+    private static bool TryMapHotbarKey(Key keycode, out int hotbarIndex)
+    {
+        hotbarIndex = keycode switch
+        {
+            Key.Key1 => 0,
+            Key.Key2 => 1,
+            Key.Key3 => 2,
+            Key.Key4 => 3,
+            Key.Key5 => 4,
+            Key.Key6 => 5,
+            Key.Key7 => 6,
+            Key.Key8 => 7,
+            Key.Key9 => 8,
+            _ => -1
+        };
+
+        return hotbarIndex >= 0;
+    }
+
+    private void HandlePlayerInventoryMoveRequested(string inventoryId, Vector2I fromSlot, Vector2I toSlot, bool splitStack)
+    {
+        if (_playerController?.TryResolveInventoryEndpoint(inventoryId, out var endpoint) != true)
+        {
+            return;
+        }
+
+        if (endpoint.Inventory.TryMoveItem(fromSlot, toSlot, splitStack))
+        {
+            UpdateHud();
+        }
+    }
+
+    private void HandlePlayerInventoryTransferRequested(string fromInventoryId, Vector2I fromSlot, string toInventoryId, Vector2I toSlot, bool splitStack)
+    {
+        if (_playerController?.TryResolveInventoryEndpoint(fromInventoryId, out var fromEndpoint) != true
+            || _playerController.TryResolveInventoryEndpoint(toInventoryId, out var toEndpoint) != true)
+        {
+            return;
+        }
+
+        if (fromEndpoint.Inventory.TryMoveItemTo(toEndpoint.Inventory, fromSlot, toSlot, splitStack, toEndpoint.CanInsert, fromEndpoint.CanInsert))
+        {
+            UpdateHud();
+        }
+    }
+
+    private void HandlePlayerInventorySlotActivated(string inventoryId, Vector2I slot)
+    {
+        _selectedPlayerItemInventoryId = inventoryId;
+        _selectedPlayerItemSlot = slot;
+        _hasSelectedPlayerItemSlot = true;
+        if (inventoryId == FactoryPlayerController.BackpackInventoryId && slot.Y == 0)
+        {
+            HandlePlayerHotbarPressed(slot.X);
+            return;
+        }
+
+        UpdateHud();
+    }
+
+    private FactoryItem? ResolveSelectedPlayerItem()
+    {
+        if (_playerController is null)
+        {
+            return null;
+        }
+
+        if (!_hasSelectedPlayerItemSlot || string.IsNullOrWhiteSpace(_selectedPlayerItemInventoryId))
+        {
+            return _playerController.GetActiveHotbarItem();
+        }
+
+        return _playerController.TryResolveInventoryEndpoint(_selectedPlayerItemInventoryId!, out var endpoint)
+            ? endpoint.Inventory.GetItemOrDefault(_selectedPlayerItemSlot)
+            : _playerController.GetActiveHotbarItem();
+    }
+
     private bool IsPointerOverUi()
     {
-        return _hud?.BlocksInput(GetViewport().GuiGetHoveredControl()) ?? false;
+        var hoveredControl = GetViewport().GuiGetHoveredControl();
+        return (_hud?.BlocksInput(hoveredControl) ?? false)
+            || (_playerHud?.BlocksWorldInput(hoveredControl) ?? false);
     }
 
     private void OnEditorPaletteSelected(BuildPrototypeKind kind)
@@ -2763,6 +2987,16 @@ public partial class MobileFactoryDemo : Node3D
 
     private void FocusFactoryForCurrentMode()
     {
+        if (_controlMode == MobileFactoryControlMode.Player)
+        {
+            if (_playerController is not null)
+            {
+                _cameraRig?.SetFollowTarget(_playerController, snapImmediately: true);
+            }
+
+            return;
+        }
+
         if (_controlMode == MobileFactoryControlMode.Observer)
         {
             return;
@@ -3616,6 +3850,10 @@ public partial class MobileFactoryDemo : Node3D
         EnsureAction("camera_pan_right", new InputEventKey { PhysicalKeycode = Key.D }, new InputEventKey { PhysicalKeycode = Key.Right });
         EnsureAction("camera_pan_up", new InputEventKey { PhysicalKeycode = Key.W }, new InputEventKey { PhysicalKeycode = Key.Up });
         EnsureAction("camera_pan_down", new InputEventKey { PhysicalKeycode = Key.S }, new InputEventKey { PhysicalKeycode = Key.Down });
+        EnsureAction("player_move_left", new InputEventKey { PhysicalKeycode = Key.A });
+        EnsureAction("player_move_right", new InputEventKey { PhysicalKeycode = Key.D });
+        EnsureAction("player_move_forward", new InputEventKey { PhysicalKeycode = Key.W });
+        EnsureAction("player_move_backward", new InputEventKey { PhysicalKeycode = Key.S });
         EnsureAction("camera_zoom_in", new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true });
         EnsureAction("camera_zoom_out", new InputEventMouseButton { ButtonIndex = MouseButton.WheelDown, Pressed = true });
         EnsureAction("factory_move_forward", new InputEventKey { PhysicalKeycode = Key.W });
@@ -3624,6 +3862,7 @@ public partial class MobileFactoryDemo : Node3D
         EnsureAction("factory_turn_right", new InputEventKey { PhysicalKeycode = Key.D });
         EnsureAction("deploy_rotate_left", new InputEventKey { PhysicalKeycode = Key.Q });
         EnsureAction("deploy_rotate_right", new InputEventKey { PhysicalKeycode = Key.E });
+        EnsureAction("toggle_factory_command", new InputEventKey { PhysicalKeycode = Key.C });
         EnsureAction("toggle_observer_mode", new InputEventKey { PhysicalKeycode = Key.Tab });
         EnsureAction("toggle_deploy_preview", new InputEventKey { PhysicalKeycode = Key.G });
         EnsureAction("cancel_mobile_command", new InputEventKey { PhysicalKeycode = Key.Escape });
@@ -3690,16 +3929,35 @@ public partial class MobileFactoryDemo : Node3D
 
     private async void RunSmokeChecks()
     {
-        if (_grid is null || _mobileFactory is null || _sinkA is null || _sinkB is null || _hud is null || _cameraRig is null || _simulation is null)
+        if (_grid is null || _mobileFactory is null || _sinkA is null || _sinkB is null || _hud is null || _cameraRig is null || _simulation is null || _playerController is null || _playerHud is null)
         {
-            GD.PushError("MOBILE_FACTORY_SMOKE_FAILED missing grid, factory, hud, camera, or sinks.");
+            GD.PushError("MOBILE_FACTORY_SMOKE_FAILED missing grid, factory, player, hud, camera, or sinks.");
             GetTree().Quit(1);
             return;
         }
 
         await ToSignal(GetTree().CreateTimer(0.25f), SceneTreeTimer.SignalName.Timeout);
-        var startsInCommandMode = _controlMode == MobileFactoryControlMode.FactoryCommand;
+        var startsInPlayerMode = _controlMode == MobileFactoryControlMode.Player;
+        var playerHudReady = _playerHud is not null;
+        var playerStartPosition = _playerController.GlobalPosition;
+        Input.ActionPress("player_move_right");
+        await ToSignal(GetTree().CreateTimer(0.2f), SceneTreeTimer.SignalName.Timeout);
+        Input.ActionRelease("player_move_right");
+        await ToSignal(GetTree().CreateTimer(0.1f), SceneTreeTimer.SignalName.Timeout);
+        var playerMoved = _playerController.GlobalPosition.DistanceTo(playerStartPosition) > 0.2f;
+        var cameraFollowedPlayer = new Vector2(_cameraRig.Position.X, _cameraRig.Position.Z)
+            .DistanceTo(new Vector2(_playerController.GlobalPosition.X, _playerController.GlobalPosition.Z)) < 1.8f;
+
+        ToggleFactoryCommandMode();
+        await ToSignal(GetTree().CreateTimer(0.1f), SceneTreeTimer.SignalName.Timeout);
+        var commandActive = _controlMode == MobileFactoryControlMode.FactoryCommand;
         var cameraLockedInCommand = !_cameraRig.AllowPanInput;
+        var initialPosition = _mobileFactory.WorldFocusPoint;
+        _mobileFactory.ApplyTransitInput(_grid, 1.0f, -1.0f, 0.5);
+        var movedInTransit = _mobileFactory.WorldFocusPoint.DistanceTo(initialPosition) > 0.05f;
+        ToggleFactoryCommandMode();
+        await ToSignal(GetTree().CreateTimer(0.1f), SceneTreeTimer.SignalName.Timeout);
+        var returnedToPlayerFromCommand = _controlMode == MobileFactoryControlMode.Player;
 
         ToggleObserverMode();
         await ToSignal(GetTree().CreateTimer(0.1f), SceneTreeTimer.SignalName.Timeout);
@@ -3707,6 +3965,14 @@ public partial class MobileFactoryDemo : Node3D
         var observerCameraActive = _cameraRig.AllowPanInput;
         ToggleObserverMode();
         await ToSignal(GetTree().CreateTimer(0.1f), SceneTreeTimer.SignalName.Timeout);
+        var returnedToPlayerFromObserver = _controlMode == MobileFactoryControlMode.Player;
+
+        ToggleDeployPreview();
+        await ToSignal(GetTree().CreateTimer(0.1f), SceneTreeTimer.SignalName.Timeout);
+        var deployPreviewEntered = _controlMode == MobileFactoryControlMode.DeployPreview;
+        ToggleDeployPreview();
+        await ToSignal(GetTree().CreateTimer(0.1f), SceneTreeTimer.SignalName.Timeout);
+        var returnedToPlayerFromDeploy = _controlMode == MobileFactoryControlMode.Player;
 
         await ToSignal(GetTree().CreateTimer(0.6f), SceneTreeTimer.SignalName.Timeout);
         var interiorRunsInTransit = _mobileFactory.InteriorSite.IsSimulationActive;
@@ -3716,10 +3982,6 @@ public partial class MobileFactoryDemo : Node3D
         _mobileFactory.TryGetInteriorStructure(new Vector2I(4, 0), out var escortTurretStructure);
         var escortTurret = escortTurretStructure as GunTurretStructure;
         var turretShotsBeforeDeploy = escortTurret?.ShotsFired ?? 0;
-
-        var initialPosition = _mobileFactory.WorldFocusPoint;
-        _mobileFactory.ApplyTransitInput(_grid, 1.0f, -1.0f, 0.5);
-        var movedInTransit = _mobileFactory.WorldFocusPoint.DistanceTo(initialPosition) > 0.05f;
 
         SetEditorOpenState(true);
         await ToSignal(GetTree().CreateTimer(0.35f), SceneTreeTimer.SignalName.Timeout);
@@ -3942,14 +4204,14 @@ public partial class MobileFactoryDemo : Node3D
             }
         }
 
-        if (!startsInCommandMode || !cameraLockedInCommand || !observerActive || !observerCameraActive || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !workspaceNavigationVerified || !rightPaneHover || !leftPaneHover || !detailWindowInTransit || !blueprintWorkflowInTransit || !multiCellInteriorVerified || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !contextualRotateWorks || !previewArrowTracksFacing || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !inputDeliveredWhileDeployed || !turretTrackedThreats || !mobileCombatActive || !recalled || !blockedOutputActive || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0 || !miningSecondRecall || !miningAttachmentSwapped || !miningWarningAnchorFound || !miningWarningPreview || !miningWarningDeploy || miningWarningConnected || miningWarningPayloadVisible || miningWarningDelivered || !miningWarningPayloadRetracted || !miningDeploy || !miningAttachmentConnected || !miningPayloadVisible || !miningSinkDelivered || !miningPayloadRetracted)
+        if (!startsInPlayerMode || !playerHudReady || !playerMoved || !cameraFollowedPlayer || !commandActive || !cameraLockedInCommand || !returnedToPlayerFromCommand || !observerActive || !observerCameraActive || !returnedToPlayerFromObserver || !deployPreviewEntered || !returnedToPlayerFromDeploy || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !workspaceNavigationVerified || !rightPaneHover || !leftPaneHover || !detailWindowInTransit || !multiCellInteriorVerified || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !contextualRotateWorks || !previewArrowTracksFacing || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !miniatureSyncedDeployed || firstDelivered <= 0 || !inputDeliveredWhileDeployed || !turretTrackedThreats || !mobileCombatActive || !recalled || !blockedOutputActive || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0)
         {
-            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsCommand={startsInCommandMode} cameraLocked={cameraLockedInCommand} observerActive={observerActive} observerCamera={observerCameraActive} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} workspaceNavigation={workspaceNavigationVerified} rightHover={rightPaneHover} leftHover={leftPaneHover} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} multiCellInterior={multiCellInteriorVerified} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} contextualRotateWorks={contextualRotateWorks} previewArrowTracksFacing={previewArrowTracksFacing} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered} miningSecondRecall={miningSecondRecall} miningAttachmentSwapped={miningAttachmentSwapped} miningWarningAnchorFound={miningWarningAnchorFound} miningWarningPreview={miningWarningPreview} miningWarningDeploy={miningWarningDeploy} miningWarningConnected={miningWarningConnected} miningWarningPayloadVisible={miningWarningPayloadVisible} miningWarningDelivered={miningWarningDelivered} miningWarningPayloadRetracted={miningWarningPayloadRetracted} miningDeploy={miningDeploy} miningAttachmentConnected={miningAttachmentConnected} miningPayloadVisible={miningPayloadVisible} miningSinkDelivered={miningSinkDelivered} miningPayloadRetracted={miningPayloadRetracted}");
+            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsPlayer={startsInPlayerMode} playerHudReady={playerHudReady} playerMoved={playerMoved} cameraFollowedPlayer={cameraFollowedPlayer} commandActive={commandActive} cameraLocked={cameraLockedInCommand} returnedPlayerFromCommand={returnedToPlayerFromCommand} observerActive={observerActive} observerCamera={observerCameraActive} returnedPlayerFromObserver={returnedToPlayerFromObserver} deployPreviewEntered={deployPreviewEntered} returnedPlayerFromDeploy={returnedToPlayerFromDeploy} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} workspaceNavigation={workspaceNavigationVerified} rightHover={rightPaneHover} leftHover={leftPaneHover} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} multiCellInterior={multiCellInteriorVerified} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} contextualRotateWorks={contextualRotateWorks} previewArrowTracksFacing={previewArrowTracksFacing} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered} miningSecondRecall={miningSecondRecall} miningAttachmentSwapped={miningAttachmentSwapped} miningWarningAnchorFound={miningWarningAnchorFound} miningWarningPreview={miningWarningPreview} miningWarningDeploy={miningWarningDeploy} miningWarningConnected={miningWarningConnected} miningWarningPayloadVisible={miningWarningPayloadVisible} miningWarningDelivered={miningWarningDelivered} miningWarningPayloadRetracted={miningWarningPayloadRetracted} miningDeploy={miningDeploy} miningAttachmentConnected={miningAttachmentConnected} miningPayloadVisible={miningPayloadVisible} miningSinkDelivered={miningSinkDelivered} miningPayloadRetracted={miningPayloadRetracted}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"MOBILE_FACTORY_SMOKE_OK firstDelivered={firstDelivered} secondDelivered={secondDelivered} miningDelivered={miningSinkDelivered} workspaceNavigation={workspaceNavigationVerified} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} multiCellInterior={multiCellInteriorVerified} turretShots={(escortTurret?.ShotsFired ?? -1)} combatKills={_simulation.DefeatedEnemyCount}");
+        GD.Print($"MOBILE_FACTORY_SMOKE_OK playerMoved={playerMoved} commandActive={commandActive} observerActive={observerActive} firstDelivered={firstDelivered} secondDelivered={secondDelivered} workspaceNavigation={workspaceNavigationVerified} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} multiCellInterior={multiCellInteriorVerified} turretShots={(escortTurret?.ShotsFired ?? -1)} combatKills={_simulation.DefeatedEnemyCount}");
         GetTree().Quit();
     }
 
@@ -5079,9 +5341,10 @@ public partial class MobileFactoryDemo : Node3D
     {
         return _controlMode switch
         {
-            MobileFactoryControlMode.Observer => "观察模式：WASD/方向键移动相机 | 滚轮缩放 | Tab 返回工厂控制 | F 内部编辑",
-            MobileFactoryControlMode.DeployPreview => "部署预览：左键确认 | Q/E/R 旋转朝向 | G/Esc 取消 | F 内部编辑",
-            _ => "工厂控制：W/S 前进后退 | A/D 转向 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器里和 sandbox 一样，X 进删除模式，右键或 Esc 回交互，Delete 拆除悬停建筑"
+            MobileFactoryControlMode.Player => "玩家模式：WASD 移动主角，镜头跟随角色；用底部热栏切换建筑套件，用左上按钮或 C 进入工厂控制。",
+            MobileFactoryControlMode.Observer => "观察模式：WASD/方向键移动相机 | 滚轮缩放 | Tab 返回玩家控制 | F 内部编辑",
+            MobileFactoryControlMode.DeployPreview => "部署预览：左键确认 | Q/E/R 旋转朝向 | G/Esc 取消并返回玩家控制 | F 内部编辑",
+            _ => "工厂控制：W/S 前进后退 | A/D 转向 | C 返回玩家控制 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器里和 sandbox 一样，X 进删除模式，右键或 Esc 回交互，Delete 拆除悬停建筑"
         };
     }
 

@@ -267,6 +267,10 @@ public partial class MobileFactoryHud
         actionsRow.AddThemeConstantOverride("separation", 8);
         body.AddChild(actionsRow);
 
+        _factoryCommandButton = new Button { Text = "进入工厂控制 (C)", ToggleMode = true, CustomMinimumSize = new Vector2(146.0f, 34.0f), MouseFilter = Control.MouseFilterEnum.Stop };
+        _factoryCommandButton.Pressed += () => FactoryCommandModeToggleRequested?.Invoke();
+        actionsRow.AddChild(_factoryCommandButton);
+
         _observerButton = new Button { Text = "进入观察模式 (Tab)", ToggleMode = true, CustomMinimumSize = new Vector2(146.0f, 34.0f), MouseFilter = Control.MouseFilterEnum.Stop };
         _observerButton.Pressed += () => ObserverModeToggleRequested?.Invoke();
         actionsRow.AddChild(_observerButton);

@@ -94,6 +94,7 @@ public partial class MobileFactoryHud : CanvasLayer
     private Label? _inspectionBodyLabel;
     private FactoryStructureDetailWindow? _detailWindow;
     private FactoryBlueprintPanel? _blueprintPanel;
+    private Button? _factoryCommandButton;
     private Button? _observerButton;
     private Button? _deployButton;
     private float _editorProgress;
@@ -110,6 +111,7 @@ public partial class MobileFactoryHud : CanvasLayer
 
     public event Action<BuildPrototypeKind>? EditorPaletteSelected;
     public event Action<int>? EditorRotateRequested;
+    public event Action? FactoryCommandModeToggleRequested;
     public event Action? ObserverModeToggleRequested;
     public event Action? DeployModeToggleRequested;
     public event Action<string, Vector2I, Vector2I, bool>? EditorDetailInventoryMoveRequested;
@@ -212,18 +214,33 @@ public partial class MobileFactoryHud : CanvasLayer
         {
             var modeText = controlMode switch
             {
+                MobileFactoryControlMode.Player => "玩家控制",
                 MobileFactoryControlMode.FactoryCommand => "工厂控制",
                 MobileFactoryControlMode.DeployPreview => "部署预览",
                 MobileFactoryControlMode.Observer => "观察模式",
                 _ => "工厂控制"
             };
             _modeLabel.Text = $"当前模式：{modeText} | 行进朝向：{FactoryDirection.ToLabel(transitFacing)} | 部署朝向：{FactoryDirection.ToLabel(deployFacing)}";
-            _modeLabel.Modulate = controlMode == MobileFactoryControlMode.Observer ? new Color("7DD3FC") : new Color("FDE68A");
+            _modeLabel.Modulate = controlMode switch
+            {
+                MobileFactoryControlMode.Player => new Color("A7F3A0"),
+                MobileFactoryControlMode.Observer => new Color("7DD3FC"),
+                _ => new Color("FDE68A")
+            };
+        }
+
+        if (_factoryCommandButton is not null)
+        {
+            _factoryCommandButton.Text = controlMode == MobileFactoryControlMode.FactoryCommand
+                ? "返回玩家控制 (C)"
+                : "进入工厂控制 (C)";
+            _factoryCommandButton.ButtonPressed = controlMode == MobileFactoryControlMode.FactoryCommand;
+            _factoryCommandButton.Disabled = lifecycleState == MobileFactoryLifecycleState.Recalling;
         }
 
         if (_observerButton is not null)
         {
-            _observerButton.Text = controlMode == MobileFactoryControlMode.Observer ? "返回工厂控制 (Tab)" : "进入观察模式 (Tab)";
+            _observerButton.Text = controlMode == MobileFactoryControlMode.Observer ? "返回玩家控制 (Tab)" : "进入观察模式 (Tab)";
             _observerButton.ButtonPressed = controlMode == MobileFactoryControlMode.Observer;
             _observerButton.Disabled = lifecycleState == MobileFactoryLifecycleState.Recalling;
         }

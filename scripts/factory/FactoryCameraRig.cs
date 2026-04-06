@@ -12,10 +12,12 @@ public partial class FactoryCameraRig : Node3D
     private Vector2 _minBounds;
     private Vector2 _maxBounds;
     private float _zoom = FactoryConstants.CameraDefaultZoom;
+    private Node3D? _followTarget;
 
     public Camera3D Camera => _camera!;
     public bool AllowPanInput { get; set; } = true;
     public bool AllowZoomInput { get; set; } = true;
+    public bool FollowTargetEnabled { get; set; } = true;
 
     public override void _Ready()
     {
@@ -50,6 +52,15 @@ public partial class FactoryCameraRig : Node3D
     {
         _targetPosition = new Vector2(worldPosition.X, worldPosition.Z).Clamp(_minBounds, _maxBounds);
         ApplyTransformState();
+    }
+
+    public void SetFollowTarget(Node3D? followTarget, bool snapImmediately = false)
+    {
+        _followTarget = followTarget;
+        if (snapImmediately && _followTarget is not null)
+        {
+            FocusWorldPosition(_followTarget.GlobalPosition);
+        }
     }
 
     public void FocusWorldPositionInViewport(Vector3 worldPosition, Vector2 screenPosition, float correctionStrength = 1.0f)
@@ -112,6 +123,11 @@ public partial class FactoryCameraRig : Node3D
         if (AllowZoomInput && Input.IsActionJustPressed("camera_zoom_out"))
         {
             _zoom = Mathf.Clamp(_zoom + 2.0f, FactoryConstants.CameraMinZoom, FactoryConstants.CameraMaxZoom);
+        }
+
+        if (FollowTargetEnabled && _followTarget is not null && GodotObject.IsInstanceValid(_followTarget) && _followTarget.IsInsideTree())
+        {
+            _targetPosition = new Vector2(_followTarget.GlobalPosition.X, _followTarget.GlobalPosition.Z).Clamp(_minBounds, _maxBounds);
         }
 
         _currentPosition = _currentPosition.Lerp(_targetPosition, 1.0f - Mathf.Exp(-FocusLerpSpeed * (float)delta));

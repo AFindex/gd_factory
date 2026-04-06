@@ -112,6 +112,18 @@ public partial class LargeStorageDepotStructure : FactoryStructure, IFactoryItem
         return inventoryId == "large-storage-buffer" && _inventory.TryMoveItem(fromSlot, toSlot, splitStack);
     }
 
+    public override bool TryResolveInventoryEndpoint(string inventoryId, out FactoryInventoryTransferEndpoint endpoint)
+    {
+        if (inventoryId == "large-storage-buffer")
+        {
+            endpoint = new FactoryInventoryTransferEndpoint(inventoryId, _inventory);
+            return true;
+        }
+
+        endpoint = default;
+        return false;
+    }
+
     public override void SimulationStep(SimulationController simulation, double stepSeconds)
     {
         _dispatchCooldown = Mathf.Max(0.0, (float)(_dispatchCooldown - stepSeconds));

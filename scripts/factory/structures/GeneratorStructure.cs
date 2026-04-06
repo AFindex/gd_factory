@@ -123,6 +123,21 @@ public partial class GeneratorStructure : FactoryStructure, IFactoryItemReceiver
         return inventoryId == "generator-fuel" && _fuelInventory.TryMoveItem(fromSlot, toSlot, splitStack);
     }
 
+    public override bool TryResolveInventoryEndpoint(string inventoryId, out FactoryInventoryTransferEndpoint endpoint)
+    {
+        if (inventoryId == "generator-fuel")
+        {
+            endpoint = new FactoryInventoryTransferEndpoint(
+                inventoryId,
+                _fuelInventory,
+                item => FactoryItemCatalog.IsFuel(item.ItemKind));
+            return true;
+        }
+
+        endpoint = default;
+        return false;
+    }
+
     public override void UpdateVisuals(float tickAlpha)
     {
         if (_beacon?.MaterialOverride is StandardMaterial3D beaconMaterial)

@@ -6,6 +6,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
 {
     private const double InventoryDragHoldSeconds = 0.18;
     private static readonly Vector2 DragPreviewOffset = new(18.0f, 18.0f);
+    private static void TraceLog(string message) => GD.Print($"[FactoryStructureDetailWindow] {message}");
 
     private sealed class InventorySlotWidget
     {
@@ -14,6 +15,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         public required Vector2I SlotPosition { get; init; }
         public required bool HasItem { get; init; }
         public required FactoryItemKind? ItemKind { get; init; }
+        public required string ItemLabelText { get; init; }
         public required int StackCount { get; init; }
         public required int MaxStackSize { get; init; }
         public required TextureRect Icon { get; init; }
@@ -24,7 +26,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
 
         public bool CanAcceptFrom(InventorySlotWidget source)
         {
-            if (InventoryId != source.InventoryId || SlotPosition == source.SlotPosition)
+            if (InventoryId == source.InventoryId && SlotPosition == source.SlotPosition)
             {
                 return false;
             }
@@ -54,6 +56,43 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         public Vector2I SlotPosition { get; }
         public FactoryItemKind? ItemKind { get; }
     }
+
+    private readonly struct InventoryDragPayload
+    {
+        public InventoryDragPayload(
+            string inventoryId,
+            Vector2I slotPosition,
+            FactoryItemKind? itemKind,
+            string itemLabelText,
+            int stackCount,
+            int maxStackSize,
+            Texture2D? iconTexture,
+            Color accentColor)
+        {
+            InventoryId = inventoryId;
+            SlotPosition = slotPosition;
+            ItemKind = itemKind;
+            ItemLabelText = itemLabelText ?? string.Empty;
+            StackCount = stackCount;
+            MaxStackSize = maxStackSize;
+            IconTexture = iconTexture;
+            AccentColor = accentColor;
+        }
+
+        public string InventoryId { get; }
+        public Vector2I SlotPosition { get; }
+        public FactoryItemKind? ItemKind { get; }
+        public string ItemLabelText { get; }
+        public int StackCount { get; }
+        public int MaxStackSize { get; }
+        public Texture2D? IconTexture { get; }
+        public Color AccentColor { get; }
+    }
+
+    private static readonly List<FactoryStructureDetailWindow> s_instances = new();
+    private static InventoryDragPayload? s_dragSourcePayload;
+    private static Action<string, Vector2I, Vector2I, bool>? s_sharedMoveHandler;
+    private static Action<string, Vector2I, string, Vector2I, bool>? s_sharedTransferHandler;
 
     private PanelContainer? _titleBar;
     private Label? _titleLabel;
@@ -85,11 +124,15 @@ public partial class FactoryStructureDetailWindow : PanelContainer
     private bool _leftMouseHeld;
 
     public event Action<string, Vector2I, Vector2I, bool>? InventoryMoveRequested;
+    public event Action<string, Vector2I, string, Vector2I, bool>? InventoryTransferRequested;
+    public event Action<string, Vector2I>? InventorySlotActivated;
     public event Action<string>? RecipeSelected;
     public event Action<string>? DetailActionRequested;
     public event Action? CloseRequested;
     public bool IsShowing => Visible;
     public string CurrentTitleText => _titleLabel?.Text ?? string.Empty;
+    public bool HasActiveInventoryInteraction => _dragSourceSlot is not null || HasSharedInventoryDrag;
+    public static bool HasSharedInventoryDrag => s_dragSourcePayload.HasValue;
 
     public override void _Ready()
     {
@@ -237,7 +280,21 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         dragPreviewText.AddChild(_dragPreviewTitle);
         dragPreviewText.AddChild(_dragPreviewCount);
 
+        if (!s_instances.Contains(this))
+        {
+            s_instances.Add(this);
+        }
+
         UpdateDragStateLabel();
+    }
+
+    public override void _ExitTree()
+    {
+        s_instances.Remove(this);
+        if (_dragSourceSlot is not null || _pendingDragSourceSlot is not null)
+        {
+            CancelSharedInventoryDrag();
+        }
     }
 
     public override void _Process(double delta)
@@ -285,6 +342,12 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         }
 
         _leftMouseHeld = mouseButton.Pressed;
+        if (!mouseButton.Pressed && HasSharedInventoryDrag && _dragSourceSlot is null && _pendingDragSourceSlot is null)
+        {
+            var pointer = GetViewport().GetMousePosition();
+            var completed = TryCompleteSharedInventoryDropAtPointer(pointer, splitStack: IsSplitModifierHeld());
+            TraceLog($"release with shared drag active and external source pointer={pointer} completed={completed}");
+        }
     }
 
     public void SetDragBounds(Rect2 bounds)
@@ -340,6 +403,11 @@ public partial class FactoryStructureDetailWindow : PanelContainer
 
     public bool BlocksInput(Control? control)
     {
+        if (HasActiveInventoryInteraction)
+        {
+            return true;
+        }
+
         if (control is null)
         {
             return false;
@@ -357,6 +425,131 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         }
 
         return false;
+    }
+
+    public bool ContainsScreenPoint(Vector2 screenPoint)
+    {
+        if (!Visible)
+        {
+            return false;
+        }
+
+        if (GetGlobalRect().HasPoint(screenPoint))
+        {
+            return true;
+        }
+
+        return _dragPreview?.Visible == true && _dragPreview.GetGlobalRect().HasPoint(screenPoint);
+    }
+
+    public static bool CanAcceptSharedInventoryDrop(
+        string inventoryId,
+        Vector2I slotPosition,
+        FactoryItemKind? itemKind,
+        int stackCount,
+        int maxStackSize,
+        string? itemLabelText)
+    {
+        return s_dragSourcePayload.HasValue
+            && CanAcceptPayload(s_dragSourcePayload.Value, inventoryId, slotPosition, itemKind, stackCount, maxStackSize, itemLabelText);
+    }
+
+    public static bool TryCompleteSharedInventoryDrop(
+        string inventoryId,
+        Vector2I slotPosition,
+        FactoryItemKind? itemKind,
+        int stackCount,
+        int maxStackSize,
+        string? itemLabelText,
+        bool splitStack)
+    {
+        if (!s_dragSourcePayload.HasValue
+            || !CanAcceptPayload(s_dragSourcePayload.Value, inventoryId, slotPosition, itemKind, stackCount, maxStackSize, itemLabelText))
+        {
+            TraceLog($"shared drop rejected target={inventoryId}@{slotPosition} item={itemKind?.ToString() ?? "empty"} stack={stackCount}/{maxStackSize}");
+            return false;
+        }
+
+        var source = s_dragSourcePayload.Value;
+        TraceLog($"shared drop accepted source={source.InventoryId}@{source.SlotPosition} -> target={inventoryId}@{slotPosition} split={splitStack}");
+        if (source.InventoryId == inventoryId)
+        {
+            s_sharedMoveHandler?.Invoke(inventoryId, source.SlotPosition, slotPosition, splitStack);
+        }
+        else
+        {
+            s_sharedTransferHandler?.Invoke(source.InventoryId, source.SlotPosition, inventoryId, slotPosition, splitStack);
+        }
+
+        CancelSharedInventoryDrag();
+        return true;
+    }
+
+    public static bool TryCompleteSharedInventoryDropAtPointer(Vector2 pointer, bool splitStack)
+    {
+        var target = FindSlotUnderPointer(pointer);
+        if (target is null)
+        {
+            TraceLog($"shared drop at pointer={pointer} found no inventory slot target");
+            return false;
+        }
+
+        TraceLog($"shared drop at pointer={pointer} resolved target={target.InventoryId}@{target.SlotPosition}");
+        return TryCompleteSharedInventoryDrop(
+            target.InventoryId,
+            target.SlotPosition,
+            target.ItemKind,
+            target.StackCount,
+            target.MaxStackSize,
+            target.ItemLabelText,
+            splitStack);
+    }
+
+    public static void BeginSharedInventoryDrag(
+        string inventoryId,
+        Vector2I slotPosition,
+        FactoryItemKind? itemKind,
+        string itemLabelText,
+        int stackCount,
+        int maxStackSize,
+        Texture2D? iconTexture,
+        Color accentColor,
+        Action<string, Vector2I, Vector2I, bool>? moveHandler,
+        Action<string, Vector2I, string, Vector2I, bool>? transferHandler)
+    {
+        CancelSharedInventoryDrag();
+        s_dragSourcePayload = new InventoryDragPayload(
+            inventoryId,
+            slotPosition,
+            itemKind,
+            itemLabelText,
+            stackCount,
+            maxStackSize,
+            iconTexture,
+            accentColor);
+        s_sharedMoveHandler = moveHandler;
+        s_sharedTransferHandler = transferHandler;
+        TraceLog($"begin shared drag source={inventoryId}@{slotPosition} item={itemKind?.ToString() ?? "empty"} label={itemLabelText} count={stackCount}/{maxStackSize}");
+    }
+
+    public static void CancelSharedInventoryDrag()
+    {
+        if (s_dragSourcePayload.HasValue)
+        {
+            var source = s_dragSourcePayload.Value;
+            TraceLog($"cancel shared drag source={source.InventoryId}@{source.SlotPosition}");
+        }
+
+        s_dragSourcePayload = null;
+        s_sharedMoveHandler = null;
+        s_sharedTransferHandler = null;
+        for (var index = 0; index < s_instances.Count; index++)
+        {
+            if (GodotObject.IsInstanceValid(s_instances[index]))
+            {
+                s_instances[index].HandleSharedDragCancelled();
+            }
+        }
     }
 
     private void RebuildContent(FactoryStructureDetailModel model)
@@ -474,6 +667,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                     SlotPosition = slot.Position,
                     HasItem = slot.HasItem,
                     ItemKind = slot.ItemKind,
+                    ItemLabelText = slot.ItemLabel ?? string.Empty,
                     StackCount = slot.StackCount,
                     MaxStackSize = slot.MaxStackSize,
                     Icon = iconRect,
@@ -807,20 +1001,29 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         {
             if (!widget.HasItem)
             {
+                TraceLog($"slot press ignored empty slot target={widget.InventoryId}@{widget.SlotPosition}");
                 return;
             }
 
             _pendingDragSourceSlot = widget;
             _pendingDragElapsed = 0.0;
             _hoveredSlot = widget;
+            TraceLog($"slot press pending drag source={widget.InventoryId}@{widget.SlotPosition} item={widget.ItemKind?.ToString() ?? "empty"} count={widget.StackCount}/{widget.MaxStackSize}");
             RefreshSlotVisuals();
             UpdateDragStateLabel();
+            CallDeferred(nameof(EmitInventorySlotActivatedDeferred), widget.InventoryId, widget.SlotPosition);
             return;
         }
     }
 
+    private void EmitInventorySlotActivatedDeferred(string inventoryId, Vector2I slotPosition)
+    {
+        InventorySlotActivated?.Invoke(inventoryId, slotPosition);
+    }
+
     private void RefreshSlotVisuals()
     {
+        var activeDragPayload = GetActiveDragPayload();
         for (var index = 0; index < _slotWidgets.Count; index++)
         {
             var widget = _slotWidgets[index];
@@ -840,9 +1043,9 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                 backgroundColor = new Color("12253A");
                 borderWidth = 2;
             }
-            else if (_dragSourceSlot is not null
+            else if (activeDragPayload.HasValue
                 && _hoveredSlot == widget
-                && widget.CanAcceptFrom(_dragSourceSlot))
+                && CanAcceptPayload(activeDragPayload.Value, widget))
             {
                 borderColor = new Color("4ADE80");
                 backgroundColor = new Color("122A23");
@@ -877,13 +1080,24 @@ public partial class FactoryStructureDetailWindow : PanelContainer
 
         if (_dragSourceSlot is null)
         {
+            if (HasSharedInventoryDrag && _hoveredSlot is not null && s_dragSourcePayload.HasValue)
+            {
+                var action = CanAcceptPayload(s_dragSourcePayload.Value, _hoveredSlot)
+                    ? _hoveredSlot.HasItem
+                        ? "可并入当前堆叠"
+                        : "可放入当前槽位"
+                    : "当前槽位不接受这次拖拽";
+                _dragStateLabel.Text = $"跨面板拖拽中：目标槽位 ({_hoveredSlot.SlotPosition.X}, {_hoveredSlot.SlotPosition.Y})，{action}。";
+                return;
+            }
+
             _dragStateLabel.Text = "拖动窗口标题可移动位置；长按左键拖动物品到空槽位或同类未满堆叠，按住 Ctrl 可拖出一半。";
             return;
         }
 
         if (_hoveredSlot is not null)
         {
-            var action = _hoveredSlot.CanAcceptFrom(_dragSourceSlot)
+            var action = CanAcceptPayload(CreateDragPayload(_dragSourceSlot), _hoveredSlot)
                 ? _hoveredSlot.HasItem
                     ? "并入目标堆叠"
                     : "移动到空槽位"
@@ -900,6 +1114,18 @@ public partial class FactoryStructureDetailWindow : PanelContainer
     {
         _pendingDragSourceSlot = null;
         _pendingDragElapsed = 0.0;
+        TraceLog($"begin inventory drag source={source.InventoryId}@{source.SlotPosition} item={source.ItemKind?.ToString() ?? "empty"} count={source.StackCount}/{source.MaxStackSize}");
+        BeginSharedInventoryDrag(
+            source.InventoryId,
+            source.SlotPosition,
+            source.ItemKind,
+            source.ItemLabelText,
+            source.StackCount,
+            source.MaxStackSize,
+            source.Icon.Texture,
+            source.AccentColor,
+            (inventoryId, fromSlot, toSlot, splitStack) => InventoryMoveRequested?.Invoke(inventoryId, fromSlot, toSlot, splitStack),
+            (fromInventoryId, fromSlot, toInventoryId, toSlot, splitStack) => InventoryTransferRequested?.Invoke(fromInventoryId, fromSlot, toInventoryId, toSlot, splitStack));
         _dragSourceSlot = source;
         MoveToFront();
         RefreshSlotVisuals();
@@ -910,14 +1136,32 @@ public partial class FactoryStructureDetailWindow : PanelContainer
     private void FinalizeInventoryDrag()
     {
         if (_dragSourceSlot is not null
-            && _hoveredSlot is not null
-            && _hoveredSlot.CanAcceptFrom(_dragSourceSlot))
+            && s_dragSourcePayload.HasValue)
         {
-            InventoryMoveRequested?.Invoke(
-                _hoveredSlot.InventoryId,
-                _dragSourceSlot.SlotPosition,
-                _hoveredSlot.SlotPosition,
-                IsSplitModifierHeld());
+            var target = FindSlotUnderPointer(GetGlobalMousePosition());
+            TraceLog($"finalize inventory drag source={_dragSourceSlot.InventoryId}@{_dragSourceSlot.SlotPosition} target={(target is null ? "none" : $"{target.InventoryId}@{target.SlotPosition}")}");
+            if (target is not null && CanAcceptPayload(s_dragSourcePayload.Value, target))
+            {
+                if (_dragSourceSlot.InventoryId == target.InventoryId)
+                {
+                    TraceLog("finalize inventory drag -> same inventory move");
+                    InventoryMoveRequested?.Invoke(
+                        target.InventoryId,
+                        _dragSourceSlot.SlotPosition,
+                        target.SlotPosition,
+                        IsSplitModifierHeld());
+                }
+                else
+                {
+                    TraceLog("finalize inventory drag -> cross inventory transfer");
+                    InventoryTransferRequested?.Invoke(
+                        _dragSourceSlot.InventoryId,
+                        _dragSourceSlot.SlotPosition,
+                        target.InventoryId,
+                        target.SlotPosition,
+                        IsSplitModifierHeld());
+                }
+            }
         }
 
         CancelInventoryDrag();
@@ -925,6 +1169,11 @@ public partial class FactoryStructureDetailWindow : PanelContainer
 
     private void ClearPendingDrag()
     {
+        if (_pendingDragSourceSlot is not null)
+        {
+            TraceLog($"clear pending drag source={_pendingDragSourceSlot.InventoryId}@{_pendingDragSourceSlot.SlotPosition}");
+        }
+
         _pendingDragSourceSlot = null;
         _pendingDragElapsed = 0.0;
         UpdateHoveredSlotFromPointer();
@@ -934,6 +1183,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
 
     private void CancelInventoryDrag()
     {
+        var hadLocalDragSource = _dragSourceSlot is not null;
         _pendingDragSourceSlot = null;
         _pendingDragElapsed = 0.0;
         _dragSourceSlot = null;
@@ -945,6 +1195,11 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         UpdateHoveredSlotFromPointer();
         RefreshSlotVisuals();
         UpdateDragStateLabel();
+
+        if (hadLocalDragSource)
+        {
+            CancelSharedInventoryDrag();
+        }
     }
 
     private void UpdateDragPreview()
@@ -979,12 +1234,16 @@ public partial class FactoryStructureDetailWindow : PanelContainer
 
     private InventorySlotWidget? GetSlotUnderPointer()
     {
+        return GetSlotUnderPointer(GetGlobalMousePosition());
+    }
+
+    private InventorySlotWidget? GetSlotUnderPointer(Vector2 pointer)
+    {
         if (!Visible)
         {
             return null;
         }
 
-        var pointer = GetGlobalMousePosition();
         for (var index = 0; index < _slotWidgets.Count; index++)
         {
             var widget = _slotWidgets[index];
@@ -1068,6 +1327,97 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         return Input.IsKeyPressed(Key.Ctrl);
     }
 
+    private InventoryDragPayload? GetActiveDragPayload()
+    {
+        if (_dragSourceSlot is not null)
+        {
+            return CreateDragPayload(_dragSourceSlot);
+        }
+
+        return s_dragSourcePayload;
+    }
+
+    private static InventoryDragPayload CreateDragPayload(InventorySlotWidget widget)
+    {
+        return new InventoryDragPayload(
+            widget.InventoryId,
+            widget.SlotPosition,
+            widget.ItemKind,
+            widget.ItemLabelText,
+            widget.StackCount,
+            widget.MaxStackSize,
+            widget.Icon.Texture,
+            widget.AccentColor);
+    }
+
+    private static bool CanAcceptPayload(InventoryDragPayload source, InventorySlotWidget target)
+    {
+        return CanAcceptPayload(
+            source,
+            target.InventoryId,
+            target.SlotPosition,
+            target.ItemKind,
+            target.StackCount,
+            target.MaxStackSize,
+            target.ItemLabelText);
+    }
+
+    private static bool CanAcceptPayload(
+        InventoryDragPayload source,
+        string inventoryId,
+        Vector2I slotPosition,
+        FactoryItemKind? itemKind,
+        int stackCount,
+        int maxStackSize,
+        string? itemLabelText)
+    {
+        if (source.InventoryId == inventoryId && source.SlotPosition == slotPosition)
+        {
+            return false;
+        }
+
+        if (!itemKind.HasValue || stackCount <= 0 || maxStackSize <= 0)
+        {
+            return true;
+        }
+
+        if (!source.ItemKind.HasValue)
+        {
+            return false;
+        }
+
+        var canMerge = itemKind.Value == source.ItemKind.Value
+            && stackCount < maxStackSize
+            && (itemKind.Value != FactoryItemKind.BuildingKit
+                || string.Equals(itemLabelText ?? string.Empty, source.ItemLabelText, StringComparison.Ordinal));
+        if (canMerge)
+        {
+            return true;
+        }
+
+        return !IsSplitModifierHeld() && source.StackCount > 0 && stackCount > 0;
+    }
+
+    private static InventorySlotWidget? FindSlotUnderPointer(Vector2 pointer)
+    {
+        for (var index = s_instances.Count - 1; index >= 0; index--)
+        {
+            var window = s_instances[index];
+            if (!GodotObject.IsInstanceValid(window))
+            {
+                continue;
+            }
+
+            var slot = window.GetSlotUnderPointer(pointer);
+            if (slot is not null)
+            {
+                return slot;
+            }
+        }
+
+        return null;
+    }
+
     private static int GetRequestedMoveCount(InventorySlotWidget widget)
     {
         if (!widget.HasItem)
@@ -1081,6 +1431,26 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         }
 
         return Mathf.Max(1, Mathf.CeilToInt(widget.StackCount * 0.5f));
+    }
+
+    private void HandleSharedDragCancelled()
+    {
+        if (_dragSourceSlot is not null || _pendingDragSourceSlot is not null)
+        {
+            TraceLog($"handle shared drag cancelled dragSource={_dragSourceSlot?.InventoryId}@{_dragSourceSlot?.SlotPosition} pending={_pendingDragSourceSlot?.InventoryId}@{_pendingDragSourceSlot?.SlotPosition}");
+        }
+
+        _pendingDragSourceSlot = null;
+        _pendingDragElapsed = 0.0;
+        _dragSourceSlot = null;
+        if (_dragPreview is not null)
+        {
+            _dragPreview.Visible = false;
+        }
+
+        UpdateHoveredSlotFromPointer();
+        RefreshSlotVisuals();
+        UpdateDragStateLabel();
     }
 
     private void ClampToBounds()

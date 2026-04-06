@@ -238,6 +238,30 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
             || (inventoryId == OutputInventoryId && _outputInventory.TryMoveItem(fromSlot, toSlot, splitStack));
     }
 
+    public override bool TryResolveInventoryEndpoint(string inventoryId, out FactoryInventoryTransferEndpoint endpoint)
+    {
+        if (inventoryId == InputInventoryId)
+        {
+            endpoint = new FactoryInventoryTransferEndpoint(
+                inventoryId,
+                _inputInventory,
+                CanAcceptDetailInputItem);
+            return true;
+        }
+
+        if (inventoryId == OutputInventoryId)
+        {
+            endpoint = new FactoryInventoryTransferEndpoint(
+                inventoryId,
+                _outputInventory,
+                _ => false);
+            return true;
+        }
+
+        endpoint = default;
+        return false;
+    }
+
     public override bool TrySetDetailRecipe(string recipeId)
     {
         if (!SupportsRecipeSelection || _isProcessing)
@@ -332,6 +356,27 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
         if (!IsOrthogonallyAdjacent(Cell, sourceCell)
             || ActiveRecipe.Inputs.Count == 0
             || !_inputInventory.CanAcceptItem(item))
+        {
+            return false;
+        }
+
+        for (var index = 0; index < ActiveRecipe.Inputs.Count; index++)
+        {
+            var ingredient = ActiveRecipe.Inputs[index];
+            if (ingredient.ItemKind != item.ItemKind)
+            {
+                continue;
+            }
+
+            return _inputInventory.CountByKind(item.ItemKind) < ingredient.Amount * 2;
+        }
+
+        return false;
+    }
+
+    private bool CanAcceptDetailInputItem(FactoryItem item)
+    {
+        if (ActiveRecipe.Inputs.Count == 0 || !_inputInventory.CanAcceptItem(item))
         {
             return false;
         }

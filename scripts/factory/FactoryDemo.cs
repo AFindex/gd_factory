@@ -46,6 +46,8 @@ public partial class FactoryDemo : Node3D
     private SimulationController? _simulation;
     private FactoryCameraRig? _cameraRig;
     private FactoryHud? _hud;
+    private FactoryPlayerController? _playerController;
+    private FactoryPlayerHud? _playerHud;
     private Node3D? _structureRoot;
     private Node3D? _enemyRoot;
     private Node3D? _previewRoot;
@@ -85,6 +87,11 @@ public partial class FactoryDemo : Node3D
     private FactoryBlueprintApplyPlan? _blueprintApplyPlan;
     private FacingDirection _blueprintApplyRotation = FacingDirection.East;
     private string _previewMessage = "交互模式：点击建筑查看；按数字键选择建筑后进入建造，或按住 Shift 左键框选蓝图。";
+    private string? _selectedPlayerItemInventoryId;
+    private Vector2I _selectedPlayerItemSlot;
+    private bool _hasSelectedPlayerItemSlot;
+    private bool _playerPlacementArmed;
+    private static void TraceLog(string message) => GD.Print($"[FactoryDemo] {message}");
 
     public override void _Ready()
     {
@@ -92,6 +99,7 @@ public partial class FactoryDemo : Node3D
         BuildSceneGraph();
         ConfigureGameplay();
         CreateStarterLayout();
+        SpawnPlayerController();
         UpdateHud();
 
         if (HasSmokeTestFlag())
@@ -103,8 +111,10 @@ public partial class FactoryDemo : Node3D
     public override void _Process(double delta)
     {
         _averageFrameMilliseconds = SmoothMetric(_averageFrameMilliseconds, delta * 1000.0, 0.1);
+        _playerController?.ApplyMovement(GetPlayerMovementBounds(), delta, allowInput: true);
         if (_cameraRig is not null)
         {
+            _cameraRig.AllowPanInput = false;
             _cameraRig.AllowZoomInput = !IsPointerOverUi();
         }
 
@@ -124,6 +134,25 @@ public partial class FactoryDemo : Node3D
 
     public override void _UnhandledInput(InputEvent @event)
     {
+        if (@event is InputEventKey hotbarKeyEvent
+            && hotbarKeyEvent.Pressed
+            && !hotbarKeyEvent.Echo
+            && TryMapHotbarKey(hotbarKeyEvent.Keycode, out var hotbarIndex))
+        {
+            HandlePlayerHotbarPressed(hotbarIndex);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (@event is InputEventMouse && IsInventoryUiInteractionActive())
+        {
+            if (@event is InputEventMouseButton blockedMouseButton)
+            {
+                TraceLog($"mouse input blocked by active inventory interaction button={blockedMouseButton.ButtonIndex} pressed={blockedMouseButton.Pressed}");
+            }
+            return;
+        }
+
         if (IsPointerOverUi())
         {
             return;
@@ -327,6 +356,7 @@ public partial class FactoryDemo : Node3D
         _hud = new FactoryHud();
         _hud.SelectionChanged += SelectBuildKind;
         _hud.DetailInventoryMoveRequested += HandleDetailInventoryMoveRequested;
+        _hud.DetailInventoryTransferRequested += HandlePlayerInventoryTransferRequested;
         _hud.DetailRecipeSelected += HandleDetailRecipeSelected;
         _hud.DetailClosed += HandleDetailWindowClosed;
         _hud.WorkspaceSelected += HandleHudWorkspaceSelected;
@@ -338,6 +368,13 @@ public partial class FactoryDemo : Node3D
         _hud.BlueprintDeleteRequested += HandleBlueprintDeleteRequested;
         _hud.BlueprintCancelRequested += CancelBlueprintWorkflow;
         AddChild(_hud);
+
+        _playerHud = new FactoryPlayerHud();
+        _playerHud.HotbarSlotPressed += HandlePlayerHotbarPressed;
+        _playerHud.BackpackInventoryMoveRequested += HandlePlayerInventoryMoveRequested;
+        _playerHud.BackpackInventoryTransferRequested += HandlePlayerInventoryTransferRequested;
+        _playerHud.BackpackSlotActivated += HandlePlayerInventorySlotActivated;
+        AddChild(_playerHud);
 
         AddChild(new LauncherNavigationOverlay());
     }
@@ -382,15 +419,6 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        HandleBuildShortcut("select_producer", BuildPrototypeKind.Producer);
-        HandleBuildShortcut("select_belt", BuildPrototypeKind.Belt);
-        HandleBuildShortcut("select_sink", BuildPrototypeKind.Sink);
-        HandleBuildShortcut("select_splitter", BuildPrototypeKind.Splitter);
-        HandleBuildShortcut("select_merger", BuildPrototypeKind.Merger);
-        HandleBuildShortcut("select_bridge", BuildPrototypeKind.Bridge);
-        HandleBuildShortcut("select_loader", BuildPrototypeKind.Loader);
-        HandleBuildShortcut("select_unloader", BuildPrototypeKind.Unloader);
-        HandleBuildShortcut("select_storage", BuildPrototypeKind.Storage);
         HandleBuildShortcut("select_inserter", BuildPrototypeKind.Inserter);
         HandleBuildShortcut("select_wall", BuildPrototypeKind.Wall);
         HandleBuildShortcut("select_ammo_assembler", BuildPrototypeKind.AmmoAssembler);
@@ -426,7 +454,13 @@ public partial class FactoryDemo : Node3D
     {
         CancelBlueprintWorkflow(clearActiveBlueprint: false);
         _selectedBuildKind = kind;
-        _interactionMode = kind.HasValue ? FactoryInteractionMode.Build : FactoryInteractionMode.Interact;
+        _playerPlacementArmed = false;
+        if (kind.HasValue)
+        {
+            _playerController?.DisarmHotbarPlacement();
+        }
+
+        RefreshInteractionModeFromBuildSource();
         _deleteDragActive = false;
 
         if (_interactionMode == FactoryInteractionMode.Build)
@@ -438,6 +472,8 @@ public partial class FactoryDemo : Node3D
     private void EnterInteractionMode()
     {
         _selectedBuildKind = null;
+        _playerPlacementArmed = false;
+        _playerController?.DisarmHotbarPlacement();
         _interactionMode = FactoryInteractionMode.Interact;
         _deleteDragActive = false;
     }
@@ -446,9 +482,148 @@ public partial class FactoryDemo : Node3D
     {
         CancelBlueprintWorkflow(clearActiveBlueprint: false);
         _selectedBuildKind = null;
+        _playerPlacementArmed = false;
+        _playerController?.DisarmHotbarPlacement();
         _selectedStructure = null;
         _interactionMode = FactoryInteractionMode.Delete;
         _deleteDragActive = false;
+    }
+
+    private void SpawnPlayerController()
+    {
+        if (_playerController is not null)
+        {
+            return;
+        }
+
+        _playerController = new FactoryPlayerController();
+        AddChild(_playerController);
+        _playerController.GlobalPosition = FindPlayerSpawnPosition();
+        _playerController.EnsureStarterLoadout(_simulation);
+        _playerController.SelectHotbarIndex(0);
+        _cameraRig?.SetFollowTarget(_playerController, snapImmediately: true);
+        _cameraRig!.FollowTargetEnabled = true;
+        _selectedPlayerItemInventoryId = FactoryPlayerController.BackpackInventoryId;
+        _selectedPlayerItemSlot = new Vector2I(0, 0);
+        _hasSelectedPlayerItemSlot = true;
+        RefreshInteractionModeFromBuildSource();
+    }
+
+    private Vector3 FindPlayerSpawnPosition()
+    {
+        if (_grid is null)
+        {
+            return new Vector3(0.0f, 0.0f, 0.0f);
+        }
+
+        var preferred = new Vector2I(-14, -12);
+        for (var radius = 0; radius <= 24; radius++)
+        {
+            for (var y = preferred.Y - radius; y <= preferred.Y + radius; y++)
+            {
+                for (var x = preferred.X - radius; x <= preferred.X + radius; x++)
+                {
+                    var candidate = new Vector2I(x, y);
+                    if (!_grid.IsInBounds(candidate) || _grid.TryGetStructure(candidate, out _))
+                    {
+                        continue;
+                    }
+
+                    var world = _grid.CellToWorld(candidate);
+                    return new Vector3(world.X, 0.0f, world.Z);
+                }
+            }
+        }
+
+        return Vector3.Zero;
+    }
+
+    private Rect2 GetPlayerMovementBounds()
+    {
+        if (_grid is null)
+        {
+            return new Rect2(-4.0f, -4.0f, 8.0f, 8.0f);
+        }
+
+        var min = _grid.GetWorldMin() + Vector2.One * 1.0f;
+        var max = _grid.GetWorldMax() - Vector2.One * 1.0f;
+        return new Rect2(min, max - min);
+    }
+
+    private bool TryGetActivePlacementKind(out BuildPrototypeKind kind, out bool usesPlayerInventory)
+    {
+        if (_selectedBuildKind.HasValue)
+        {
+            kind = _selectedBuildKind.Value;
+            usesPlayerInventory = false;
+            return true;
+        }
+
+        if (_playerPlacementArmed && TryResolveSelectedPlayerPlaceable(out var selectedPlayerKind))
+        {
+            kind = selectedPlayerKind;
+            usesPlayerInventory = true;
+            return true;
+        }
+
+        if (_playerController?.GetArmedPlaceablePrototype() is BuildPrototypeKind playerKind)
+        {
+            kind = playerKind;
+            usesPlayerInventory = true;
+            return true;
+        }
+
+        kind = default;
+        usesPlayerInventory = false;
+        return false;
+    }
+
+    private void RefreshInteractionModeFromBuildSource()
+    {
+        if (_interactionMode == FactoryInteractionMode.Delete)
+        {
+            return;
+        }
+
+        _interactionMode = TryGetActivePlacementKind(out _, out _)
+            ? FactoryInteractionMode.Build
+            : FactoryInteractionMode.Interact;
+    }
+
+    private void HandlePlayerHotbarPressed(int index)
+    {
+        if (_playerController is null)
+        {
+            return;
+        }
+
+        CancelBlueprintWorkflow(clearActiveBlueprint: false);
+        _selectedBuildKind = null;
+        _playerController.ToggleHotbarIndex(index);
+        _selectedPlayerItemInventoryId = FactoryPlayerController.BackpackInventoryId;
+        _selectedPlayerItemSlot = new Vector2I(index, 0);
+        _hasSelectedPlayerItemSlot = true;
+        _playerPlacementArmed = _playerController.IsHotbarPlacementArmed;
+        RefreshInteractionModeFromBuildSource();
+    }
+
+    private static bool TryMapHotbarKey(Key keycode, out int hotbarIndex)
+    {
+        hotbarIndex = keycode switch
+        {
+            Key.Key1 => 0,
+            Key.Key2 => 1,
+            Key.Key3 => 2,
+            Key.Key4 => 3,
+            Key.Key5 => 4,
+            Key.Key6 => 5,
+            Key.Key7 => 6,
+            Key.Key8 => 7,
+            Key.Key9 => 8,
+            _ => -1
+        };
+
+        return hotbarIndex >= 0;
     }
 
     private void CreateStarterLayout()
@@ -1068,11 +1243,13 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        if (_interactionMode == FactoryInteractionMode.Build && _selectedBuildKind.HasValue)
+        if (_interactionMode == FactoryInteractionMode.Build && TryGetActivePlacementKind(out var placementKind, out var usesPlayerInventory))
         {
-            _canPlaceCurrentCell = TryValidateWorldPlacement(_selectedBuildKind.Value, cell, _selectedFacing, out var placementIssue);
+            _canPlaceCurrentCell = TryValidateWorldPlacement(placementKind, cell, _selectedFacing, out var placementIssue);
             _previewMessage = _canPlaceCurrentCell
-                ? $"可在 ({cell.X}, {cell.Y}) 放置{_definitions[_selectedBuildKind.Value].DisplayName}，朝向 {FactoryDirection.ToLabel(_selectedFacing)}"
+                ? usesPlayerInventory
+                    ? $"可在 ({cell.X}, {cell.Y}) 放置{FactoryPresentation.GetBuildPrototypeDisplayName(placementKind)}套件，朝向 {FactoryDirection.ToLabel(_selectedFacing)}"
+                    : $"可在 ({cell.X}, {cell.Y}) 放置{_definitions[placementKind].DisplayName}，朝向 {FactoryDirection.ToLabel(_selectedFacing)}"
                 : placementIssue;
             return;
         }
@@ -1119,9 +1296,16 @@ public partial class FactoryDemo : Node3D
 
         var showCapturePreview = _blueprintMode == FactoryBlueprintWorkflowMode.CaptureSelection
             && (_blueprintSelectionDragActive || _hasBlueprintSelectionRect);
+        var hasPlacementPreview = false;
+        var previewKind = default(BuildPrototypeKind);
+        if (_interactionMode == FactoryInteractionMode.Build && TryGetActivePlacementKind(out var activePreviewKind, out _))
+        {
+            hasPlacementPreview = true;
+            previewKind = activePreviewKind;
+        }
+
         var showPreview = showCapturePreview || (_hasHoveredCell
-            && ((_interactionMode == FactoryInteractionMode.Build && _selectedBuildKind.HasValue)
-                || _interactionMode == FactoryInteractionMode.Delete));
+            && (hasPlacementPreview || _interactionMode == FactoryInteractionMode.Delete));
         _previewRoot.Visible = showPreview;
         if (!showPreview)
         {
@@ -1178,9 +1362,9 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        _previewRoot.Position = FactoryPlacement.GetPreviewCenter(_grid, _selectedBuildKind!.Value, _hoveredCell, _selectedFacing);
+        _previewRoot.Position = FactoryPlacement.GetPreviewCenter(_grid, previewKind, _hoveredCell, _selectedFacing);
         _previewRoot.Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(_selectedFacing), 0.0f);
-        var previewSize = FactoryPlacement.GetPreviewSize(_grid, _selectedBuildKind.Value, _selectedFacing);
+        var previewSize = FactoryPlacement.GetPreviewSize(_grid, previewKind, _selectedFacing);
         _previewCell.Mesh = new BoxMesh
         {
             Size = new Vector3(
@@ -1194,7 +1378,7 @@ public partial class FactoryDemo : Node3D
         var tint = _canPlaceCurrentCell ? new Color(0.35f, 0.95f, 0.55f, 0.45f) : new Color(1.0f, 0.35f, 0.35f, 0.45f);
         ApplyPreviewColor(_previewCell, tint);
         ApplyPreviewColor(_previewArrow, tint.Lightened(0.1f));
-        UpdatePreviewPowerRange(_selectedBuildKind, _grid, _previewPowerRange, tint);
+        UpdatePreviewPowerRange(previewKind, _grid, _previewPowerRange, tint);
     }
 
     private void UpdateBlueprintPreview()
@@ -1639,6 +1823,14 @@ public partial class FactoryDemo : Node3D
                 : "交互模式：左键查看建筑，Shift+左键拖拽可直接框选蓝图，数字键或按钮切换到对应建造工具。";
         _hud.SetNote(modeNote);
         _hud.SetBlueprintState(BuildBlueprintPanelState());
+
+        if (_playerHud is not null)
+        {
+            _playerHud.SetContext(
+                _playerController,
+                BuildSelectedStructureLinkedDetailModel(),
+                ResolveSelectedPlayerItem());
+        }
     }
 
     private void HandleHudWorkspaceSelected(string workspaceId)
@@ -1785,32 +1977,46 @@ public partial class FactoryDemo : Node3D
     {
         if (!_hasHoveredCell)
         {
+            TraceLog("HandlePrimaryClick ignored because there is no hovered cell");
             return;
         }
 
-        if (_interactionMode == FactoryInteractionMode.Build && _selectedBuildKind.HasValue)
+        if (_interactionMode == FactoryInteractionMode.Build && TryGetActivePlacementKind(out var placementKind, out var usesPlayerInventory))
         {
+            TraceLog($"HandlePrimaryClick build mode cell={_hoveredCell} kind={placementKind} usesPlayerInventory={usesPlayerInventory} canPlace={_canPlaceCurrentCell} selectedInventory={_selectedPlayerItemInventoryId ?? "none"} selectedSlot={_selectedPlayerItemSlot}");
             if (_canPlaceCurrentCell)
             {
-                PlaceStructure(_selectedBuildKind.Value, _hoveredCell, _selectedFacing);
+                var placedStructure = PlaceStructure(placementKind, _hoveredCell, _selectedFacing);
+                TraceLog($"HandlePrimaryClick placement result placed={(placedStructure is not null)}");
+                if (placedStructure is not null && usesPlayerInventory)
+                {
+                    var consumed = TryConsumeSelectedPlayerPlaceable();
+                    TraceLog($"HandlePrimaryClick consumed player placeable={consumed}");
+                    RefreshInteractionModeFromBuildSource();
+                }
+            }
+            else
+            {
+                TraceLog($"HandlePrimaryClick placement blocked previewMessage={_previewMessage}");
             }
 
             return;
         }
 
+        TraceLog($"HandlePrimaryClick interaction mode select hoveredStructure={_hoveredStructure?.DisplayName ?? "none"}");
         _selectedStructure = _hoveredStructure;
     }
 
     private void HandleSecondaryClick()
     {
-        if (!_hasHoveredCell)
-        {
-            return;
-        }
-
         if (_interactionMode == FactoryInteractionMode.Build)
         {
             EnterInteractionMode();
+            return;
+        }
+
+        if (!_hasHoveredCell)
+        {
             return;
         }
 
@@ -2229,6 +2435,63 @@ public partial class FactoryDemo : Node3D
         }
     }
 
+    private void HandlePlayerInventoryMoveRequested(string inventoryId, Vector2I fromSlot, Vector2I toSlot, bool splitStack)
+    {
+        if (!TryResolveInventoryEndpoint(inventoryId, out var endpoint))
+        {
+            TraceLog($"HandlePlayerInventoryMoveRequested failed to resolve inventory={inventoryId}");
+            return;
+        }
+
+        var moved = endpoint.Inventory.TryMoveItem(fromSlot, toSlot, splitStack);
+        TraceLog($"HandlePlayerInventoryMoveRequested inventory={inventoryId} from={fromSlot} to={toSlot} split={splitStack} moved={moved}");
+        if (moved)
+        {
+            UpdateHud();
+        }
+    }
+
+    private void HandlePlayerInventoryTransferRequested(string fromInventoryId, Vector2I fromSlot, string toInventoryId, Vector2I toSlot, bool splitStack)
+    {
+        if (!TryResolveInventoryEndpoint(fromInventoryId, out var fromEndpoint)
+            || !TryResolveInventoryEndpoint(toInventoryId, out var toEndpoint))
+        {
+            TraceLog($"HandlePlayerInventoryTransferRequested failed resolve from={fromInventoryId} to={toInventoryId}");
+            return;
+        }
+
+        var moved = fromEndpoint.Inventory.TryMoveItemTo(toEndpoint.Inventory, fromSlot, toSlot, splitStack, toEndpoint.CanInsert, fromEndpoint.CanInsert);
+        TraceLog($"HandlePlayerInventoryTransferRequested from={fromInventoryId}@{fromSlot} to={toInventoryId}@{toSlot} split={splitStack} moved={moved}");
+        if (moved)
+        {
+            UpdateHud();
+        }
+    }
+
+    private void HandlePlayerInventorySlotActivated(string inventoryId, Vector2I slot)
+    {
+        _selectedPlayerItemInventoryId = inventoryId;
+        _selectedPlayerItemSlot = slot;
+        _hasSelectedPlayerItemSlot = true;
+        TraceLog($"HandlePlayerInventorySlotActivated inventory={inventoryId} slot={slot}");
+
+        if (inventoryId == FactoryPlayerController.BackpackInventoryId && slot.Y == 0)
+        {
+            TraceLog("HandlePlayerInventorySlotActivated forwarding to hotbar press");
+            HandlePlayerHotbarPressed(slot.X);
+            return;
+        }
+
+        _selectedBuildKind = null;
+        _playerController?.DisarmHotbarPlacement();
+        _playerPlacementArmed = inventoryId == FactoryPlayerController.BackpackInventoryId
+            && ResolveSelectedPlayerItem() is FactoryItem item
+            && FactoryPresentation.IsPlaceableStructureItem(item);
+        TraceLog($"HandlePlayerInventorySlotActivated armedPlacement={_playerPlacementArmed} resolvedItem={ResolveSelectedPlayerItem()?.ItemKind.ToString() ?? "none"}");
+        RefreshInteractionModeFromBuildSource();
+        UpdateHud();
+    }
+
     private void HandleDetailRecipeSelected(string recipeId)
     {
         if (_selectedStructure is IFactoryStructureDetailProvider detailProvider && detailProvider.TrySetDetailRecipe(recipeId))
@@ -2243,9 +2506,90 @@ public partial class FactoryDemo : Node3D
         UpdateHud();
     }
 
+    private bool TryResolveSelectedPlayerPlaceable(out BuildPrototypeKind kind)
+    {
+        var item = ResolveSelectedPlayerItem();
+        return FactoryPresentation.TryGetPlaceableStructureKind(item, out kind);
+    }
+
+    private bool TryConsumeSelectedPlayerPlaceable()
+    {
+        if (!_hasSelectedPlayerItemSlot
+            || string.IsNullOrWhiteSpace(_selectedPlayerItemInventoryId)
+            || !TryResolveInventoryEndpoint(_selectedPlayerItemInventoryId!, out var endpoint))
+        {
+            _playerPlacementArmed = false;
+            TraceLog("TryConsumeSelectedPlayerPlaceable failed because selected slot or endpoint was invalid");
+            return false;
+        }
+
+        var consumed = endpoint.Inventory.TryTakeFromSlot(_selectedPlayerItemSlot, out _);
+        TraceLog($"TryConsumeSelectedPlayerPlaceable inventory={_selectedPlayerItemInventoryId} slot={_selectedPlayerItemSlot} consumed={consumed}");
+        _playerController?.RefreshActiveSlotState();
+
+        var remainingItem = endpoint.Inventory.GetItemOrDefault(_selectedPlayerItemSlot);
+        _playerPlacementArmed = remainingItem is not null && FactoryPresentation.IsPlaceableStructureItem(remainingItem);
+        if (!_playerPlacementArmed && _selectedPlayerItemSlot.Y == 0)
+        {
+            _playerController?.DisarmHotbarPlacement();
+        }
+
+        return consumed;
+    }
+
+    private FactoryStructureDetailModel? BuildSelectedStructureLinkedDetailModel()
+    {
+        return _selectedStructure is IFactoryStructureDetailProvider detailProvider
+            && GodotObject.IsInstanceValid(_selectedStructure)
+            && _selectedStructure.IsInsideTree()
+            ? detailProvider.GetDetailModel()
+            : null;
+    }
+
+    private FactoryItem? ResolveSelectedPlayerItem()
+    {
+        if (!_hasSelectedPlayerItemSlot || string.IsNullOrWhiteSpace(_selectedPlayerItemInventoryId))
+        {
+            return _playerController?.GetActiveHotbarItem();
+        }
+
+        if (!TryResolveInventoryEndpoint(_selectedPlayerItemInventoryId!, out var endpoint))
+        {
+            return _playerController?.GetActiveHotbarItem();
+        }
+
+        return endpoint.Inventory.GetItemOrDefault(_selectedPlayerItemSlot);
+    }
+
+    private bool TryResolveInventoryEndpoint(string inventoryId, out FactoryInventoryTransferEndpoint endpoint)
+    {
+        if (_playerController?.TryResolveInventoryEndpoint(inventoryId, out endpoint) == true)
+        {
+            return true;
+        }
+
+        if (_selectedStructure is IFactoryInventoryEndpointProvider endpointProvider
+            && endpointProvider.TryResolveInventoryEndpoint(inventoryId, out endpoint))
+        {
+            return true;
+        }
+
+        endpoint = default;
+        return false;
+    }
+
     private bool IsPointerOverUi()
     {
-        return _hud?.BlocksWorldInput(GetViewport().GuiGetHoveredControl()) ?? false;
+        var hoveredControl = GetViewport().GuiGetHoveredControl();
+        var pointer = GetViewport().GetMousePosition();
+        return (_hud?.BlocksWorldInput(hoveredControl, pointer) ?? false)
+            || (_playerHud?.BlocksWorldInput(hoveredControl, pointer) ?? false);
+    }
+
+    private bool IsInventoryUiInteractionActive()
+    {
+        return (_hud?.HasActiveInventoryInteraction ?? false)
+            || (_playerHud?.HasActiveInventoryInteraction ?? false);
     }
 
     private void CreatePreviewVisuals()
@@ -2374,6 +2718,10 @@ public partial class FactoryDemo : Node3D
         EnsureAction("camera_pan_right", new InputEventKey { PhysicalKeycode = Key.D }, new InputEventKey { PhysicalKeycode = Key.Right });
         EnsureAction("camera_pan_up", new InputEventKey { PhysicalKeycode = Key.W }, new InputEventKey { PhysicalKeycode = Key.Up });
         EnsureAction("camera_pan_down", new InputEventKey { PhysicalKeycode = Key.S }, new InputEventKey { PhysicalKeycode = Key.Down });
+        EnsureAction("player_move_left", new InputEventKey { PhysicalKeycode = Key.A });
+        EnsureAction("player_move_right", new InputEventKey { PhysicalKeycode = Key.D });
+        EnsureAction("player_move_forward", new InputEventKey { PhysicalKeycode = Key.W });
+        EnsureAction("player_move_backward", new InputEventKey { PhysicalKeycode = Key.S });
         EnsureAction("camera_zoom_in", new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true });
         EnsureAction("camera_zoom_out", new InputEventMouseButton { ButtonIndex = MouseButton.WheelDown, Pressed = true });
         EnsureAction("camera_rotate_left", new InputEventKey { PhysicalKeycode = Key.Q });
@@ -2450,6 +2798,7 @@ public partial class FactoryDemo : Node3D
         var removed = _grid.CanPlace(probeCell);
         var multiCellPlacementVerified = RunMultiCellPlacementSmoke();
         var previewArrowReady = _previewArrow is not null && _previewArrow.GetChildCount() >= 3;
+        var playerInteractionVerified = await RunPlayerCharacterSmoke(probeCell);
 
         var initialStructureCount = _simulation.RegisteredStructureCount;
         var poweredFactoryVerified = await RunPoweredFactorySmoke();
@@ -2485,15 +2834,125 @@ public partial class FactoryDemo : Node3D
             || !structureVisualProfilesVerified
             || !combatVerified
             || !multiCellPlacementVerified
-            || !previewArrowReady)
+            || !previewArrowReady
+            || !playerInteractionVerified)
         {
-            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
+            GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} playerInteraction={playerInteractionVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} previewArrowReady={previewArrowReady}");
+        GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} previewArrowReady={previewArrowReady} playerInteraction={playerInteractionVerified}");
         GetTree().Quit();
+    }
+
+    private async Task<bool> RunPlayerCharacterSmoke(Vector2I placementCell)
+    {
+        if (_playerController is null || _cameraRig is null || _grid is null)
+        {
+            return false;
+        }
+
+        var playerSpawned = _playerController.IsInsideTree() && _playerController.BackpackInventory.Count > 0;
+        var startPosition = _playerController.GlobalPosition;
+        Input.ActionPress("player_move_right");
+        await ToSignal(GetTree().CreateTimer(0.2f), SceneTreeTimer.SignalName.Timeout);
+        Input.ActionRelease("player_move_right");
+        await ToSignal(GetTree().CreateTimer(0.1f), SceneTreeTimer.SignalName.Timeout);
+
+        var playerMoved = _playerController.GlobalPosition.DistanceTo(startPosition) > 0.2f;
+        var cameraFollowed = new Vector2(_cameraRig.Position.X, _cameraRig.Position.Z)
+            .DistanceTo(new Vector2(_playerController.GlobalPosition.X, _playerController.GlobalPosition.Z)) < 3.4f;
+
+        HandlePlayerHotbarPressed(1);
+        var hotbarSelected = _playerController.ActiveHotbarIndex == 1 && _playerController.GetArmedPlaceablePrototype().HasValue;
+        var stackBeforePlacement = GetInventorySlotCount(_playerController.BackpackInventory, new Vector2I(1, 0));
+        var validPlacement = hotbarSelected
+            && TryValidateWorldPlacement(_playerController.GetArmedPlaceablePrototype()!.Value, placementCell, FacingDirection.East, out _);
+
+        var placedFromHotbar = false;
+        var consumedOneItem = false;
+        if (validPlacement)
+        {
+            _selectedFacing = FacingDirection.East;
+            _hoveredCell = placementCell;
+            _hasHoveredCell = true;
+            _canPlaceCurrentCell = true;
+            HandlePrimaryClick();
+            placedFromHotbar = _grid.TryGetStructure(placementCell, out var placedStructure) && placedStructure is not null;
+            consumedOneItem = GetInventorySlotCount(_playerController.BackpackInventory, new Vector2I(1, 0)) == stackBeforePlacement - 1;
+            RemoveStructure(placementCell);
+        }
+
+        var crossTransferWorked = false;
+        if (_grid.TryGetStructure(new Vector2I(-6, 2), out var storageStructure)
+            && storageStructure is StorageStructure storage
+            && storage.TryResolveInventoryEndpoint("storage-buffer", out var storageEndpoint)
+            && _playerController.TryResolveInventoryEndpoint(FactoryPlayerController.BackpackInventoryId, out var playerEndpoint))
+        {
+            if (_simulation is not null)
+            {
+                var seededCargo = _simulation.CreateItem(BuildPrototypeKind.Producer, FactoryItemKind.GenericCargo);
+                storage.TryReceiveProvidedItem(seededCargo, storage.Cell + Vector2I.Left, _simulation);
+            }
+
+            var sourceSnapshot = storageEndpoint.Inventory.Snapshot();
+            var targetSnapshot = playerEndpoint.Inventory.Snapshot();
+            var sourceSlot = new Vector2I(-1, -1);
+            var targetSlot = new Vector2I(-1, -1);
+            for (var index = 0; index < sourceSnapshot.Length; index++)
+            {
+                if (sourceSnapshot[index].HasItem)
+                {
+                    sourceSlot = sourceSnapshot[index].Position;
+                    break;
+                }
+            }
+
+            for (var index = 0; index < targetSnapshot.Length; index++)
+            {
+                if (!targetSnapshot[index].HasItem && targetSnapshot[index].Position.Y > 0)
+                {
+                    targetSlot = targetSnapshot[index].Position;
+                    break;
+                }
+            }
+
+            if (sourceSlot.X >= 0 && targetSlot.X >= 0)
+            {
+                var moved = storageEndpoint.Inventory.TryMoveItemTo(playerEndpoint.Inventory, sourceSlot, targetSlot, false, playerEndpoint.CanInsert);
+                crossTransferWorked = moved && playerEndpoint.Inventory.GetItemOrDefault(targetSlot) is not null;
+            }
+        }
+
+        var passed = playerSpawned
+            && playerMoved
+            && cameraFollowed
+            && hotbarSelected
+            && placedFromHotbar
+            && consumedOneItem
+            && crossTransferWorked;
+
+        if (!passed)
+        {
+            GD.Print($"FACTORY_PLAYER_SMOKE playerSpawned={playerSpawned} playerMoved={playerMoved} cameraFollowed={cameraFollowed} hotbarSelected={hotbarSelected} placedFromHotbar={placedFromHotbar} consumedOneItem={consumedOneItem} crossTransferWorked={crossTransferWorked}");
+        }
+
+        return passed;
+    }
+
+    private static int GetInventorySlotCount(FactorySlottedItemInventory inventory, Vector2I slot)
+    {
+        var snapshot = inventory.Snapshot();
+        for (var index = 0; index < snapshot.Length; index++)
+        {
+            if (snapshot[index].Position == slot)
+            {
+                return snapshot[index].StackCount;
+            }
+        }
+
+        return 0;
     }
 
     private bool RunMultiCellPlacementSmoke()
