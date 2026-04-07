@@ -1,6 +1,38 @@
 using Godot;
 using System.Collections.Generic;
 
+public static class DemoLaunchOptions
+{
+    public static string? FactoryWorldMapPath { get; set; }
+    public static string? MobileWorldMapPath { get; set; }
+    public static string? MobileInteriorMapPath { get; set; }
+
+    public static string ResolveFactoryWorldMapPath()
+    {
+        return ResolveOrFallback(FactoryWorldMapPath, FactoryMapPaths.StaticSandboxWorld);
+    }
+
+    public static string ResolveMobileWorldMapPath()
+    {
+        return ResolveOrFallback(MobileWorldMapPath, FactoryMapPaths.FocusedMobileWorld);
+    }
+
+    public static string ResolveMobileInteriorMapPath()
+    {
+        return ResolveOrFallback(MobileInteriorMapPath, FactoryMapPaths.FocusedMobileInterior);
+    }
+
+    private static string ResolveOrFallback(string? selectedPath, string fallbackPath)
+    {
+        if (!string.IsNullOrWhiteSpace(selectedPath) && Godot.FileAccess.FileExists(selectedPath))
+        {
+            return selectedPath!;
+        }
+
+        return fallbackPath;
+    }
+}
+
 public sealed class DemoSceneEntry
 {
     public DemoSceneEntry(string id, string title, string description, string scenePath)

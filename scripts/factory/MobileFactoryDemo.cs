@@ -485,6 +485,10 @@ public partial class MobileFactoryDemo : Node3D
         _hud.BlueprintCaptureSelectionRequested += StartInteriorBlueprintCapture;
         _hud.BlueprintCaptureFullRequested += CaptureCurrentInteriorBlueprint;
         _hud.BlueprintSaveRequested += HandleInteriorBlueprintSaveRequested;
+        _hud.WorldMapSaveRequested += HandleWorldMapSaveRequested;
+        _hud.InteriorMapSaveRequested += HandleInteriorMapSaveRequested;
+        _hud.WorldMapSourceSaveRequested += HandleWorldMapSourceSaveRequested;
+        _hud.InteriorMapSourceSaveRequested += HandleInteriorMapSourceSaveRequested;
         _hud.BlueprintSelected += HandleInteriorBlueprintSelected;
         _hud.BlueprintApplyRequested += EnterInteriorBlueprintApplyMode;
         _hud.BlueprintConfirmRequested += ConfirmInteriorBlueprintApply;
@@ -492,6 +496,7 @@ public partial class MobileFactoryDemo : Node3D
         _hud.BlueprintCancelRequested += CancelInteriorBlueprintWorkflow;
         _hud.WorkspaceSelected += HandleHudWorkspaceSelected;
         AddChild(_hud);
+        InitializePersistenceHud();
 
         _playerHud.HotbarSlotPressed += HandlePlayerHotbarPressed;
         _playerHud.BackpackInventoryMoveRequested += HandlePlayerInventoryMoveRequested;
@@ -3428,6 +3433,7 @@ public partial class MobileFactoryDemo : Node3D
         _hasInteriorBlueprintSelectionRect = false;
         _blueprintMode = FactoryBlueprintWorkflowMode.None;
         _interiorPreviewMessage = $"已保存蓝图：{savedRecord.DisplayName}";
+        ShowBlueprintPersistenceStatus(savedRecord);
     }
 
     private void HandleInteriorBlueprintSelected(string blueprintId)

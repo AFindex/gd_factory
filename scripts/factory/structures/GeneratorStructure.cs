@@ -138,6 +138,11 @@ public partial class GeneratorStructure : FactoryStructure, IFactoryItemReceiver
         return false;
     }
 
+    public override IReadOnlyList<FactoryMapSeedItemEntry> CaptureMapSeedItems()
+    {
+        return CaptureSeedItemsFromInventory(_fuelInventory);
+    }
+
     public override void UpdateVisuals(float tickAlpha)
     {
         if (_beacon?.MaterialOverride is StandardMaterial3D beaconMaterial)

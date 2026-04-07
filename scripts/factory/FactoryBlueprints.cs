@@ -618,6 +618,7 @@ public static class FactoryBlueprintPlanner
 public static class FactoryBlueprintLibrary
 {
     private static readonly List<FactoryBlueprintRecord> Records = new();
+    private static readonly HashSet<string> SeedBlueprintIds = new(StringComparer.Ordinal);
     private static bool _seeded;
 
     public static string? ActiveBlueprintId { get; private set; }
@@ -662,11 +663,13 @@ public static class FactoryBlueprintLibrary
             }
 
             Records[index] = blueprint;
+            PersistLibrary();
             Changed?.Invoke();
             return blueprint;
         }
 
         Records.Add(blueprint);
+        PersistLibrary();
         Changed?.Invoke();
         return blueprint;
     }
@@ -687,6 +690,7 @@ public static class FactoryBlueprintLibrary
                 ActiveBlueprintId = null;
             }
 
+            PersistLibrary();
             Changed?.Invoke();
             return true;
         }
@@ -703,6 +707,7 @@ public static class FactoryBlueprintLibrary
         }
 
         ActiveBlueprintId = blueprintId;
+        PersistLibrary();
         Changed?.Invoke();
         return true;
     }
@@ -711,6 +716,7 @@ public static class FactoryBlueprintLibrary
     {
         EnsureSeedBlueprints();
         ActiveBlueprintId = null;
+        PersistLibrary();
         Changed?.Invoke();
     }
 
@@ -740,10 +746,44 @@ public static class FactoryBlueprintLibrary
             "seed-mobile-focused-demo-layout",
             "双线物流样板蓝图",
             MobileFactoryScenarioLibrary.CreateFocusedDemoPreset()));
+
+        var persisted = FactoryBlueprintPersistence.Load();
+        for (var index = 0; index < persisted.Records.Count; index++)
+        {
+            UpsertWithoutPersistence(persisted.Records[index]);
+        }
+
+        if (!string.IsNullOrWhiteSpace(persisted.ActiveBlueprintId) && FindById(persisted.ActiveBlueprintId!) is not null)
+        {
+            ActiveBlueprintId = persisted.ActiveBlueprintId;
+        }
     }
 
     private static void AddSeed(FactoryBlueprintRecord blueprint)
     {
         Records.Add(blueprint);
+        SeedBlueprintIds.Add(blueprint.Id);
+    }
+
+    private static void UpsertWithoutPersistence(FactoryBlueprintRecord blueprint)
+    {
+        for (var index = 0; index < Records.Count; index++)
+        {
+            if (Records[index].Id == blueprint.Id)
+            {
+                Records[index] = blueprint;
+                return;
+            }
+        }
+
+        Records.Add(blueprint);
+    }
+
+    private static void PersistLibrary()
+    {
+        FactoryBlueprintPersistence.Save(
+            Records,
+            ActiveBlueprintId,
+            blueprint => !SeedBlueprintIds.Contains(blueprint.Id));
     }
 }

@@ -1,10 +1,13 @@
 using Godot;
+using System.Collections.Generic;
 
 public partial class DemoLauncher : Control
 {
     private string? _mapValidationTargetId;
     private FactoryMapValidationMapScope? _mapValidationFocusScope;
     private Vector2I? _mapValidationFocusCell;
+    private IReadOnlyList<FactoryMapCatalogEntry> _worldMapEntries = System.Array.Empty<FactoryMapCatalogEntry>();
+    private IReadOnlyList<FactoryMapCatalogEntry> _interiorMapEntries = System.Array.Empty<FactoryMapCatalogEntry>();
 
     public override void _Ready()
     {
@@ -28,6 +31,9 @@ public partial class DemoLauncher : Control
 
     private void BuildScene()
     {
+        _worldMapEntries = FactoryMapCatalog.GetWorldMaps();
+        _interiorMapEntries = FactoryMapCatalog.GetInteriorMaps();
+
         var background = new ColorRect();
         background.SetAnchorsPreset(LayoutPreset.FullRect);
         background.Color = FactoryUiTheme.Canvas;
@@ -122,7 +128,7 @@ public partial class DemoLauncher : Control
 
         body.AddChild(CreateLabel("快速入口", 22, FactoryUiTheme.Text));
         body.AddChild(CreateLabel("适合在 Godot 编辑器之外浏览各个演示切片，或在验证改动时反复往返多个场景。", 14, FactoryUiTheme.TextMuted, true));
-        body.AddChild(CreateLabel("建议先进入 Factory Sandbox 观察基准物流，再切到移动工厂和 UI 展示页检查单独功能。", 13, FactoryUiTheme.TextSubtle, true));
+        body.AddChild(CreateLabel("建议先进入 Factory Sandbox 观察基准物流，再切到移动工厂和 UI 展示页检查单独功能。现在也可以在启动页直接挑选工程内或运行时保存的地图。", 13, FactoryUiTheme.TextSubtle, true));
 
         return panel;
     }
@@ -152,6 +158,7 @@ public partial class DemoLauncher : Control
         copy.AddChild(CreateLabel(entry.Title, 24, FactoryUiTheme.Text));
         copy.AddChild(CreateLabel(entry.Description, 14, FactoryUiTheme.TextMuted, true));
         copy.AddChild(CreateLabel(entry.ScenePath, 12, FactoryUiTheme.TextSubtle));
+        AddMapSelectors(entry, copy);
 
         var actions = new VBoxContainer();
         actions.CustomMinimumSize = new Vector2(180.0f, 0.0f);
@@ -162,7 +169,7 @@ public partial class DemoLauncher : Control
         launchButton.Text = "进入 Demo";
         launchButton.CustomMinimumSize = new Vector2(0.0f, 42.0f);
         launchButton.AddThemeFontSizeOverride("font_size", 15);
-        launchButton.Pressed += () => OpenDemo(entry.ScenePath);
+        launchButton.Pressed += () => OpenDemo(entry);
         FactoryUiTheme.ApplyButtonTheme(launchButton);
         actions.AddChild(launchButton);
 
@@ -191,18 +198,20 @@ public partial class DemoLauncher : Control
         return footer;
     }
 
-    private void OpenDemo(string scenePath)
+    private void OpenDemo(DemoSceneEntry entry)
     {
-        var error = GetTree().ChangeSceneToFile(scenePath);
+        ApplyLaunchSelection(entry);
+
+        var error = GetTree().ChangeSceneToFile(entry.ScenePath);
         if (error != Error.Ok)
         {
-            GD.PushError($"Unable to open demo scene '{scenePath}': {error}");
+            GD.PushError($"Unable to open demo scene '{entry.ScenePath}': {error}");
         }
     }
 
     private void OpenFactorySmokeScene()
     {
-        OpenDemo("res://scenes/factory_demo.tscn");
+        OpenDemo(DemoCatalog.LauncherEntries[0]);
     }
 
     private void RunHeadlessMapValidation()
@@ -387,6 +396,125 @@ public partial class DemoLauncher : Control
         label.AddThemeFontSizeOverride("font_size", fontSize);
         label.AutowrapMode = wrap ? TextServer.AutowrapMode.WordSmart : TextServer.AutowrapMode.Off;
         return label;
+    }
+
+    private void AddMapSelectors(DemoSceneEntry entry, VBoxContainer parent)
+    {
+        if (entry.Id == "factory-demo")
+        {
+            Label? summaryLabel = null;
+            var selector = CreateMapSelector("世界地图", _worldMapEntries, DemoLaunchOptions.ResolveFactoryWorldMapPath(), selected =>
+            {
+                DemoLaunchOptions.FactoryWorldMapPath = selected.Path;
+                if (summaryLabel is not null)
+                {
+                    summaryLabel.Text = selected.BuildSummaryText();
+                }
+            });
+            summaryLabel = selector.SummaryLabel;
+            parent.AddChild(selector.Container);
+            return;
+        }
+
+        if (entry.Id == "mobile-factory-demo" || entry.Id == "mobile-factory-test-scenario")
+        {
+            Label? worldSummaryLabel = null;
+            var worldSelector = CreateMapSelector("世界地图", _worldMapEntries, DemoLaunchOptions.ResolveMobileWorldMapPath(), selected =>
+            {
+                DemoLaunchOptions.MobileWorldMapPath = selected.Path;
+                if (worldSummaryLabel is not null)
+                {
+                    worldSummaryLabel.Text = selected.BuildSummaryText();
+                }
+            });
+            worldSummaryLabel = worldSelector.SummaryLabel;
+            parent.AddChild(worldSelector.Container);
+
+            Label? interiorSummaryLabel = null;
+            var interiorSelector = CreateMapSelector("内部地图", _interiorMapEntries, DemoLaunchOptions.ResolveMobileInteriorMapPath(), selected =>
+            {
+                DemoLaunchOptions.MobileInteriorMapPath = selected.Path;
+                if (interiorSummaryLabel is not null)
+                {
+                    interiorSummaryLabel.Text = selected.BuildSummaryText();
+                }
+            });
+            interiorSummaryLabel = interiorSelector.SummaryLabel;
+            parent.AddChild(interiorSelector.Container);
+        }
+    }
+
+    private (Control Container, Label SummaryLabel) CreateMapSelector(
+        string title,
+        IReadOnlyList<FactoryMapCatalogEntry> entries,
+        string selectedPath,
+        System.Action<FactoryMapCatalogEntry> onSelected)
+    {
+        var container = new VBoxContainer();
+        container.AddThemeConstantOverride("separation", 6);
+
+        container.AddChild(CreateLabel(title, 12, FactoryUiTheme.TextSubtle));
+
+        var optionButton = new OptionButton();
+        optionButton.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        optionButton.FitToLongestItem = false;
+        optionButton.AddThemeFontSizeOverride("font_size", 13);
+        container.AddChild(optionButton);
+
+        var summaryLabel = CreateLabel("暂无地图。", 12, FactoryUiTheme.TextSubtle, true);
+        container.AddChild(summaryLabel);
+
+        var selectedIndex = 0;
+        for (var index = 0; index < entries.Count; index++)
+        {
+            var entry = entries[index];
+            optionButton.AddItem(entry.BuildOptionText());
+            if (string.Equals(entry.Path, selectedPath, System.StringComparison.OrdinalIgnoreCase))
+            {
+                selectedIndex = index;
+            }
+        }
+
+        if (entries.Count > 0)
+        {
+            optionButton.Select(selectedIndex);
+            summaryLabel.Text = entries[selectedIndex].BuildSummaryText();
+            onSelected(entries[selectedIndex]);
+            optionButton.ItemSelected += selected =>
+            {
+                var entry = entries[(int)selected];
+                summaryLabel.Text = entry.BuildSummaryText();
+                onSelected(entry);
+            };
+        }
+        else
+        {
+            optionButton.Disabled = true;
+            summaryLabel.Text = "当前没有可用地图。";
+        }
+
+        return (container, summaryLabel);
+    }
+
+    private void ApplyLaunchSelection(DemoSceneEntry entry)
+    {
+        if (entry.Id == "factory-demo" && string.IsNullOrWhiteSpace(DemoLaunchOptions.FactoryWorldMapPath))
+        {
+            DemoLaunchOptions.FactoryWorldMapPath = FactoryMapPaths.StaticSandboxWorld;
+        }
+
+        if ((entry.Id == "mobile-factory-demo" || entry.Id == "mobile-factory-test-scenario"))
+        {
+            if (string.IsNullOrWhiteSpace(DemoLaunchOptions.MobileWorldMapPath))
+            {
+                DemoLaunchOptions.MobileWorldMapPath = FactoryMapPaths.FocusedMobileWorld;
+            }
+
+            if (string.IsNullOrWhiteSpace(DemoLaunchOptions.MobileInteriorMapPath))
+            {
+                DemoLaunchOptions.MobileInteriorMapPath = FactoryMapPaths.FocusedMobileInterior;
+            }
+        }
     }
 
 }

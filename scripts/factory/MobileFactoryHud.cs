@@ -91,6 +91,7 @@ public partial class MobileFactoryHud : CanvasLayer
     private Label? _factoryDetailLabel;
     private Label? _worldWorkspaceHintLabel;
     private Label? _editorWorkspaceHintLabel;
+    private Label? _saveStatusLabel;
     private PanelContainer? _inspectionPanel;
     private Label? _inspectionTitleLabel;
     private Label? _inspectionBodyLabel;
@@ -129,6 +130,10 @@ public partial class MobileFactoryHud : CanvasLayer
     public event Action? BlueprintConfirmRequested;
     public event Action<string>? BlueprintDeleteRequested;
     public event Action? BlueprintCancelRequested;
+    public event Action? WorldMapSaveRequested;
+    public event Action? InteriorMapSaveRequested;
+    public event Action? WorldMapSourceSaveRequested;
+    public event Action? InteriorMapSourceSaveRequested;
     public event Action<string>? WorkspaceSelected;
 
     public override void _Ready()
@@ -146,6 +151,7 @@ public partial class MobileFactoryHud : CanvasLayer
         {
             MoveChild(_overlayRoot, GetChildCount() - 1);
         }
+        SetPersistenceStatus(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: true));
         UpdateLayout();
         GetViewport().SizeChanged += UpdateLayout;
     }
@@ -465,6 +471,14 @@ public partial class MobileFactoryHud : CanvasLayer
         if (state.PendingCaptureId is not null || state.CanConfirmApply || state.ModeText.Contains("框选", StringComparison.Ordinal) || state.ModeText.Contains("应用预览", StringComparison.Ordinal))
         {
             SetActiveWorkspace(BlueprintWorkspaceId, emitSignal: false);
+        }
+    }
+
+    public void SetPersistenceStatus(string text)
+    {
+        if (_saveStatusLabel is not null)
+        {
+            _saveStatusLabel.Text = text;
         }
     }
 

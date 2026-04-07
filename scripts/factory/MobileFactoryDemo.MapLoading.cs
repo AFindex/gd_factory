@@ -12,8 +12,9 @@ public partial class MobileFactoryDemo
             return;
         }
 
+        var mapPath = DemoLaunchOptions.ResolveMobileWorldMapPath();
         var result = FactoryMapRuntimeLoader.LoadWorldMap(
-            FactoryMapPaths.FocusedMobileWorld,
+            mapPath,
             _grid,
             _structureRoot,
             _simulation);
@@ -38,8 +39,9 @@ public partial class MobileFactoryDemo
             return;
         }
 
+        var mapPath = DemoLaunchOptions.ResolveMobileInteriorMapPath();
         FactoryMapRuntimeLoader.ApplyInteriorRuntimeState(
-            FactoryMapPaths.FocusedMobileInterior,
+            mapPath,
             _mobileFactory,
             _simulation);
     }

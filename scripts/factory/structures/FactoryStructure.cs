@@ -149,6 +149,21 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
         return new Dictionary<string, string>();
     }
 
+    public virtual string? CaptureMapRecipeId()
+    {
+        return null;
+    }
+
+    public virtual IReadOnlyList<FactoryMapSeedItemEntry> CaptureMapSeedItems()
+    {
+        return System.Array.Empty<FactoryMapSeedItemEntry>();
+    }
+
+    public virtual bool TryApplyMapRecipe(string recipeId)
+    {
+        return string.IsNullOrWhiteSpace(recipeId);
+    }
+
     public virtual bool ApplyBlueprintConfiguration(IReadOnlyDictionary<string, string> configuration)
     {
         return configuration.Count == 0;
@@ -467,6 +482,34 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
         }
 
         return new FactoryInventorySectionModel(inventoryId, title, inventory.GridSize, slots, allowMove);
+    }
+
+    protected static IReadOnlyList<FactoryMapSeedItemEntry> CaptureSeedItemsFromInventory(FactorySlottedItemInventory inventory)
+    {
+        var counts = new Dictionary<FactoryItemKind, int>();
+        var snapshot = inventory.Snapshot();
+        for (var index = 0; index < snapshot.Length; index++)
+        {
+            var item = snapshot[index].Item;
+            if (item is null || snapshot[index].StackCount <= 0)
+            {
+                continue;
+            }
+
+            counts[item.ItemKind] = counts.TryGetValue(item.ItemKind, out var existingCount)
+                ? existingCount + snapshot[index].StackCount
+                : snapshot[index].StackCount;
+        }
+
+        var kinds = new List<FactoryItemKind>(counts.Keys);
+        kinds.Sort();
+        var seeds = new List<FactoryMapSeedItemEntry>(kinds.Count);
+        for (var index = 0; index < kinds.Count; index++)
+        {
+            seeds.Add(new FactoryMapSeedItemEntry(kinds[index], counts[kinds[index]]));
+        }
+
+        return seeds;
     }
 
     private Node GetVisualParent()

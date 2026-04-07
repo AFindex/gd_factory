@@ -153,6 +153,11 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
         return false;
     }
 
+    public override IReadOnlyList<FactoryMapSeedItemEntry> CaptureMapSeedItems()
+    {
+        return CaptureSeedItemsFromInventory(_ammoInventory);
+    }
+
     public override void _Process(double delta)
     {
         var deltaF = (float)delta;

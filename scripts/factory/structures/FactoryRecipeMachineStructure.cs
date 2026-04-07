@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 
 public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, IFactoryItemProvider, IFactoryItemReceiver, IFactoryPowerConsumer
@@ -292,6 +293,16 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
         };
     }
 
+    public override string? CaptureMapRecipeId()
+    {
+        return SupportsRecipeSelection ? ActiveRecipe.Id : null;
+    }
+
+    public override IReadOnlyList<FactoryMapSeedItemEntry> CaptureMapSeedItems()
+    {
+        return CaptureSeedItemsFromInventory(_inputInventory);
+    }
+
     public override bool ApplyBlueprintConfiguration(IReadOnlyDictionary<string, string> configuration)
     {
         if (!configuration.TryGetValue("recipe_id", out var recipeId))
@@ -300,6 +311,21 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
         }
 
         return TrySetDetailRecipe(recipeId);
+    }
+
+    public override bool TryApplyMapRecipe(string recipeId)
+    {
+        if (string.IsNullOrWhiteSpace(recipeId))
+        {
+            return true;
+        }
+
+        if (SupportsRecipeSelection)
+        {
+            return TrySetDetailRecipe(recipeId);
+        }
+
+        return string.Equals(ActiveRecipe.Id, recipeId, StringComparison.Ordinal);
     }
 
     protected void SetActiveRecipeById(string recipeId)

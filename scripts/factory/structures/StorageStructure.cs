@@ -126,6 +126,11 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
         return false;
     }
 
+    public override IReadOnlyList<FactoryMapSeedItemEntry> CaptureMapSeedItems()
+    {
+        return CaptureSeedItemsFromInventory(_inventory);
+    }
+
     public override void SimulationStep(SimulationController simulation, double stepSeconds)
     {
         _dispatchCooldown = Mathf.Max(0.0, (float)(_dispatchCooldown - stepSeconds));

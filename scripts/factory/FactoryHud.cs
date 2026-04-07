@@ -66,6 +66,7 @@ public partial class FactoryHud : CanvasLayer
     private Label? _testingNoteLabel;
     private Label? _testingTargetLabel;
     private Label? _testingPreviewLabel;
+    private Label? _testingSaveStatusLabel;
     private PanelContainer? _inspectionPanel;
     private Label? _inspectionTitleLabel;
     private Label? _inspectionBodyLabel;
@@ -84,6 +85,8 @@ public partial class FactoryHud : CanvasLayer
     public event Action? BlueprintConfirmRequested;
     public event Action<string>? BlueprintDeleteRequested;
     public event Action? BlueprintCancelRequested;
+    public event Action? MapSaveRequested;
+    public event Action? MapSourceSaveRequested;
     public event Action<string>? WorkspaceSelected;
 
     public string ProfilerText => _profilerLabel?.Text ?? string.Empty;
@@ -181,6 +184,7 @@ public partial class FactoryHud : CanvasLayer
         SetCombatStats(0, 0, 0);
         SetNote("默认场景现在围绕真实采矿、冶炼、弹药补给、维护站与接收站循环组织；验证工作区主要用于观察这些链路。");
         SetInspection(null, null);
+        SetPersistenceStatus(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: false));
         UpdateLayout();
         GetViewport().SizeChanged += UpdateLayout;
     }
@@ -408,6 +412,14 @@ public partial class FactoryHud : CanvasLayer
         }
     }
 
+    public void SetPersistenceStatus(string text)
+    {
+        if (_testingSaveStatusLabel is not null)
+        {
+            _testingSaveStatusLabel.Text = text;
+        }
+    }
+
     private IReadOnlyList<FactoryWorkspaceDescriptor> BuildWorkspaceDescriptors()
     {
         return new[]
@@ -483,6 +495,7 @@ public partial class FactoryHud : CanvasLayer
 
         body.AddChild(CreateSectionLabel("蓝图工作区", 14, FactoryUiTheme.Text));
         body.AddChild(CreateValueLabel("框选保存、库浏览和应用预览都集中在这里，不再单独弹出默认常驻窗口。", FactoryUiTheme.TextSubtle));
+        body.AddChild(CreateValueLabel(FactoryPersistencePaths.BuildBlueprintPersistenceHint(), FactoryUiTheme.TextSubtle));
 
         var blueprintMargin = new MarginContainer();
         blueprintMargin.MouseFilter = Control.MouseFilterEnum.Ignore;
@@ -553,21 +566,27 @@ public partial class FactoryHud : CanvasLayer
         body.AddChild(CreateSectionLabel("验证工作区", 14, FactoryUiTheme.Text));
         body.AddChild(CreateValueLabel("把 sandbox 案例观察、建造验证和蓝图验证整理成一个独立面板，而不是默认摊开在主 HUD 上。", FactoryUiTheme.TextSubtle));
 
-        var jumpRow = new HBoxContainer();
-        jumpRow.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        jumpRow.AddThemeConstantOverride("separation", 6);
-        body.AddChild(jumpRow);
+        var jumpGrid = new GridContainer();
+        jumpGrid.Columns = 2;
+        jumpGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        jumpGrid.AddThemeConstantOverride("h_separation", 6);
+        jumpGrid.AddThemeConstantOverride("v_separation", 6);
+        body.AddChild(jumpGrid);
 
-        jumpRow.AddChild(CreateWorkspaceJumpButton("打开建造工作区", BuildWorkspaceId));
-        jumpRow.AddChild(CreateWorkspaceJumpButton("打开蓝图工作区", BlueprintWorkspaceId));
+        jumpGrid.AddChild(CreateWorkspaceJumpButton("打开建造工作区", BuildWorkspaceId));
+        jumpGrid.AddChild(CreateWorkspaceJumpButton("打开蓝图工作区", BlueprintWorkspaceId));
+        jumpGrid.AddChild(CreateActionButton("导出运行时副本", () => MapSaveRequested?.Invoke()));
+        jumpGrid.AddChild(CreateActionButton("保存到当前源", () => MapSourceSaveRequested?.Invoke()));
 
         body.AddChild(CreateDivider());
         _testingNoteLabel = CreateValueLabel(string.Empty, FactoryUiTheme.TextSubtle);
         _testingTargetLabel = CreateValueLabel("验证目标: 未选中建筑", FactoryUiTheme.TextMuted);
         _testingPreviewLabel = CreateValueLabel("验证提示: 等待状态更新。", FactoryUiTheme.TextMuted);
+        _testingSaveStatusLabel = CreateValueLabel(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: false), FactoryUiTheme.TextSubtle);
         body.AddChild(_testingNoteLabel);
         body.AddChild(_testingTargetLabel);
         body.AddChild(_testingPreviewLabel);
+        body.AddChild(_testingSaveStatusLabel);
 
         body.AddChild(CreateDivider());
         body.AddChild(CreateValueLabel("建议验证路径：观察采矿与接收站吞吐、点击建筑查看详情、Shift+左键框选蓝图、Delete/X 验证拆除与恢复。", FactoryUiTheme.TextSubtle));
@@ -608,6 +627,20 @@ public partial class FactoryHud : CanvasLayer
         };
         FactoryUiTheme.ApplyButtonTheme(button);
         button.Pressed += () => SetActiveWorkspace(workspaceId);
+        return button;
+    }
+
+    private Button CreateActionButton(string text, Action pressed)
+    {
+        var button = new Button
+        {
+            Text = text,
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            CustomMinimumSize = new Vector2(0.0f, 30.0f)
+        };
+        FactoryUiTheme.ApplyButtonTheme(button);
+        button.Pressed += pressed;
         return button;
     }
 

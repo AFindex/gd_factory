@@ -383,12 +383,15 @@ public partial class FactoryDemo : Node3D
         _hud.WorkspaceSelected += HandleHudWorkspaceSelected;
         _hud.BlueprintCaptureRequested += StartBlueprintCapture;
         _hud.BlueprintSaveRequested += HandleBlueprintSaveRequested;
+        _hud.MapSaveRequested += HandleMapSaveRequested;
+        _hud.MapSourceSaveRequested += HandleMapSourceSaveRequested;
         _hud.BlueprintSelected += HandleBlueprintSelected;
         _hud.BlueprintApplyRequested += EnterBlueprintApplyMode;
         _hud.BlueprintConfirmRequested += ConfirmBlueprintApply;
         _hud.BlueprintDeleteRequested += HandleBlueprintDeleteRequested;
         _hud.BlueprintCancelRequested += CancelBlueprintWorkflow;
         AddChild(_hud);
+        InitializePersistenceHud();
 
         _playerHud.HotbarSlotPressed += HandlePlayerHotbarPressed;
         _playerHud.BackpackInventoryMoveRequested += HandlePlayerInventoryMoveRequested;
@@ -1701,6 +1704,7 @@ public partial class FactoryDemo : Node3D
         _hasBlueprintSelectionRect = false;
         _blueprintMode = FactoryBlueprintWorkflowMode.None;
         _previewMessage = $"已保存蓝图：{savedRecord.DisplayName}";
+        ShowBlueprintPersistenceStatus(savedRecord);
     }
 
     private void HandleBlueprintSelected(string blueprintId)

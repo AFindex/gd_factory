@@ -256,7 +256,7 @@ structure|Belt|0|0|South
                     $"Runtime state application could not find structure at ({entry.Cell.X}, {entry.Cell.Y}).");
             }
 
-            if (!string.IsNullOrWhiteSpace(entry.RecipeId) && !structure.TrySetDetailRecipe(entry.RecipeId))
+            if (!string.IsNullOrWhiteSpace(entry.RecipeId) && !structure.TryApplyMapRecipe(entry.RecipeId))
             {
                 throw new InvalidDataException(
                     $"Structure '{entry.Kind}' at ({entry.Cell.X}, {entry.Cell.Y}) rejected recipe '{entry.RecipeId}'.");

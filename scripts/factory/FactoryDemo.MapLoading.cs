@@ -9,8 +9,9 @@ public partial class FactoryDemo
             return;
         }
 
+        var mapPath = DemoLaunchOptions.ResolveFactoryWorldMapPath();
         FactoryMapRuntimeLoader.LoadWorldMap(
-            FactoryMapPaths.StaticSandboxWorld,
+            mapPath,
             _grid,
             _structureRoot,
             _simulation);

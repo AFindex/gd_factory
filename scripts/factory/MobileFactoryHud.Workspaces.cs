@@ -334,6 +334,20 @@ public partial class MobileFactoryHud
             11,
             FactoryUiTheme.TextSubtle));
 
+        var saveGrid = new GridContainer();
+        saveGrid.Columns = 2;
+        saveGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        saveGrid.AddThemeConstantOverride("h_separation", 6);
+        saveGrid.AddThemeConstantOverride("v_separation", 6);
+        body.AddChild(saveGrid);
+        saveGrid.AddChild(CreateEditorActionButton("导出世界副本", () => WorldMapSaveRequested?.Invoke()));
+        saveGrid.AddChild(CreateEditorActionButton("覆盖世界源", () => WorldMapSourceSaveRequested?.Invoke()));
+        saveGrid.AddChild(CreateEditorActionButton("导出内部副本", () => InteriorMapSaveRequested?.Invoke()));
+        saveGrid.AddChild(CreateEditorActionButton("覆盖内部源", () => InteriorMapSourceSaveRequested?.Invoke()));
+
+        _saveStatusLabel = CreateEditorLabel(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: true), 11, FactoryUiTheme.TextSubtle);
+        body.AddChild(_saveStatusLabel);
+
         _inspectionPanel = new PanelContainer { Visible = false };
         body.AddChild(_inspectionPanel);
         var inspectionBody = new VBoxContainer();
@@ -369,6 +383,7 @@ public partial class MobileFactoryHud
 
         body.AddChild(CreateEditorLabel("蓝图工作区", 14, FactoryUiTheme.Text));
         body.AddChild(CreateEditorLabel("从顶部菜单进入蓝图面板，保存内部布局或应用共享蓝图。", 11, FactoryUiTheme.TextSubtle));
+        body.AddChild(CreateEditorLabel(FactoryPersistencePaths.BuildBlueprintPersistenceHint(), 11, FactoryUiTheme.TextSubtle));
 
         var blueprintMargin = new MarginContainer();
         blueprintMargin.MouseFilter = Control.MouseFilterEnum.Ignore;
@@ -567,6 +582,21 @@ public partial class MobileFactoryHud
         FactoryUiTheme.ApplyButtonTheme(rotateRight, compact: true);
         rotateRight.Pressed += () => EditorRotateRequested?.Invoke(1);
         rotateRow.AddChild(rotateRight);
+    }
+
+    private Button CreateEditorActionButton(string text, Action pressed)
+    {
+        var button = new Button
+        {
+            Text = text,
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            CustomMinimumSize = new Vector2(0.0f, 28.0f)
+        };
+        button.AddThemeFontSizeOverride("font_size", 11);
+        FactoryUiTheme.ApplyButtonTheme(button, compact: true);
+        button.Pressed += pressed;
+        return button;
     }
 
     private void RefreshFocusVisuals()
