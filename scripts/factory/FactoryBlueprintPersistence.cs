@@ -6,14 +6,25 @@ using System.Text.Json;
 
 public sealed class FactoryBlueprintPersistenceSnapshot
 {
-    public FactoryBlueprintPersistenceSnapshot(IReadOnlyList<FactoryBlueprintRecord>? records = null, string? activeBlueprintId = null)
+    public FactoryBlueprintPersistenceSnapshot(
+        IReadOnlyList<FactoryBlueprintRecord>? runtimeRecords = null,
+        IReadOnlyList<FactoryBlueprintRecord>? sourceRecords = null,
+        string? activeBlueprintId = null)
     {
-        Records = records ?? Array.Empty<FactoryBlueprintRecord>();
+        RuntimeRecords = runtimeRecords ?? Array.Empty<FactoryBlueprintRecord>();
+        SourceRecords = sourceRecords ?? Array.Empty<FactoryBlueprintRecord>();
         ActiveBlueprintId = activeBlueprintId;
     }
 
-    public IReadOnlyList<FactoryBlueprintRecord> Records { get; }
+    public IReadOnlyList<FactoryBlueprintRecord> RuntimeRecords { get; }
+    public IReadOnlyList<FactoryBlueprintRecord> SourceRecords { get; }
     public string? ActiveBlueprintId { get; }
+}
+
+public enum FactoryBlueprintPersistenceTarget
+{
+    Runtime,
+    Source
 }
 
 public static class FactoryBlueprintPersistence
@@ -26,87 +37,58 @@ public static class FactoryBlueprintPersistence
 
     public static FactoryBlueprintPersistenceSnapshot Load()
     {
-        if (!FactoryPersistencePaths.IsPersistenceEnabled())
-        {
-            return new FactoryBlueprintPersistenceSnapshot();
-        }
-
-        FactoryPersistencePaths.EnsureDirectory(FactoryPersistencePaths.BlueprintDirectory);
-        var records = new List<FactoryBlueprintRecord>();
-        var directoryPath = FactoryPersistencePaths.GetGlobalPath(FactoryPersistencePaths.BlueprintDirectory);
-        if (Directory.Exists(directoryPath))
-        {
-            var files = Directory.GetFiles(directoryPath, "*.json", SearchOption.TopDirectoryOnly);
-            Array.Sort(files, StringComparer.OrdinalIgnoreCase);
-            for (var index = 0; index < files.Length; index++)
-            {
-                var filePath = files[index];
-                if (string.Equals(Path.GetFileName(filePath), Path.GetFileName(FactoryPersistencePaths.BlueprintStateFilePath), StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                try
-                {
-                    var json = File.ReadAllText(filePath);
-                    records.Add(DeserializeRecord(json, filePath));
-                }
-                catch (Exception ex)
-                {
-                    GD.PushWarning($"Failed to load persisted blueprint '{filePath}': {ex.Message}");
-                }
-            }
-        }
-
-        return new FactoryBlueprintPersistenceSnapshot(records, LoadActiveBlueprintId());
+        var runtimeRecords = FactoryPersistencePaths.IsPersistenceEnabled()
+            ? LoadRecordsFromDirectory(
+                FactoryPersistencePaths.BlueprintDirectory,
+                skipFileName: Path.GetFileName(FactoryPersistencePaths.BlueprintStateFilePath))
+            : Array.Empty<FactoryBlueprintRecord>();
+        var sourceRecords = LoadRecordsFromDirectory(FactoryPersistencePaths.BlueprintSourceDirectory);
+        return new FactoryBlueprintPersistenceSnapshot(runtimeRecords, sourceRecords, LoadActiveBlueprintId());
     }
 
-    public static void Save(
-        IReadOnlyList<FactoryBlueprintRecord> records,
-        string? activeBlueprintId,
-        Func<FactoryBlueprintRecord, bool> shouldPersist)
+    public static void SaveRecord(FactoryBlueprintRecord record, FactoryBlueprintPersistenceTarget target)
     {
         if (!FactoryPersistencePaths.IsPersistenceEnabled())
         {
             return;
         }
 
-        FactoryPersistencePaths.EnsureDirectory(FactoryPersistencePaths.BlueprintDirectory);
-        var directoryPath = FactoryPersistencePaths.GetGlobalPath(FactoryPersistencePaths.BlueprintDirectory);
-        var expectedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        for (var index = 0; index < records.Count; index++)
+        var existingGlobalFilePath = FindExistingRecordFilePath(record.Id, target);
+        var filePath = GetBlueprintFilePath(record, target);
+        var globalFilePath = FactoryPersistencePaths.GetGlobalPath(filePath);
+        var directoryPath = Path.GetDirectoryName(FactoryPersistencePaths.GetGlobalPath(filePath));
+        if (!string.IsNullOrWhiteSpace(directoryPath))
         {
-            var record = records[index];
-            if (!shouldPersist(record))
-            {
-                continue;
-            }
-
-            var userFilePath = FactoryPersistencePaths.BuildBlueprintFilePath(record.Id);
-            var globalFilePath = FactoryPersistencePaths.GetGlobalPath(userFilePath);
-            File.WriteAllText(globalFilePath, SerializeRecord(record));
-            expectedFiles.Add(globalFilePath);
+            Directory.CreateDirectory(directoryPath);
         }
 
-        if (Directory.Exists(directoryPath))
+        File.WriteAllText(globalFilePath, SerializeRecord(record));
+        if (!string.IsNullOrWhiteSpace(existingGlobalFilePath)
+            && !string.Equals(existingGlobalFilePath, globalFilePath, StringComparison.OrdinalIgnoreCase)
+            && File.Exists(existingGlobalFilePath))
         {
-            var files = Directory.GetFiles(directoryPath, "*.json", SearchOption.TopDirectoryOnly);
-            for (var index = 0; index < files.Length; index++)
-            {
-                var filePath = files[index];
-                if (string.Equals(Path.GetFileName(filePath), Path.GetFileName(FactoryPersistencePaths.BlueprintStateFilePath), StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                if (!expectedFiles.Contains(filePath))
-                {
-                    File.Delete(filePath);
-                }
-            }
+            File.Delete(existingGlobalFilePath);
         }
+    }
 
+    public static void DeleteRecord(string blueprintId, FactoryBlueprintPersistenceTarget target)
+    {
+        var globalFilePath = FindExistingRecordFilePath(blueprintId, target);
+        if (!string.IsNullOrWhiteSpace(globalFilePath) && File.Exists(globalFilePath))
+        {
+            File.Delete(globalFilePath);
+        }
+    }
+
+    public static void SaveActiveBlueprintState(string? activeBlueprintId)
+    {
         SaveActiveBlueprintId(activeBlueprintId);
+    }
+
+    public static string ResolveRecordGlobalPath(FactoryBlueprintRecord record, FactoryBlueprintPersistenceTarget target)
+    {
+        return FindExistingRecordFilePath(record.Id, target)
+            ?? FactoryPersistencePaths.GetGlobalPath(GetBlueprintFilePath(record, target));
     }
 
     private static string SerializeRecord(FactoryBlueprintRecord record)
@@ -235,6 +217,11 @@ public static class FactoryBlueprintPersistence
 
     private static string? LoadActiveBlueprintId()
     {
+        if (!FactoryPersistencePaths.IsPersistenceEnabled())
+        {
+            return null;
+        }
+
         var statePath = FactoryPersistencePaths.GetGlobalPath(FactoryPersistencePaths.BlueprintStateFilePath);
         if (!File.Exists(statePath))
         {
@@ -269,6 +256,138 @@ public static class FactoryBlueprintPersistence
             ActiveBlueprintId = activeBlueprintId
         };
         File.WriteAllText(statePath, JsonSerializer.Serialize(dto, SerializerOptions));
+    }
+
+    private static IReadOnlyList<FactoryBlueprintRecord> LoadRecordsFromDirectory(string directoryPath, string? skipFileName = null)
+    {
+        var records = new List<FactoryBlueprintRecord>();
+        var globalDirectoryPath = FactoryPersistencePaths.GetGlobalPath(directoryPath);
+        if (!Directory.Exists(globalDirectoryPath))
+        {
+            return records;
+        }
+
+        var files = Directory.GetFiles(globalDirectoryPath, "*.json", SearchOption.TopDirectoryOnly);
+        Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < files.Length; index++)
+        {
+            var filePath = files[index];
+            if (!string.IsNullOrWhiteSpace(skipFileName)
+                && string.Equals(Path.GetFileName(filePath), skipFileName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            try
+            {
+                var json = File.ReadAllText(filePath);
+                records.Add(DeserializeRecord(json, filePath));
+            }
+            catch (Exception ex)
+            {
+                GD.PushWarning($"Failed to load persisted blueprint '{filePath}': {ex.Message}");
+            }
+        }
+
+        return records;
+    }
+
+    private static string GetBlueprintFilePath(FactoryBlueprintRecord record, FactoryBlueprintPersistenceTarget target)
+    {
+        var directoryPath = GetBlueprintDirectoryPath(target);
+        var preferredStem = FactoryPersistencePaths.SanitizeBlueprintFileStem(record.DisplayName);
+        var existingGlobalFilePath = FindExistingRecordFilePath(record.Id, target);
+        var preferredFilePath = CombineBlueprintFilePath(directoryPath, preferredStem);
+        var preferredGlobalFilePath = FactoryPersistencePaths.GetGlobalPath(preferredFilePath);
+
+        if (!File.Exists(preferredGlobalFilePath)
+            || string.Equals(existingGlobalFilePath, preferredGlobalFilePath, StringComparison.OrdinalIgnoreCase))
+        {
+            return preferredFilePath;
+        }
+
+        var suffix = 2;
+        while (true)
+        {
+            var candidateFilePath = CombineBlueprintFilePath(directoryPath, $"{preferredStem}-{suffix}");
+            var candidateGlobalFilePath = FactoryPersistencePaths.GetGlobalPath(candidateFilePath);
+            if (!File.Exists(candidateGlobalFilePath)
+                || string.Equals(existingGlobalFilePath, candidateGlobalFilePath, StringComparison.OrdinalIgnoreCase))
+            {
+                return candidateFilePath;
+            }
+
+            suffix++;
+        }
+    }
+
+    private static string? FindExistingRecordFilePath(string blueprintId, FactoryBlueprintPersistenceTarget target)
+    {
+        var directoryPath = FactoryPersistencePaths.GetGlobalPath(GetBlueprintDirectoryPath(target));
+        if (!Directory.Exists(directoryPath))
+        {
+            return null;
+        }
+
+        var files = Directory.GetFiles(directoryPath, "*.json", SearchOption.TopDirectoryOnly);
+        for (var index = 0; index < files.Length; index++)
+        {
+            var filePath = files[index];
+            if (IsSkippedBlueprintFile(filePath, target))
+            {
+                continue;
+            }
+
+            if (TryReadBlueprintId(filePath, out var existingBlueprintId)
+                && string.Equals(existingBlueprintId, blueprintId, StringComparison.Ordinal))
+            {
+                return filePath;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool TryReadBlueprintId(string filePath, out string blueprintId)
+    {
+        blueprintId = string.Empty;
+        try
+        {
+            var json = File.ReadAllText(filePath);
+            var dto = JsonSerializer.Deserialize<BlueprintRecordDto>(json, SerializerOptions);
+            if (string.IsNullOrWhiteSpace(dto?.Id))
+            {
+                return false;
+            }
+
+            blueprintId = dto.Id;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsSkippedBlueprintFile(string filePath, FactoryBlueprintPersistenceTarget target)
+    {
+        return target == FactoryBlueprintPersistenceTarget.Runtime
+            && string.Equals(
+                Path.GetFileName(filePath),
+                Path.GetFileName(FactoryPersistencePaths.BlueprintStateFilePath),
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetBlueprintDirectoryPath(FactoryBlueprintPersistenceTarget target)
+    {
+        return target == FactoryBlueprintPersistenceTarget.Source
+            ? FactoryPersistencePaths.BlueprintSourceDirectory
+            : FactoryPersistencePaths.BlueprintDirectory;
+    }
+
+    private static string CombineBlueprintFilePath(string directoryPath, string fileStem)
+    {
+        return $"{directoryPath}/{fileStem}.json";
     }
 
     private sealed class BlueprintRecordDto

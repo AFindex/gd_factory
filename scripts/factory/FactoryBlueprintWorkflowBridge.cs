@@ -2,7 +2,10 @@ using Godot;
 
 public static class FactoryBlueprintWorkflowBridge
 {
-    public static FactoryBlueprintRecord SavePendingCapture(FactoryBlueprintRecord pendingCapture, string requestedName)
+    public static FactoryBlueprintRecord SavePendingCapture(
+        FactoryBlueprintRecord pendingCapture,
+        string requestedName,
+        FactoryBlueprintPersistenceTarget target = FactoryBlueprintPersistenceTarget.Runtime)
     {
         var displayName = string.IsNullOrWhiteSpace(requestedName)
             ? pendingCapture.DisplayName
@@ -15,7 +18,7 @@ public static class FactoryBlueprintWorkflowBridge
             pendingCapture.BoundsSize,
             pendingCapture.Entries,
             pendingCapture.RequiredAttachments);
-        FactoryBlueprintLibrary.AddOrUpdate(savedRecord);
+        FactoryBlueprintLibrary.AddOrUpdate(savedRecord, target);
         FactoryBlueprintLibrary.SelectActive(savedRecord.Id);
         return savedRecord;
     }

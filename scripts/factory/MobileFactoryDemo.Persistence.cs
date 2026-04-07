@@ -99,15 +99,16 @@ public partial class MobileFactoryDemo
         UpdateHud();
     }
 
-    private void ShowBlueprintPersistenceStatus(FactoryBlueprintRecord savedRecord)
+    private void ShowBlueprintPersistenceStatus(FactoryBlueprintRecord savedRecord, FactoryBlueprintPersistenceTarget target)
     {
         if (_hud is null)
         {
             return;
         }
 
-        var blueprintPath = FactoryPersistencePaths.GetGlobalPath(FactoryPersistencePaths.BuildBlueprintFilePath(savedRecord.Id));
-        _interiorPreviewMessage = $"已保存蓝图：{savedRecord.DisplayName}\n{blueprintPath}";
-        _hud.SetPersistenceStatus($"蓝图已保存：{blueprintPath}\n世界地图目录：{FactoryPersistencePaths.GetWorldMapDirectoryGlobalPath()}\n内部地图目录：{FactoryPersistencePaths.GetInteriorMapDirectoryGlobalPath()}");
+        var blueprintPath = FactoryBlueprintPersistence.ResolveRecordGlobalPath(savedRecord, target);
+        var targetLabel = target == FactoryBlueprintPersistenceTarget.Source ? "工程内" : "运行时";
+        _interiorPreviewMessage = $"已保存蓝图到{targetLabel}：{savedRecord.DisplayName}\n{blueprintPath}";
+        _hud.SetPersistenceStatus($"蓝图已保存到{targetLabel}：{blueprintPath}\n运行时蓝图目录：{FactoryPersistencePaths.GetBlueprintDirectoryGlobalPath()}\n工程蓝图目录：{FactoryPersistencePaths.GetBlueprintSourceDirectoryGlobalPath()}");
     }
 }

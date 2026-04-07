@@ -122,9 +122,9 @@ public partial class MobileFactoryHud : CanvasLayer
     public event Action<string>? EditorDetailRecipeSelected;
     public event Action<string>? EditorDetailActionRequested;
     public event Action? EditorDetailClosed;
-    public event Action? BlueprintCaptureSelectionRequested;
     public event Action? BlueprintCaptureFullRequested;
-    public event Action<string>? BlueprintSaveRequested;
+    public event Action<string>? BlueprintRuntimeSaveRequested;
+    public event Action<string>? BlueprintSourceSaveRequested;
     public event Action<string>? BlueprintSelected;
     public event Action? BlueprintApplyRequested;
     public event Action? BlueprintConfirmRequested;

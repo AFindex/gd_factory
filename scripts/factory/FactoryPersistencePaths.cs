@@ -9,6 +9,7 @@ public static class FactoryPersistencePaths
     public const string InteriorMapDirectory = PersistenceRootDirectory + "/maps/interior";
     public const string BlueprintDirectory = PersistenceRootDirectory + "/blueprints";
     public const string BlueprintStateFilePath = BlueprintDirectory + "/_state.json";
+    public const string BlueprintSourceDirectory = "res://data/factory/blueprints";
 
     public static bool IsPersistenceEnabled()
     {
@@ -53,6 +54,11 @@ public static class FactoryPersistencePaths
         return GetGlobalPath(BlueprintDirectory);
     }
 
+    public static string GetBlueprintSourceDirectoryGlobalPath()
+    {
+        return GetGlobalPath(BlueprintSourceDirectory);
+    }
+
     public static string BuildBlueprintPersistenceHint()
     {
         if (!IsPersistenceEnabled())
@@ -60,7 +66,7 @@ public static class FactoryPersistencePaths
             return "当前运行处于 smoke/validate 模式，蓝图持久化已禁用。";
         }
 
-        return $"蓝图会自动保存到 {GetBlueprintDirectoryGlobalPath()}。";
+        return $"蓝图可保存到运行时目录 {GetBlueprintDirectoryGlobalPath()}，也可保存到工程目录 {GetBlueprintSourceDirectoryGlobalPath()}。";
     }
 
     public static string BuildPersistenceSummary(bool includeInteriorMap)
@@ -90,6 +96,26 @@ public static class FactoryPersistencePaths
     public static string BuildBlueprintFilePath(string blueprintId)
     {
         return $"{BlueprintDirectory}/{SanitizeFileStem(blueprintId)}.json";
+    }
+
+    public static string BuildBlueprintSourceFilePath(string blueprintId)
+    {
+        return $"{BlueprintSourceDirectory}/{SanitizeFileStem(blueprintId)}.json";
+    }
+
+    public static string BuildBlueprintFilePathFromDisplayName(string displayName)
+    {
+        return $"{BlueprintDirectory}/{SanitizeFileStem(displayName)}.json";
+    }
+
+    public static string BuildBlueprintSourceFilePathFromDisplayName(string displayName)
+    {
+        return $"{BlueprintSourceDirectory}/{SanitizeFileStem(displayName)}.json";
+    }
+
+    public static string SanitizeBlueprintFileStem(string? rawValue)
+    {
+        return SanitizeFileStem(rawValue);
     }
 
     private static string SanitizeFileStem(string? rawValue)

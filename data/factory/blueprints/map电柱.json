@@ -1,0 +1,350 @@
+{
+  "FormatVersion": 1,
+  "Id": "20cea4cf788e4796b75ebca116c9d38b",
+  "DisplayName": "map\u7535\u67F1",
+  "SourceSiteKind": "WorldGrid",
+  "SuggestedAnchorCell": {
+    "X": -8,
+    "Y": -18
+  },
+  "BoundsSize": {
+    "X": 15,
+    "Y": 5
+  },
+  "Entries": [
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 0,
+        "Y": 0
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 3,
+        "Y": 0
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 6,
+        "Y": 0
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 7,
+        "Y": 0
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 8,
+        "Y": 0
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 11,
+        "Y": 0
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 12,
+        "Y": 0
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 13,
+        "Y": 0
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 0,
+        "Y": 1
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 1,
+        "Y": 1
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 2,
+        "Y": 1
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 3,
+        "Y": 1
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 5,
+        "Y": 1
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 9,
+        "Y": 1
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 11,
+        "Y": 1
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 14,
+        "Y": 1
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 0,
+        "Y": 2
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 2,
+        "Y": 2
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 3,
+        "Y": 2
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 5,
+        "Y": 2
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 6,
+        "Y": 2
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 7,
+        "Y": 2
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 8,
+        "Y": 2
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 9,
+        "Y": 2
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 11,
+        "Y": 2
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 12,
+        "Y": 2
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 13,
+        "Y": 2
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 0,
+        "Y": 3
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 3,
+        "Y": 3
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 5,
+        "Y": 3
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 9,
+        "Y": 3
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 11,
+        "Y": 3
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 0,
+        "Y": 4
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 3,
+        "Y": 4
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 5,
+        "Y": 4
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 9,
+        "Y": 4
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "PowerPole",
+      "LocalCell": {
+        "X": 11,
+        "Y": 4
+      },
+      "Facing": "East",
+      "Configuration": null
+    }
+  ],
+  "RequiredAttachments": []
+}

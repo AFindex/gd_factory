@@ -482,9 +482,9 @@ public partial class MobileFactoryDemo : Node3D
         _hud.EditorDetailRecipeSelected += HandleEditorDetailRecipeSelected;
         _hud.EditorDetailActionRequested += HandleEditorDetailActionRequested;
         _hud.EditorDetailClosed += HandleEditorDetailClosed;
-        _hud.BlueprintCaptureSelectionRequested += StartInteriorBlueprintCapture;
         _hud.BlueprintCaptureFullRequested += CaptureCurrentInteriorBlueprint;
-        _hud.BlueprintSaveRequested += HandleInteriorBlueprintSaveRequested;
+        _hud.BlueprintRuntimeSaveRequested += name => HandleInteriorBlueprintSaveRequested(name, FactoryBlueprintPersistenceTarget.Runtime);
+        _hud.BlueprintSourceSaveRequested += name => HandleInteriorBlueprintSaveRequested(name, FactoryBlueprintPersistenceTarget.Source);
         _hud.WorldMapSaveRequested += HandleWorldMapSaveRequested;
         _hud.InteriorMapSaveRequested += HandleInteriorMapSaveRequested;
         _hud.WorldMapSourceSaveRequested += HandleWorldMapSourceSaveRequested;
@@ -2539,7 +2539,6 @@ public partial class MobileFactoryDemo : Node3D
             SuggestedName = _pendingBlueprintCapture?.DisplayName ?? string.Empty,
             PendingCaptureId = _pendingBlueprintCapture?.Id,
             ActiveBlueprintId = activeBlueprint?.Id,
-            AllowSelectionCapture = true,
             AllowFullCapture = true,
             CanSaveCapture = _pendingBlueprintCapture is not null,
             CanConfirmApply = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && _interiorBlueprintPlan?.IsValid == true,
@@ -3421,19 +3420,18 @@ public partial class MobileFactoryDemo : Node3D
             $"内部蓝图 {CountEditableInteriorStructures()} 件");
     }
 
-    private void HandleInteriorBlueprintSaveRequested(string name)
+    private void HandleInteriorBlueprintSaveRequested(string name, FactoryBlueprintPersistenceTarget target)
     {
         if (_pendingBlueprintCapture is null)
         {
             return;
         }
 
-        var savedRecord = FactoryBlueprintWorkflowBridge.SavePendingCapture(_pendingBlueprintCapture, name);
+        var savedRecord = FactoryBlueprintWorkflowBridge.SavePendingCapture(_pendingBlueprintCapture, name, target);
         _pendingBlueprintCapture = null;
         _hasInteriorBlueprintSelectionRect = false;
         _blueprintMode = FactoryBlueprintWorkflowMode.None;
-        _interiorPreviewMessage = $"已保存蓝图：{savedRecord.DisplayName}";
-        ShowBlueprintPersistenceStatus(savedRecord);
+        ShowBlueprintPersistenceStatus(savedRecord, target);
     }
 
     private void HandleInteriorBlueprintSelected(string blueprintId)

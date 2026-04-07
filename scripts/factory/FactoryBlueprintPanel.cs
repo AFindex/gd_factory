@@ -12,7 +12,6 @@ public sealed class FactoryBlueprintPanelState
     public string SuggestedName { get; init; } = string.Empty;
     public string? PendingCaptureId { get; init; }
     public string? ActiveBlueprintId { get; init; }
-    public bool AllowSelectionCapture { get; init; } = true;
     public bool AllowFullCapture { get; init; }
     public bool CanSaveCapture { get; init; }
     public bool CanConfirmApply { get; init; }
@@ -33,9 +32,9 @@ public partial class FactoryBlueprintPanel : PanelContainer
     private Label? _issueLabel;
     private ItemList? _blueprintList;
     private LineEdit? _nameEdit;
-    private Button? _captureSelectionButton;
     private Button? _captureFullButton;
-    private Button? _saveButton;
+    private Button? _saveRuntimeButton;
+    private Button? _saveSourceButton;
     private Button? _applyButton;
     private Button? _confirmButton;
     private Button? _deleteButton;
@@ -47,10 +46,10 @@ public partial class FactoryBlueprintPanel : PanelContainer
     private Rect2 _defaultRect;
     private Vector2 _dragOffset;
 
-    public event Action? CaptureSelectionRequested;
     public event Action? CaptureFullRequested;
     public event Action<string>? BlueprintSelected;
-    public event Action<string>? SaveCaptureRequested;
+    public event Action<string>? SaveCaptureRuntimeRequested;
+    public event Action<string>? SaveCaptureSourceRequested;
     public event Action? ApplyActiveRequested;
     public event Action? ConfirmApplyRequested;
     public event Action<string>? DeleteSelectedRequested;
@@ -139,26 +138,19 @@ public partial class FactoryBlueprintPanel : PanelContainer
         body.AddChild(_modeLabel);
         _activeLabel = CreateValueLabel("[ACTIVE] 当前蓝图：未选择", FactoryUiTheme.Text);
 
-        var captureRow = new HBoxContainer();
-        captureRow.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        captureRow.AddThemeConstantOverride("separation", 6);
-        body.AddChild(captureRow);
-
-        _captureSelectionButton = CreateActionButton("框选保存");
-        _captureSelectionButton.Pressed += () => CaptureSelectionRequested?.Invoke();
-        captureRow.AddChild(_captureSelectionButton);
-
         _captureFullButton = CreateActionButton("保存当前布局");
         _captureFullButton.Pressed += () => CaptureFullRequested?.Invoke();
-        captureRow.AddChild(_captureFullButton);
+        body.AddChild(_captureFullButton);
 
         _captureSummaryLabel = CreateValueLabel("未捕获待保存蓝图。", FactoryUiTheme.TextMuted);
         body.AddChild(_captureSummaryLabel);
 
-        var saveRow = new HBoxContainer();
-        saveRow.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        saveRow.AddThemeConstantOverride("separation", 6);
-        body.AddChild(saveRow);
+        body.AddChild(CreateValueLabel("在场景中按 Shift+左键框选后，可在这里命名并选择保存位置。", FactoryUiTheme.TextSubtle));
+
+        var saveNameRow = new HBoxContainer();
+        saveNameRow.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        saveNameRow.AddThemeConstantOverride("separation", 6);
+        body.AddChild(saveNameRow);
 
         _nameEdit = new LineEdit
         {
@@ -167,11 +159,22 @@ public partial class FactoryBlueprintPanel : PanelContainer
             MouseFilter = Control.MouseFilterEnum.Stop
         };
         FactoryUiTheme.ApplyLineEditTheme(_nameEdit);
-        saveRow.AddChild(_nameEdit);
+        saveNameRow.AddChild(_nameEdit);
 
-        _saveButton = CreateActionButton("保存");
-        _saveButton.Pressed += () => SaveCaptureRequested?.Invoke(_nameEdit?.Text?.Trim() ?? string.Empty);
-        saveRow.AddChild(_saveButton);
+        var saveButtonGrid = new GridContainer();
+        saveButtonGrid.Columns = 2;
+        saveButtonGrid.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        saveButtonGrid.AddThemeConstantOverride("h_separation", 6);
+        saveButtonGrid.AddThemeConstantOverride("v_separation", 6);
+        body.AddChild(saveButtonGrid);
+
+        _saveRuntimeButton = CreateActionButton("保存到运行时");
+        _saveRuntimeButton.Pressed += () => SaveCaptureRuntimeRequested?.Invoke(_nameEdit?.Text?.Trim() ?? string.Empty);
+        saveButtonGrid.AddChild(_saveRuntimeButton);
+
+        _saveSourceButton = CreateActionButton("保存到工程内");
+        _saveSourceButton.Pressed += () => SaveCaptureSourceRequested?.Invoke(_nameEdit?.Text?.Trim() ?? string.Empty);
+        saveButtonGrid.AddChild(_saveSourceButton);
 
         body.AddChild(CreateSectionLabel("蓝图库", 13, FactoryUiTheme.Text));
         _blueprintList = new ItemList
@@ -322,19 +325,19 @@ public partial class FactoryBlueprintPanel : PanelContainer
             _issueLabel.Modulate = state.CanConfirmApply ? FactoryUiTheme.StatusOk : FactoryUiTheme.TextSubtle;
         }
 
-        if (_captureSelectionButton is not null)
-        {
-            _captureSelectionButton.Visible = state.AllowSelectionCapture;
-        }
-
         if (_captureFullButton is not null)
         {
             _captureFullButton.Visible = state.AllowFullCapture;
         }
 
-        if (_saveButton is not null)
+        if (_saveRuntimeButton is not null)
         {
-            _saveButton.Disabled = !state.CanSaveCapture;
+            _saveRuntimeButton.Disabled = !state.CanSaveCapture;
+        }
+
+        if (_saveSourceButton is not null)
+        {
+            _saveSourceButton.Disabled = !state.CanSaveCapture;
         }
 
         if (_confirmButton is not null)

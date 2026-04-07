@@ -78,8 +78,8 @@ public partial class FactoryHud : CanvasLayer
     public event Action<string, Vector2I, string, Vector2I, bool>? DetailInventoryTransferRequested;
     public event Action<string>? DetailRecipeSelected;
     public event Action? DetailClosed;
-    public event Action? BlueprintCaptureRequested;
-    public event Action<string>? BlueprintSaveRequested;
+    public event Action<string>? BlueprintRuntimeSaveRequested;
+    public event Action<string>? BlueprintSourceSaveRequested;
     public event Action<string>? BlueprintSelected;
     public event Action? BlueprintApplyRequested;
     public event Action? BlueprintConfirmRequested;
@@ -512,9 +512,9 @@ public partial class FactoryHud : CanvasLayer
         _blueprintPanel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         _blueprintPanel.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         _blueprintPanel.SetDocked(true);
-        _blueprintPanel.CaptureSelectionRequested += () => BlueprintCaptureRequested?.Invoke();
         _blueprintPanel.BlueprintSelected += blueprintId => BlueprintSelected?.Invoke(blueprintId);
-        _blueprintPanel.SaveCaptureRequested += name => BlueprintSaveRequested?.Invoke(name);
+        _blueprintPanel.SaveCaptureRuntimeRequested += name => BlueprintRuntimeSaveRequested?.Invoke(name);
+        _blueprintPanel.SaveCaptureSourceRequested += name => BlueprintSourceSaveRequested?.Invoke(name);
         _blueprintPanel.ApplyActiveRequested += () => BlueprintApplyRequested?.Invoke();
         _blueprintPanel.ConfirmApplyRequested += () => BlueprintConfirmRequested?.Invoke();
         _blueprintPanel.DeleteSelectedRequested += blueprintId => BlueprintDeleteRequested?.Invoke(blueprintId);

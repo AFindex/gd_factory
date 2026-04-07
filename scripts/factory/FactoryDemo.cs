@@ -381,8 +381,8 @@ public partial class FactoryDemo : Node3D
         _hud.DetailRecipeSelected += HandleDetailRecipeSelected;
         _hud.DetailClosed += HandleDetailWindowClosed;
         _hud.WorkspaceSelected += HandleHudWorkspaceSelected;
-        _hud.BlueprintCaptureRequested += StartBlueprintCapture;
-        _hud.BlueprintSaveRequested += HandleBlueprintSaveRequested;
+        _hud.BlueprintRuntimeSaveRequested += name => HandleBlueprintSaveRequested(name, FactoryBlueprintPersistenceTarget.Runtime);
+        _hud.BlueprintSourceSaveRequested += name => HandleBlueprintSaveRequested(name, FactoryBlueprintPersistenceTarget.Source);
         _hud.MapSaveRequested += HandleMapSaveRequested;
         _hud.MapSourceSaveRequested += HandleMapSourceSaveRequested;
         _hud.BlueprintSelected += HandleBlueprintSelected;
@@ -1343,7 +1343,6 @@ public partial class FactoryDemo : Node3D
             SuggestedName = _pendingBlueprintCapture?.DisplayName ?? string.Empty,
             PendingCaptureId = _pendingBlueprintCapture?.Id,
             ActiveBlueprintId = activeBlueprint?.Id,
-            AllowSelectionCapture = true,
             AllowFullCapture = false,
             CanSaveCapture = _pendingBlueprintCapture is not null,
             CanConfirmApply = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && _blueprintApplyPlan?.IsValid == true,
@@ -1692,19 +1691,18 @@ public partial class FactoryDemo : Node3D
         }
     }
 
-    private void HandleBlueprintSaveRequested(string name)
+    private void HandleBlueprintSaveRequested(string name, FactoryBlueprintPersistenceTarget target)
     {
         if (_pendingBlueprintCapture is null)
         {
             return;
         }
 
-        var savedRecord = FactoryBlueprintWorkflowBridge.SavePendingCapture(_pendingBlueprintCapture, name);
+        var savedRecord = FactoryBlueprintWorkflowBridge.SavePendingCapture(_pendingBlueprintCapture, name, target);
         _pendingBlueprintCapture = null;
         _hasBlueprintSelectionRect = false;
         _blueprintMode = FactoryBlueprintWorkflowMode.None;
-        _previewMessage = $"已保存蓝图：{savedRecord.DisplayName}";
-        ShowBlueprintPersistenceStatus(savedRecord);
+        ShowBlueprintPersistenceStatus(savedRecord, target);
     }
 
     private void HandleBlueprintSelected(string blueprintId)

@@ -619,6 +619,7 @@ public static class FactoryBlueprintLibrary
 {
     private static readonly List<FactoryBlueprintRecord> Records = new();
     private static readonly HashSet<string> SeedBlueprintIds = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, FactoryBlueprintPersistenceTarget> RecordTargets = new(StringComparer.Ordinal);
     private static bool _seeded;
 
     public static string? ActiveBlueprintId { get; private set; }
@@ -654,7 +655,19 @@ public static class FactoryBlueprintLibrary
 
     public static FactoryBlueprintRecord AddOrUpdate(FactoryBlueprintRecord blueprint)
     {
+        return AddOrUpdate(blueprint, FactoryBlueprintPersistenceTarget.Runtime);
+    }
+
+    public static FactoryBlueprintRecord AddOrUpdate(FactoryBlueprintRecord blueprint, FactoryBlueprintPersistenceTarget target)
+    {
         EnsureSeedBlueprints();
+        if (RecordTargets.TryGetValue(blueprint.Id, out var previousTarget)
+            && previousTarget != target
+            && !SeedBlueprintIds.Contains(blueprint.Id))
+        {
+            FactoryBlueprintPersistence.DeleteRecord(blueprint.Id, previousTarget);
+        }
+
         for (var index = 0; index < Records.Count; index++)
         {
             if (Records[index].Id != blueprint.Id)
@@ -663,13 +676,15 @@ public static class FactoryBlueprintLibrary
             }
 
             Records[index] = blueprint;
-            PersistLibrary();
+            RecordTargets[blueprint.Id] = target;
+            PersistRecord(blueprint, target);
             Changed?.Invoke();
             return blueprint;
         }
 
         Records.Add(blueprint);
-        PersistLibrary();
+        RecordTargets[blueprint.Id] = target;
+        PersistRecord(blueprint, target);
         Changed?.Invoke();
         return blueprint;
     }
@@ -690,7 +705,14 @@ public static class FactoryBlueprintLibrary
                 ActiveBlueprintId = null;
             }
 
-            PersistLibrary();
+            if (RecordTargets.TryGetValue(blueprintId, out var target)
+                && !SeedBlueprintIds.Contains(blueprintId))
+            {
+                FactoryBlueprintPersistence.DeleteRecord(blueprintId, target);
+            }
+
+            RecordTargets.Remove(blueprintId);
+            FactoryBlueprintPersistence.SaveActiveBlueprintState(ActiveBlueprintId);
             Changed?.Invoke();
             return true;
         }
@@ -707,7 +729,7 @@ public static class FactoryBlueprintLibrary
         }
 
         ActiveBlueprintId = blueprintId;
-        PersistLibrary();
+        FactoryBlueprintPersistence.SaveActiveBlueprintState(ActiveBlueprintId);
         Changed?.Invoke();
         return true;
     }
@@ -716,7 +738,7 @@ public static class FactoryBlueprintLibrary
     {
         EnsureSeedBlueprints();
         ActiveBlueprintId = null;
-        PersistLibrary();
+        FactoryBlueprintPersistence.SaveActiveBlueprintState(ActiveBlueprintId);
         Changed?.Invoke();
     }
 
@@ -748,9 +770,14 @@ public static class FactoryBlueprintLibrary
             MobileFactoryScenarioLibrary.CreateFocusedDemoPreset()));
 
         var persisted = FactoryBlueprintPersistence.Load();
-        for (var index = 0; index < persisted.Records.Count; index++)
+        for (var index = 0; index < persisted.SourceRecords.Count; index++)
         {
-            UpsertWithoutPersistence(persisted.Records[index]);
+            UpsertWithoutPersistence(persisted.SourceRecords[index], FactoryBlueprintPersistenceTarget.Source);
+        }
+
+        for (var index = 0; index < persisted.RuntimeRecords.Count; index++)
+        {
+            UpsertWithoutPersistence(persisted.RuntimeRecords[index], FactoryBlueprintPersistenceTarget.Runtime);
         }
 
         if (!string.IsNullOrWhiteSpace(persisted.ActiveBlueprintId) && FindById(persisted.ActiveBlueprintId!) is not null)
@@ -763,27 +790,33 @@ public static class FactoryBlueprintLibrary
     {
         Records.Add(blueprint);
         SeedBlueprintIds.Add(blueprint.Id);
+        RecordTargets[blueprint.Id] = FactoryBlueprintPersistenceTarget.Runtime;
     }
 
-    private static void UpsertWithoutPersistence(FactoryBlueprintRecord blueprint)
+    private static void UpsertWithoutPersistence(FactoryBlueprintRecord blueprint, FactoryBlueprintPersistenceTarget target)
     {
         for (var index = 0; index < Records.Count; index++)
         {
             if (Records[index].Id == blueprint.Id)
             {
                 Records[index] = blueprint;
+                RecordTargets[blueprint.Id] = target;
                 return;
             }
         }
 
         Records.Add(blueprint);
+        RecordTargets[blueprint.Id] = target;
     }
 
-    private static void PersistLibrary()
+    private static void PersistRecord(FactoryBlueprintRecord blueprint, FactoryBlueprintPersistenceTarget target)
     {
-        FactoryBlueprintPersistence.Save(
-            Records,
-            ActiveBlueprintId,
-            blueprint => !SeedBlueprintIds.Contains(blueprint.Id));
+        if (SeedBlueprintIds.Contains(blueprint.Id))
+        {
+            return;
+        }
+
+        FactoryBlueprintPersistence.SaveRecord(blueprint, target);
+        FactoryBlueprintPersistence.SaveActiveBlueprintState(ActiveBlueprintId);
     }
 }

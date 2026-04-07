@@ -400,10 +400,10 @@ public partial class MobileFactoryHud
         _blueprintPanel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         _blueprintPanel.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         _blueprintPanel.SetDocked(true);
-        _blueprintPanel.CaptureSelectionRequested += () => BlueprintCaptureSelectionRequested?.Invoke();
         _blueprintPanel.CaptureFullRequested += () => BlueprintCaptureFullRequested?.Invoke();
         _blueprintPanel.BlueprintSelected += blueprintId => BlueprintSelected?.Invoke(blueprintId);
-        _blueprintPanel.SaveCaptureRequested += name => BlueprintSaveRequested?.Invoke(name);
+        _blueprintPanel.SaveCaptureRuntimeRequested += name => BlueprintRuntimeSaveRequested?.Invoke(name);
+        _blueprintPanel.SaveCaptureSourceRequested += name => BlueprintSourceSaveRequested?.Invoke(name);
         _blueprintPanel.ApplyActiveRequested += () => BlueprintApplyRequested?.Invoke();
         _blueprintPanel.ConfirmApplyRequested += () => BlueprintConfirmRequested?.Invoke();
         _blueprintPanel.DeleteSelectedRequested += blueprintId => BlueprintDeleteRequested?.Invoke(blueprintId);
