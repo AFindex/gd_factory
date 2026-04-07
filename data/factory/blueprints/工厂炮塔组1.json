@@ -1,0 +1,62 @@
+{
+  "FormatVersion": 1,
+  "Id": "d84a864c030e4eea8de407e666b3e8e9",
+  "DisplayName": "\u5DE5\u5382\u70AE\u5854\u7EC41",
+  "SourceSiteKind": "MobileInterior",
+  "SuggestedAnchorCell": {
+    "X": 2,
+    "Y": 2
+  },
+  "BoundsSize": {
+    "X": 5,
+    "Y": 3
+  },
+  "Entries": [
+    {
+      "Kind": "LargeStorageDepot",
+      "LocalCell": {
+        "X": 0,
+        "Y": 1
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "Inserter",
+      "LocalCell": {
+        "X": 2,
+        "Y": 1
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "HeavyGunTurret",
+      "LocalCell": {
+        "X": 3,
+        "Y": 1
+      },
+      "Facing": "North",
+      "Configuration": null
+    },
+    {
+      "Kind": "Inserter",
+      "LocalCell": {
+        "X": 2,
+        "Y": 2
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "GunTurret",
+      "LocalCell": {
+        "X": 3,
+        "Y": 2
+      },
+      "Facing": "East",
+      "Configuration": null
+    }
+  ],
+  "RequiredAttachments": []
+}
