@@ -1,4 +1,4 @@
-using Godot;
+﻿using Godot;
 
 public partial class MobileFactoryDemo
 {
@@ -44,10 +44,7 @@ public partial class MobileFactoryDemo
             _simulation);
     }
 
-    private static bool RunFactoryMapSmokeChecks()
-    {
-        return FactoryMapSmokeSupport.VerifyDocuments(
-            FactoryMapPaths.FocusedMobileWorld,
-            FactoryMapPaths.FocusedMobileInterior);
-    }
+
 }
+
+

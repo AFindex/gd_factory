@@ -1,4 +1,4 @@
-using Godot;
+﻿using Godot;
 
 public partial class FactoryDemo
 {
@@ -16,8 +16,6 @@ public partial class FactoryDemo
             _simulation);
     }
 
-    private static bool RunFactoryMapSmokeChecks()
-    {
-        return FactoryMapSmokeSupport.VerifyDocuments(FactoryMapPaths.StaticSandboxWorld);
-    }
+
 }
+
