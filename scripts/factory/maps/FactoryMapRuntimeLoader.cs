@@ -89,13 +89,20 @@ public static class FactoryMapRuntimeLoader
         string presetId,
         string displayName,
         string description,
-        string recoverySummary)
+        string recoverySummary,
+        MobileFactoryProfile? profile = null)
     {
         var document = FactoryMapValidator.ValidateDocument(FactoryMapSerializer.LoadFromFile(resourcePath));
         if (document.Kind != FactoryMapKind.Interior)
         {
             throw new InvalidDataException($"Map '{resourcePath}' is not an interior map.");
         }
+
+        if (profile is not null)
+        {
+            ValidateInteriorDocumentAgainstProfile(document, profile, resourcePath);
+        }
+
         LogDocument("Loaded interior preset document", resourcePath, document);
 
         var placements = new List<FactoryPlacementSpec>();
@@ -120,6 +127,29 @@ public static class FactoryMapRuntimeLoader
             recoverySummary,
             placements,
             attachmentPlacements);
+    }
+
+    public static void ValidateInteriorDocumentAgainstProfile(
+        FactoryMapDocument document,
+        MobileFactoryProfile profile,
+        string resourcePath)
+    {
+        FactoryMapValidator.ValidateAgainstSiteBounds(document, profile.InteriorMinCell, profile.InteriorMaxCell, FactoryMapKind.Interior);
+
+        for (var i = 0; i < document.Structures.Count; i++)
+        {
+            var entry = document.Structures[i];
+            if (!MobileFactoryBoundaryAttachmentCatalog.IsAttachmentKind(entry.Kind))
+            {
+                continue;
+            }
+
+            if (!profile.TryGetAttachmentMount(entry.Cell, entry.Facing, entry.Kind, out var mount) || mount is null)
+            {
+                throw new InvalidDataException(
+                    $"Interior map '{resourcePath}' places attachment '{entry.Kind}' at ({entry.Cell.X}, {entry.Cell.Y}) facing {entry.Facing}, but the selected mobile factory profile '{profile.Id}' does not allow that mount.");
+            }
+        }
     }
 
     public static void ApplyInteriorRuntimeState(

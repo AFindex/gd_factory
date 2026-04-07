@@ -91,6 +91,54 @@
 
 ## 冒烟测试
 
+### 无头地图校验
+
+可以直接跑共享地图校验入口，检查当前注册的地图目标：
+
+```powershell
+& 'D:\Godot\Godot_v4.6.1-stable_mono_win64\Godot_v4.6.1-stable_mono_win64_console.exe' --headless --path 'D:\Godot\projs\net-factory' -- --factory-map-validate
+```
+
+如果只想校验一个目标，可以在参数里带 target id：
+
+```powershell
+& 'D:\Godot\Godot_v4.6.1-stable_mono_win64\Godot_v4.6.1-stable_mono_win64_console.exe' --headless --path 'D:\Godot\projs\net-factory' -- --factory-map-validate=focused-mobile-bundle
+```
+
+当前内置的 target 有：
+- `static-sandbox-world`：静态 sandbox 世界地图
+- `focused-mobile-bundle`：focused mobile 的世界地图 + 内部地图 + profile-aware 部署探针
+
+这个校验会输出：
+- 文档级错误，例如格式、边界、重叠、非法建筑种类
+- 运行时回放错误，例如真实摆放失败、内部 attachment 挂点不匹配
+- advisory 级连接性信息，例如孤立物流段、无电力来源的耗电建筑、移动工厂部署探针结果
+
+现在还会额外检查：
+- 已配置配方的生产建筑是否存在可达的上游供料路径
+- 已配置配方的生产建筑产物是否存在可达的下游消费路径
+
+如果只想看某一个格子当前落到的建筑是否合法、上下游接了谁、配方缺什么，可以跑 focused cell 校验：
+
+```powershell
+& 'D:\Godot\Godot_v4.6.1-stable_mono_win64\Godot_v4.6.1-stable_mono_win64_console.exe' --headless --path 'D:\Godot\projs\net-factory' -- --factory-map-validate-cell=static-sandbox-world:14,2
+```
+
+移动工厂 bundle 也支持指定 interior scope：
+
+```powershell
+& 'D:\Godot\Godot_v4.6.1-stable_mono_win64\Godot_v4.6.1-stable_mono_win64_console.exe' --headless --path 'D:\Godot\projs\net-factory' -- --factory-map-validate-cell=focused-mobile-bundle:interior:4,1
+```
+
+focused cell 校验会输出：
+- 请求格子最终命中的建筑和 anchor
+- footprint 占用、输入口、输出口
+- 直接上下游邻居
+- 电力可达性
+- 配方级缺料 / 缺消费端信息
+
+默认 factory / mobile smoke 现在也会走同一套共享地图校验逻辑，保留 malformed-map rejection 和 round-trip 检查。
+
 可以用下面的命令跑默认静态 demo 的冒烟测试：
 
 ```powershell

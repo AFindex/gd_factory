@@ -2,10 +2,21 @@ using Godot;
 
 public partial class DemoLauncher : Control
 {
+    private string? _mapValidationTargetId;
+    private FactoryMapValidationMapScope? _mapValidationFocusScope;
+    private Vector2I? _mapValidationFocusCell;
+
     public override void _Ready()
     {
         Name = "DemoLauncher";
         MouseFilter = MouseFilterEnum.Stop;
+
+        if (TryGetMapValidationRequest(out _mapValidationTargetId, out _mapValidationFocusScope, out _mapValidationFocusCell))
+        {
+            CallDeferred(nameof(RunHeadlessMapValidation));
+            return;
+        }
+
         SetAnchorsPreset(LayoutPreset.FullRect);
         BuildScene();
 
@@ -194,6 +205,39 @@ public partial class DemoLauncher : Control
         OpenDemo("res://scenes/factory_demo.tscn");
     }
 
+    private void RunHeadlessMapValidation()
+    {
+        try
+        {
+            if (_mapValidationFocusCell.HasValue)
+            {
+                if (string.IsNullOrWhiteSpace(_mapValidationTargetId) || !_mapValidationFocusScope.HasValue)
+                {
+                    throw new System.InvalidOperationException("Focused map validation requires both a target id and a scope.");
+                }
+
+                var focusResult = FactoryMapValidationService.ValidateFocus(
+                    _mapValidationTargetId!,
+                    _mapValidationFocusScope.Value,
+                    _mapValidationFocusCell.Value);
+                FactoryMapValidationService.PrintFocusReport(focusResult);
+                GetTree().Quit(focusResult.HasErrors ? 1 : 0);
+                return;
+            }
+
+            var report = string.IsNullOrWhiteSpace(_mapValidationTargetId)
+                ? FactoryMapValidationService.ValidateAllTargets()
+                : FactoryMapValidationService.ValidateTarget(_mapValidationTargetId!);
+            FactoryMapValidationService.PrintReport(report);
+            GetTree().Quit(report.HasErrors ? 1 : 0);
+        }
+        catch (System.Exception ex)
+        {
+            GD.PrintErr($"FACTORY_MAP_VALIDATION_FAILED {ex.Message}");
+            GetTree().Quit(1);
+        }
+    }
+
     private static bool HasUserArg(string argText)
     {
         foreach (var arg in OS.GetCmdlineUserArgs())
@@ -205,6 +249,91 @@ public partial class DemoLauncher : Control
         }
 
         return false;
+    }
+
+    private static bool TryGetMapValidationRequest(
+        out string? targetId,
+        out FactoryMapValidationMapScope? focusScope,
+        out Vector2I? focusCell)
+    {
+        foreach (var arg in OS.GetCmdlineUserArgs())
+        {
+            if (string.Equals(arg, "--factory-map-validate", System.StringComparison.Ordinal))
+            {
+                targetId = null;
+                focusScope = null;
+                focusCell = null;
+                return true;
+            }
+
+            if (arg.StartsWith("--factory-map-validate=", System.StringComparison.Ordinal))
+            {
+                var value = arg.Substring("--factory-map-validate=".Length).Trim();
+                targetId = string.IsNullOrWhiteSpace(value) ? null : value;
+                focusScope = null;
+                focusCell = null;
+                return true;
+            }
+
+            if (arg.StartsWith("--factory-map-validate-cell=", System.StringComparison.Ordinal))
+            {
+                ParseFocusedValidationRequest(
+                    arg.Substring("--factory-map-validate-cell=".Length).Trim(),
+                    out targetId,
+                    out focusScope,
+                    out focusCell);
+                return true;
+            }
+        }
+
+        targetId = null;
+        focusScope = null;
+        focusCell = null;
+        return false;
+    }
+
+    private static void ParseFocusedValidationRequest(
+        string value,
+        out string? targetId,
+        out FactoryMapValidationMapScope? focusScope,
+        out Vector2I? focusCell)
+    {
+        var parts = value.Split(':', System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries);
+        if (parts.Length < 2 || parts.Length > 3)
+        {
+            throw new System.InvalidOperationException(
+                "Focused map validation expects '<target-id>:<x>,<y>' or '<target-id>:world:<x>,<y>' / '<target-id>:interior:<x>,<y>'.");
+        }
+
+        targetId = parts[0];
+        if (parts.Length == 2)
+        {
+            focusScope = FactoryMapValidationMapScope.World;
+            focusCell = ParseVector2I(parts[1]);
+            return;
+        }
+
+        focusScope = parts[1].ToLowerInvariant() switch
+        {
+            "world" => FactoryMapValidationMapScope.World,
+            "interior" => FactoryMapValidationMapScope.Interior,
+            _ => throw new System.InvalidOperationException(
+                $"Unknown focused validation scope '{parts[1]}'. Use 'world' or 'interior'.")
+        };
+        focusCell = ParseVector2I(parts[2]);
+    }
+
+    private static Vector2I ParseVector2I(string text)
+    {
+        var parts = text.Split(',', System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries);
+        if (parts.Length != 2
+            || !int.TryParse(parts[0], out var x)
+            || !int.TryParse(parts[1], out var y))
+        {
+            throw new System.InvalidOperationException($"Invalid cell '{text}'. Expected '<x>,<y>'.");
+        }
+
+        return new Vector2I(x, y);
     }
 
     private static void AddGlow(Control parent, Vector2 anchor, Vector2 size, Color color)

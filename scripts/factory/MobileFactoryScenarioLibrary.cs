@@ -159,12 +159,14 @@ public static class MobileFactoryScenarioLibrary
 
     public static MobileFactoryInteriorPreset CreateFocusedDemoPreset()
     {
+        var profile = CreateFocusedDemoProfile();
         return FactoryMapRuntimeLoader.LoadInteriorPreset(
             FactoryMapPaths.FocusedMobileInterior,
             presetId: "focused-dual-logistics",
             displayName: "野外加工转运样板",
             description: "玩家移动工厂把野外矿石导入熔炼与组装主线，同时在下层维持弹药补给支线，再经东侧双输出端口把产物送往接收站。",
-            recoverySummary: "西侧输入端口接收矿石，中央熔炉把原矿送入组装机，主输出端口负责向站点外送；下层双仓储和弹药组装器组成内部防务补给支线。");
+            recoverySummary: "西侧输入端口接收矿石，中央熔炉把原矿送入组装机，主输出端口负责向站点外送；下层双仓储和弹药组装器组成内部防务补给支线。",
+            profile: profile);
     }
 
     public static MobileFactoryInteriorPreset CreateExpeditionInputVerificationPreset()

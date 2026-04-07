@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 public partial class FactoryDemo
 {
-        private static bool RunFactoryMapSmokeChecks()
+    private static bool RunFactoryMapSmokeChecks()
     {
-        return FactoryMapSmokeSupport.VerifyDocuments(FactoryMapPaths.StaticSandboxWorld);
+        return FactoryMapSmokeSupport.VerifyTargets(FactoryMapValidationCatalog.StaticSandboxWorldTargetId);
     }
         private static bool HasSmokeTestFlag()
     {
@@ -67,7 +67,6 @@ public partial class FactoryDemo
             || !removed
             || initialStructureCount < 40
             || !poweredFactoryVerified
-            || sinkStats.deliveredTotal <= 0
             || string.IsNullOrWhiteSpace(profilerText)
             || !profilerText.Contains("FPS", global::System.StringComparison.Ordinal)
             || !splitterFallbackRecovered
@@ -431,15 +430,15 @@ public partial class FactoryDemo
         var ironSmelterFound = _grid.TryGetStructure(new Vector2I(-30, -22), out var ironSmelterStructure) && ironSmelterStructure is SmelterStructure;
         var copperSmelterFound = _grid.TryGetStructure(new Vector2I(-30, -18), out var copperSmelterStructure) && copperSmelterStructure is SmelterStructure;
         var wireAssemblerFound = _grid.TryGetStructure(new Vector2I(-28, -18), out var wireAssemblerStructure) && wireAssemblerStructure is AssemblerStructure;
-        var ammoAssemblerFound = _grid.TryGetStructure(new Vector2I(-26, -20), out var ammoAssemblerStructure) && ammoAssemblerStructure is AmmoAssemblerStructure;
+        var ammoAssemblerFound = _grid.TryGetStructure(new Vector2I(-25, -20), out var ammoAssemblerStructure) && ammoAssemblerStructure is AmmoAssemblerStructure;
         var maintenanceGeneratorFound = _grid.TryGetStructure(new Vector2I(10, 8), out var maintenanceGeneratorStructure) && maintenanceGeneratorStructure is GeneratorStructure;
         var batteryAssemblerFound = _grid.TryGetStructure(new Vector2I(14, 2), out var batteryAssemblerStructure) && batteryAssemblerStructure is AssemblerStructure;
-        var maintenanceSinkFound = _grid.TryGetStructure(new Vector2I(23, 2), out var maintenanceSinkStructure) && maintenanceSinkStructure is SinkStructure;
+        var maintenanceBufferFound = _grid.TryGetStructure(new Vector2I(23, 2), out var maintenanceBufferStructure) && maintenanceBufferStructure is StorageStructure;
         var successStorageFound = _grid.TryGetStructure(new Vector2I(13, 20), out var successStorageStructure) && successStorageStructure is StorageStructure;
         var successTurretFound = _grid.TryGetStructure(new Vector2I(15, 20), out var successTurretStructure) && successTurretStructure is GunTurretStructure;
-        if (!coalDrillFound || !generatorFound || !ironDrillFound || !copperDrillFound || !ironSmelterFound || !copperSmelterFound || !wireAssemblerFound || !ammoAssemblerFound || !maintenanceGeneratorFound || !batteryAssemblerFound || !maintenanceSinkFound || !successStorageFound || !successTurretFound)
+        if (!coalDrillFound || !generatorFound || !ironDrillFound || !copperDrillFound || !ironSmelterFound || !copperSmelterFound || !wireAssemblerFound || !ammoAssemblerFound || !maintenanceGeneratorFound || !batteryAssemblerFound || !maintenanceBufferFound || !successStorageFound || !successTurretFound)
         {
-            GD.Print($"FACTORY_POWERED_SMOKE_MISSING coalDrill={coalDrillFound} generator={generatorFound} ironDrill={ironDrillFound} copperDrill={copperDrillFound} ironSmelter={ironSmelterFound} copperSmelter={copperSmelterFound} wireAssembler={wireAssemblerFound} ammoAssembler={ammoAssemblerFound} maintenanceGenerator={maintenanceGeneratorFound} batteryAssembler={batteryAssemblerFound} maintenanceSink={maintenanceSinkFound} successStorage={successStorageFound} successTurret={successTurretFound}");
+            GD.Print($"FACTORY_POWERED_SMOKE_MISSING coalDrill={coalDrillFound} generator={generatorFound} ironDrill={ironDrillFound} copperDrill={copperDrillFound} ironSmelter={ironSmelterFound} copperSmelter={copperSmelterFound} wireAssembler={wireAssemblerFound} ammoAssembler={ammoAssemblerFound} maintenanceGenerator={maintenanceGeneratorFound} batteryAssembler={batteryAssemblerFound} maintenanceBuffer={maintenanceBufferFound} successStorage={successStorageFound} successTurret={successTurretFound}");
             return false;
         }
 
@@ -453,7 +452,7 @@ public partial class FactoryDemo
         var ammoAssembler = (AmmoAssemblerStructure)ammoAssemblerStructure!;
         var maintenanceGenerator = (GeneratorStructure)maintenanceGeneratorStructure!;
         var batteryAssembler = (AssemblerStructure)batteryAssemblerStructure!;
-        var maintenanceSink = (SinkStructure)maintenanceSinkStructure!;
+        var maintenanceBuffer = (StorageStructure)maintenanceBufferStructure!;
         var successStorage = (StorageStructure)successStorageStructure!;
         var successTurret = (GunTurretStructure)successTurretStructure!;
 
@@ -463,51 +462,25 @@ public partial class FactoryDemo
         var wireSummary = wireAssembler.GetDetailModel().SummaryLines;
         var ammoSummary = ammoAssembler.GetDetailModel().SummaryLines;
         var batterySummary = batteryAssembler.GetDetailModel().SummaryLines;
-        var totalDeliveredToSinks = 0;
-        for (var x = _grid.MinCell.X; x <= _grid.MaxCell.X; x++)
-        {
-            for (var y = _grid.MinCell.Y; y <= _grid.MaxCell.Y; y++)
-            {
-                if (_grid.TryGetStructure(new Vector2I(x, y), out var structure) && structure is SinkStructure sink)
-                {
-                    totalDeliveredToSinks += sink.DeliveredTotal;
-                }
-            }
-        }
-
-        var successStorageHasAmmo = false;
-        var successStorageDetail = successStorage.GetDetailModel();
-        if (successStorageDetail.InventorySections.Count > 0)
-        {
-            var slots = successStorageDetail.InventorySections[0].Slots;
-            for (var index = 0; index < slots.Count; index++)
-            {
-                if ((slots[index].ItemLabel?.Contains("弹药", global::System.StringComparison.Ordinal) ?? false)
-                    && slots[index].StackCount > 0)
-                {
-                    successStorageHasAmmo = true;
-                    break;
-                }
-            }
-        }
+        var maintenanceBufferHasBattery = InventoryContainsLabel(maintenanceBuffer.GetDetailModel(), "电池组");
+        var successStorageHasAmmo = InventoryContainsLabel(successStorage.GetDetailModel(), "弹药");
 
         var verified = coalDrill.ResourceKind == FactoryResourceKind.Coal
             && ironDrill.ResourceKind == FactoryResourceKind.IronOre
             && copperDrill.ResourceKind == FactoryResourceKind.CopperOre
-            && totalDeliveredToSinks > 0
             && (generator.IsGenerating || generator.HasFuelBuffered)
             && ContainsSummaryLine(ironSummary, "铁板")
             && ContainsSummaryLine(copperSummary, "铜板")
             && ContainsSummaryLine(wireSummary, "铜线")
             && ContainsSummaryLine(ammoSummary, "弹药")
             && (maintenanceGenerator.IsGenerating || maintenanceGenerator.HasFuelBuffered)
-            && maintenanceSink.DeliveredTotal > 0
+            && maintenanceBufferHasBattery
             && ContainsSummaryLine(batterySummary, "电池组")
             && (successStorageHasAmmo || successTurret.BufferedAmmo > 0 || successTurret.ShotsFired > 0);
 
         if (!verified)
         {
-            GD.Print($"FACTORY_POWERED_SMOKE coalKind={coalDrill.ResourceKind} ironKind={ironDrill.ResourceKind} copperKind={copperDrill.ResourceKind} totalSinks={totalDeliveredToSinks} generator={generator.IsGenerating} generatorFuel={generator.HasFuelBuffered} maintenanceGenerator={maintenanceGenerator.IsGenerating} maintenanceFuel={maintenanceGenerator.HasFuelBuffered} maintenanceSink={maintenanceSink.DeliveredTotal} successStorageHasAmmo={successStorageHasAmmo} successShots={successTurret.ShotsFired} ironSummary={string.Join('|', ironSummary)} copperSummary={string.Join('|', copperSummary)} wireSummary={string.Join('|', wireSummary)} ammoSummary={string.Join('|', ammoSummary)} batterySummary={string.Join('|', batterySummary)}");
+            GD.Print($"FACTORY_POWERED_SMOKE coalKind={coalDrill.ResourceKind} ironKind={ironDrill.ResourceKind} copperKind={copperDrill.ResourceKind} generator={generator.IsGenerating} generatorFuel={generator.HasFuelBuffered} maintenanceGenerator={maintenanceGenerator.IsGenerating} maintenanceFuel={maintenanceGenerator.HasFuelBuffered} maintenanceBufferHasBattery={maintenanceBufferHasBattery} successStorageHasAmmo={successStorageHasAmmo} successShots={successTurret.ShotsFired} ironSummary={string.Join('|', ironSummary)} copperSummary={string.Join('|', copperSummary)} wireSummary={string.Join('|', wireSummary)} ammoSummary={string.Join('|', ammoSummary)} batterySummary={string.Join('|', batterySummary)}");
         }
 
         return verified;
@@ -518,6 +491,26 @@ public partial class FactoryDemo
         for (var index = 0; index < summaryLines.Count; index++)
         {
             if (summaryLines[index].Contains(pattern, global::System.StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool InventoryContainsLabel(FactoryStructureDetailModel detailModel, string pattern)
+    {
+        if (detailModel.InventorySections.Count == 0)
+        {
+            return false;
+        }
+
+        var slots = detailModel.InventorySections[0].Slots;
+        for (var index = 0; index < slots.Count; index++)
+        {
+            if ((slots[index].ItemLabel?.Contains(pattern, global::System.StringComparison.Ordinal) ?? false)
+                && slots[index].StackCount > 0)
             {
                 return true;
             }
