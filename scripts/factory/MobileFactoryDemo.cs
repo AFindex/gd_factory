@@ -1103,54 +1103,20 @@ public partial class MobileFactoryDemo : Node3D
 
     private void RebuildMobileResourceOverlayVisuals()
     {
-        if (_resourceOverlayRoot is null || _grid is null)
-        {
-            return;
-        }
-
-        foreach (var child in _resourceOverlayRoot.GetChildren())
-        {
-            if (child is Node node)
-            {
-                node.QueueFree();
-            }
-        }
-
-        var deposits = _grid.GetResourceDeposits();
-        for (var depositIndex = 0; depositIndex < deposits.Count; depositIndex++)
-        {
-            var deposit = deposits[depositIndex];
-            for (var cellIndex = 0; cellIndex < deposit.Cells.Count; cellIndex++)
-            {
-                var cell = deposit.Cells[cellIndex];
-                var tile = new MeshInstance3D
-                {
-                    Name = $"MobileResource_{deposit.Id}_{cell.X}_{cell.Y}",
-                    Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.86f, 0.05f, FactoryConstants.CellSize * 0.86f) },
-                    Position = _grid.CellToWorld(cell) + new Vector3(0.0f, 0.025f, 0.0f),
-                    MaterialOverride = new StandardMaterial3D
-                    {
-                        AlbedoColor = deposit.Tint,
-                        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-                        Roughness = 0.96f
-                    }
-                };
-                _resourceOverlayRoot.AddChild(tile);
-
-                var chip = new MeshInstance3D
-                {
-                    Name = $"MobileResourceChip_{deposit.Id}_{cell.X}_{cell.Y}",
-                    Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.18f, 0.12f, FactoryConstants.CellSize * 0.18f) },
-                    Position = _grid.CellToWorld(cell) + new Vector3(0.0f, 0.09f, 0.0f),
-                    MaterialOverride = new StandardMaterial3D
-                    {
-                        AlbedoColor = deposit.Tint.Lightened(0.16f),
-                        Roughness = 0.86f
-                    }
-                };
-                _resourceOverlayRoot.AddChild(chip);
-            }
-        }
+        FactoryMapVisualSupport.RebuildResourceOverlay(
+            _resourceOverlayRoot,
+            _grid,
+            "MobileResource_",
+            0.86f,
+            0.05f,
+            0.025f,
+            0.96f,
+            "MobileResourceChip_",
+            0.18f,
+            0.12f,
+            0.09f,
+            0.16f,
+            0.86f);
     }
 
     private static Vector2I[] BuildRectCells(Vector2I origin, Vector2I size)
@@ -1166,75 +1132,6 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         return cells;
-    }
-
-    private void CreateAmbientWorldLine(Vector2I startCell, int beltCount, FacingDirection facing)
-    {
-        var cell = startCell;
-        PlaceWorldStructure(BuildPrototypeKind.Producer, cell, facing);
-
-        for (var i = 1; i <= beltCount; i++)
-        {
-            cell += FactoryDirection.ToCellOffset(facing);
-            PlaceWorldStructure(BuildPrototypeKind.Belt, cell, facing);
-        }
-
-        cell += FactoryDirection.ToCellOffset(facing);
-        var sink = PlaceWorldStructure(BuildPrototypeKind.Sink, cell, facing) as SinkStructure;
-        if (sink is not null)
-        {
-            _scenarioSinks.Add(sink);
-        }
-    }
-
-    private void CreateAmbientBranchDepot(Vector2I originCell)
-    {
-        PlaceWorldStructure(BuildPrototypeKind.Producer, originCell, FacingDirection.East);
-        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(1, 0), FacingDirection.East);
-        PlaceWorldStructure(BuildPrototypeKind.Splitter, originCell + new Vector2I(2, 0), FacingDirection.East);
-        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(2, -1), FacingDirection.East);
-        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(3, -1), FacingDirection.South);
-        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(2, 1), FacingDirection.East);
-        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(3, 1), FacingDirection.North);
-        PlaceWorldStructure(BuildPrototypeKind.Merger, originCell + new Vector2I(3, 0), FacingDirection.East);
-        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(4, 0), FacingDirection.East);
-        RegisterScenarioSink(PlaceWorldStructure(BuildPrototypeKind.Sink, originCell + new Vector2I(5, 0), FacingDirection.East) as SinkStructure);
-    }
-
-    private void CreateAmbientStorageDepot(Vector2I originCell)
-    {
-        PlaceWorldStructure(BuildPrototypeKind.Producer, originCell, FacingDirection.East);
-        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(1, 0), FacingDirection.East);
-        PlaceWorldStructure(BuildPrototypeKind.Storage, originCell + new Vector2I(2, 0), FacingDirection.East);
-        PlaceWorldStructure(BuildPrototypeKind.Inserter, originCell + new Vector2I(3, 0), FacingDirection.East);
-        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(4, 0), FacingDirection.East);
-        RegisterScenarioSink(PlaceWorldStructure(BuildPrototypeKind.Sink, originCell + new Vector2I(5, 0), FacingDirection.East) as SinkStructure);
-        PlaceWorldStructure(BuildPrototypeKind.Producer, originCell + new Vector2I(2, -2), FacingDirection.South);
-        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(2, -1), FacingDirection.South);
-    }
-
-    private void CreateAmbientBridgeCrossing(Vector2I centerCell)
-    {
-        PlaceWorldStructure(BuildPrototypeKind.Producer, centerCell + new Vector2I(-2, 0), FacingDirection.East);
-        PlaceWorldStructure(BuildPrototypeKind.Belt, centerCell + new Vector2I(-1, 0), FacingDirection.East);
-        PlaceWorldStructure(BuildPrototypeKind.Bridge, centerCell, FacingDirection.East);
-        PlaceWorldStructure(BuildPrototypeKind.Belt, centerCell + new Vector2I(1, 0), FacingDirection.East);
-        RegisterScenarioSink(PlaceWorldStructure(BuildPrototypeKind.Sink, centerCell + new Vector2I(2, 0), FacingDirection.East) as SinkStructure);
-
-        PlaceWorldStructure(BuildPrototypeKind.Producer, centerCell + new Vector2I(0, -2), FacingDirection.South);
-        PlaceWorldStructure(BuildPrototypeKind.Belt, centerCell + new Vector2I(0, -1), FacingDirection.South);
-        PlaceWorldStructure(BuildPrototypeKind.Belt, centerCell + new Vector2I(0, 1), FacingDirection.South);
-        RegisterScenarioSink(PlaceWorldStructure(BuildPrototypeKind.Sink, centerCell + new Vector2I(0, 2), FacingDirection.South) as SinkStructure);
-    }
-
-    private void CreateAmbientLoaderRelay(Vector2I originCell)
-    {
-        PlaceWorldStructure(BuildPrototypeKind.Producer, originCell, FacingDirection.East);
-        PlaceWorldStructure(BuildPrototypeKind.Unloader, originCell + new Vector2I(1, 0), FacingDirection.East);
-        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(2, 0), FacingDirection.South);
-        PlaceWorldStructure(BuildPrototypeKind.Belt, originCell + new Vector2I(2, 1), FacingDirection.South);
-        PlaceWorldStructure(BuildPrototypeKind.Loader, originCell + new Vector2I(2, 2), FacingDirection.South);
-        RegisterScenarioSink(PlaceWorldStructure(BuildPrototypeKind.Sink, originCell + new Vector2I(2, 3), FacingDirection.South) as SinkStructure);
     }
 
     private void CreateReceivingStationLandmark(Vector2I originCell)
