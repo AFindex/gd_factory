@@ -294,8 +294,10 @@ public partial class SimulationController : Node
     public override void _PhysicsProcess(double delta)
     {
         _accumulator += delta;
+        var stepsProcessed = 0;
 
-        while (_accumulator >= FactoryConstants.SimulationStepSeconds)
+        while (_accumulator >= FactoryConstants.SimulationStepSeconds
+            && stepsProcessed < FactoryConstants.MaxSimulationStepsPerPhysicsFrame)
         {
             var stepStartTicks = Stopwatch.GetTimestamp();
             ApplyPowerStates();
@@ -339,6 +341,12 @@ public partial class SimulationController : Node
             _accumulator -= FactoryConstants.SimulationStepSeconds;
             _activeTransportItemCount = CountTransitItems();
             _averageStepMilliseconds = SmoothMetric(_averageStepMilliseconds, Stopwatch.GetElapsedTime(stepStartTicks).TotalMilliseconds, 0.18);
+            stepsProcessed++;
+        }
+
+        if (_accumulator > FactoryConstants.MaxSimulationAccumulatorSeconds)
+        {
+            _accumulator = FactoryConstants.MaxSimulationAccumulatorSeconds;
         }
     }
 

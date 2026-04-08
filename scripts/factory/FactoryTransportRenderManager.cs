@@ -149,9 +149,7 @@ public partial class FactoryTransportRenderManager : Node3D
             Multimesh = multiMesh,
             MaterialOverride = FactoryTransportVisualFactory.GetSharedMaterial(descriptor),
             Visible = false,
-            CastShadow = descriptor.Mode == FactoryTransportRenderMode.Billboard
-                ? GeometryInstance3D.ShadowCastingSetting.Off
-                : GeometryInstance3D.ShadowCastingSetting.On
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
         };
 
         AddChild(instance);

@@ -684,13 +684,13 @@ public partial class FactoryDemo
     {
         var placeholderVisual = FactoryTransportVisualFactory.CreateVisual(new FactoryItem(-101, BuildPrototypeKind.MiningDrill, FactoryItemKind.IronOre), FactoryConstants.CellSize);
         var billboardVisual = FactoryTransportVisualFactory.CreateVisual(new FactoryItem(-102, BuildPrototypeKind.Assembler, FactoryItemKind.CopperWire), FactoryConstants.CellSize);
-        var modelVisual = FactoryTransportVisualFactory.CreateVisual(new FactoryItem(-103, BuildPrototypeKind.Assembler, FactoryItemKind.AmmoMagazine), FactoryConstants.CellSize);
+        var ammoVisual = FactoryTransportVisualFactory.CreateVisual(new FactoryItem(-103, BuildPrototypeKind.Assembler, FactoryItemKind.AmmoMagazine), FactoryConstants.CellSize);
         var copperDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(FactoryItemKind.CopperOre, FactoryConstants.CellSize);
         var ammoDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(FactoryItemKind.AmmoMagazine, FactoryConstants.CellSize);
 
         var placeholderMesh = FindFirstMesh(placeholderVisual);
         var billboardMesh = FindFirstMesh(billboardVisual);
-        var modelMeshCount = CountMeshes(modelVisual);
+        var ammoMesh = FindFirstMesh(ammoVisual);
         var distinctBaselineColors =
             !FactoryItemCatalog.GetAccentColor(FactoryItemKind.Coal).IsEqualApprox(FactoryItemCatalog.GetAccentColor(FactoryItemKind.IronOre))
             && !FactoryItemCatalog.GetAccentColor(FactoryItemKind.IronOre).IsEqualApprox(FactoryItemCatalog.GetAccentColor(FactoryItemKind.CopperOre))
@@ -703,18 +703,20 @@ public partial class FactoryDemo
 
         placeholderVisual.QueueFree();
         billboardVisual.QueueFree();
-        modelVisual.QueueFree();
+        ammoVisual.QueueFree();
 
         return placeholderMesh?.Mesh is BoxMesh
             && billboardMesh?.Mesh is QuadMesh
             && billboardMesh.MaterialOverride is StandardMaterial3D billboardMaterial
             && billboardMaterial.BillboardMode == BaseMaterial3D.BillboardModeEnum.Enabled
-            && modelMeshCount >= 2
+            && ammoMesh?.Mesh is QuadMesh
             && copperDescriptors.Primary.BatchKey == copperDescriptors.ResolveForTier(FactoryTransportRenderTier.Near).BatchKey
+            && copperDescriptors.Primary.Mode == FactoryTransportRenderMode.Billboard
             && copperDescriptors.Mid.IsBatchable
             && copperDescriptors.Far.IsBatchable
-            && !ammoDescriptors.Primary.IsBatchable
-            && ammoDescriptors.ResolveBatchableForTier(FactoryTransportRenderTier.Near).IsBatchable
+            && ammoDescriptors.Primary.Mode == FactoryTransportRenderMode.Billboard
+            && ammoDescriptors.Primary.IsBatchable
+            && ammoDescriptors.ResolveBatchableForTier(FactoryTransportRenderTier.Near).Mode == FactoryTransportRenderMode.Billboard
             && distinctBaselineColors
             && iconsPresent;
     }

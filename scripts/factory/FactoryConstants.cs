@@ -7,6 +7,8 @@ public static class FactoryConstants
     public const int GridMin = -48;
     public const int GridMax = 48;
     public const float SimulationStepSeconds = 0.05f;
+    public const int MaxSimulationStepsPerPhysicsFrame = 2;
+    public const float MaxSimulationAccumulatorSeconds = SimulationStepSeconds;
     public const float ProducerSpawnSeconds = 0.8f;
     public const float BeltItemsPerSecond = 1.6f;
     public const float StorageDispatchSeconds = 0.3f;

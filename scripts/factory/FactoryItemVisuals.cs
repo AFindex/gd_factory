@@ -453,16 +453,16 @@ public static class FactoryTransportVisualFactory
         var placeholder = CreatePlaceholderDescriptor(itemKind, profile, cellSize);
         var billboard = CreateBillboardDescriptor(itemKind, profile, cellSize) ?? placeholder;
         var textured = CreateTexturedDescriptor(itemKind, profile, cellSize) ?? billboard;
-        var primary = profile.ModelFactory is not null
-            ? CreateModelDescriptor(itemKind, profile, cellSize)
+        var primary = profile.AllowBillboardFallback && profile.Texture is not null
+            ? billboard
             : profile.AllowTexturedMeshFallback && profile.Texture is not null
                 ? textured
-                : profile.AllowBillboardFallback && profile.Texture is not null
-                    ? billboard
-                    : placeholder;
-        var mid = profile.AllowTexturedMeshFallback && profile.Texture is not null
-            ? textured
-            : billboard;
+                : placeholder;
+        var mid = primary.Mode == FactoryTransportRenderMode.Billboard
+            ? billboard
+            : profile.AllowTexturedMeshFallback && profile.Texture is not null
+                ? textured
+                : billboard;
         var far = profile.AllowBillboardFallback && profile.Texture is not null
             ? billboard
             : placeholder;
@@ -527,6 +527,7 @@ public static class FactoryTransportVisualFactory
         {
             var model = descriptor.ModelFactory(cellSize);
             model.Name = $"{itemKind}_Model";
+            DisableShadowsRecursive(model);
             return model;
         }
 
@@ -535,9 +536,7 @@ public static class FactoryTransportVisualFactory
             Name = descriptor.Mode == FactoryTransportRenderMode.Billboard ? "BillboardQuad" : "TransportMesh",
             Mesh = GetSharedMesh(descriptor),
             MaterialOverride = GetSharedMaterial(descriptor),
-            CastShadow = descriptor.Mode == FactoryTransportRenderMode.Billboard
-                ? GeometryInstance3D.ShadowCastingSetting.Off
-                : GeometryInstance3D.ShadowCastingSetting.On
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
         };
 
         var root = new Node3D
@@ -546,6 +545,19 @@ public static class FactoryTransportVisualFactory
         };
         root.AddChild(mesh);
         return root;
+    }
+
+    private static void DisableShadowsRecursive(Node node)
+    {
+        if (node is GeometryInstance3D geometry)
+        {
+            geometry.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+        }
+
+        foreach (var child in node.GetChildren())
+        {
+            DisableShadowsRecursive(child);
+        }
     }
 
     private static FactoryTransportRenderDescriptor CreatePlaceholderDescriptor(FactoryItemKind itemKind, FactoryTransportVisualProfile profile, float cellSize)
