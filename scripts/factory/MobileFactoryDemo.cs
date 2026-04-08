@@ -75,9 +75,9 @@ public partial class MobileFactoryDemo : Node3D
     private readonly Dictionary<BuildPrototypeKind, BuildPrototypeDefinition> _definitions = new()
     {
         [BuildPrototypeKind.Producer] = new BuildPrototypeDefinition(BuildPrototypeKind.Producer, "兼容生产器", new Color("9DC08B"), "兼容型占位产物流，仅用于 legacy 验证。"),
-        [BuildPrototypeKind.Belt] = new BuildPrototypeDefinition(BuildPrototypeKind.Belt, "传送带", new Color("7DD3FC"), "将物品沿直线向前输送。"),
+        [BuildPrototypeKind.Belt] = new BuildPrototypeDefinition(BuildPrototypeKind.Belt, "传送带", new Color("7DD3FC"), "将物品沿直线向前输送，也允许末端直接并入另一段传送带的中段。"),
         [BuildPrototypeKind.Splitter] = new BuildPrototypeDefinition(BuildPrototypeKind.Splitter, "分流器", new Color("C4B5FD"), "将后方输入分到左右两路。"),
-        [BuildPrototypeKind.Merger] = new BuildPrototypeDefinition(BuildPrototypeKind.Merger, "合并器", new Color("99F6E4"), "把左右两路物流汇成前方一路。"),
+        [BuildPrototypeKind.Merger] = new BuildPrototypeDefinition(BuildPrototypeKind.Merger, "合并器", new Color("99F6E4"), "把后方、左侧和右侧三路物流汇成前方一路。"),
         [BuildPrototypeKind.Bridge] = new BuildPrototypeDefinition(BuildPrototypeKind.Bridge, "跨桥", new Color("F59E0B"), "让南北和东西两路物流跨越而不互连。"),
         [BuildPrototypeKind.Loader] = new BuildPrototypeDefinition(BuildPrototypeKind.Loader, "装载器", new Color("FDBA74"), "把后方带上的物品装入前方机器或回收端。"),
         [BuildPrototypeKind.Unloader] = new BuildPrototypeDefinition(BuildPrototypeKind.Unloader, "卸载器", new Color("93C5FD"), "把机器端输出卸到前方传送网络。"),
@@ -1616,7 +1616,7 @@ public partial class MobileFactoryDemo : Node3D
             }
             else
             {
-                _interiorPreviewMessage = $"可在内部格 ({cell.X}, {cell.Y}) 放置{_definitions[_selectedInteriorKind].DisplayName}。";
+                _interiorPreviewMessage = DescribeInteriorPlacementPreview(_selectedInteriorKind, cell, _selectedInteriorFacing);
             }
             return;
         }
@@ -3893,7 +3893,7 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        var markers = FactoryLogisticsPreview.CollectNearbyPortMarkers(_mobileFactory.InteriorSite, _hoveredInteriorCell);
+        var markers = FactoryLogisticsPreview.CollectPortMarkers(_mobileFactory.InteriorSite, previewKind, _hoveredInteriorCell, _selectedInteriorFacing);
         EnsureInteriorPortHintMeshCount(markers.Count);
         var visibleCount = 0;
         for (var index = 0; index < markers.Count; index++)
@@ -3950,6 +3950,24 @@ public partial class MobileFactoryDemo : Node3D
         FactoryDemoInputActions.EnsureAction("cancel_mobile_command", new InputEventKey { PhysicalKeycode = Key.Escape });
         FactoryDemoInputActions.EnsureAction("mobile_factory_auxiliary_command", new InputEventKey { PhysicalKeycode = Key.R });
         FactoryDemoInputActions.EnsureAction("toggle_mobile_editor", new InputEventKey { PhysicalKeycode = Key.F });
+    }
+
+    private string DescribeInteriorPlacementPreview(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
+    {
+        var displayName = _definitions[kind].DisplayName;
+        if (_mobileFactory is not null
+            && kind == BuildPrototypeKind.Belt
+            && FactoryTransportTopology.TryGetBeltMidspanMergeTarget(_mobileFactory.InteriorSite, cell, facing, out var mergeTargetCell))
+        {
+            return $"可在内部格 ({cell.X}, {cell.Y}) 放置{displayName}，并以 T 字方式并入 ({mergeTargetCell.X}, {mergeTargetCell.Y}) 的传送带。";
+        }
+
+        if (kind == BuildPrototypeKind.Merger)
+        {
+            return $"可在内部格 ({cell.X}, {cell.Y}) 放置{displayName}，三入口分别来自后方、左侧和右侧。";
+        }
+
+        return $"可在内部格 ({cell.X}, {cell.Y}) 放置{displayName}。";
     }
 
 

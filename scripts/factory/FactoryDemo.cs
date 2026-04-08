@@ -21,10 +21,10 @@ public partial class FactoryDemo : Node3D
         [BuildPrototypeKind.PowerPole] = new BuildPrototypeDefinition(BuildPrototypeKind.PowerPole, "电线杆", new Color("FDE68A"), "延伸电网覆盖，把发电机接到更远的机器。"),
         [BuildPrototypeKind.Smelter] = new BuildPrototypeDefinition(BuildPrototypeKind.Smelter, "熔炉", new Color("CBD5E1"), "消耗电力把铁矿、铜矿或铁板冶炼成更高阶板材。"),
         [BuildPrototypeKind.Assembler] = new BuildPrototypeDefinition(BuildPrototypeKind.Assembler, "组装机", new Color("67E8F9"), "消耗板材和中间件，组装铜线、电路、机加工件与弹药。"),
-        [BuildPrototypeKind.Belt] = new BuildPrototypeDefinition(BuildPrototypeKind.Belt, "传送带", new Color("7DD3FC"), "将物品沿直线向前输送。"),
+        [BuildPrototypeKind.Belt] = new BuildPrototypeDefinition(BuildPrototypeKind.Belt, "传送带", new Color("7DD3FC"), "将物品沿直线向前输送，也允许末端直接并入另一段传送带的中段。"),
         [BuildPrototypeKind.Sink] = new BuildPrototypeDefinition(BuildPrototypeKind.Sink, "回收站", new Color("FDE68A"), "接收物品并统计送达数量。"),
         [BuildPrototypeKind.Splitter] = new BuildPrototypeDefinition(BuildPrototypeKind.Splitter, "分流器", new Color("C4B5FD"), "将后方输入分到左右两路。"),
-        [BuildPrototypeKind.Merger] = new BuildPrototypeDefinition(BuildPrototypeKind.Merger, "合并器", new Color("99F6E4"), "把左右两路物流汇成前方一路。"),
+        [BuildPrototypeKind.Merger] = new BuildPrototypeDefinition(BuildPrototypeKind.Merger, "合并器", new Color("99F6E4"), "把后方、左侧和右侧三路物流汇成前方一路。"),
         [BuildPrototypeKind.Bridge] = new BuildPrototypeDefinition(BuildPrototypeKind.Bridge, "跨桥", new Color("F59E0B"), "让南北和东西两路物流跨越而不互连。"),
         [BuildPrototypeKind.Loader] = new BuildPrototypeDefinition(BuildPrototypeKind.Loader, "装载器", new Color("FDBA74"), "把后方带上的物品装入前方机器或回收端。"),
         [BuildPrototypeKind.Unloader] = new BuildPrototypeDefinition(BuildPrototypeKind.Unloader, "卸载器", new Color("93C5FD"), "把机器端输出卸到前方传送网络。"),
@@ -811,9 +811,7 @@ public partial class FactoryDemo : Node3D
         {
             _canPlaceCurrentCell = TryValidateWorldPlacement(placementKind, cell, _selectedFacing, out var placementIssue);
             _previewMessage = _canPlaceCurrentCell
-                ? usesPlayerInventory
-                    ? $"可在 ({cell.X}, {cell.Y}) 放置{FactoryPresentation.GetBuildPrototypeDisplayName(placementKind)}，朝向 {FactoryDirection.ToLabel(_selectedFacing)}"
-                    : $"可在 ({cell.X}, {cell.Y}) 放置{_definitions[placementKind].DisplayName}，朝向 {FactoryDirection.ToLabel(_selectedFacing)}"
+                ? DescribeWorldPlacementPreview(placementKind, cell, _selectedFacing, usesPlayerInventory)
                 : placementIssue;
             return;
         }
@@ -1940,7 +1938,7 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        var markers = FactoryLogisticsPreview.CollectNearbyPortMarkers(_grid, _hoveredCell);
+        var markers = FactoryLogisticsPreview.CollectPortMarkers(_grid, previewKind, _hoveredCell, _selectedFacing);
         EnsurePreviewPortHintMeshCount(markers.Count);
         var visibleCount = 0;
         for (var index = 0; index < markers.Count; index++)
@@ -2104,6 +2102,27 @@ public partial class FactoryDemo : Node3D
         }
 
         return _grid.CanPlaceStructure(kind, cell, facing, out message);
+    }
+
+    private string DescribeWorldPlacementPreview(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing, bool usesPlayerInventory)
+    {
+        var displayName = usesPlayerInventory
+            ? FactoryPresentation.GetBuildPrototypeDisplayName(kind)
+            : _definitions[kind].DisplayName;
+
+        if (_grid is not null
+            && kind == BuildPrototypeKind.Belt
+            && FactoryTransportTopology.TryGetBeltMidspanMergeTarget(_grid, cell, facing, out var mergeTargetCell))
+        {
+            return $"可在 ({cell.X}, {cell.Y}) 放置{displayName}，朝向 {FactoryDirection.ToLabel(facing)}，并以 T 字方式并入 ({mergeTargetCell.X}, {mergeTargetCell.Y}) 的传送带。";
+        }
+
+        if (kind == BuildPrototypeKind.Merger)
+        {
+            return $"可在 ({cell.X}, {cell.Y}) 放置{displayName}，朝向 {FactoryDirection.ToLabel(facing)}，三入口分别来自后方、左侧和右侧。";
+        }
+
+        return $"可在 ({cell.X}, {cell.Y}) 放置{displayName}，朝向 {FactoryDirection.ToLabel(facing)}";
     }
 }
 

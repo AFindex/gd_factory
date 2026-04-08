@@ -20,15 +20,54 @@ public static class FactoryLogisticsPreview
 
     public static bool ShouldShowContextualPortHints(BuildPrototypeKind kind)
     {
-        return kind == BuildPrototypeKind.Belt;
+        return kind == BuildPrototypeKind.Belt || kind == BuildPrototypeKind.Merger;
     }
 
-    public static List<FactoryPortPreviewMarker> CollectNearbyPortMarkers(IFactorySite site, Vector2I referenceCell)
+    public static List<FactoryPortPreviewMarker> CollectPortMarkers(IFactorySite site, BuildPrototypeKind previewKind, Vector2I referenceCell, FacingDirection facing)
     {
         var markers = new List<FactoryPortPreviewMarker>();
-        var seenStructures = new HashSet<ulong>();
         var seenCells = new HashSet<(Vector2I, bool)>();
 
+        AppendPreviewMarkers(markers, seenCells, previewKind, referenceCell, facing);
+        AppendNearbyPortMarkers(markers, seenCells, site, referenceCell);
+        return markers;
+    }
+
+    private static void AppendPreviewMarkers(
+        List<FactoryPortPreviewMarker> markers,
+        HashSet<(Vector2I, bool)> seenCells,
+        BuildPrototypeKind previewKind,
+        Vector2I referenceCell,
+        FacingDirection facing)
+    {
+        if (previewKind != BuildPrototypeKind.Merger)
+        {
+            return;
+        }
+
+        AppendMarkers(
+            markers,
+            seenCells,
+            FactoryTransportTopology.GetInputCells(previewKind, referenceCell, facing),
+            isInput: true,
+            highlightAll: true,
+            referenceCell);
+        AppendMarkers(
+            markers,
+            seenCells,
+            FactoryTransportTopology.GetOutputCells(previewKind, referenceCell, facing),
+            isInput: false,
+            highlightAll: true,
+            referenceCell);
+    }
+
+    private static void AppendNearbyPortMarkers(
+        List<FactoryPortPreviewMarker> markers,
+        HashSet<(Vector2I, bool)> seenCells,
+        IFactorySite site,
+        Vector2I referenceCell)
+    {
+        var seenStructures = new HashSet<ulong>();
         for (var index = 0; index < CandidateOffsets.Length; index++)
         {
             if (!site.TryGetStructure(referenceCell + CandidateOffsets[index], out var structure) || structure is null)
@@ -41,18 +80,16 @@ public static class FactoryLogisticsPreview
                 continue;
             }
 
-            var inputCells = structure.GetInputCells();
-            var outputCells = structure.GetOutputCells();
+            var inputCells = FactoryTransportTopology.GetInputCells(structure);
+            var outputCells = FactoryTransportTopology.GetOutputCells(structure);
             if (inputCells.Count <= 1 && outputCells.Count <= 1)
             {
                 continue;
             }
 
-            AppendMarkers(markers, seenCells, inputCells, isInput: true, referenceCell);
-            AppendMarkers(markers, seenCells, outputCells, isInput: false, referenceCell);
+            AppendMarkers(markers, seenCells, inputCells, isInput: true, highlightAll: false, referenceCell);
+            AppendMarkers(markers, seenCells, outputCells, isInput: false, highlightAll: false, referenceCell);
         }
-
-        return markers;
     }
 
     private static void AppendMarkers(
@@ -60,6 +97,7 @@ public static class FactoryLogisticsPreview
         HashSet<(Vector2I, bool)> seenCells,
         IReadOnlyList<Vector2I> cells,
         bool isInput,
+        bool highlightAll,
         Vector2I referenceCell)
     {
         for (var index = 0; index < cells.Count; index++)
@@ -73,7 +111,7 @@ public static class FactoryLogisticsPreview
             markers.Add(new FactoryPortPreviewMarker(
                 cells[index],
                 isInput,
-                cells[index] == referenceCell));
+                highlightAll || cells[index] == referenceCell));
         }
     }
 }

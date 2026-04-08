@@ -136,17 +136,12 @@ internal static class FactoryMapValidationTopologyHelper
 {
     public static IReadOnlyList<Vector2I> GetInputCells(FactoryStructure structure)
     {
-        if (structure is BeltStructure belt)
-        {
-            return new[] { belt.GetInputCell() };
-        }
-
-        return structure.GetInputCells();
+        return FactoryTransportTopology.GetInputCells(structure);
     }
 
     public static IReadOnlyList<Vector2I> GetOutputCells(FactoryStructure structure)
     {
-        return structure.GetOutputCells();
+        return FactoryTransportTopology.GetOutputCells(structure);
     }
 
     public static bool TryGetInputProvider(FactoryStructure receiver, Vector2I inputCell, out FactoryStructure? provider)
@@ -391,7 +386,7 @@ public static partial class FactoryMapValidationService
             context.TargetId,
             FactoryMapValidationSeverity.Info,
             "focus",
-            $"Occupied cells: {JoinCells(structure.GetOccupiedCells())}. Inputs: {JoinCells(structure.GetInputCells())}. Outputs: {JoinCells(structure.GetOutputCells())}.",
+            $"Occupied cells: {JoinCells(structure.GetOccupiedCells())}. Inputs: {JoinCells(FactoryTransportTopology.GetInputCells(structure))}. Outputs: {JoinCells(FactoryTransportTopology.GetOutputCells(structure))}.",
             context.MapPath,
             structure.Kind,
             structure.Cell));

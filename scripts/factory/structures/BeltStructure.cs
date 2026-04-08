@@ -22,14 +22,14 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
 
     public void RefreshTopology()
     {
-        _inputFacing = DetermineInputFacing();
+        _inputFacing = FactoryTransportTopology.DetermineBeltPrimaryInputFacing(Site, Cell, Facing);
         Rotation = new Vector3(0.0f, Site.WorldRotationRadians, 0.0f);
         RebuildTrackVisuals();
     }
 
     public override bool CanReceiveFrom(Vector2I sourceCell)
     {
-        return sourceCell == GetInputCell();
+        return FactoryTransportTopology.BeltCanReceiveFrom(Site, Cell, Facing, sourceCell);
     }
 
     public override bool CanOutputTo(Vector2I targetCell)
@@ -54,7 +54,7 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
 
     protected override bool CanReceiveProvidedFrom(Vector2I sourceCell)
     {
-        return IsOrthogonallyAdjacent(Cell, sourceCell) && sourceCell != GetOutputCell();
+        return FactoryTransportTopology.BeltCanReceiveFrom(Site, Cell, Facing, sourceCell);
     }
 
     protected override void BuildVisuals()
@@ -90,28 +90,6 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
     {
         targetCell = GetOutputCell();
         return true;
-    }
-
-    private FacingDirection DetermineInputFacing()
-    {
-        var preferred = GetOppositeFacing(Facing);
-        var candidates = new FacingDirection[]
-        {
-            preferred,
-            FactoryDirection.RotateCounterClockwise(Facing),
-            FactoryDirection.RotateClockwise(Facing)
-        };
-
-        foreach (var direction in candidates)
-        {
-            var sourceCell = Cell + FactoryDirection.ToCellOffset(direction);
-            if (Site.TryGetStructure(sourceCell, out var structure) && structure is not null && structure.CanOutputTo(Cell))
-            {
-                return direction;
-            }
-        }
-
-        return preferred;
     }
 
     private void RebuildTrackVisuals()
@@ -153,16 +131,5 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
         };
 
         mesh.Position = new Vector3(direction.X * CellSize * 0.32f, 0.16f, direction.Y * CellSize * 0.32f);
-    }
-
-    private static FacingDirection GetOppositeFacing(FacingDirection facing)
-    {
-        return facing switch
-        {
-            FacingDirection.East => FacingDirection.West,
-            FacingDirection.West => FacingDirection.East,
-            FacingDirection.North => FacingDirection.South,
-            _ => FacingDirection.North
-        };
     }
 }

@@ -52,6 +52,8 @@ public partial class FactoryDemo
         ConfigureCombatScenarios();
         var profilerText = _hud?.ProfilerText ?? string.Empty;
         var splitterFallbackRecovered = await RunSplitterFallbackSmoke();
+        var midspanMergeRecovered = await RunMidspanMergeSmoke();
+        var threeWayMergerRecovered = await RunThreeWayMergerSmoke();
         var bridgeLaneRecovered = await RunBridgeLaneIndependenceSmoke();
         var storageFlowVerified = await RunStorageInserterSmoke();
         var inspectionVerified = VerifyStorageInspectionPanel();
@@ -70,6 +72,8 @@ public partial class FactoryDemo
             || string.IsNullOrWhiteSpace(profilerText)
             || !profilerText.Contains("FPS", global::System.StringComparison.Ordinal)
             || !splitterFallbackRecovered
+            || !midspanMergeRecovered
+            || !threeWayMergerRecovered
             || !bridgeLaneRecovered
             || !storageFlowVerified
             || !inspectionVerified
@@ -85,12 +89,12 @@ public partial class FactoryDemo
             || !previewArrowReady
             || !playerInteractionVerified)
         {
-              GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} assemblerPortPreview={assemblerPortPreviewVerified} playerInteraction={playerInteractionVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} mapFormat={mapFormatVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
+              GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} assemblerPortPreview={assemblerPortPreviewVerified} playerInteraction={playerInteractionVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} mapFormat={mapFormatVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
             GetTree().Quit(1);
             return;
         }
 
-          GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} mapFormat={mapFormatVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} assemblerPortPreview={assemblerPortPreviewVerified} previewArrowReady={previewArrowReady} playerInteraction={playerInteractionVerified}");
+          GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} mapFormat={mapFormatVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} assemblerPortPreview={assemblerPortPreviewVerified} previewArrowReady={previewArrowReady} playerInteraction={playerInteractionVerified}");
         GetTree().Quit();
     }
 
@@ -341,8 +345,30 @@ public partial class FactoryDemo
         UpdatePreview();
         var nonBeltHintsHidden = !_previewPortHintRoot.Visible;
 
+        _selectedFacing = FacingDirection.East;
+        _hoveredCell = new Vector2I(19, 18);
+        _hasHoveredCell = true;
+        _canPlaceCurrentCell = TryValidateWorldPlacement(BuildPrototypeKind.Merger, _hoveredCell, FacingDirection.East, out _);
+        SelectBuildKind(BuildPrototypeKind.Merger);
+        UpdatePreview();
+        var mergerHintsVisible = CountVisiblePreviewPortHints() >= 4;
+
         EnterInteractionMode();
-        return eastContractVerified && beltHintsVisible && southPreviewSizeVerified && nonBeltHintsHidden;
+        return eastContractVerified && beltHintsVisible && southPreviewSizeVerified && nonBeltHintsHidden && mergerHintsVisible;
+    }
+
+    private int CountVisiblePreviewPortHints()
+    {
+        var count = 0;
+        for (var index = 0; index < _previewPortHintMeshes.Count; index++)
+        {
+            if (_previewPortHintMeshes[index].Visible)
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private bool TryFindHorizontalPlacementPair(BuildPrototypeKind kind, Vector2I nearCell, out Vector2I startCell, out Vector2I nextCell)
@@ -951,6 +977,143 @@ public partial class FactoryDemo
         if (!passed)
         {
             GD.Print($"FACTORY_BRIDGE_SMOKE eastDelivered={eastSink.DeliveredTotal} southDelivered={southSink.DeliveredTotal} eastBuffered={eastStorage.BufferedCount} southBuffered={southStorage.BufferedCount}");
+        }
+
+        return passed;
+    }
+
+    private async Task<bool> RunMidspanMergeSmoke()
+    {
+        if (_grid is null || _simulation is null)
+        {
+            return false;
+        }
+
+        var requiredCells = new[]
+        {
+            new Vector2I(35, -12),
+            new Vector2I(36, -12),
+            new Vector2I(37, -12),
+            new Vector2I(38, -12),
+            new Vector2I(36, -15),
+            new Vector2I(36, -14),
+            new Vector2I(36, -13)
+        };
+
+        for (var index = 0; index < requiredCells.Length; index++)
+        {
+            if (!_grid.CanPlace(requiredCells[index]))
+            {
+                return false;
+            }
+        }
+
+        PlaceStructure(BuildPrototypeKind.Belt, 35, -12, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, 36, -12, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, 37, -12, FacingDirection.East);
+        var sink = PlaceStructure(BuildPrototypeKind.Sink, 38, -12, FacingDirection.East) as SinkStructure;
+        var feederStorage = PlaceStructure(BuildPrototypeKind.Storage, 36, -15, FacingDirection.South) as StorageStructure;
+        PlaceStructure(BuildPrototypeKind.Belt, 36, -14, FacingDirection.South);
+        PlaceStructure(BuildPrototypeKind.Belt, 36, -13, FacingDirection.South);
+
+        if (sink is null || feederStorage is null)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < 4; index++)
+        {
+            feederStorage.TryReceiveProvidedItem(
+                _simulation.CreateItem(BuildPrototypeKind.Storage, FactoryItemKind.GenericCargo),
+                GetPrimaryInputCell(feederStorage),
+                _simulation);
+        }
+
+        await ToSignal(GetTree().CreateTimer(8.0f), SceneTreeTimer.SignalName.Timeout);
+
+        var passed = sink.DeliveredTotal > 0 && feederStorage.BufferedCount < 4;
+        if (!passed)
+        {
+            GD.Print($"FACTORY_MIDSPAN_MERGE_SMOKE delivered={sink.DeliveredTotal} feederBuffered={feederStorage.BufferedCount}");
+        }
+
+        return passed;
+    }
+
+    private async Task<bool> RunThreeWayMergerSmoke()
+    {
+        if (_grid is null || _simulation is null)
+        {
+            return false;
+        }
+
+        var requiredCells = new[]
+        {
+            new Vector2I(34, -20),
+            new Vector2I(35, -20),
+            new Vector2I(36, -20),
+            new Vector2I(37, -20),
+            new Vector2I(38, -20),
+            new Vector2I(36, -23),
+            new Vector2I(36, -22),
+            new Vector2I(36, -21),
+            new Vector2I(36, -19),
+            new Vector2I(36, -18),
+            new Vector2I(36, -17)
+        };
+
+        for (var index = 0; index < requiredCells.Length; index++)
+        {
+            if (!_grid.CanPlace(requiredCells[index]))
+            {
+                return false;
+            }
+        }
+
+        var westStorage = PlaceStructure(BuildPrototypeKind.Storage, 34, -20, FacingDirection.East) as StorageStructure;
+        PlaceStructure(BuildPrototypeKind.Belt, 35, -20, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Merger, 36, -20, FacingDirection.East);
+        PlaceStructure(BuildPrototypeKind.Belt, 37, -20, FacingDirection.East);
+        var sink = PlaceStructure(BuildPrototypeKind.Sink, 38, -20, FacingDirection.East) as SinkStructure;
+
+        var northStorage = PlaceStructure(BuildPrototypeKind.Storage, 36, -23, FacingDirection.South) as StorageStructure;
+        PlaceStructure(BuildPrototypeKind.Belt, 36, -22, FacingDirection.South);
+        PlaceStructure(BuildPrototypeKind.Belt, 36, -21, FacingDirection.South);
+
+        PlaceStructure(BuildPrototypeKind.Belt, 36, -19, FacingDirection.North);
+        var southStorage = PlaceStructure(BuildPrototypeKind.Storage, 36, -17, FacingDirection.North) as StorageStructure;
+        PlaceStructure(BuildPrototypeKind.Belt, 36, -18, FacingDirection.North);
+
+        if (westStorage is null || northStorage is null || southStorage is null || sink is null)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < 4; index++)
+        {
+            westStorage.TryReceiveProvidedItem(
+                _simulation.CreateItem(BuildPrototypeKind.Storage, FactoryItemKind.GenericCargo),
+                GetPrimaryInputCell(westStorage),
+                _simulation);
+            northStorage.TryReceiveProvidedItem(
+                _simulation.CreateItem(BuildPrototypeKind.Storage, FactoryItemKind.GenericCargo),
+                GetPrimaryInputCell(northStorage),
+                _simulation);
+            southStorage.TryReceiveProvidedItem(
+                _simulation.CreateItem(BuildPrototypeKind.Storage, FactoryItemKind.GenericCargo),
+                GetPrimaryInputCell(southStorage),
+                _simulation);
+        }
+
+        await ToSignal(GetTree().CreateTimer(10.0f), SceneTreeTimer.SignalName.Timeout);
+
+        var passed = sink.DeliveredTotal > 0
+            && westStorage.BufferedCount < 4
+            && northStorage.BufferedCount < 4
+            && southStorage.BufferedCount < 4;
+        if (!passed)
+        {
+            GD.Print($"FACTORY_THREE_WAY_MERGER_SMOKE delivered={sink.DeliveredTotal} westBuffered={westStorage.BufferedCount} northBuffered={northStorage.BufferedCount} southBuffered={southStorage.BufferedCount}");
         }
 
         return passed;
