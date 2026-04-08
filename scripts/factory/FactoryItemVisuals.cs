@@ -2,6 +2,101 @@ using Godot;
 using System;
 using System.Collections.Generic;
 
+public enum FactoryTransportRenderMode
+{
+    Placeholder,
+    TexturedBox,
+    Billboard,
+    ModelNode
+}
+
+public enum FactoryTransportRenderTier
+{
+    Near,
+    Mid,
+    Far
+}
+
+public sealed class FactoryTransportRenderDescriptor
+{
+    public FactoryTransportRenderDescriptor(
+        string batchKey,
+        FactoryTransportRenderMode mode,
+        Color tint,
+        Vector3 meshScale,
+        Vector2 billboardScale,
+        Texture2D? texture = null,
+        Func<float, Node3D>? modelFactory = null,
+        bool isBatchable = true)
+    {
+        BatchKey = batchKey;
+        Mode = mode;
+        Tint = tint;
+        MeshScale = meshScale;
+        BillboardScale = billboardScale;
+        Texture = texture;
+        ModelFactory = modelFactory;
+        IsBatchable = isBatchable;
+    }
+
+    public string BatchKey { get; }
+    public FactoryTransportRenderMode Mode { get; }
+    public Color Tint { get; }
+    public Vector3 MeshScale { get; }
+    public Vector2 BillboardScale { get; }
+    public Texture2D? Texture { get; }
+    public Func<float, Node3D>? ModelFactory { get; }
+    public bool IsBatchable { get; }
+}
+
+public sealed class FactoryTransportRenderDescriptorSet
+{
+    public FactoryTransportRenderDescriptorSet(
+        FactoryTransportRenderDescriptor primary,
+        FactoryTransportRenderDescriptor mid,
+        FactoryTransportRenderDescriptor far)
+    {
+        Primary = primary;
+        Mid = mid;
+        Far = far;
+    }
+
+    public FactoryTransportRenderDescriptor Primary { get; }
+    public FactoryTransportRenderDescriptor Mid { get; }
+    public FactoryTransportRenderDescriptor Far { get; }
+
+    public FactoryTransportRenderDescriptor ResolveForTier(FactoryTransportRenderTier tier)
+    {
+        return tier switch
+        {
+            FactoryTransportRenderTier.Far => Far,
+            FactoryTransportRenderTier.Mid => Mid,
+            _ => Primary
+        };
+    }
+
+    public FactoryTransportRenderDescriptor ResolveBatchableForTier(FactoryTransportRenderTier tier)
+    {
+        var preferred = ResolveForTier(tier);
+        if (preferred.IsBatchable)
+        {
+            return preferred;
+        }
+
+        if (Mid.IsBatchable)
+        {
+            return Mid;
+        }
+
+        if (Far.IsBatchable)
+        {
+            return Far;
+        }
+
+        return Primary;
+    }
+}
+
 public sealed class FactoryTransportVisualProfile
 {
     public FactoryTransportVisualProfile(
@@ -32,6 +127,11 @@ public sealed class FactoryTransportVisualProfile
     public Func<float, Node3D>? ModelFactory { get; }
     public bool AllowTexturedMeshFallback { get; }
     public bool AllowBillboardFallback { get; }
+
+    public FactoryTransportRenderDescriptorSet ResolveRenderDescriptors(FactoryItemKind itemKind, float cellSize)
+    {
+        return FactoryTransportVisualFactory.ResolveDescriptorSet(itemKind, cellSize);
+    }
 }
 
 public sealed class FactoryItemDefinition
@@ -328,107 +428,189 @@ public static partial class FactoryItemCatalog
 
 public static class FactoryTransportVisualFactory
 {
+    private static readonly Dictionary<string, Mesh> SharedMeshes = new();
+    private static readonly Dictionary<string, Material> SharedMaterials = new();
+
     public static Node3D CreateVisual(FactoryItem item, float cellSize)
     {
-        var definition = FactoryItemCatalog.GetDefinition(item.ItemKind);
-        var profile = definition.VisualProfile;
-
-        if (profile.ModelFactory is not null)
-        {
-            var model = profile.ModelFactory(cellSize);
-            if (model is not null)
-            {
-                model.Name = $"{item.ItemKind}_Model";
-                return model;
-            }
-        }
-
-        if (profile.AllowTexturedMeshFallback && profile.Texture is not null)
-        {
-            return CreateTexturedMeshNode(item.ItemKind, cellSize, profile);
-        }
-
-        if (profile.AllowBillboardFallback && profile.Texture is not null)
-        {
-            return CreateBillboardNode(item.ItemKind, cellSize, profile);
-        }
-
-        return CreatePlaceholderNode(item.ItemKind, cellSize, profile);
+        return CreateVisual(item.ItemKind, cellSize);
     }
 
-    private static Node3D CreatePlaceholderNode(FactoryItemKind itemKind, float cellSize, FactoryTransportVisualProfile profile)
+    public static Node3D CreateVisual(FactoryItemKind itemKind, float cellSize)
     {
-        var root = new Node3D
+        return CreateNodeForDescriptor(ResolveDescriptorSet(itemKind, cellSize).Primary, itemKind, cellSize);
+    }
+
+    public static FactoryTransportRenderDescriptorSet ResolveDescriptorSet(FactoryItem item, float cellSize)
+    {
+        return ResolveDescriptorSet(item.ItemKind, cellSize);
+    }
+
+    public static FactoryTransportRenderDescriptorSet ResolveDescriptorSet(FactoryItemKind itemKind, float cellSize)
+    {
+        var definition = FactoryItemCatalog.GetDefinition(itemKind);
+        var profile = definition.VisualProfile;
+        var placeholder = CreatePlaceholderDescriptor(itemKind, profile, cellSize);
+        var billboard = CreateBillboardDescriptor(itemKind, profile, cellSize) ?? placeholder;
+        var textured = CreateTexturedDescriptor(itemKind, profile, cellSize) ?? billboard;
+        var primary = profile.ModelFactory is not null
+            ? CreateModelDescriptor(itemKind, profile, cellSize)
+            : profile.AllowTexturedMeshFallback && profile.Texture is not null
+                ? textured
+                : profile.AllowBillboardFallback && profile.Texture is not null
+                    ? billboard
+                    : placeholder;
+        var mid = profile.AllowTexturedMeshFallback && profile.Texture is not null
+            ? textured
+            : billboard;
+        var far = profile.AllowBillboardFallback && profile.Texture is not null
+            ? billboard
+            : placeholder;
+        return new FactoryTransportRenderDescriptorSet(primary, mid, far);
+    }
+
+    public static Mesh GetSharedMesh(FactoryTransportRenderDescriptor descriptor)
+    {
+        if (SharedMeshes.TryGetValue(descriptor.BatchKey, out var existing))
         {
-            Name = $"{itemKind}_Placeholder"
+            return existing;
+        }
+
+        Mesh mesh = descriptor.Mode switch
+        {
+            FactoryTransportRenderMode.Billboard => new QuadMesh { Size = descriptor.BillboardScale },
+            FactoryTransportRenderMode.TexturedBox => new BoxMesh { Size = descriptor.MeshScale },
+            _ => new BoxMesh { Size = descriptor.MeshScale }
         };
-        root.AddChild(new MeshInstance3D
+        SharedMeshes[descriptor.BatchKey] = mesh;
+        return mesh;
+    }
+
+    public static Material GetSharedMaterial(FactoryTransportRenderDescriptor descriptor)
+    {
+        if (SharedMaterials.TryGetValue(descriptor.BatchKey, out var existing))
         {
-            Name = "PlaceholderMesh",
-            Mesh = new BoxMesh { Size = profile.PlaceholderScale * cellSize },
-            MaterialOverride = new StandardMaterial3D
+            return existing;
+        }
+
+        Material material = descriptor.Mode switch
+        {
+            FactoryTransportRenderMode.Billboard => new StandardMaterial3D
             {
-                AlbedoColor = profile.Tint,
+                AlbedoColor = Colors.White,
+                AlbedoTexture = descriptor.Texture,
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
+                CullMode = BaseMaterial3D.CullModeEnum.Disabled
+            },
+            FactoryTransportRenderMode.TexturedBox => new StandardMaterial3D
+            {
+                AlbedoColor = Colors.White,
+                AlbedoTexture = descriptor.Texture,
+                Roughness = 0.62f,
+                Metallic = 0.04f
+            },
+            _ => new StandardMaterial3D
+            {
+                AlbedoColor = descriptor.Tint,
                 Roughness = 0.75f
             }
-        });
-        return root;
+        };
+        SharedMaterials[descriptor.BatchKey] = material;
+        return material;
     }
 
-    private static Node3D CreateTexturedMeshNode(FactoryItemKind itemKind, float cellSize, FactoryTransportVisualProfile profile)
+    private static Node3D CreateNodeForDescriptor(FactoryTransportRenderDescriptor descriptor, FactoryItemKind itemKind, float cellSize)
     {
-        var material = new StandardMaterial3D
+        if (descriptor.Mode == FactoryTransportRenderMode.ModelNode && descriptor.ModelFactory is not null)
         {
-            AlbedoColor = Colors.White,
-            AlbedoTexture = profile.Texture,
-            Roughness = 0.62f,
-            Metallic = 0.04f
-        };
+            var model = descriptor.ModelFactory(cellSize);
+            model.Name = $"{itemKind}_Model";
+            return model;
+        }
 
         var mesh = new MeshInstance3D
         {
-            Name = "TexturedMesh",
-            Mesh = new BoxMesh { Size = profile.TexturedMeshScale * cellSize },
-            MaterialOverride = material
+            Name = descriptor.Mode == FactoryTransportRenderMode.Billboard ? "BillboardQuad" : "TransportMesh",
+            Mesh = GetSharedMesh(descriptor),
+            MaterialOverride = GetSharedMaterial(descriptor),
+            CastShadow = descriptor.Mode == FactoryTransportRenderMode.Billboard
+                ? GeometryInstance3D.ShadowCastingSetting.Off
+                : GeometryInstance3D.ShadowCastingSetting.On
         };
 
         var root = new Node3D
         {
-            Name = $"{itemKind}_Textured"
+            Name = $"{itemKind}_{descriptor.Mode}"
         };
         root.AddChild(mesh);
         return root;
     }
 
-    private static Node3D CreateBillboardNode(FactoryItemKind itemKind, float cellSize, FactoryTransportVisualProfile profile)
+    private static FactoryTransportRenderDescriptor CreatePlaceholderDescriptor(FactoryItemKind itemKind, FactoryTransportVisualProfile profile, float cellSize)
     {
-        var material = new StandardMaterial3D
-        {
-            AlbedoColor = Colors.White,
-            AlbedoTexture = profile.Texture,
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
-            CullMode = BaseMaterial3D.CullModeEnum.Disabled
-        };
+        return new FactoryTransportRenderDescriptor(
+            $"placeholder:{itemKind}:{FormatVector3(profile.PlaceholderScale * cellSize)}:{profile.Tint.ToHtml()}",
+            FactoryTransportRenderMode.Placeholder,
+            profile.Tint,
+            profile.PlaceholderScale * cellSize,
+            profile.BillboardScale * cellSize);
+    }
 
-        var mesh = new MeshInstance3D
+    private static FactoryTransportRenderDescriptor? CreateTexturedDescriptor(FactoryItemKind itemKind, FactoryTransportVisualProfile profile, float cellSize)
+    {
+        if (profile.Texture is null)
         {
-            Name = "BillboardQuad",
-            Mesh = new QuadMesh
-            {
-                Size = profile.BillboardScale * cellSize
-            },
-            MaterialOverride = material,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
-        };
+            return null;
+        }
 
-        var root = new Node3D
+        return new FactoryTransportRenderDescriptor(
+            $"textured:{itemKind}:{profile.Texture.GetInstanceId()}:{FormatVector3(profile.TexturedMeshScale * cellSize)}",
+            FactoryTransportRenderMode.TexturedBox,
+            profile.Tint,
+            profile.TexturedMeshScale * cellSize,
+            profile.BillboardScale * cellSize,
+            texture: profile.Texture);
+    }
+
+    private static FactoryTransportRenderDescriptor? CreateBillboardDescriptor(FactoryItemKind itemKind, FactoryTransportVisualProfile profile, float cellSize)
+    {
+        if (profile.Texture is null)
         {
-            Name = $"{itemKind}_Billboard"
-        };
-        root.AddChild(mesh);
-        return root;
+            return null;
+        }
+
+        return new FactoryTransportRenderDescriptor(
+            $"billboard:{itemKind}:{profile.Texture.GetInstanceId()}:{FormatVector2(profile.BillboardScale * cellSize)}",
+            FactoryTransportRenderMode.Billboard,
+            profile.Tint,
+            profile.PlaceholderScale * cellSize,
+            profile.BillboardScale * cellSize,
+            texture: profile.Texture);
+    }
+
+    private static FactoryTransportRenderDescriptor CreateModelDescriptor(FactoryItemKind itemKind, FactoryTransportVisualProfile profile, float cellSize)
+    {
+        return new FactoryTransportRenderDescriptor(
+            $"model:{itemKind}:{FormatVector3(profile.PlaceholderScale * cellSize)}",
+            FactoryTransportRenderMode.ModelNode,
+            profile.Tint,
+            profile.PlaceholderScale * cellSize,
+            profile.BillboardScale * cellSize,
+            texture: profile.Texture,
+            modelFactory: profile.ModelFactory,
+            isBatchable: false);
+    }
+
+    private static string FormatVector2(Vector2 value)
+    {
+        return $"{value.X:0.###},{value.Y:0.###}";
+    }
+
+    private static string FormatVector3(Vector3 value)
+    {
+        return $"{value.X:0.###},{value.Y:0.###},{value.Z:0.###}";
     }
 }
 

@@ -5,19 +5,26 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
 {
     protected sealed class TransitItemState
     {
-        public TransitItemState(FactoryItem item, Node3D visual, Vector2I sourceCell, Vector2I targetCell)
+        public TransitItemState(
+            FactoryItem item,
+            FactoryTransportRenderDescriptorSet renderDescriptors,
+            Vector2I sourceCell,
+            Vector2I targetCell,
+            Node3D? legacyVisual = null)
         {
             Item = item;
-            Visual = visual;
+            RenderDescriptors = renderDescriptors;
             SourceCell = sourceCell;
             TargetCell = targetCell;
+            LegacyVisual = legacyVisual;
             LaneKey = 0;
         }
 
         public FactoryItem Item { get; }
-        public Node3D Visual { get; }
+        public FactoryTransportRenderDescriptorSet RenderDescriptors { get; }
         public Vector2I SourceCell { get; }
         public Vector2I TargetCell { get; set; }
+        public Node3D? LegacyVisual { get; set; }
         public int LaneKey { get; set; }
         public float Position { get; set; }
         public float PreviousPosition { get; set; }
@@ -54,13 +61,19 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
             return false;
         }
 
-        var state = new TransitItemState(item, CreateTransitVisual(item), sourceCell, targetCell)
+        var renderDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(item, CellSize);
+        var legacyVisual = GetTransportRenderManager() is null ? CreateTransitVisual(item) : null;
+        var state = new TransitItemState(item, renderDescriptors, sourceCell, targetCell, legacyVisual)
         {
             LaneKey = laneKey,
             Position = 0.0f,
             PreviousPosition = 0.0f
         };
-        state.Visual.Position = EvaluatePathPoint(state, 0.0f);
+        if (state.LegacyVisual is not null)
+        {
+            state.LegacyVisual.Position = EvaluatePathPoint(state, 0.0f);
+        }
+
         _items.Add(state);
         OnTransitItemAccepted(state);
         return true;
@@ -118,7 +131,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         }
 
         item = previewItem;
-        _items[stateIndex].Visual.QueueFree();
+        FreeLegacyVisual(_items[stateIndex]);
         _items.RemoveAt(stateIndex);
         return true;
     }
@@ -159,13 +172,19 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
             return false;
         }
 
-        var state = new TransitItemState(item, CreateTransitVisual(item), sourceCell, targetCell)
+        var renderDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(item, CellSize);
+        var legacyVisual = GetTransportRenderManager() is null ? CreateTransitVisual(item) : null;
+        var state = new TransitItemState(item, renderDescriptors, sourceCell, targetCell, legacyVisual)
         {
             LaneKey = laneKey,
             Position = 0.0f,
             PreviousPosition = 0.0f
         };
-        state.Visual.Position = EvaluatePathPoint(state, 0.0f);
+        if (state.LegacyVisual is not null)
+        {
+            state.LegacyVisual.Position = EvaluatePathPoint(state, 0.0f);
+        }
+
         _items.Add(state);
         OnTransitItemAccepted(state);
         return true;
@@ -200,7 +219,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
                 {
                     if (TryDispatchItem(itemState, simulation))
                     {
-                        itemState.Visual.QueueFree();
+                        FreeLegacyVisual(itemState);
                         _items.RemoveAt(i);
                         i--;
                         continue;
@@ -220,11 +239,28 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
 
     public override void UpdateVisuals(float tickAlpha)
     {
+        var renderManager = GetTransportRenderManager();
         for (var i = 0; i < _items.Count; i++)
         {
             var itemState = _items[i];
             var visualProgress = Mathf.Lerp(itemState.PreviousPosition, itemState.Position, tickAlpha);
-            itemState.Visual.Position = EvaluatePathPoint(itemState, visualProgress);
+            var localPoint = EvaluatePathPoint(itemState, visualProgress);
+            if (renderManager is not null)
+            {
+                FreeLegacyVisual(itemState);
+                renderManager.SubmitSnapshot(new FactoryTransportRenderSnapshot(
+                    ToGlobal(localPoint),
+                    Cell,
+                    itemState.RenderDescriptors));
+                continue;
+            }
+
+            if (itemState.LegacyVisual is null)
+            {
+                itemState.LegacyVisual = CreateTransitVisual(itemState.Item);
+            }
+
+            itemState.LegacyVisual.Position = localPoint;
         }
     }
 
@@ -308,6 +344,22 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
     protected virtual bool CanReceiveProvidedFrom(Vector2I sourceCell)
     {
         return CanReceiveFrom(sourceCell);
+    }
+
+    private FactoryTransportRenderManager? GetTransportRenderManager()
+    {
+        return GetTree()?.GetFirstNodeInGroup(FactoryTransportRenderManager.GroupName) as FactoryTransportRenderManager;
+    }
+
+    private static void FreeLegacyVisual(TransitItemState state)
+    {
+        if (state.LegacyVisual is null)
+        {
+            return;
+        }
+
+        state.LegacyVisual.QueueFree();
+        state.LegacyVisual = null;
     }
 
     private void RefreshTransitLanes()

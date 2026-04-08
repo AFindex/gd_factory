@@ -1,0 +1,73 @@
+{
+  "FormatVersion": 1,
+  "Id": "b2c7b5a5f0bf4f33a64f756a7dec750a",
+  "DisplayName": "\u53D1\u7535",
+  "SourceSiteKind": "WorldGrid",
+  "SuggestedAnchorCell": {
+    "X": -36,
+    "Y": -30
+  },
+  "BoundsSize": {
+    "X": 6,
+    "Y": 1
+  },
+  "Entries": [
+    {
+      "Kind": "MiningDrill",
+      "LocalCell": {
+        "X": 0,
+        "Y": 0
+      },
+      "Facing": "East",
+      "Configuration": {
+        "recipe_id": "coal-extraction"
+      }
+    },
+    {
+      "Kind": "Belt",
+      "LocalCell": {
+        "X": 1,
+        "Y": 0
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "Belt",
+      "LocalCell": {
+        "X": 2,
+        "Y": 0
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "Belt",
+      "LocalCell": {
+        "X": 3,
+        "Y": 0
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "Belt",
+      "LocalCell": {
+        "X": 4,
+        "Y": 0
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "Generator",
+      "LocalCell": {
+        "X": 5,
+        "Y": 0
+      },
+      "Facing": "East",
+      "Configuration": null
+    }
+  ],
+  "RequiredAttachments": []
+}

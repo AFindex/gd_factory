@@ -180,7 +180,7 @@ public partial class FactoryHud : CanvasLayer
         SetPreviewStatus(false, "交互模式：点击建筑查看；按数字键选择建筑后进入建造。");
         SetRotation(FacingDirection.East);
         SetSinkStats(0, 0, 0);
-        SetProfilerStats(0, 0.0, 0, 0, 0.0, 0.0, 0.0);
+        SetProfilerStats(0, 0.0, 0, 0, 0, 0, false, 0.0, 0.0, 0.0);
         SetCombatStats(0, 0, 0);
         SetNote("默认场景现在围绕真实采矿、冶炼、弹药补给、维护站与接收站循环组织；验证工作区主要用于观察这些链路。");
         SetInspection(null, null);
@@ -309,7 +309,17 @@ public partial class FactoryHud : CanvasLayer
         }
     }
 
-    public void SetProfilerStats(int fps, double frameMilliseconds, int structureCount, int transitItemCount, double simulationMilliseconds, double visualMilliseconds, double topologyMilliseconds)
+    public void SetProfilerStats(
+        int fps,
+        double frameMilliseconds,
+        int structureCount,
+        int transitItemCount,
+        int visibleTransportItemCount,
+        int transportBatchCount,
+        bool optimizedTransportActive,
+        double simulationMilliseconds,
+        double visualMilliseconds,
+        double topologyMilliseconds)
     {
         if (_profilerLabel is null)
         {
@@ -319,6 +329,7 @@ public partial class FactoryHud : CanvasLayer
         _profilerLabel.Text =
             $"FPS {fps} | 帧 {frameMilliseconds:0.0} ms\n" +
             $"结构 {structureCount} | 在途 {transitItemCount}\n" +
+            $"渲染中 {visibleTransportItemCount} | 批次 {transportBatchCount} | 优化 {(optimizedTransportActive ? "ON" : "OFF")}\n" +
             $"热点 sim {simulationMilliseconds:0.00} ms | visual {visualMilliseconds:0.00} ms\n" +
             $"拓扑重建 {topologyMilliseconds:0.00} ms";
     }

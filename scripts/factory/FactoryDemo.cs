@@ -41,6 +41,7 @@ public partial class FactoryDemo : Node3D
     private SimulationController? _simulation;
     private FactoryCameraRig? _cameraRig;
     private FactoryHud? _hud;
+    private FactoryTransportRenderManager? _transportRenderManager;
     private FactoryPlayerController? _playerController;
     private FactoryPlayerHud? _playerHud;
     private Node3D? _structureRoot;
@@ -380,6 +381,9 @@ public partial class FactoryDemo : Node3D
         _combatDirector = scaffold.CombatDirector;
         _cameraRig = scaffold.CameraRig;
         _playerHud = scaffold.PlayerHud;
+
+        _transportRenderManager = new FactoryTransportRenderManager();
+        AddChild(_transportRenderManager);
 
         CreatePreviewVisuals();
 
@@ -1043,13 +1047,16 @@ public partial class FactoryDemo : Node3D
 
     private void UpdateStructureVisuals()
     {
-        if (_simulation is null || _structureRoot is null)
+        if (_simulation is null || _structureRoot is null || _cameraRig is null)
         {
             return;
         }
 
         var startTicks = Stopwatch.GetTimestamp();
         var alpha = _simulation.TickAlpha;
+        var hasVisibleRect = TryGetVisibleWorldCellRect(out var visibleRect);
+        var cameraWorldPosition = _cameraRig.Camera?.GlobalPosition ?? Vector3.Zero;
+        _transportRenderManager?.BeginFrame(visibleRect, hasVisibleRect, cameraWorldPosition);
         foreach (var child in _structureRoot.GetChildren())
         {
             if (child is FactoryStructure structure)
@@ -1061,6 +1068,7 @@ public partial class FactoryDemo : Node3D
                 structure.SyncCombatVisuals(alpha);
             }
         }
+        _transportRenderManager?.EndFrame();
 
         _averageVisualSyncMilliseconds = SmoothMetric(_averageVisualSyncMilliseconds, Stopwatch.GetElapsedTime(startTicks).TotalMilliseconds, 0.18);
     }
@@ -1267,12 +1275,16 @@ public partial class FactoryDemo : Node3D
         _hud.SetStructureDetails(FactoryDemoInteractionBridge.BuildLinkedDetailModel(_selectedStructure));
 
         var sinkStats = CollectSinkStats();
+        var transportRenderStats = _transportRenderManager?.GetStats() ?? new FactoryTransportRenderStats();
         _hud.SetSinkStats(sinkStats.deliveredTotal, sinkStats.deliveredRate, sinkStats.sinkCount);
         _hud.SetProfilerStats(
             (int)Engine.GetFramesPerSecond(),
             _averageFrameMilliseconds,
             _simulation?.RegisteredStructureCount ?? 0,
             _simulation?.ActiveTransportItemCount ?? 0,
+            transportRenderStats.VisibleItems,
+            transportRenderStats.ActiveBuckets,
+            transportRenderStats.OptimizedPathActive,
             _simulation?.AverageStepMilliseconds ?? 0.0,
             _averageVisualSyncMilliseconds,
             _simulation?.LastTopologyRebuildMilliseconds ?? 0.0);

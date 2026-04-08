@@ -64,6 +64,7 @@ public partial class FactoryDemo
         var workspaceVerified = RunWorkspaceNavigationSmoke();
         var itemVisualProfilesVerified = RunItemVisualProfileSmoke();
         var structureVisualProfilesVerified = RunStructureVisualProfileSmoke();
+        var (transportRenderTelemetryVerified, transportRenderCullingVerified) = await RunTransportRenderSmoke();
         var mapFormatVerified = RunFactoryMapSmokeChecks();
         var combatVerified = await VerifyCombatScenarios();
 
@@ -84,6 +85,8 @@ public partial class FactoryDemo
               || !workspaceVerified
               || !itemVisualProfilesVerified
               || !structureVisualProfilesVerified
+            || !transportRenderTelemetryVerified
+            || !transportRenderCullingVerified
             || !mapFormatVerified
             || !combatVerified
             || !multiCellPlacementVerified
@@ -93,12 +96,12 @@ public partial class FactoryDemo
             || !previewArrowReady
             || !playerInteractionVerified)
         {
-              GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} beltDragAutoFacing={beltDragAutoFacingVerified} beltExistingJoinAutoFacing={beltExistingJoinAutoFacingVerified} assemblerPortPreview={assemblerPortPreviewVerified} playerInteraction={playerInteractionVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} mapFormat={mapFormatVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
+              GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} beltDragAutoFacing={beltDragAutoFacingVerified} beltExistingJoinAutoFacing={beltExistingJoinAutoFacingVerified} assemblerPortPreview={assemblerPortPreviewVerified} playerInteraction={playerInteractionVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} transportRenderTelemetry={transportRenderTelemetryVerified} transportRenderCulling={transportRenderCullingVerified} mapFormat={mapFormatVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
             GetTree().Quit(1);
             return;
         }
 
-          GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} mapFormat={mapFormatVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} beltDragAutoFacing={beltDragAutoFacingVerified} beltExistingJoinAutoFacing={beltExistingJoinAutoFacingVerified} assemblerPortPreview={assemblerPortPreviewVerified} previewArrowReady={previewArrowReady} playerInteraction={playerInteractionVerified}");
+          GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} transportRenderTelemetry={transportRenderTelemetryVerified} transportRenderCulling={transportRenderCullingVerified} mapFormat={mapFormatVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} beltDragAutoFacing={beltDragAutoFacingVerified} beltExistingJoinAutoFacing={beltExistingJoinAutoFacingVerified} assemblerPortPreview={assemblerPortPreviewVerified} previewArrowReady={previewArrowReady} playerInteraction={playerInteractionVerified}");
         GetTree().Quit();
     }
 
@@ -682,6 +685,8 @@ public partial class FactoryDemo
         var placeholderVisual = FactoryTransportVisualFactory.CreateVisual(new FactoryItem(-101, BuildPrototypeKind.MiningDrill, FactoryItemKind.IronOre), FactoryConstants.CellSize);
         var billboardVisual = FactoryTransportVisualFactory.CreateVisual(new FactoryItem(-102, BuildPrototypeKind.Assembler, FactoryItemKind.CopperWire), FactoryConstants.CellSize);
         var modelVisual = FactoryTransportVisualFactory.CreateVisual(new FactoryItem(-103, BuildPrototypeKind.Assembler, FactoryItemKind.AmmoMagazine), FactoryConstants.CellSize);
+        var copperDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(FactoryItemKind.CopperOre, FactoryConstants.CellSize);
+        var ammoDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(FactoryItemKind.AmmoMagazine, FactoryConstants.CellSize);
 
         var placeholderMesh = FindFirstMesh(placeholderVisual);
         var billboardMesh = FindFirstMesh(billboardVisual);
@@ -705,8 +710,40 @@ public partial class FactoryDemo
             && billboardMesh.MaterialOverride is StandardMaterial3D billboardMaterial
             && billboardMaterial.BillboardMode == BaseMaterial3D.BillboardModeEnum.Enabled
             && modelMeshCount >= 2
+            && copperDescriptors.Primary.BatchKey == copperDescriptors.ResolveForTier(FactoryTransportRenderTier.Near).BatchKey
+            && copperDescriptors.Mid.IsBatchable
+            && copperDescriptors.Far.IsBatchable
+            && !ammoDescriptors.Primary.IsBatchable
+            && ammoDescriptors.ResolveBatchableForTier(FactoryTransportRenderTier.Near).IsBatchable
             && distinctBaselineColors
             && iconsPresent;
+    }
+
+    private async Task<(bool TelemetryVerified, bool CullingVerified)> RunTransportRenderSmoke()
+    {
+        if (_hud is null || _transportRenderManager is null || _cameraRig is null)
+        {
+            return (false, false);
+        }
+
+        var previousFollowState = _cameraRig.FollowTargetEnabled;
+        _cameraRig.FollowTargetEnabled = false;
+        _cameraRig.FocusWorldPosition(new Vector3(36.0f, 0.0f, -28.0f));
+        _hud.SelectWorkspace(TelemetryWorkspaceId);
+        await ToSignal(GetTree().CreateTimer(0.35f), SceneTreeTimer.SignalName.Timeout);
+
+        var stats = _transportRenderManager.GetStats();
+        var profilerText = _hud.ProfilerText ?? string.Empty;
+        var telemetryVerified =
+            stats.OptimizedPathActive
+            && stats.TotalActiveItems > 0
+            && stats.VisibleItems > 0
+            && stats.ActiveBuckets > 0
+            && profilerText.Contains("渲染中", global::System.StringComparison.Ordinal)
+            && profilerText.Contains("优化 ON", global::System.StringComparison.Ordinal);
+        var cullingVerified = stats.TotalActiveItems > stats.VisibleItems;
+        _cameraRig.FollowTargetEnabled = previousFollowState;
+        return (telemetryVerified, cullingVerified);
     }
 
     private bool RunStructureVisualProfileSmoke()
