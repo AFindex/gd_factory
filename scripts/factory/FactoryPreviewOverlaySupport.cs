@@ -22,9 +22,14 @@ public static class FactoryPreviewOverlaySupport
         };
     }
 
-    public static Node3D CreateFacingArrow(string name, float bodyLength, float headRadius)
+    public static Node3D CreateFacingArrow(string name, float arrowLength, float liftY)
     {
-        return FactoryPreviewVisuals.CreateFacingArrow(name, bodyLength, headRadius);
+        return FactoryPreviewVisuals.CreateFacingArrow(name, arrowLength, liftY);
+    }
+
+    public static Node3D CreatePortHintArrow(string name, float cellSize)
+    {
+        return FactoryPreviewVisuals.CreateFacingArrow(name, cellSize * 0.44f, 0.0f);
     }
 
     public static MeshInstance3D CreatePreviewPowerRange(string name)
@@ -141,17 +146,21 @@ public static class FactoryPreviewOverlaySupport
 
     public static void ApplyPreviewColor(MeshInstance3D meshInstance, Color color)
     {
-        meshInstance.MaterialOverride = new StandardMaterial3D
-        {
-            AlbedoColor = color,
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            Roughness = 0.4f
-        };
+        FactoryPreviewVisuals.ApplyMeshPreviewColor(meshInstance, color);
     }
 
     public static void ApplyPreviewColor(Node3D arrowRoot, Color color)
     {
         FactoryPreviewVisuals.ApplyArrowColor(arrowRoot, color);
+    }
+
+    public static void ConfigureDirectionalArrow(Node3D arrowRoot, Vector3 position, FacingDirection facing, Color color, float scale = 1.0f)
+    {
+        arrowRoot.Visible = true;
+        arrowRoot.Position = position;
+        arrowRoot.Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(facing), 0.0f);
+        arrowRoot.Scale = new Vector3(scale, scale, scale);
+        ApplyPreviewColor(arrowRoot, color);
     }
 
     public static void ApplyMiningPreviewColor(MeshInstance3D meshInstance, Color color)

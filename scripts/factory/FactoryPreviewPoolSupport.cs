@@ -62,6 +62,42 @@ public static class FactoryPreviewPoolSupport
         root.Visible = visibleCount > 0;
     }
 
+    public static void EnsureNodeCapacity<TNode>(
+        Node3D? root,
+        List<TNode> nodes,
+        int count,
+        Func<int, TNode> createNode)
+        where TNode : Node3D
+    {
+        if (root is null)
+        {
+            return;
+        }
+
+        while (nodes.Count < count)
+        {
+            var node = createNode(nodes.Count);
+            root.AddChild(node);
+            nodes.Add(node);
+        }
+    }
+
+    public static void SetVisibleNodeCount<TNode>(Node3D? root, IReadOnlyList<TNode> nodes, int visibleCount)
+        where TNode : Node3D
+    {
+        if (root is null)
+        {
+            return;
+        }
+
+        for (var index = visibleCount; index < nodes.Count; index++)
+        {
+            nodes[index].Visible = false;
+        }
+
+        root.Visible = visibleCount > 0;
+    }
+
     public static FactoryStructure EnsureGhostPreview(
         Node3D? root,
         List<FactoryStructure> ghosts,

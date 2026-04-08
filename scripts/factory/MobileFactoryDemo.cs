@@ -116,7 +116,7 @@ public partial class MobileFactoryDemo : Node3D
     private Camera3D? _editorCamera;
     private FactoryCombatDirector? _combatDirector;
     private readonly List<MeshInstance3D> _worldPreviewFootprintMeshes = new();
-    private readonly List<MeshInstance3D> _worldPreviewPortMeshes = new();
+    private readonly List<Node3D> _worldPreviewPortMeshes = new();
     private readonly List<MeshInstance3D> _worldPreviewMiningMeshes = new();
     private readonly List<MeshInstance3D> _worldPreviewMiningLinkMeshes = new();
     private Node3D? _worldPreviewFacingArrow;
@@ -125,7 +125,8 @@ public partial class MobileFactoryDemo : Node3D
     private MeshInstance3D? _interiorPreviewPowerRange;
     private readonly List<MeshInstance3D> _interiorPreviewBoundaryMeshes = new();
     private readonly List<MeshInstance3D> _interiorPreviewExteriorMeshes = new();
-    private readonly List<MeshInstance3D> _interiorPortHintMeshes = new();
+    private readonly List<Node3D> _interiorPortHintMeshes = new();
+    private readonly List<FactoryPortPreviewMarker> _cachedInteriorPortMarkers = new();
     private readonly List<MeshInstance3D> _interiorBlueprintPreviewMeshes = new();
     private readonly List<FactoryStructure> _interiorBlueprintPreviewGhosts = new();
     private readonly List<MeshInstance3D> _interiorPowerLinkDashes = new();
@@ -157,7 +158,10 @@ public partial class MobileFactoryDemo : Node3D
     private FactoryStructure? _selectedInteriorStructure;
     private FactoryStructure? _hoveredInteriorStructure;
     private Vector2I _hoveredInteriorCell;
+    private Vector2I _cachedInteriorPortCell;
+    private Rect2I _cachedInteriorPortVisibleRect;
     private bool _hasHoveredInteriorCell;
+    private bool _hasCachedInteriorPortMarkers;
     private bool _canPlaceInteriorCell;
     private bool _canDeleteInteriorCell;
     private bool _deleteInteriorDragActive;
@@ -183,6 +187,9 @@ public partial class MobileFactoryDemo : Node3D
     private bool _hasSelectedPlayerItemSlot;
     private bool _playerInteriorPlacementArmed;
     private readonly FactoryPlayerInventorySelectionState _playerSelectionState = new();
+    private BuildPrototypeKind? _cachedInteriorPortKind;
+    private FacingDirection _cachedInteriorPortFacing = FacingDirection.East;
+    private int _cachedInteriorPortRevision = -1;
 
     public override void _Ready()
     {
@@ -1686,14 +1693,11 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        var evaluation = GetCurrentDeploymentEvaluation();
+        var evaluation = GetCurrentDeploymentEvaluation() ?? _mobileFactory.EvaluateDeployment(_grid, _hoveredAnchor, _selectedDeployFacing);
         var deployState = evaluation?.State ?? (_canDeployCurrentAnchor ? MobileFactoryDeployState.Valid : MobileFactoryDeployState.Blocked);
         var footprintColor = deployState == MobileFactoryDeployState.Blocked
             ? new Color(1.0f, 0.35f, 0.35f, 0.38f)
             : new Color(0.35f, 0.95f, 0.55f, 0.38f);
-        var portColor = deployState == MobileFactoryDeployState.Blocked
-            ? new Color(1.0f, 0.55f, 0.35f, 0.55f)
-            : new Color(0.98f, 0.72f, 0.34f, 0.55f);
         var miningActiveColor = deployState == MobileFactoryDeployState.Blocked
             ? new Color(0.99f, 0.52f, 0.38f, 0.78f)
             : new Color(0.38f, 0.68f, 1.0f, 0.88f);
@@ -1707,13 +1711,15 @@ public partial class MobileFactoryDemo : Node3D
         var footprintCells = evaluation is not null
             ? new List<Vector2I>(evaluation.FootprintCells)
             : new List<Vector2I>(_mobileFactory.GetFootprintCells(_hoveredAnchor, _selectedDeployFacing));
-        var portCellSet = new HashSet<Vector2I>();
+        var seenPortCells = new HashSet<Vector2I>();
+        var portPreviewEntries = new List<(Vector2I Cell, FacingDirection Facing, MobileFactoryAttachmentChannelType ChannelType)>();
         var miningPreviewEntries = new List<(Vector2I Cell, Vector2I PortCell, bool IsEligible, bool IsDeployed)>();
         if (evaluation is not null)
         {
             for (var attachmentIndex = 0; attachmentIndex < evaluation.AttachmentEvaluations.Count; attachmentIndex++)
             {
                 var attachmentEvaluation = evaluation.AttachmentEvaluations[attachmentIndex];
+                var channelType = attachmentEvaluation.Attachment.AttachmentDefinition.ChannelType;
                 if (attachmentEvaluation.Attachment.Kind == BuildPrototypeKind.MiningInputPort)
                 {
                     if (attachmentEvaluation.Attachment is MobileFactoryMiningInputPortStructure miningAttachment)
@@ -1734,22 +1740,23 @@ public partial class MobileFactoryDemo : Node3D
                     continue;
                 }
 
+                var previewFacing = channelType == MobileFactoryAttachmentChannelType.ItemInput
+                    ? FactoryDirection.Opposite(attachmentEvaluation.Projection.WorldFacing)
+                    : attachmentEvaluation.Projection.WorldFacing;
                 for (var cellIndex = 0; cellIndex < attachmentEvaluation.PreviewWorldCells.Count; cellIndex++)
                 {
-                    portCellSet.Add(attachmentEvaluation.PreviewWorldCells[cellIndex]);
+                    var previewCell = attachmentEvaluation.PreviewWorldCells[cellIndex];
+                    if (!seenPortCells.Add(previewCell))
+                    {
+                        continue;
+                    }
+
+                    portPreviewEntries.Add((previewCell, previewFacing, channelType));
                 }
             }
         }
-        else
-        {
-            foreach (var cell in _mobileFactory.GetPortCells(_hoveredAnchor, _selectedDeployFacing))
-            {
-                portCellSet.Add(cell);
-            }
-        }
 
-        var portCells = new List<Vector2I>(portCellSet);
-        EnsureWorldPreviewVisualCapacity(footprintCells.Count, portCells.Count, miningPreviewEntries.Count);
+        EnsureWorldPreviewVisualCapacity(footprintCells.Count, portPreviewEntries.Count, miningPreviewEntries.Count);
 
         var index = 0;
         foreach (var cell in footprintCells)
@@ -1761,12 +1768,14 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         index = 0;
-        foreach (var cell in portCells)
+        foreach (var entry in portPreviewEntries)
         {
-            var mesh = _worldPreviewPortMeshes[index++];
-            mesh.Visible = true;
-            mesh.Position = _grid.CellToWorld(cell) + new Vector3(0.0f, 0.08f, 0.0f);
-            FactoryPreviewOverlaySupport.ApplyPreviewColor(mesh, portColor);
+            FactoryPreviewOverlaySupport.ConfigureDirectionalArrow(
+                _worldPreviewPortMeshes[index++],
+                _grid.CellToWorld(entry.Cell) + new Vector3(0.0f, 0.08f, 0.0f),
+                entry.Facing,
+                GetWorldPortPreviewColor(entry.ChannelType, deployState),
+                1.02f);
         }
 
         index = 0;
@@ -1802,10 +1811,11 @@ public partial class MobileFactoryDemo : Node3D
 
         if (_worldPreviewFacingArrow is not null)
         {
-            _worldPreviewFacingArrow.Visible = true;
-            _worldPreviewFacingArrow.Position = GetPreviewFacingArrowPosition(_hoveredAnchor, _selectedDeployFacing);
-            _worldPreviewFacingArrow.Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(_selectedDeployFacing), 0.0f);
-        FactoryPreviewOverlaySupport.ApplyPreviewColor(_worldPreviewFacingArrow, portColor.Lightened(0.08f));
+            FactoryPreviewOverlaySupport.ConfigureDirectionalArrow(
+                _worldPreviewFacingArrow,
+                GetPreviewFacingArrowPosition(_hoveredAnchor, _selectedDeployFacing),
+                _selectedDeployFacing,
+                GetWorldPortPreviewColor(MobileFactoryAttachmentChannelType.ItemOutput, deployState).Lightened(0.08f));
         }
     }
 
@@ -3746,19 +3756,11 @@ public partial class MobileFactoryDemo : Node3D
                 return footprint;
             });
 
-        FactoryPreviewPoolSupport.EnsureMeshCapacity(
+        FactoryPreviewPoolSupport.EnsureNodeCapacity(
             _worldPreviewRoot,
             _worldPreviewPortMeshes,
             portCount,
-            index => new MeshInstance3D
-            {
-                Name = $"PreviewPort_{index}",
-                Visible = false,
-                Mesh = new BoxMesh
-                {
-                    Size = new Vector3(FactoryConstants.CellSize * 0.55f, 0.12f, FactoryConstants.CellSize * 0.55f)
-                }
-            });
+            index => FactoryPreviewOverlaySupport.CreatePortHintArrow($"PreviewPort_{index}", FactoryConstants.CellSize));
 
         FactoryPreviewPoolSupport.EnsureMeshCapacity(
             _worldPreviewRoot,
@@ -3792,19 +3794,11 @@ public partial class MobileFactoryDemo : Node3D
                 return footprint;
             });
 
-        FactoryPreviewPoolSupport.EnsureMeshCapacity(
+        FactoryPreviewPoolSupport.EnsureNodeCapacity(
             _worldPreviewRoot,
             _worldPreviewPortMeshes,
             portCount,
-            index => new MeshInstance3D
-            {
-                Name = $"PreviewPort_{index}",
-                Visible = false,
-                Mesh = new BoxMesh
-                {
-                    Size = new Vector3(FactoryConstants.CellSize * 0.55f, 0.12f, FactoryConstants.CellSize * 0.55f)
-                }
-            });
+            index => FactoryPreviewOverlaySupport.CreatePortHintArrow($"PreviewPort_{index}", FactoryConstants.CellSize));
 
         FactoryPreviewPoolSupport.EnsureMeshCapacity(
             _worldPreviewRoot,
@@ -3893,28 +3887,26 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        var markers = FactoryLogisticsPreview.CollectPortMarkers(_mobileFactory.InteriorSite, previewKind, _hoveredInteriorCell, _selectedInteriorFacing);
+        var visibleRect = GetVisibleInteriorCellRectOrBounds();
+        var markers = GetInteriorPortMarkers(previewKind, visibleRect);
         EnsureInteriorPortHintMeshCount(markers.Count);
         var visibleCount = 0;
         for (var index = 0; index < markers.Count; index++)
         {
             var marker = markers[index];
-            var mesh = _interiorPortHintMeshes[index];
-            mesh.Visible = true;
-            mesh.Position = _mobileFactory.InteriorSite.CellToWorld(marker.Cell) + new Vector3(0.0f, marker.IsHighlighted ? 0.13f : 0.10f, 0.0f);
-            mesh.Mesh = new BoxMesh
-            {
-                Size = Vector3.One * (marker.IsHighlighted ? _mobileFactory.InteriorSite.CellSize * 0.30f : _mobileFactory.InteriorSite.CellSize * 0.22f)
-            };
-            FactoryPreviewOverlaySupport.ApplyPreviewColor(
-                mesh,
+            var arrow = _interiorPortHintMeshes[index];
+            FactoryPreviewOverlaySupport.ConfigureDirectionalArrow(
+                arrow,
+                _mobileFactory.InteriorSite.CellToWorld(marker.Cell) + new Vector3(0.0f, marker.IsHighlighted ? 0.13f : 0.10f, 0.0f),
+                marker.Facing,
                 marker.IsInput
                     ? marker.IsHighlighted
                         ? new Color(0.38f, 0.78f, 1.0f, 0.82f)
                         : new Color(0.38f, 0.78f, 1.0f, 0.52f)
                     : marker.IsHighlighted
                         ? new Color(1.0f, 0.68f, 0.26f, 0.82f)
-                        : new Color(1.0f, 0.68f, 0.26f, 0.52f));
+                        : new Color(1.0f, 0.68f, 0.26f, 0.52f),
+                marker.IsHighlighted ? 1.10f : 0.92f);
             visibleCount++;
         }
 
@@ -3923,18 +3915,185 @@ public partial class MobileFactoryDemo : Node3D
 
     private void EnsureInteriorPortHintMeshCount(int count)
     {
-        FactoryPreviewPoolSupport.EnsureMeshCapacity(
+        FactoryPreviewPoolSupport.EnsureNodeCapacity(
             _interiorPortHintRoot,
             _interiorPortHintMeshes,
             count,
-            index => FactoryPreviewOverlaySupport.CreatePortHintMesh($"InteriorPortHint_{index}"));
+            index => FactoryPreviewOverlaySupport.CreatePortHintArrow($"InteriorPortHint_{index}", _mobileFactory?.InteriorSite.CellSize ?? FactoryConstants.CellSize));
     }
 
     private void SetInteriorPortHintCount(int visibleCount)
     {
-        FactoryPreviewPoolSupport.SetVisibleMeshCount(_interiorPortHintRoot, _interiorPortHintMeshes, visibleCount);
+        FactoryPreviewPoolSupport.SetVisibleNodeCount(_interiorPortHintRoot, _interiorPortHintMeshes, visibleCount);
     }
 
+    private static Color GetWorldPortPreviewColor(MobileFactoryAttachmentChannelType channelType, MobileFactoryDeployState deployState)
+    {
+        var blocked = deployState == MobileFactoryDeployState.Blocked;
+        return channelType == MobileFactoryAttachmentChannelType.ItemInput
+            ? blocked
+                ? new Color(0.60f, 0.78f, 1.0f, 0.58f)
+                : new Color(0.38f, 0.78f, 1.0f, 0.68f)
+            : blocked
+                ? new Color(1.0f, 0.55f, 0.35f, 0.58f)
+                : new Color(0.98f, 0.72f, 0.34f, 0.68f);
+    }
+
+    private List<FactoryPortPreviewMarker> GetInteriorPortMarkers(BuildPrototypeKind previewKind, Rect2I visibleRect)
+    {
+        if (_mobileFactory is null)
+        {
+            _cachedInteriorPortMarkers.Clear();
+            return _cachedInteriorPortMarkers;
+        }
+
+        var structureRevision = _mobileFactory.InteriorSite.StructureRevision;
+        if (_hasCachedInteriorPortMarkers
+            && _cachedInteriorPortKind == previewKind
+            && _cachedInteriorPortFacing == _selectedInteriorFacing
+            && _cachedInteriorPortCell == _hoveredInteriorCell
+            && _cachedInteriorPortVisibleRect == visibleRect
+            && _cachedInteriorPortRevision == structureRevision)
+        {
+            return _cachedInteriorPortMarkers;
+        }
+
+        _cachedInteriorPortMarkers.Clear();
+        _cachedInteriorPortMarkers.AddRange(FactoryLogisticsPreview.CollectPortMarkers(
+            _mobileFactory.InteriorSite,
+            previewKind,
+            _hoveredInteriorCell,
+            _selectedInteriorFacing,
+            EnumerateInteriorStructuresInRect(visibleRect)));
+        _cachedInteriorPortKind = previewKind;
+        _cachedInteriorPortFacing = _selectedInteriorFacing;
+        _cachedInteriorPortCell = _hoveredInteriorCell;
+        _cachedInteriorPortVisibleRect = visibleRect;
+        _cachedInteriorPortRevision = structureRevision;
+        _hasCachedInteriorPortMarkers = true;
+        return _cachedInteriorPortMarkers;
+    }
+
+    private Rect2I GetVisibleInteriorCellRectOrBounds()
+    {
+        if (_mobileFactory is null)
+        {
+            return default;
+        }
+
+        return TryGetVisibleInteriorCellRect(out var visibleRect)
+            ? visibleRect
+            : BuildCellRect(_mobileFactory.InteriorSite.MinCell, _mobileFactory.InteriorSite.MaxCell);
+    }
+
+    private IEnumerable<FactoryStructure> EnumerateInteriorStructuresInRect(Rect2I rect)
+    {
+        if (_mobileFactory is null || rect.Size.X <= 0 || rect.Size.Y <= 0)
+        {
+            yield break;
+        }
+
+        var seenStructureIds = new HashSet<ulong>();
+        for (var y = rect.Position.Y; y < rect.End.Y; y++)
+        {
+            for (var x = rect.Position.X; x < rect.End.X; x++)
+            {
+                if (!_mobileFactory.InteriorSite.TryGetStructure(new Vector2I(x, y), out var structure) || structure is null)
+                {
+                    continue;
+                }
+
+                if (seenStructureIds.Add(structure.GetInstanceId()))
+                {
+                    yield return structure;
+                }
+            }
+        }
+    }
+
+    private bool TryGetVisibleInteriorCellRect(out Rect2I visibleRect)
+    {
+        visibleRect = default;
+
+        if (_mobileFactory is null || _editorCamera is null || _hud is null)
+        {
+            return false;
+        }
+
+        var viewportSize = _hud.EditorViewport.Size;
+        if (viewportSize.X <= 0 || viewportSize.Y <= 0)
+        {
+            return false;
+        }
+
+        var corners = new[]
+        {
+            Vector2.Zero,
+            new Vector2(viewportSize.X, 0.0f),
+            new Vector2(0.0f, viewportSize.Y),
+            new Vector2(viewportSize.X, viewportSize.Y)
+        };
+
+        var minCell = new Vector2I(int.MaxValue, int.MaxValue);
+        var maxCell = new Vector2I(int.MinValue, int.MinValue);
+        for (var index = 0; index < corners.Length; index++)
+        {
+            if (!TryProjectEditorScreenToInterior(corners[index], out var worldPosition))
+            {
+                return false;
+            }
+
+            var cell = _mobileFactory.InteriorSite.WorldToCell(worldPosition);
+            minCell = new Vector2I(System.Math.Min(minCell.X, cell.X), System.Math.Min(minCell.Y, cell.Y));
+            maxCell = new Vector2I(System.Math.Max(maxCell.X, cell.X), System.Math.Max(maxCell.Y, cell.Y));
+        }
+
+        visibleRect = new Rect2I(
+            minCell - Vector2I.One,
+            (maxCell - minCell) + new Vector2I(3, 3));
+        return true;
+    }
+
+    private bool TryProjectEditorScreenToInterior(Vector2 screenPosition, out Vector3 worldPosition)
+    {
+        worldPosition = Vector3.Zero;
+
+        if (_editorCamera is null || _mobileFactory is null)
+        {
+            return false;
+        }
+
+        var rayOrigin = _editorCamera.ProjectRayOrigin(screenPosition);
+        var rayDirection = _editorCamera.ProjectRayNormal(screenPosition);
+        var planeY = _mobileFactory.InteriorSite.WorldOrigin.Y;
+
+        if (Mathf.Abs(rayDirection.Y) < 0.001f)
+        {
+            return false;
+        }
+
+        var distance = (planeY - rayOrigin.Y) / rayDirection.Y;
+        if (distance < 0.0f)
+        {
+            return false;
+        }
+
+        worldPosition = rayOrigin + rayDirection * distance;
+        return true;
+    }
+
+    private static Rect2I BuildCellRect(Vector2I a, Vector2I b, int padding = 0)
+    {
+        var minCell = new Vector2I(
+            System.Math.Min(a.X, b.X) - padding,
+            System.Math.Min(a.Y, b.Y) - padding);
+        var maxCell = new Vector2I(
+            System.Math.Max(a.X, b.X) + padding,
+            System.Math.Max(a.Y, b.Y) + padding);
+        return new Rect2I(
+            minCell,
+            new Vector2I(maxCell.X - minCell.X + 1, maxCell.Y - minCell.Y + 1));
+    }
     private void EnsureInputActions()
     {
         FactoryDemoInputActions.EnsureCommonActions();

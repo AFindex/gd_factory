@@ -18,6 +18,7 @@ public sealed class GridManager : IFactorySite
     public Vector2I MinCell { get; }
     public Vector2I MaxCell { get; }
     public float CellSize { get; }
+    public int StructureRevision { get; private set; }
     public bool IsVisible => true;
     public bool IsSimulationActive => true;
     public float CombatOverlayScale => FactoryConstants.NormalCombatOverlayScale;
@@ -195,9 +196,16 @@ public sealed class GridManager : IFactorySite
 
     public void ReserveCells(IEnumerable<Vector2I> cells, string ownerId, GridReservationKind kind, FactoryStructure? structure = null)
     {
+        var changed = false;
         foreach (var cell in cells)
         {
             _reservations[cell] = new GridReservation(ownerId, kind, structure);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            StructureRevision++;
         }
     }
 
@@ -215,6 +223,11 @@ public sealed class GridManager : IFactorySite
         foreach (var cell in toRemove)
         {
             _reservations.Remove(cell);
+        }
+
+        if (toRemove.Count > 0)
+        {
+            StructureRevision++;
         }
     }
 

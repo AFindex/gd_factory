@@ -23,6 +23,7 @@ public sealed class MobileFactorySite : IFactorySite
     public Vector2I MinCell { get; }
     public Vector2I MaxCell { get; }
     public float CellSize { get; }
+    public int StructureRevision { get; private set; }
     public bool IsVisible { get; private set; }
     public bool IsSimulationActive { get; private set; }
     public float CombatOverlayScale { get; private set; } = FactoryConstants.MobileInteriorCombatOverlayScale;
@@ -95,6 +96,8 @@ public sealed class MobileFactorySite : IFactorySite
         {
             _structures[cell] = structure;
         }
+
+        StructureRevision++;
     }
 
     public void RemoveStructure(FactoryStructure structure)
@@ -111,6 +114,11 @@ public sealed class MobileFactorySite : IFactorySite
         for (var index = 0; index < toRemove.Count; index++)
         {
             _structures.Remove(toRemove[index]);
+        }
+
+        if (toRemove.Count > 0)
+        {
+            StructureRevision++;
         }
     }
 

@@ -1,4 +1,5 @@
 using Godot;
+using System;
 
 public partial class FactoryCameraRig : Node3D
 {
@@ -137,6 +138,42 @@ public partial class FactoryCameraRig : Node3D
     public bool TryProjectMouseToPlane(Vector2 mousePosition, out Vector3 worldPosition)
     {
         return TryProjectScreenToPlane(mousePosition, 0.0f, out worldPosition);
+    }
+
+    public bool TryProjectViewportRectToPlane(float planeY, out Rect2 projectedRect)
+    {
+        projectedRect = default;
+
+        var viewportRect = GetViewport().GetVisibleRect();
+        var corners = new[]
+        {
+            viewportRect.Position,
+            new Vector2(viewportRect.End.X, viewportRect.Position.Y),
+            new Vector2(viewportRect.Position.X, viewportRect.End.Y),
+            viewportRect.End
+        };
+
+        var minX = float.PositiveInfinity;
+        var minZ = float.PositiveInfinity;
+        var maxX = float.NegativeInfinity;
+        var maxZ = float.NegativeInfinity;
+        for (var index = 0; index < corners.Length; index++)
+        {
+            if (!TryProjectScreenToPlane(corners[index], planeY, out var worldPosition))
+            {
+                return false;
+            }
+
+            minX = MathF.Min(minX, worldPosition.X);
+            minZ = MathF.Min(minZ, worldPosition.Z);
+            maxX = MathF.Max(maxX, worldPosition.X);
+            maxZ = MathF.Max(maxZ, worldPosition.Z);
+        }
+
+        projectedRect = new Rect2(
+            new Vector2(minX, minZ),
+            new Vector2(maxX - minX, maxZ - minZ));
+        return true;
     }
 
     public bool TryProjectScreenToPlane(Vector2 screenPosition, float planeY, out Vector3 worldPosition)

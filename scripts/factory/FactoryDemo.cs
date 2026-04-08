@@ -54,7 +54,8 @@ public partial class FactoryDemo : Node3D
     private MeshInstance3D? _previewCell;
     private Node3D? _previewArrow;
     private MeshInstance3D? _previewPowerRange;
-    private readonly List<MeshInstance3D> _previewPortHintMeshes = new();
+    private readonly List<Node3D> _previewPortHintMeshes = new();
+    private readonly List<FactoryPortPreviewMarker> _cachedPreviewPortMarkers = new();
     private readonly List<MeshInstance3D> _blueprintPreviewMeshes = new();
     private readonly List<FactoryStructure> _blueprintPreviewGhosts = new();
     private readonly List<MeshInstance3D> _powerLinkDashes = new();
@@ -68,7 +69,10 @@ public partial class FactoryDemo : Node3D
     private FactoryStructure? _selectedStructure;
     private FactoryStructure? _hoveredStructure;
     private Vector2I _hoveredCell;
+    private Vector2I _cachedPreviewPortCell;
+    private Rect2I _cachedPreviewPortVisibleRect;
     private bool _hasHoveredCell;
+    private bool _hasCachedPreviewPortMarkers;
     private bool _canPlaceCurrentCell;
     private bool _canDeleteCurrentCell;
     private bool _deleteDragActive;
@@ -91,6 +95,9 @@ public partial class FactoryDemo : Node3D
     private bool _hasSelectedPlayerItemSlot;
     private bool _playerPlacementArmed;
     private readonly FactoryPlayerInventorySelectionState _playerSelectionState = new();
+    private BuildPrototypeKind? _cachedPreviewPortKind;
+    private FacingDirection _cachedPreviewPortFacing = FacingDirection.East;
+    private int _cachedPreviewPortRevision = -1;
     private static void TraceLog(string message) => GD.Print($"[FactoryDemo] {message}");
 
     public override void _Ready()
@@ -1938,28 +1945,26 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        var markers = FactoryLogisticsPreview.CollectPortMarkers(_grid, previewKind, _hoveredCell, _selectedFacing);
+        var visibleRect = GetVisibleWorldCellRectOrBounds();
+        var markers = GetPreviewPortMarkers(previewKind, visibleRect);
         EnsurePreviewPortHintMeshCount(markers.Count);
         var visibleCount = 0;
         for (var index = 0; index < markers.Count; index++)
         {
             var marker = markers[index];
-            var mesh = _previewPortHintMeshes[index];
-            mesh.Visible = true;
-            mesh.Position = _grid.CellToWorld(marker.Cell) + new Vector3(0.0f, marker.IsHighlighted ? 0.13f : 0.10f, 0.0f);
-            mesh.Mesh = new BoxMesh
-            {
-                Size = Vector3.One * (marker.IsHighlighted ? FactoryConstants.CellSize * 0.30f : FactoryConstants.CellSize * 0.22f)
-            };
-            FactoryPreviewOverlaySupport.ApplyPreviewColor(
-                mesh,
+            var arrow = _previewPortHintMeshes[index];
+            FactoryPreviewOverlaySupport.ConfigureDirectionalArrow(
+                arrow,
+                _grid.CellToWorld(marker.Cell) + new Vector3(0.0f, marker.IsHighlighted ? 0.13f : 0.10f, 0.0f),
+                marker.Facing,
                 marker.IsInput
                     ? marker.IsHighlighted
                         ? new Color(0.38f, 0.78f, 1.0f, 0.82f)
                         : new Color(0.38f, 0.78f, 1.0f, 0.52f)
                     : marker.IsHighlighted
                         ? new Color(1.0f, 0.68f, 0.26f, 0.82f)
-                        : new Color(1.0f, 0.68f, 0.26f, 0.52f));
+                        : new Color(1.0f, 0.68f, 0.26f, 0.52f),
+                marker.IsHighlighted ? 1.10f : 0.92f);
             visibleCount++;
         }
 
@@ -1968,18 +1973,118 @@ public partial class FactoryDemo : Node3D
 
     private void EnsurePreviewPortHintMeshCount(int count)
     {
-        FactoryPreviewPoolSupport.EnsureMeshCapacity(
+        FactoryPreviewPoolSupport.EnsureNodeCapacity(
             _previewPortHintRoot,
             _previewPortHintMeshes,
             count,
-            index => FactoryPreviewOverlaySupport.CreatePortHintMesh($"PreviewPortHint_{index}"));
+            index => FactoryPreviewOverlaySupport.CreatePortHintArrow($"PreviewPortHint_{index}", _grid?.CellSize ?? FactoryConstants.CellSize));
     }
 
     private void SetPreviewPortHintCount(int visibleCount)
     {
-        FactoryPreviewPoolSupport.SetVisibleMeshCount(_previewPortHintRoot, _previewPortHintMeshes, visibleCount);
+        FactoryPreviewPoolSupport.SetVisibleNodeCount(_previewPortHintRoot, _previewPortHintMeshes, visibleCount);
     }
 
+    private List<FactoryPortPreviewMarker> GetPreviewPortMarkers(BuildPrototypeKind previewKind, Rect2I visibleRect)
+    {
+        if (_grid is null)
+        {
+            _cachedPreviewPortMarkers.Clear();
+            return _cachedPreviewPortMarkers;
+        }
+
+        var structureRevision = _grid.StructureRevision;
+        if (_hasCachedPreviewPortMarkers
+            && _cachedPreviewPortKind == previewKind
+            && _cachedPreviewPortFacing == _selectedFacing
+            && _cachedPreviewPortCell == _hoveredCell
+            && _cachedPreviewPortVisibleRect == visibleRect
+            && _cachedPreviewPortRevision == structureRevision)
+        {
+            return _cachedPreviewPortMarkers;
+        }
+
+        _cachedPreviewPortMarkers.Clear();
+        _cachedPreviewPortMarkers.AddRange(FactoryLogisticsPreview.CollectPortMarkers(
+            _grid,
+            previewKind,
+            _hoveredCell,
+            _selectedFacing,
+            EnumerateStructuresInRect(visibleRect)));
+        _cachedPreviewPortKind = previewKind;
+        _cachedPreviewPortFacing = _selectedFacing;
+        _cachedPreviewPortCell = _hoveredCell;
+        _cachedPreviewPortVisibleRect = visibleRect;
+        _cachedPreviewPortRevision = structureRevision;
+        _hasCachedPreviewPortMarkers = true;
+        return _cachedPreviewPortMarkers;
+    }
+
+    private Rect2I GetVisibleWorldCellRectOrBounds()
+    {
+        if (_grid is null)
+        {
+            return default;
+        }
+
+        return TryGetVisibleWorldCellRect(out var visibleRect)
+            ? visibleRect
+            : BuildCellRect(_grid.MinCell, _grid.MaxCell);
+    }
+
+    private IEnumerable<FactoryStructure> EnumerateStructuresInRect(Rect2I rect)
+    {
+        if (_grid is null || rect.Size.X <= 0 || rect.Size.Y <= 0)
+        {
+            yield break;
+        }
+
+        var seenStructureIds = new HashSet<ulong>();
+        for (var y = rect.Position.Y; y < rect.End.Y; y++)
+        {
+            for (var x = rect.Position.X; x < rect.End.X; x++)
+            {
+                if (!_grid.TryGetStructure(new Vector2I(x, y), out var structure) || structure is null)
+                {
+                    continue;
+                }
+
+                if (seenStructureIds.Add(structure.GetInstanceId()))
+                {
+                    yield return structure;
+                }
+            }
+        }
+    }
+
+    private bool TryGetVisibleWorldCellRect(out Rect2I visibleRect)
+    {
+        visibleRect = default;
+
+        if (_grid is null || _cameraRig is null || !_cameraRig.TryProjectViewportRectToPlane(0.0f, out var projectedRect))
+        {
+            return false;
+        }
+
+        visibleRect = BuildCellRect(
+            _grid.WorldToCell(new Vector3(projectedRect.Position.X, 0.0f, projectedRect.Position.Y)),
+            _grid.WorldToCell(new Vector3(projectedRect.End.X, 0.0f, projectedRect.End.Y)),
+            1);
+        return true;
+    }
+
+    private static Rect2I BuildCellRect(Vector2I a, Vector2I b, int padding = 0)
+    {
+        var minCell = new Vector2I(
+            System.Math.Min(a.X, b.X) - padding,
+            System.Math.Min(a.Y, b.Y) - padding);
+        var maxCell = new Vector2I(
+            System.Math.Max(a.X, b.X) + padding,
+            System.Math.Max(a.Y, b.Y) + padding);
+        return new Rect2I(
+            minCell,
+            new Vector2I(maxCell.X - minCell.X + 1, maxCell.Y - minCell.Y + 1));
+    }
     private void HandleBuildPrimaryPress()
     {
         _buildPlacementDragActive = true;
