@@ -43,6 +43,8 @@ public partial class FactoryDemo
         var removed = _grid.CanPlace(probeCell);
         var multiCellPlacementVerified = RunMultiCellPlacementSmoke();
         var assemblerPortPreviewVerified = RunAssemblerPortPreviewSmoke();
+        var beltDragAutoFacingVerified = RunBeltDragAutoFacingSmoke();
+        var beltExistingJoinAutoFacingVerified = RunBeltExistingJoinAutoFacingSmoke();
         var previewArrowReady = _previewArrow is not null && _previewArrow.GetChildCount() >= 3;
         var playerInteractionVerified = await RunPlayerCharacterSmoke(probeCell);
 
@@ -82,19 +84,21 @@ public partial class FactoryDemo
               || !workspaceVerified
               || !itemVisualProfilesVerified
               || !structureVisualProfilesVerified
-              || !mapFormatVerified
-              || !combatVerified
-              || !multiCellPlacementVerified
+            || !mapFormatVerified
+            || !combatVerified
+            || !multiCellPlacementVerified
+            || !beltDragAutoFacingVerified
+            || !beltExistingJoinAutoFacingVerified
             || !assemblerPortPreviewVerified
             || !previewArrowReady
             || !playerInteractionVerified)
         {
-              GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} assemblerPortPreview={assemblerPortPreviewVerified} playerInteraction={playerInteractionVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} mapFormat={mapFormatVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
+              GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} beltDragAutoFacing={beltDragAutoFacingVerified} beltExistingJoinAutoFacing={beltExistingJoinAutoFacingVerified} assemblerPortPreview={assemblerPortPreviewVerified} playerInteraction={playerInteractionVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} mapFormat={mapFormatVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
             GetTree().Quit(1);
             return;
         }
 
-          GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} mapFormat={mapFormatVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} assemblerPortPreview={assemblerPortPreviewVerified} previewArrowReady={previewArrowReady} playerInteraction={playerInteractionVerified}");
+          GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} mapFormat={mapFormatVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} beltDragAutoFacing={beltDragAutoFacingVerified} beltExistingJoinAutoFacing={beltExistingJoinAutoFacingVerified} assemblerPortPreview={assemblerPortPreviewVerified} previewArrowReady={previewArrowReady} playerInteraction={playerInteractionVerified}");
         GetTree().Quit();
     }
 
@@ -369,6 +373,134 @@ public partial class FactoryDemo
         }
 
         return count;
+    }
+
+    private bool RunBeltDragAutoFacingSmoke()
+    {
+        if (_grid is null || !TryFindBeltTurnPlacementTriple(new Vector2I(18, 18), out var firstCell, out var secondCell, out var thirdCell))
+        {
+            return false;
+        }
+
+        SelectBuildKind(BuildPrototypeKind.Belt);
+        _selectedFacing = FacingDirection.East;
+
+        _hoveredCell = firstCell;
+        _hasHoveredCell = true;
+        _canPlaceCurrentCell = TryValidateWorldPlacement(BuildPrototypeKind.Belt, firstCell, _selectedFacing, out _);
+        HandleBuildPrimaryPress();
+
+        _hoveredCell = secondCell;
+        _canPlaceCurrentCell = TryValidateWorldPlacement(BuildPrototypeKind.Belt, secondCell, _selectedFacing, out _);
+        var placedSecond = TryPlaceCurrentBuildTarget(trackCurrentCellForStroke: true);
+
+        _hoveredCell = thirdCell;
+        _canPlaceCurrentCell = TryValidateWorldPlacement(BuildPrototypeKind.Belt, thirdCell, _selectedFacing, out _);
+        var placedThird = TryPlaceCurrentBuildTarget(trackCurrentCellForStroke: true);
+        HandleBuildPrimaryRelease();
+
+        var firstFacingOk = _grid.TryGetStructure(firstCell, out var firstStructure)
+            && firstStructure is BeltStructure firstBelt
+            && firstBelt.Facing == FacingDirection.East;
+        var secondFacingOk = _grid.TryGetStructure(secondCell, out var secondStructure)
+            && secondStructure is BeltStructure secondBelt
+            && secondBelt.Facing == FacingDirection.South;
+        var thirdFacingOk = _grid.TryGetStructure(thirdCell, out var thirdStructure)
+            && thirdStructure is BeltStructure thirdBelt
+            && thirdBelt.Facing == FacingDirection.South;
+        var selectedFacingUpdated = _selectedFacing == FacingDirection.South;
+
+        RemoveStructure(thirdCell);
+        RemoveStructure(secondCell);
+        RemoveStructure(firstCell);
+        EnterInteractionMode();
+
+        return placedSecond && placedThird && firstFacingOk && secondFacingOk && thirdFacingOk && selectedFacingUpdated;
+    }
+
+    private bool RunBeltExistingJoinAutoFacingSmoke()
+    {
+        if (_grid is null)
+        {
+            return false;
+        }
+
+        var sourceCell = new Vector2I(30, 18);
+        var joinCell = sourceCell + Vector2I.Right;
+        var targetCell = joinCell + Vector2I.Down;
+        if (!TryValidateWorldPlacement(BuildPrototypeKind.Belt, sourceCell, FacingDirection.East, out _)
+            || !TryValidateWorldPlacement(BuildPrototypeKind.Belt, targetCell, FacingDirection.South, out _)
+            || !TryValidateWorldPlacement(BuildPrototypeKind.Belt, joinCell, FacingDirection.East, out _))
+        {
+            return false;
+        }
+
+        var sourcePlaced = PlaceStructure(BuildPrototypeKind.Belt, sourceCell, FacingDirection.East) is BeltStructure;
+        var targetPlaced = PlaceStructure(BuildPrototypeKind.Belt, targetCell, FacingDirection.South) is BeltStructure;
+        if (!sourcePlaced || !targetPlaced)
+        {
+            RemoveStructure(targetCell);
+            RemoveStructure(sourceCell);
+            return false;
+        }
+
+        SelectBuildKind(BuildPrototypeKind.Belt);
+        _selectedFacing = FacingDirection.East;
+        var resolvedFacing = ResolveWorldPlacementFacing(BuildPrototypeKind.Belt, joinCell, trackCurrentCellForStroke: false);
+        _hoveredCell = joinCell;
+        _hasHoveredCell = true;
+        var placedJoin = TryPlaceCurrentBuildTarget(trackCurrentCellForStroke: false);
+
+        var joinFacingOk = _grid.TryGetStructure(joinCell, out var joinStructure)
+            && joinStructure is BeltStructure joinBelt
+            && joinBelt.Facing == FacingDirection.South;
+        var sourceFacingUnchanged = _grid.TryGetStructure(sourceCell, out var sourceStructure)
+            && sourceStructure is BeltStructure sourceBelt
+            && sourceBelt.Facing == FacingDirection.East;
+        var targetFacingUnchanged = _grid.TryGetStructure(targetCell, out var targetStructure)
+            && targetStructure is BeltStructure targetBelt
+            && targetBelt.Facing == FacingDirection.South;
+
+        RemoveStructure(joinCell);
+        RemoveStructure(targetCell);
+        RemoveStructure(sourceCell);
+        EnterInteractionMode();
+
+        return resolvedFacing == FacingDirection.South && placedJoin && joinFacingOk && sourceFacingUnchanged && targetFacingUnchanged;
+    }
+
+    private bool TryFindBeltTurnPlacementTriple(Vector2I nearCell, out Vector2I firstCell, out Vector2I secondCell, out Vector2I thirdCell)
+    {
+        firstCell = Vector2I.Zero;
+        secondCell = Vector2I.Zero;
+        thirdCell = Vector2I.Zero;
+        if (_grid is null)
+        {
+            return false;
+        }
+
+        for (var y = nearCell.Y; y <= nearCell.Y + 6; y++)
+        {
+            for (var x = nearCell.X; x <= nearCell.X + 6; x++)
+            {
+                var candidate = new Vector2I(x, y);
+                var horizontal = candidate + Vector2I.Right;
+                var turn = horizontal + Vector2I.Down;
+                if (!TryValidateWorldPlacement(BuildPrototypeKind.Belt, candidate, FacingDirection.East, out _)
+                    || !TryValidateWorldPlacement(BuildPrototypeKind.Belt, horizontal, FacingDirection.East, out _)
+                    || !TryValidateWorldPlacement(BuildPrototypeKind.Belt, turn, FacingDirection.South, out _))
+                {
+                    continue;
+                }
+
+                firstCell = candidate;
+                secondCell = horizontal;
+                thirdCell = turn;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool TryFindHorizontalPlacementPair(BuildPrototypeKind kind, Vector2I nearCell, out Vector2I startCell, out Vector2I nextCell)

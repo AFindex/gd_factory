@@ -71,8 +71,10 @@ public partial class FactoryDemo : Node3D
     private Vector2I _hoveredCell;
     private Vector2I _cachedPreviewPortCell;
     private Rect2I _cachedPreviewPortVisibleRect;
+    private Vector2I _lastBuildStrokeCell;
     private bool _hasHoveredCell;
     private bool _hasCachedPreviewPortMarkers;
+    private bool _hasLastBuildStrokeCell;
     private bool _canPlaceCurrentCell;
     private bool _canDeleteCurrentCell;
     private bool _deleteDragActive;
@@ -816,9 +818,10 @@ public partial class FactoryDemo : Node3D
 
         if (_interactionMode == FactoryInteractionMode.Build && TryGetActivePlacementKind(out var placementKind, out var usesPlayerInventory))
         {
-            _canPlaceCurrentCell = TryValidateWorldPlacement(placementKind, cell, _selectedFacing, out var placementIssue);
+            var previewFacing = ResolveWorldPlacementFacing(placementKind, cell, _buildPlacementDragActive);
+            _canPlaceCurrentCell = TryValidateWorldPlacement(placementKind, cell, previewFacing, out var placementIssue);
             _previewMessage = _canPlaceCurrentCell
-                ? DescribeWorldPlacementPreview(placementKind, cell, _selectedFacing, usesPlayerInventory)
+                ? DescribeWorldPlacementPreview(placementKind, cell, previewFacing, usesPlayerInventory)
                 : placementIssue;
             return;
         }
@@ -868,10 +871,15 @@ public partial class FactoryDemo : Node3D
             && (_blueprintSelectionDragActive || _hasBlueprintSelectionRect);
         var hasPlacementPreview = false;
         var previewKind = default(BuildPrototypeKind);
+        var previewFacing = _selectedFacing;
         if (_interactionMode == FactoryInteractionMode.Build && TryGetActivePlacementKind(out var activePreviewKind, out _))
         {
             hasPlacementPreview = true;
             previewKind = activePreviewKind;
+            if (_hasHoveredCell)
+            {
+                previewFacing = ResolveWorldPlacementFacing(previewKind, _hoveredCell, _buildPlacementDragActive);
+            }
         }
 
         var showPreview = showCapturePreview || (_hasHoveredCell
@@ -932,8 +940,8 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        _previewRoot.Position = FactoryPlacement.GetPreviewCenter(_grid, previewKind, _hoveredCell, _selectedFacing);
-        _previewRoot.Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(_selectedFacing), 0.0f);
+        _previewRoot.Position = FactoryPlacement.GetPreviewCenter(_grid, previewKind, _hoveredCell, previewFacing);
+        _previewRoot.Rotation = new Vector3(0.0f, FactoryDirection.ToYRotationRadians(previewFacing), 0.0f);
         var previewSize = FactoryPlacement.GetPreviewBaseSize(_grid, previewKind);
         _previewCell.Mesh = new BoxMesh
         {
@@ -2125,24 +2133,41 @@ public partial class FactoryDemo : Node3D
             return false;
         }
 
+        var placementFacing = ResolveWorldPlacementFacing(placementKind, _hoveredCell, trackCurrentCellForStroke);
+        var canPlaceCurrentCell = TryValidateWorldPlacement(placementKind, _hoveredCell, placementFacing, out var placementMessage);
+        _canPlaceCurrentCell = canPlaceCurrentCell;
+        _previewMessage = placementMessage;
         TraceLog($"TryPlaceCurrentBuildTarget cell={_hoveredCell} kind={placementKind} usesPlayerInventory={usesPlayerInventory} canPlace={_canPlaceCurrentCell} drag={trackCurrentCellForStroke}");
-        if (!_canPlaceCurrentCell)
+        if (!canPlaceCurrentCell)
         {
             TraceLog($"TryPlaceCurrentBuildTarget blocked previewMessage={_previewMessage}");
             return false;
         }
 
         var targetCell = _hoveredCell;
-        var placedStructure = PlaceStructure(placementKind, targetCell, _selectedFacing);
+        var previousStrokeCell = _lastBuildStrokeCell;
+        var hadPreviousStrokeCell = _hasLastBuildStrokeCell;
+        var placedStructure = PlaceStructure(placementKind, targetCell, placementFacing);
         TraceLog($"TryPlaceCurrentBuildTarget placement result placed={(placedStructure is not null)}");
         if (placedStructure is null)
         {
             return false;
         }
 
+        _selectedFacing = placementFacing;
+        if (placementKind == BuildPrototypeKind.Belt && hadPreviousStrokeCell)
+        {
+            if (ReorientBeltAt(previousStrokeCell, placementFacing))
+            {
+                RefreshAllTopology();
+            }
+        }
+
         if (trackCurrentCellForStroke)
         {
             _buildPlacementStrokeCells.Add(targetCell);
+            _lastBuildStrokeCell = targetCell;
+            _hasLastBuildStrokeCell = true;
         }
 
         if (usesPlayerInventory)
@@ -2159,6 +2184,117 @@ public partial class FactoryDemo : Node3D
     {
         _buildPlacementDragActive = false;
         _buildPlacementStrokeCells.Clear();
+        _hasLastBuildStrokeCell = false;
+    }
+
+    private FacingDirection ResolveWorldPlacementFacing(BuildPrototypeKind placementKind, Vector2I cell, bool trackCurrentCellForStroke)
+    {
+        if (placementKind != BuildPrototypeKind.Belt)
+        {
+            return _selectedFacing;
+        }
+
+        if (TryResolveExistingBeltConnectionFacing(cell, out var autoConnectFacing))
+        {
+            return autoConnectFacing;
+        }
+
+        if (trackCurrentCellForStroke
+            && _hasLastBuildStrokeCell
+            && TryResolveBeltDragFacing(_lastBuildStrokeCell, cell, out var dragFacing))
+        {
+            _selectedFacing = dragFacing;
+            return dragFacing;
+        }
+
+        return _selectedFacing;
+    }
+
+    private bool ReorientBeltAt(Vector2I cell, FacingDirection facing)
+    {
+        if (_grid is null || !_grid.TryGetStructure(cell, out var structure) || structure is not BeltStructure belt)
+        {
+            return false;
+        }
+
+        if (belt.Facing == facing)
+        {
+            return false;
+        }
+
+        belt.Reorient(facing);
+        return true;
+    }
+
+    private static bool TryResolveBeltDragFacing(Vector2I fromCell, Vector2I toCell, out FacingDirection facing)
+    {
+        var delta = toCell - fromCell;
+        if (Mathf.Abs(delta.X) + Mathf.Abs(delta.Y) != 1)
+        {
+            facing = FacingDirection.East;
+            return false;
+        }
+
+        facing = delta.X > 0
+            ? FacingDirection.East
+            : delta.X < 0
+                ? FacingDirection.West
+                : delta.Y > 0
+                    ? FacingDirection.South
+                    : FacingDirection.North;
+        return true;
+    }
+
+    private bool TryResolveExistingBeltConnectionFacing(Vector2I cell, out FacingDirection facing)
+    {
+        facing = FacingDirection.East;
+
+        if (_grid is null)
+        {
+            return false;
+        }
+
+        var resolved = false;
+        foreach (FacingDirection candidateFacing in System.Enum.GetValues(typeof(FacingDirection)))
+        {
+            var inputConnected = false;
+            var inputCells = FactoryTransportTopology.GetBeltInputCells(cell, candidateFacing);
+            for (var index = 0; index < inputCells.Count; index++)
+            {
+                if (!_grid.TryGetStructure(inputCells[index], out var inputStructure) || inputStructure is not BeltStructure)
+                {
+                    continue;
+                }
+
+                if (inputStructure.CanOutputTo(cell))
+                {
+                    inputConnected = true;
+                    break;
+                }
+            }
+
+            if (!inputConnected)
+            {
+                continue;
+            }
+
+            var outputCell = FactoryTransportTopology.GetBeltOutputCell(cell, candidateFacing);
+            if (!_grid.TryGetStructure(outputCell, out var outputStructure) || outputStructure is not BeltStructure || !outputStructure.CanReceiveFrom(cell))
+            {
+                continue;
+            }
+
+            if (resolved)
+            {
+                facing = FacingDirection.East;
+                return false;
+            }
+
+            facing = candidateFacing;
+            resolved = true;
+        }
+
+        return resolved;
     }
 
     private void EnsureInputActions()

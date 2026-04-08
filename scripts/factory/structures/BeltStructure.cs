@@ -37,6 +37,17 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
         return GetOutputCell() == targetCell;
     }
 
+    public void Reorient(FacingDirection facing)
+    {
+        if (Facing == facing)
+        {
+            return;
+        }
+
+        Facing = facing;
+        RefreshTopology();
+    }
+
     public new Vector2I GetInputCell()
     {
         return Cell + FactoryDirection.ToCellOffset(_inputFacing);
