@@ -61,6 +61,7 @@ public partial class FactoryDemo
         var inspectionVerified = VerifyStorageInspectionPanel();
         var detailWindowVerified = await RunStructureDetailSmoke();
         var blueprintVerified = RunBlueprintWorkflowSmoke();
+        var miningBlueprintVerified = RunMiningBlueprintWorkflowSmoke();
         var workspaceVerified = RunWorkspaceNavigationSmoke();
         var itemVisualProfilesVerified = RunItemVisualProfileSmoke();
         var structureVisualProfilesVerified = RunStructureVisualProfileSmoke();
@@ -82,6 +83,7 @@ public partial class FactoryDemo
             || !inspectionVerified
             || !detailWindowVerified
             || !blueprintVerified
+            || !miningBlueprintVerified
               || !workspaceVerified
               || !itemVisualProfilesVerified
               || !structureVisualProfilesVerified
@@ -96,12 +98,12 @@ public partial class FactoryDemo
             || !previewArrowReady
             || !playerInteractionVerified)
         {
-              GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} beltDragAutoFacing={beltDragAutoFacingVerified} beltExistingJoinAutoFacing={beltExistingJoinAutoFacingVerified} assemblerPortPreview={assemblerPortPreviewVerified} playerInteraction={playerInteractionVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} transportRenderTelemetry={transportRenderTelemetryVerified} transportRenderCulling={transportRenderCullingVerified} mapFormat={mapFormatVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
+              GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} beltDragAutoFacing={beltDragAutoFacingVerified} beltExistingJoinAutoFacing={beltExistingJoinAutoFacingVerified} assemblerPortPreview={assemblerPortPreviewVerified} playerInteraction={playerInteractionVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} miningBlueprint={miningBlueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} transportRenderTelemetry={transportRenderTelemetryVerified} transportRenderCulling={transportRenderCullingVerified} mapFormat={mapFormatVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
             GetTree().Quit(1);
             return;
         }
 
-          GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} transportRenderTelemetry={transportRenderTelemetryVerified} transportRenderCulling={transportRenderCullingVerified} mapFormat={mapFormatVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} beltDragAutoFacing={beltDragAutoFacingVerified} beltExistingJoinAutoFacing={beltExistingJoinAutoFacingVerified} assemblerPortPreview={assemblerPortPreviewVerified} previewArrowReady={previewArrowReady} playerInteraction={playerInteractionVerified}");
+          GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} miningBlueprint={miningBlueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} transportRenderTelemetry={transportRenderTelemetryVerified} transportRenderCulling={transportRenderCullingVerified} mapFormat={mapFormatVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} beltDragAutoFacing={beltDragAutoFacingVerified} beltExistingJoinAutoFacing={beltExistingJoinAutoFacingVerified} assemblerPortPreview={assemblerPortPreviewVerified} previewArrowReady={previewArrowReady} playerInteraction={playerInteractionVerified}");
         GetTree().Quit();
     }
 
@@ -996,6 +998,95 @@ public partial class FactoryDemo
             && validPlan.IsValid
             && placedEntries == captured.Entries.Count
             && _simulation.RegisteredStructureCount >= structureCountBefore + captured.Entries.Count;
+    }
+
+    private bool RunMiningBlueprintWorkflowSmoke()
+    {
+        if (_blueprintSite is null || _grid is null)
+        {
+            return false;
+        }
+
+        var originalDeposits = new List<FactoryResourceDepositDefinition>(_grid.GetResourceDeposits());
+        if (!TryFindMiningBlueprintLaneCandidate(new Vector2I(34, 26), out var sourceDrillCell, out var sourceBeltCell, out var sourceSinkCell)
+            || !TryFindMiningBlueprintLaneCandidate(new Vector2I(42, 26), out var targetDrillCell, out var targetBeltCell, out var targetSinkCell))
+        {
+            return false;
+        }
+
+        _grid.SetResourceDeposits(new List<FactoryResourceDepositDefinition>(originalDeposits)
+        {
+            new("smoke-mining-source", FactoryResourceKind.IronOre, "Smoke Source Iron", FactoryResourceCatalog.GetTint(FactoryResourceKind.IronOre), new[] { sourceDrillCell }),
+            new("smoke-mining-target", FactoryResourceKind.IronOre, "Smoke Target Iron", FactoryResourceCatalog.GetTint(FactoryResourceKind.IronOre), new[] { targetDrillCell })
+        });
+
+        try
+        {
+            if (PlaceStructure(BuildPrototypeKind.MiningDrill, sourceDrillCell, FacingDirection.East) is not MiningDrillStructure
+                || PlaceStructure(BuildPrototypeKind.Belt, sourceBeltCell, FacingDirection.East) is null
+                || PlaceStructure(BuildPrototypeKind.Sink, sourceSinkCell, FacingDirection.East) is null)
+            {
+                return false;
+            }
+
+            var captured = FactoryBlueprintCaptureService.CaptureSelection(
+                _blueprintSite,
+                new Rect2I(sourceDrillCell.X, sourceDrillCell.Y, 3, 1),
+                "Smoke Mining Blueprint");
+            if (captured is null || captured.StructureCount != 3)
+            {
+                return false;
+            }
+
+            var validPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintSite, targetDrillCell);
+            var committed = validPlan.IsValid && FactoryBlueprintPlanner.CommitPlan(validPlan, _blueprintSite);
+            var drillPlaced = _grid.TryGetStructure(targetDrillCell, out var drillStructure) && drillStructure is MiningDrillStructure drill && drill.ResourceKind == FactoryResourceKind.IronOre;
+            var beltPlaced = _grid.TryGetStructure(targetBeltCell, out var beltStructure) && beltStructure is BeltStructure;
+            var sinkPlaced = _grid.TryGetStructure(targetSinkCell, out var sinkStructure) && sinkStructure is SinkStructure;
+            return committed && drillPlaced && beltPlaced && sinkPlaced;
+        }
+        finally
+        {
+            RemoveStructure(targetSinkCell);
+            RemoveStructure(targetBeltCell);
+            RemoveStructure(targetDrillCell);
+            RemoveStructure(sourceSinkCell);
+            RemoveStructure(sourceBeltCell);
+            RemoveStructure(sourceDrillCell);
+            _grid.SetResourceDeposits(originalDeposits);
+        }
+    }
+
+    private bool TryFindMiningBlueprintLaneCandidate(Vector2I nearCell, out Vector2I drillCell, out Vector2I beltCell, out Vector2I sinkCell)
+    {
+        drillCell = Vector2I.Zero;
+        beltCell = Vector2I.Zero;
+        sinkCell = Vector2I.Zero;
+        if (_grid is null)
+        {
+            return false;
+        }
+
+        for (var y = nearCell.Y; y <= nearCell.Y + 8; y++)
+        {
+            for (var x = nearCell.X; x <= nearCell.X + 8; x++)
+            {
+                var candidateDrill = new Vector2I(x, y);
+                var candidateBelt = candidateDrill + Vector2I.Right;
+                var candidateSink = candidateDrill + (Vector2I.Right * 2);
+                if (!_grid.CanPlace(candidateDrill) || !_grid.CanPlace(candidateBelt) || !_grid.CanPlace(candidateSink))
+                {
+                    continue;
+                }
+
+                drillCell = candidateDrill;
+                beltCell = candidateBelt;
+                sinkCell = candidateSink;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool TryFindBlueprintAnchor(FactoryBlueprintRecord blueprint, out Vector2I anchor)

@@ -17,6 +17,7 @@ public static class FactoryTransportTopology
     {
         return kind switch
         {
+            BuildPrototypeKind.PowerPole => System.Array.Empty<Vector2I>(),
             BuildPrototypeKind.Belt => GetBeltInputCells(cell, facing),
             BuildPrototypeKind.Merger => GetMergerInputCells(cell, facing),
             _ => FactoryStructureFactory.GetFootprint(kind).ResolveInputCells(cell, facing)
@@ -25,7 +26,9 @@ public static class FactoryTransportTopology
 
     public static IReadOnlyList<Vector2I> GetOutputCells(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
     {
-        return FactoryStructureFactory.GetFootprint(kind).ResolveOutputCells(cell, facing);
+        return kind == BuildPrototypeKind.PowerPole
+            ? System.Array.Empty<Vector2I>()
+            : FactoryStructureFactory.GetFootprint(kind).ResolveOutputCells(cell, facing);
     }
 
     public static IReadOnlyList<Vector2I> GetBeltInputCells(Vector2I cell, FacingDirection facing)

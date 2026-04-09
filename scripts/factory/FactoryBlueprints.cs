@@ -545,13 +545,18 @@ public static class FactoryBlueprintPlanner
         {
             var entry = plan.Entries[index];
             var placed = site.PlaceStructure(entry.SourceEntry.Kind, entry.TargetCell, entry.TargetFacing);
-            if (placed is null || !placed.ApplyBlueprintConfiguration(entry.SourceEntry.Configuration))
+            if (placed is null)
             {
                 RollbackPlaced(site, placedCells);
                 return false;
             }
 
             placedCells.Add(entry.TargetCell);
+            if (!placed.ApplyBlueprintConfiguration(entry.SourceEntry.Configuration))
+            {
+                RollbackPlaced(site, placedCells);
+                return false;
+            }
         }
 
         return true;

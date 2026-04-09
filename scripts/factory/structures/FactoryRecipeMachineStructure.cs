@@ -287,6 +287,11 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
 
     public override IReadOnlyDictionary<string, string> CaptureBlueprintConfiguration()
     {
+        if (!SupportsRecipeSelection)
+        {
+            return new Dictionary<string, string>();
+        }
+
         return new Dictionary<string, string>
         {
             ["recipe_id"] = ActiveRecipe.Id
@@ -308,6 +313,11 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
         if (!configuration.TryGetValue("recipe_id", out var recipeId))
         {
             return configuration.Count == 0;
+        }
+
+        if (!SupportsRecipeSelection)
+        {
+            return string.Equals(ActiveRecipe.Id, recipeId, StringComparison.Ordinal);
         }
 
         return TrySetDetailRecipe(recipeId);
