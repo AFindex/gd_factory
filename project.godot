@@ -26,6 +26,10 @@ window/stretch/aspect="expand"
 
 project/assembly_name="net_factory"
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/dotnet_diagnostics_profiler/plugin.cfg")
+
 [physics]
 
 3d/physics_engine="Jolt Physics"
