@@ -388,6 +388,56 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
         };
     }
 
+    protected override void CaptureRuntimeState(FactoryStructureRuntimeSnapshot snapshot)
+    {
+        base.CaptureRuntimeState(snapshot);
+        snapshot.Inventories.Add(FactoryRuntimeSnapshotValues.CaptureInventory(InputInventoryId, _inputInventory));
+        snapshot.Inventories.Add(FactoryRuntimeSnapshotValues.CaptureInventory(OutputInventoryId, _outputInventory));
+        snapshot.State["recipe_id"] = ActiveRecipe.Id;
+        snapshot.State["dispatch_cooldown"] = FactoryRuntimeSnapshotValues.FormatDouble(_dispatchCooldown);
+        snapshot.State["process_progress"] = FactoryRuntimeSnapshotValues.FormatDouble(_processProgress);
+        snapshot.State["is_processing"] = FactoryRuntimeSnapshotValues.FormatBool(_isProcessing);
+        snapshot.State["dispatch_output_index"] = FactoryRuntimeSnapshotValues.FormatInt(_dispatchOutputIndex);
+    }
+
+    protected override void ApplyRuntimeState(FactoryStructureRuntimeSnapshot snapshot, SimulationController simulation)
+    {
+        base.ApplyRuntimeState(snapshot, simulation);
+
+        if (snapshot.State.TryGetValue("recipe_id", out var recipeId) && !string.IsNullOrWhiteSpace(recipeId))
+        {
+            SetActiveRecipeById(recipeId);
+        }
+
+        for (var index = 0; index < snapshot.Inventories.Count; index++)
+        {
+            var inventorySnapshot = snapshot.Inventories[index];
+            var restored = inventorySnapshot.InventoryId switch
+            {
+                var id when id == InputInventoryId => FactoryRuntimeSnapshotValues.TryRestoreInventory(_inputInventory, inventorySnapshot, simulation),
+                var id when id == OutputInventoryId => FactoryRuntimeSnapshotValues.TryRestoreInventory(_outputInventory, inventorySnapshot, simulation),
+                _ => false
+            };
+
+            if (!restored)
+            {
+                throw new InvalidOperationException(
+                    $"Machine '{GetRuntimeStructureKey()}' could not restore inventory '{inventorySnapshot.InventoryId}'.");
+            }
+        }
+
+        _dispatchCooldown = FactoryRuntimeSnapshotValues.TryGetDouble(snapshot.State, "dispatch_cooldown", out var dispatchCooldown)
+            ? Mathf.Max(0.0, dispatchCooldown)
+            : 0.0;
+        _processProgress = FactoryRuntimeSnapshotValues.TryGetDouble(snapshot.State, "process_progress", out var processProgress)
+            ? Mathf.Max(0.0, processProgress)
+            : 0.0;
+        _isProcessing = FactoryRuntimeSnapshotValues.TryGetBool(snapshot.State, "is_processing", out var isProcessing) && isProcessing;
+        _dispatchOutputIndex = FactoryRuntimeSnapshotValues.TryGetInt(snapshot.State, "dispatch_output_index", out var dispatchOutputIndex)
+            ? Mathf.Max(0, dispatchOutputIndex)
+            : 0;
+    }
+
     private bool CanAcceptInput(FactoryItem item, Vector2I sourceCell)
     {
         if (!CanReceiveFrom(sourceCell)

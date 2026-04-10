@@ -345,6 +345,27 @@ public partial class MobileFactoryHud
         saveGrid.AddChild(CreateEditorActionButton("导出内部副本", () => InteriorMapSaveRequested?.Invoke()));
         saveGrid.AddChild(CreateEditorActionButton("覆盖内部源", () => InteriorMapSourceSaveRequested?.Invoke()));
 
+        body.AddChild(CreateDivider());
+        body.AddChild(CreateEditorLabel("进度存档", 12, FactoryUiTheme.TextMuted));
+        var runtimeSlotEdit = new LineEdit
+        {
+            Text = "progress-1",
+            PlaceholderText = "输入存档名",
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+        };
+        FactoryUiTheme.ApplyLineEditTheme(runtimeSlotEdit);
+        body.AddChild(runtimeSlotEdit);
+
+        var runtimeGrid = new GridContainer();
+        runtimeGrid.Columns = 2;
+        runtimeGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        runtimeGrid.AddThemeConstantOverride("h_separation", 6);
+        runtimeGrid.AddThemeConstantOverride("v_separation", 6);
+        runtimeGrid.AddChild(CreateEditorActionButton("保存进度", () => RuntimeSaveRequested?.Invoke(runtimeSlotEdit.Text?.Trim() ?? string.Empty)));
+        runtimeGrid.AddChild(CreateEditorActionButton("读取进度", () => RuntimeLoadRequested?.Invoke(runtimeSlotEdit.Text?.Trim() ?? string.Empty)));
+        body.AddChild(runtimeGrid);
+
         _saveStatusLabel = CreateEditorLabel(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: true), 11, FactoryUiTheme.TextSubtle);
         body.AddChild(_saveStatusLabel);
 

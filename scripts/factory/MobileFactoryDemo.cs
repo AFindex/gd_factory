@@ -207,6 +207,10 @@ public partial class MobileFactoryDemo : Node3D
         {
             CallDeferred(nameof(RunSmokeChecks));
         }
+        else if (HasRuntimeSaveSmokeTestFlag())
+        {
+            CallDeferred(nameof(RunRuntimeSaveSmokeChecks));
+        }
         else if (HasMiningPortSmokeTestFlag())
         {
             CallDeferred(nameof(RunMiningPortSmokeChecks));
@@ -496,6 +500,8 @@ public partial class MobileFactoryDemo : Node3D
         _hud.InteriorMapSaveRequested += HandleInteriorMapSaveRequested;
         _hud.WorldMapSourceSaveRequested += HandleWorldMapSourceSaveRequested;
         _hud.InteriorMapSourceSaveRequested += HandleInteriorMapSourceSaveRequested;
+        _hud.RuntimeSaveRequested += HandleRuntimeSaveRequested;
+        _hud.RuntimeLoadRequested += HandleRuntimeLoadRequested;
         _hud.BlueprintSelected += HandleInteriorBlueprintSelected;
         _hud.BlueprintApplyRequested += EnterInteriorBlueprintApplyMode;
         _hud.BlueprintConfirmRequested += ConfirmInteriorBlueprintApply;

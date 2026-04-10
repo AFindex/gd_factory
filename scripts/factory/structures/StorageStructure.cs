@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 
 public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, IFactoryItemReceiver
@@ -164,6 +165,34 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
             var targetScale = _inventory.IsEmpty ? Vector3.One : new Vector3(1.0f, 1.05f + fillRatio * 0.18f, 1.0f);
             _statusBeacon.Scale = _statusBeacon.Scale.Lerp(targetScale, tickAlpha * 0.45f);
         }
+    }
+
+    protected override void CaptureRuntimeState(FactoryStructureRuntimeSnapshot snapshot)
+    {
+        base.CaptureRuntimeState(snapshot);
+        snapshot.Inventories.Add(FactoryRuntimeSnapshotValues.CaptureInventory("storage-buffer", _inventory));
+        snapshot.State["dispatch_cooldown"] = FactoryRuntimeSnapshotValues.FormatDouble(_dispatchCooldown);
+    }
+
+    protected override void ApplyRuntimeState(FactoryStructureRuntimeSnapshot snapshot, SimulationController simulation)
+    {
+        base.ApplyRuntimeState(snapshot, simulation);
+        for (var index = 0; index < snapshot.Inventories.Count; index++)
+        {
+            if (snapshot.Inventories[index].InventoryId != "storage-buffer")
+            {
+                continue;
+            }
+
+            if (!FactoryRuntimeSnapshotValues.TryRestoreInventory(_inventory, snapshot.Inventories[index], simulation))
+            {
+                throw new InvalidOperationException($"Storage '{GetRuntimeStructureKey()}' could not restore its buffer.");
+            }
+        }
+
+        _dispatchCooldown = FactoryRuntimeSnapshotValues.TryGetDouble(snapshot.State, "dispatch_cooldown", out var cooldown)
+            ? Mathf.Max(0.0, cooldown)
+            : 0.0;
     }
 
     protected override void BuildVisuals()

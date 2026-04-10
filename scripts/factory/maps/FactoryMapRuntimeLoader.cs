@@ -42,12 +42,24 @@ public static class FactoryMapRuntimeLoader
         Node3D structureRoot,
         SimulationController simulation)
     {
+        var document = FactoryMapValidator.ValidateDocument(FactoryMapSerializer.LoadFromFile(resourcePath));
+        return LoadWorldMapDocument(resourcePath, document, site, structureRoot, simulation);
+    }
+
+    public static FactoryWorldMapLoadResult LoadWorldMapDocument(
+        string resourcePath,
+        FactoryMapDocument document,
+        GridManager site,
+        Node3D structureRoot,
+        SimulationController simulation,
+        bool applyDocumentRuntimeState = true)
+    {
         foreach (var _ in site.GetStructures())
         {
             throw new InvalidOperationException($"World site '{site.SiteId}' must be empty before loading '{resourcePath}'.");
         }
 
-        var document = FactoryMapValidator.ValidateDocument(FactoryMapSerializer.LoadFromFile(resourcePath));
+        document = FactoryMapValidator.ValidateDocument(document);
         FactoryMapValidator.ValidateAgainstSiteBounds(document, site.MinCell, site.MaxCell, FactoryMapKind.World);
         LogDocument("Loaded world map document", resourcePath, document);
 
@@ -73,7 +85,10 @@ public static class FactoryMapRuntimeLoader
             loadedStructures.Add(structure);
         }
 
-        ApplyStructureRuntimeState(document, simulation, structuresByAnchorCell);
+        if (applyDocumentRuntimeState)
+        {
+            ApplyStructureRuntimeState(document, simulation, structuresByAnchorCell);
+        }
 
         var anchors = new Dictionary<string, Vector2I>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < document.Anchors.Count; i++)
@@ -158,6 +173,16 @@ public static class FactoryMapRuntimeLoader
         SimulationController simulation)
     {
         var document = FactoryMapValidator.ValidateDocument(FactoryMapSerializer.LoadFromFile(resourcePath));
+        ApplyInteriorRuntimeDocument(resourcePath, document, factory, simulation);
+    }
+
+    public static void ApplyInteriorRuntimeDocument(
+        string resourcePath,
+        FactoryMapDocument document,
+        MobileFactoryInstance factory,
+        SimulationController simulation,
+        bool applyDocumentRuntimeState = true)
+    {
         FactoryMapValidator.ValidateAgainstSiteBounds(document, factory.InteriorMinCell, factory.InteriorMaxCell, FactoryMapKind.Interior);
         LogDocument("Applying interior runtime state", resourcePath, document);
 
@@ -174,7 +199,24 @@ public static class FactoryMapRuntimeLoader
             structuresByAnchorCell[entry.Cell] = structure;
         }
 
-        ApplyStructureRuntimeState(document, simulation, structuresByAnchorCell);
+        if (applyDocumentRuntimeState)
+        {
+            ApplyStructureRuntimeState(document, simulation, structuresByAnchorCell);
+        }
+    }
+
+    public static void LoadInteriorMapDocument(
+        string resourcePath,
+        FactoryMapDocument document,
+        MobileFactoryInstance factory,
+        SimulationController simulation,
+        bool applyDocumentRuntimeState = true)
+    {
+        document = FactoryMapValidator.ValidateDocument(document);
+        FactoryMapValidator.ValidateAgainstSiteBounds(document, factory.InteriorMinCell, factory.InteriorMaxCell, FactoryMapKind.Interior);
+        LogDocument("Loaded interior map document", resourcePath, document);
+        factory.RebuildInteriorFromMapDocument(document, rebuildTopology: false);
+        ApplyInteriorRuntimeDocument(resourcePath, document, factory, simulation, applyDocumentRuntimeState);
     }
 
     public static bool VerifyRoundTrip(string resourcePath)

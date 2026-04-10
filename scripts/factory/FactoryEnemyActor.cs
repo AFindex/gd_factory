@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 
 public abstract partial class FactoryEnemyActor : Node3D
@@ -39,6 +40,7 @@ public abstract partial class FactoryEnemyActor : Node3D
     public string EnemyId { get; private set; } = string.Empty;
     public bool IsDefeated { get; private set; }
     public float CurrentHealth => _currentHealth;
+    public abstract string EnemyTypeId { get; }
     public abstract string DisplayName { get; }
     public abstract float MaxHealth { get; }
     public abstract float MoveSpeed { get; }
@@ -207,6 +209,59 @@ public abstract partial class FactoryEnemyActor : Node3D
         _attackTracers.Clear();
     }
 
+    public FactoryEnemyRuntimeSnapshot CaptureRuntimeSnapshot()
+    {
+        var snapshot = new FactoryEnemyRuntimeSnapshot
+        {
+            EnemyTypeId = EnemyTypeId,
+            EnemyId = EnemyId,
+            Position = FactoryRuntimeVec3.FromVector3(GlobalPosition),
+            NextPathIndex = _nextPathIndex,
+            CurrentHealth = _currentHealth,
+            AttackCooldown = _attackCooldown
+        };
+
+        for (var index = 0; index < _pathPoints.Count; index++)
+        {
+            snapshot.PathPoints.Add(FactoryRuntimeVec3.FromVector3(_pathPoints[index]));
+        }
+
+        return snapshot;
+    }
+
+    public void ApplyRuntimeSnapshot(FactoryEnemyRuntimeSnapshot snapshot)
+    {
+        if (!string.Equals(snapshot.EnemyTypeId, EnemyTypeId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Enemy snapshot type '{snapshot.EnemyTypeId}' does not match '{EnemyTypeId}'.");
+        }
+
+        EnemyId = snapshot.EnemyId;
+        _pathPoints.Clear();
+        for (var index = 0; index < snapshot.PathPoints.Count; index++)
+        {
+            _pathPoints.Add(snapshot.PathPoints[index].ToVector3());
+        }
+
+        _nextPathIndex = Mathf.Clamp(snapshot.NextPathIndex, 0, _pathPoints.Count == 0 ? 0 : _pathPoints.Count - 1);
+        _currentHealth = Mathf.Clamp(snapshot.CurrentHealth, 0.0f, MaxHealth);
+        _attackCooldown = Mathf.Max(0.0, snapshot.AttackCooldown);
+        _damageFlashTimer = 0.0f;
+        _engagedTarget = null;
+        IsDefeated = _currentHealth <= 0.0f;
+        var restoredPosition = snapshot.Position.ToVector3();
+        if (IsInsideTree())
+        {
+            GlobalPosition = restoredPosition;
+        }
+        else
+        {
+            Position = restoredPosition;
+        }
+
+        SyncHealthBar();
+    }
+
     private void AdvanceAlongPath(float stepSeconds)
     {
         if (_pathPoints.Count == 0 || _nextPathIndex >= _pathPoints.Count)
@@ -335,6 +390,7 @@ public sealed partial class MeleeRaiderEnemy : FactoryEnemyActor
     protected override Color BodyColor => new Color("EF4444");
     protected override Vector3 BodySize => new Vector3(0.8f, 0.72f, 0.8f);
 
+    public override string EnemyTypeId => "melee";
     public override string DisplayName => "近战袭击者";
     public override float MaxHealth => 160.0f;
     public override float MoveSpeed => FactoryConstants.EnemyMeleeSpeed;
@@ -357,6 +413,7 @@ public sealed partial class RangedRaiderEnemy : FactoryEnemyActor
     protected override Vector3 AttackOriginOffset => new Vector3(0.0f, 0.68f, 0.0f);
     protected override Vector3 AttackImpactOffset => new Vector3(0.0f, 0.68f, 0.0f);
 
+    public override string EnemyTypeId => "ranged";
     public override string DisplayName => "远程袭击者";
     public override float MaxHealth => 140.0f;
     public override float MoveSpeed => FactoryConstants.EnemyRangedSpeed;

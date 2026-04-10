@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 
 public partial class GeneratorStructure : FactoryStructure, IFactoryItemReceiver, IFactoryPowerProducer
@@ -205,6 +206,42 @@ public partial class GeneratorStructure : FactoryStructure, IFactoryItemReceiver
         {
             _powerRange.Visible = visible;
         }
+    }
+
+    protected override void CaptureRuntimeState(FactoryStructureRuntimeSnapshot snapshot)
+    {
+        base.CaptureRuntimeState(snapshot);
+        snapshot.Inventories.Add(FactoryRuntimeSnapshotValues.CaptureInventory("generator-fuel", _fuelInventory));
+        snapshot.State["burn_remaining"] = FactoryRuntimeSnapshotValues.FormatDouble(_burnRemaining);
+        snapshot.State["power_output_fraction"] = FactoryRuntimeSnapshotValues.FormatFloat(_powerOutputFraction);
+        snapshot.State["rotor_speed_fraction"] = FactoryRuntimeSnapshotValues.FormatFloat(_rotorSpeedFraction);
+    }
+
+    protected override void ApplyRuntimeState(FactoryStructureRuntimeSnapshot snapshot, SimulationController simulation)
+    {
+        base.ApplyRuntimeState(snapshot, simulation);
+        for (var index = 0; index < snapshot.Inventories.Count; index++)
+        {
+            if (snapshot.Inventories[index].InventoryId != "generator-fuel")
+            {
+                continue;
+            }
+
+            if (!FactoryRuntimeSnapshotValues.TryRestoreInventory(_fuelInventory, snapshot.Inventories[index], simulation))
+            {
+                throw new InvalidOperationException($"Generator '{GetRuntimeStructureKey()}' could not restore fuel.");
+            }
+        }
+
+        _burnRemaining = FactoryRuntimeSnapshotValues.TryGetDouble(snapshot.State, "burn_remaining", out var burnRemaining)
+            ? Mathf.Max(0.0, burnRemaining)
+            : 0.0;
+        _powerOutputFraction = FactoryRuntimeSnapshotValues.TryGetFloat(snapshot.State, "power_output_fraction", out var powerFraction)
+            ? Mathf.Clamp(powerFraction, 0.0f, 1.0f)
+            : 0.0f;
+        _rotorSpeedFraction = FactoryRuntimeSnapshotValues.TryGetFloat(snapshot.State, "rotor_speed_fraction", out var rotorFraction)
+            ? Mathf.Clamp(rotorFraction, 0.0f, 1.0f)
+            : 0.0f;
     }
 
     protected override void BuildVisuals()

@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 
 public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IFactoryStructureDetailProvider, IFactoryInventoryEndpointProvider
@@ -167,6 +168,48 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
     public virtual bool ApplyBlueprintConfiguration(IReadOnlyDictionary<string, string> configuration)
     {
         return configuration.Count == 0;
+    }
+
+    public static string BuildRuntimeStructureKey(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
+    {
+        return FactoryRuntimeSnapshotValues.BuildStructureKey(kind, cell, facing);
+    }
+
+    public virtual string GetRuntimeStructureKey()
+    {
+        return BuildRuntimeStructureKey(Kind, Cell, Facing);
+    }
+
+    public virtual FactoryStructureRuntimeSnapshot CaptureRuntimeSnapshot()
+    {
+        var snapshot = new FactoryStructureRuntimeSnapshot
+        {
+            StructureKey = GetRuntimeStructureKey(),
+            SiteId = Site.SiteId,
+            Kind = Kind,
+            Cell = FactoryRuntimeInt2.FromVector2I(Cell),
+            Facing = Facing,
+            CurrentHealth = CurrentHealth
+        };
+        CaptureRuntimeState(snapshot);
+        return snapshot;
+    }
+
+    public virtual void ApplyRuntimeSnapshot(FactoryStructureRuntimeSnapshot snapshot, SimulationController simulation)
+    {
+        if (snapshot.Kind != Kind
+            || snapshot.Cell.ToVector2I() != Cell
+            || snapshot.Facing != Facing
+            || !string.Equals(snapshot.StructureKey, GetRuntimeStructureKey(), StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Runtime snapshot '{snapshot.StructureKey}' does not match structure '{GetRuntimeStructureKey()}'.");
+        }
+
+        RestoreCurrentHealth(snapshot.CurrentHealth);
+        ApplyRuntimeState(snapshot, simulation);
+        SyncCombatVisuals(0.0f);
+        SyncVisualPresentation(0.0f);
     }
 
     public Vector2I GetOutputCell()
@@ -510,6 +553,21 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
         }
 
         return seeds;
+    }
+
+    protected virtual void CaptureRuntimeState(FactoryStructureRuntimeSnapshot snapshot)
+    {
+    }
+
+    protected virtual void ApplyRuntimeState(FactoryStructureRuntimeSnapshot snapshot, SimulationController simulation)
+    {
+    }
+
+    protected void RestoreCurrentHealth(float currentHealth)
+    {
+        _currentHealth = Mathf.Clamp(currentHealth, 0.0f, MaxHealth);
+        IsDestroyed = _currentHealth <= 0.0f;
+        _recentDamageTimer = 0.0;
     }
 
     private Node GetVisualParent()

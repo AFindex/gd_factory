@@ -58,6 +58,19 @@ public partial class SplitterStructure : FlowTransportStructure
         _sendLeftNext = !_sendLeftNext;
     }
 
+    protected override void CaptureRuntimeState(FactoryStructureRuntimeSnapshot snapshot)
+    {
+        base.CaptureRuntimeState(snapshot);
+        snapshot.State["send_left_next"] = FactoryRuntimeSnapshotValues.FormatBool(_sendLeftNext);
+    }
+
+    protected override void ApplyRuntimeState(FactoryStructureRuntimeSnapshot snapshot, SimulationController simulation)
+    {
+        base.ApplyRuntimeState(snapshot, simulation);
+        _sendLeftNext = !FactoryRuntimeSnapshotValues.TryGetBool(snapshot.State, "send_left_next", out var sendLeftNext)
+            || sendLeftNext;
+    }
+
     protected override bool TryDispatchItem(TransitItemState state, SimulationController simulation)
     {
         var leftCell = GetLeftOutputCell();

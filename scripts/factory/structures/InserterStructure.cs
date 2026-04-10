@@ -1,4 +1,5 @@
 using Godot;
+using System;
 
 public partial class InserterStructure : FactoryStructure
 {
@@ -75,6 +76,46 @@ public partial class InserterStructure : FactoryStructure
         {
             _heldVisual.Visible = _heldItem is not null;
         }
+    }
+
+    protected override void CaptureRuntimeState(FactoryStructureRuntimeSnapshot snapshot)
+    {
+        base.CaptureRuntimeState(snapshot);
+        snapshot.State["swing_progress"] = FactoryRuntimeSnapshotValues.FormatFloat(_swingProgress);
+        snapshot.State["is_returning"] = FactoryRuntimeSnapshotValues.FormatBool(_isReturning);
+        if (_heldItem is not null)
+        {
+            snapshot.State["held_item_id"] = FactoryRuntimeSnapshotValues.FormatInt(_heldItem.Id);
+            snapshot.State["held_item_kind"] = _heldItem.ItemKind.ToString();
+            snapshot.State["held_item_source"] = _heldItem.SourceKind.ToString();
+        }
+    }
+
+    protected override void ApplyRuntimeState(FactoryStructureRuntimeSnapshot snapshot, SimulationController simulation)
+    {
+        base.ApplyRuntimeState(snapshot, simulation);
+        _swingProgress = FactoryRuntimeSnapshotValues.TryGetFloat(snapshot.State, "swing_progress", out var swingProgress)
+            ? Mathf.Clamp(swingProgress, 0.0f, 1.0f)
+            : 0.0f;
+        _isReturning = FactoryRuntimeSnapshotValues.TryGetBool(snapshot.State, "is_returning", out var isReturning) && isReturning;
+
+        _heldItem = null;
+        if (FactoryRuntimeSnapshotValues.TryGetInt(snapshot.State, "held_item_id", out var itemId)
+            && snapshot.State.TryGetValue("held_item_kind", out var itemKindRaw)
+            && snapshot.State.TryGetValue("held_item_source", out var sourceKindRaw)
+            && Enum.TryParse<FactoryItemKind>(itemKindRaw, out var itemKind)
+            && Enum.TryParse<BuildPrototypeKind>(sourceKindRaw, out var sourceKind))
+        {
+            _heldItem = simulation.CreateItemWithId(itemId, sourceKind, itemKind);
+        }
+
+        if (_heldItem is null)
+        {
+            ClearHeldVisual();
+            return;
+        }
+
+        RebuildHeldVisual();
     }
 
     protected override void BuildVisuals()

@@ -1,4 +1,5 @@
 using Godot;
+using System;
 
 public partial class SinkStructure : FactoryStructure, IFactoryItemReceiver
 {
@@ -59,6 +60,32 @@ public partial class SinkStructure : FactoryStructure, IFactoryItemReceiver
         {
             _indicator.Scale = _indicator.Scale.Lerp(Vector3.One, tickAlpha * 0.5f);
         }
+    }
+
+    protected override void CaptureRuntimeState(FactoryStructureRuntimeSnapshot snapshot)
+    {
+        base.CaptureRuntimeState(snapshot);
+        snapshot.State["delivered_total"] = FactoryRuntimeSnapshotValues.FormatInt(DeliveredTotal);
+        snapshot.State["delivered_rate"] = FactoryRuntimeSnapshotValues.FormatInt(DeliveredRate);
+        snapshot.State["recent_delivered"] = FactoryRuntimeSnapshotValues.FormatInt(_recentDelivered);
+        snapshot.State["rate_timer"] = FactoryRuntimeSnapshotValues.FormatDouble(_rateTimer);
+    }
+
+    protected override void ApplyRuntimeState(FactoryStructureRuntimeSnapshot snapshot, SimulationController simulation)
+    {
+        base.ApplyRuntimeState(snapshot, simulation);
+        DeliveredTotal = FactoryRuntimeSnapshotValues.TryGetInt(snapshot.State, "delivered_total", out var deliveredTotal)
+            ? Mathf.Max(0, deliveredTotal)
+            : 0;
+        DeliveredRate = FactoryRuntimeSnapshotValues.TryGetInt(snapshot.State, "delivered_rate", out var deliveredRate)
+            ? Mathf.Max(0, deliveredRate)
+            : 0;
+        _recentDelivered = FactoryRuntimeSnapshotValues.TryGetInt(snapshot.State, "recent_delivered", out var recentDelivered)
+            ? Mathf.Max(0, recentDelivered)
+            : 0;
+        _rateTimer = FactoryRuntimeSnapshotValues.TryGetDouble(snapshot.State, "rate_timer", out var rateTimer)
+            ? Mathf.Max(0.0, rateTimer)
+            : 0.0;
     }
 
     protected override void BuildVisuals()

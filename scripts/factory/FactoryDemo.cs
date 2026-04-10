@@ -120,6 +120,10 @@ public partial class FactoryDemo : Node3D
         {
             CallDeferred(nameof(RunSmokeChecks));
         }
+        else if (HasRuntimeSaveSmokeTestFlag())
+        {
+            CallDeferred(nameof(RunRuntimeSaveSmokeChecks));
+        }
     }
 
     public override void _Process(double delta)
@@ -398,6 +402,8 @@ public partial class FactoryDemo : Node3D
         _hud.BlueprintSourceSaveRequested += name => HandleBlueprintSaveRequested(name, FactoryBlueprintPersistenceTarget.Source);
         _hud.MapSaveRequested += HandleMapSaveRequested;
         _hud.MapSourceSaveRequested += HandleMapSourceSaveRequested;
+        _hud.RuntimeSaveRequested += HandleRuntimeSaveRequested;
+        _hud.RuntimeLoadRequested += HandleRuntimeLoadRequested;
         _hud.BlueprintSelected += HandleBlueprintSelected;
         _hud.BlueprintApplyRequested += EnterBlueprintApplyMode;
         _hud.BlueprintConfirmRequested += ConfirmBlueprintApply;

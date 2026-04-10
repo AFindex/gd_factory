@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 
 public sealed class MobileFactoryInstance
@@ -625,6 +626,88 @@ public sealed class MobileFactoryInstance
         }
 
         return total;
+    }
+
+    public FactoryMobileFactoryRuntimeSnapshot CaptureRuntimeSnapshot()
+    {
+        var state = State == MobileFactoryLifecycleState.Deployed
+            ? MobileFactoryLifecycleState.Deployed
+            : MobileFactoryLifecycleState.InTransit;
+
+        return new FactoryMobileFactoryRuntimeSnapshot
+        {
+            FactoryId = FactoryId,
+            State = state,
+            HullPosition = FactoryRuntimeVec3.FromVector3(_hullRoot.Position),
+            TransitFacing = TransitFacing,
+            HasAnchorCell = AnchorCell.HasValue,
+            AnchorCell = FactoryRuntimeInt2.FromVector2I(AnchorCell ?? Vector2I.Zero),
+            DeploymentFacing = DeploymentFacing
+        };
+    }
+
+    public void ApplyRuntimeSnapshot(FactoryMobileFactoryRuntimeSnapshot snapshot, GridManager worldGrid)
+    {
+        if (!string.Equals(snapshot.FactoryId, FactoryId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Mobile factory snapshot '{snapshot.FactoryId}' does not match '{FactoryId}'.");
+        }
+
+        if (snapshot.State == MobileFactoryLifecycleState.Deployed && snapshot.HasAnchorCell)
+        {
+            if (!TryDeploy(worldGrid, snapshot.AnchorCell.ToVector2I(), snapshot.DeploymentFacing))
+            {
+                throw new InvalidOperationException("Mobile factory deployment could not be restored from the snapshot.");
+            }
+
+            return;
+        }
+
+        SetTransitPose(snapshot.HullPosition.ToVector3(), snapshot.TransitFacing);
+    }
+
+    public void ClearInteriorStructures(bool rebuildTopology = true)
+    {
+        var structures = new List<FactoryStructure>(InteriorSite.GetStructures());
+        for (var index = 0; index < structures.Count; index++)
+        {
+            var structure = structures[index];
+            InteriorSite.RemoveStructure(structure);
+            _simulation.UnregisterStructure(structure);
+            DetachAttachmentIfNeeded(structure);
+            structure.QueueFree();
+        }
+
+        _attachments.Clear();
+        RefreshRuntimeAfterInteriorChange(rebuildTopology);
+    }
+
+    public void RebuildInteriorFromMapDocument(FactoryMapDocument document, bool rebuildTopology = true)
+    {
+        FactoryMapRuntimeLoader.ValidateInteriorDocumentAgainstProfile(document, Profile, $"{FactoryId}#runtime-save");
+        ClearInteriorStructures(rebuildTopology: false);
+
+        for (var index = 0; index < document.Structures.Count; index++)
+        {
+            var entry = document.Structures[index];
+            if (!CanPlaceInterior(entry.Kind, entry.Cell, entry.Facing))
+            {
+                throw new InvalidOperationException(
+                    $"Mobile factory interior could not place '{entry.Kind}' at ({entry.Cell.X}, {entry.Cell.Y}).");
+            }
+
+            var structure = FactoryStructureFactory.Create(
+                entry.Kind,
+                new FactoryStructurePlacement(InteriorSite, entry.Cell, entry.Facing));
+            RegisterInteriorStructure(structure);
+            if (structure is MobileFactoryBoundaryAttachmentStructure attachment)
+            {
+                _attachments.Add(attachment);
+            }
+        }
+
+        RefreshRuntimeAfterInteriorChange(rebuildTopology);
     }
 
     private void ApplyInteriorPreset(MobileFactoryInteriorPreset preset)

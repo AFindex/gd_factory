@@ -10,6 +10,8 @@ public static class FactoryPersistencePaths
     public const string BlueprintDirectory = PersistenceRootDirectory + "/blueprints";
     public const string BlueprintStateFilePath = BlueprintDirectory + "/_state.json";
     public const string BlueprintSourceDirectory = "res://data/factory/blueprints";
+    public const string RuntimeSaveDirectory = PersistenceRootDirectory + "/saves";
+    public const string RuntimeSaveIndexFilePath = RuntimeSaveDirectory + "/_index.json";
 
     public static bool IsPersistenceEnabled()
     {
@@ -54,6 +56,11 @@ public static class FactoryPersistencePaths
         return GetGlobalPath(BlueprintDirectory);
     }
 
+    public static string GetRuntimeSaveDirectoryGlobalPath()
+    {
+        return GetGlobalPath(RuntimeSaveDirectory);
+    }
+
     public static string GetBlueprintSourceDirectoryGlobalPath()
     {
         return GetGlobalPath(BlueprintSourceDirectory);
@@ -77,8 +84,8 @@ public static class FactoryPersistencePaths
         }
 
         return includeInteriorMap
-            ? $"世界地图目录：{GetWorldMapDirectoryGlobalPath()}\n内部地图目录：{GetInteriorMapDirectoryGlobalPath()}\n蓝图目录：{GetBlueprintDirectoryGlobalPath()}"
-            : $"世界地图目录：{GetWorldMapDirectoryGlobalPath()}\n蓝图目录：{GetBlueprintDirectoryGlobalPath()}";
+            ? $"世界地图目录：{GetWorldMapDirectoryGlobalPath()}\n内部地图目录：{GetInteriorMapDirectoryGlobalPath()}\n蓝图目录：{GetBlueprintDirectoryGlobalPath()}\n进度存档目录：{GetRuntimeSaveDirectoryGlobalPath()}"
+            : $"世界地图目录：{GetWorldMapDirectoryGlobalPath()}\n蓝图目录：{GetBlueprintDirectoryGlobalPath()}\n进度存档目录：{GetRuntimeSaveDirectoryGlobalPath()}";
     }
 
     public static string BuildRuntimeMapSavePath(string sourcePath, FactoryMapKind kind)
@@ -113,7 +120,17 @@ public static class FactoryPersistencePaths
         return $"{BlueprintSourceDirectory}/{SanitizeFileStem(displayName)}.json";
     }
 
+    public static string BuildRuntimeSaveFilePath(string slotId)
+    {
+        return $"{RuntimeSaveDirectory}/{SanitizeFileStem(slotId)}.json";
+    }
+
     public static string SanitizeBlueprintFileStem(string? rawValue)
+    {
+        return SanitizeFileStem(rawValue);
+    }
+
+    public static string SanitizeRuntimeSaveSlotId(string? rawValue)
     {
         return SanitizeFileStem(rawValue);
     }

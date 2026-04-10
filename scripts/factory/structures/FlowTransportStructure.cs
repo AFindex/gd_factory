@@ -346,6 +346,30 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         return CanReceiveFrom(sourceCell);
     }
 
+    protected override void CaptureRuntimeState(FactoryStructureRuntimeSnapshot snapshot)
+    {
+        base.CaptureRuntimeState(snapshot);
+        for (var index = 0; index < _items.Count; index++)
+        {
+            var item = _items[index];
+            snapshot.TransitItems.Add(new FactoryRuntimeTransitItemSnapshot
+            {
+                Item = FactoryRuntimeItemSnapshot.FromItem(item.Item),
+                SourceCell = FactoryRuntimeInt2.FromVector2I(item.SourceCell),
+                TargetCell = FactoryRuntimeInt2.FromVector2I(item.TargetCell),
+                LaneKey = item.LaneKey,
+                Position = item.Position,
+                PreviousPosition = item.PreviousPosition
+            });
+        }
+    }
+
+    protected override void ApplyRuntimeState(FactoryStructureRuntimeSnapshot snapshot, SimulationController simulation)
+    {
+        base.ApplyRuntimeState(snapshot, simulation);
+        RestoreTransitItems(snapshot.TransitItems, simulation);
+    }
+
     private FactoryTransportRenderManager? GetTransportRenderManager()
     {
         return GetTree()?.GetFirstNodeInGroup(FactoryTransportRenderManager.GroupName) as FactoryTransportRenderManager;
@@ -367,6 +391,44 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         for (var i = 0; i < _items.Count; i++)
         {
             _items[i].LaneKey = GetTransitLaneKey(_items[i].SourceCell, _items[i].TargetCell);
+        }
+    }
+
+    private void RestoreTransitItems(
+        IReadOnlyList<FactoryRuntimeTransitItemSnapshot> transitItems,
+        SimulationController simulation)
+    {
+        for (var index = 0; index < _items.Count; index++)
+        {
+            FreeLegacyVisual(_items[index]);
+        }
+
+        _items.Clear();
+
+        for (var index = 0; index < transitItems.Count; index++)
+        {
+            var transit = transitItems[index];
+            var item = transit.Item.ToItem(simulation);
+            var renderDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(item, CellSize);
+            var legacyVisual = GetTransportRenderManager() is null ? CreateTransitVisual(item) : null;
+            var state = new TransitItemState(
+                item,
+                renderDescriptors,
+                transit.SourceCell.ToVector2I(),
+                transit.TargetCell.ToVector2I(),
+                legacyVisual)
+            {
+                LaneKey = transit.LaneKey,
+                Position = Mathf.Clamp(transit.Position, 0.0f, 1.0f),
+                PreviousPosition = Mathf.Clamp(transit.PreviousPosition, 0.0f, 1.0f)
+            };
+
+            if (state.LegacyVisual is not null)
+            {
+                state.LegacyVisual.Position = EvaluatePathPoint(state, state.Position);
+            }
+
+            _items.Add(state);
         }
     }
 

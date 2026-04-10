@@ -87,6 +87,8 @@ public partial class FactoryHud : CanvasLayer
     public event Action? BlueprintCancelRequested;
     public event Action? MapSaveRequested;
     public event Action? MapSourceSaveRequested;
+    public event Action<string>? RuntimeSaveRequested;
+    public event Action<string>? RuntimeLoadRequested;
     public event Action<string>? WorkspaceSelected;
 
     public string ProfilerText => _profilerLabel?.Text ?? string.Empty;
@@ -588,6 +590,27 @@ public partial class FactoryHud : CanvasLayer
         jumpGrid.AddChild(CreateWorkspaceJumpButton("打开蓝图工作区", BlueprintWorkspaceId));
         jumpGrid.AddChild(CreateActionButton("导出运行时副本", () => MapSaveRequested?.Invoke()));
         jumpGrid.AddChild(CreateActionButton("保存到当前源", () => MapSourceSaveRequested?.Invoke()));
+
+        body.AddChild(CreateDivider());
+        body.AddChild(CreateSectionLabel("进度存档", 12, FactoryUiTheme.Text));
+        var runtimeSlotEdit = new LineEdit
+        {
+            Text = "progress-1",
+            PlaceholderText = "输入存档名",
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+        };
+        FactoryUiTheme.ApplyLineEditTheme(runtimeSlotEdit);
+        body.AddChild(runtimeSlotEdit);
+
+        var runtimeGrid = new GridContainer();
+        runtimeGrid.Columns = 2;
+        runtimeGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        runtimeGrid.AddThemeConstantOverride("h_separation", 6);
+        runtimeGrid.AddThemeConstantOverride("v_separation", 6);
+        runtimeGrid.AddChild(CreateActionButton("保存进度", () => RuntimeSaveRequested?.Invoke(runtimeSlotEdit.Text?.Trim() ?? string.Empty)));
+        runtimeGrid.AddChild(CreateActionButton("读取进度", () => RuntimeLoadRequested?.Invoke(runtimeSlotEdit.Text?.Trim() ?? string.Empty)));
+        body.AddChild(runtimeGrid);
 
         body.AddChild(CreateDivider());
         _testingNoteLabel = CreateValueLabel(string.Empty, FactoryUiTheme.TextSubtle);

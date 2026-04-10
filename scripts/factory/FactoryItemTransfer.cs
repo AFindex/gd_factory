@@ -1,5 +1,6 @@
 using Godot;
 using System.Collections.Generic;
+using System.Linq;
 
 public interface IFactoryItemProvider
 {
@@ -148,6 +149,7 @@ internal sealed class FactoryInventoryItemStack
     public bool IsEmpty => _items.Count == 0;
     public bool IsFull => _items.Count >= MaxStackSize;
     public FactoryItem PeekFirst() => _items[0];
+    public FactoryItem[] SnapshotItems() => _items.ToArray();
 
     public bool CanAccept(FactoryItem item)
     {
@@ -745,6 +747,115 @@ public sealed class FactorySlottedItemInventory
             }
 
             if (!placed)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public IReadOnlyList<FactoryItem> SnapshotSlotItems(Vector2I slot)
+    {
+        if (!IsValidSlot(slot) || !_items.TryGetValue(slot, out var stack))
+        {
+            return System.Array.Empty<FactoryItem>();
+        }
+
+        return stack.SnapshotItems();
+    }
+
+    public void Clear()
+    {
+        _items.Clear();
+        _itemCount = 0;
+    }
+
+    public bool TryRestoreStack(Vector2I slot, IReadOnlyList<FactoryItem> items)
+    {
+        if (!IsValidSlot(slot))
+        {
+            return false;
+        }
+
+        if (items.Count == 0)
+        {
+            if (_items.Remove(slot, out var removed))
+            {
+                _itemCount -= removed.Count;
+            }
+
+            return true;
+        }
+
+        if (!CanCreateStack(items))
+        {
+            return false;
+        }
+
+        if (_items.Remove(slot, out var existing))
+        {
+            _itemCount -= existing.Count;
+        }
+
+        var stack = FactoryInventoryItemStack.CreateFromItems(items);
+        if (stack is null)
+        {
+            return false;
+        }
+
+        _items[slot] = stack;
+        _itemCount += stack.Count;
+        return true;
+    }
+
+    public bool TryRestoreSnapshot(IEnumerable<(Vector2I Slot, IReadOnlyList<FactoryItem> Items)> stacks)
+    {
+        var normalized = stacks.ToList();
+        for (var index = 0; index < normalized.Count; index++)
+        {
+            if (!IsValidSlot(normalized[index].Slot) || !CanCreateStack(normalized[index].Items))
+            {
+                return false;
+            }
+        }
+
+        Clear();
+        for (var index = 0; index < normalized.Count; index++)
+        {
+            if (!TryRestoreStack(normalized[index].Slot, normalized[index].Items))
+            {
+                Clear();
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool CanCreateStack(IReadOnlyList<FactoryItem> items)
+    {
+        if (items.Count == 0)
+        {
+            return true;
+        }
+
+        var first = items[0];
+        var maxStack = FactoryItemCatalog.GetMaxStackSize(first.ItemKind);
+        if (items.Count > maxStack)
+        {
+            return false;
+        }
+
+        for (var index = 1; index < items.Count; index++)
+        {
+            if (items[index].ItemKind != first.ItemKind)
+            {
+                return false;
+            }
+
+            if (first.ItemKind == FactoryItemKind.BuildingKit
+                && items[index].SourceKind != first.SourceKind)
             {
                 return false;
             }

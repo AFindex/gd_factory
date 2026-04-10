@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 
 public sealed class FactoryEnemySpawnRule
@@ -62,6 +63,80 @@ public partial class FactoryCombatDirector : Node, IFactoryCombatSystem
         _lanes.Add(new LaneRuntimeState(lane));
     }
 
+    public FactoryCombatDirectorRuntimeSnapshot CaptureRuntimeSnapshot(SimulationController simulation)
+    {
+        var snapshot = new FactoryCombatDirectorRuntimeSnapshot
+        {
+            SpawnCounter = _spawnCounter,
+            DestroyedStructureCount = simulation.DestroyedStructureCount,
+            DefeatedEnemyCount = simulation.DefeatedEnemyCount,
+            TotalProjectileLaunchCount = simulation.TotalProjectileLaunchCount
+        };
+
+        for (var index = 0; index < _lanes.Count; index++)
+        {
+            var lane = _lanes[index];
+            snapshot.Lanes.Add(new FactoryCombatLaneRuntimeSnapshot
+            {
+                LaneId = lane.Definition.LaneId,
+                SpawnIndex = lane.SpawnIndex,
+                TimeUntilNextSpawn = lane.TimeUntilNextSpawn
+            });
+        }
+
+        return snapshot;
+    }
+
+    public void ApplyRuntimeSnapshot(FactoryCombatDirectorRuntimeSnapshot snapshot, SimulationController simulation)
+    {
+        ValidateRuntimeSnapshot(snapshot);
+        _spawnCounter = Mathf.Max(0, snapshot.SpawnCounter);
+        simulation.RestoreRuntimeCounters(
+            snapshot.DestroyedStructureCount,
+            snapshot.DefeatedEnemyCount,
+            snapshot.TotalProjectileLaunchCount);
+
+        for (var index = 0; index < snapshot.Lanes.Count; index++)
+        {
+            var laneSnapshot = snapshot.Lanes[index];
+            var lane = FindLaneRuntime(laneSnapshot.LaneId)
+                ?? throw new InvalidOperationException($"Combat lane '{laneSnapshot.LaneId}' was not found during restore.");
+
+            lane.SpawnIndex = lane.Definition.SpawnRules.Count == 0
+                ? 0
+                : Mathf.Clamp(laneSnapshot.SpawnIndex, 0, lane.Definition.SpawnRules.Count - 1);
+            lane.TimeUntilNextSpawn = Mathf.Max(0.0f, laneSnapshot.TimeUntilNextSpawn);
+        }
+    }
+
+    public void ValidateRuntimeSnapshot(FactoryCombatDirectorRuntimeSnapshot snapshot)
+    {
+        for (var index = 0; index < snapshot.Lanes.Count; index++)
+        {
+            if (FindLaneRuntime(snapshot.Lanes[index].LaneId) is null)
+            {
+                throw new InvalidOperationException(
+                    $"Combat lane '{snapshot.Lanes[index].LaneId}' was not found during validation.");
+            }
+        }
+    }
+
+    public static FactoryEnemyActor CreateEnemyActor(string enemyTypeId)
+    {
+        return enemyTypeId switch
+        {
+            "ranged" => new RangedRaiderEnemy(),
+            "world-brute" => new WorldBruteEnemy(),
+            "world-siege" => new WorldSiegeEnemy(),
+            _ => new MeleeRaiderEnemy()
+        };
+    }
+
+    public static bool IsKnownEnemyType(string enemyTypeId)
+    {
+        return enemyTypeId is "melee" or "ranged" or "world-brute" or "world-siege";
+    }
+
     public void SimulationStep(SimulationController simulation, double stepSeconds)
     {
         if (_enemyRoot is null)
@@ -97,17 +172,24 @@ public partial class FactoryCombatDirector : Node, IFactoryCombatSystem
             return;
         }
 
-        FactoryEnemyActor enemy = rule.EnemyTypeId switch
-        {
-            "ranged" => new RangedRaiderEnemy(),
-            "world-brute" => new WorldBruteEnemy(),
-            "world-siege" => new WorldSiegeEnemy(),
-            _ => new MeleeRaiderEnemy()
-        };
+        var enemy = CreateEnemyActor(rule.EnemyTypeId);
 
         enemy.Name = $"{lane.LaneId}_{rule.EnemyTypeId}_{_spawnCounter++}";
         enemy.Configure(enemy.Name, lane.PathPoints);
         _enemyRoot.AddChild(enemy);
         simulation.RegisterEnemy(enemy);
+    }
+
+    private LaneRuntimeState? FindLaneRuntime(string laneId)
+    {
+        for (var index = 0; index < _lanes.Count; index++)
+        {
+            if (string.Equals(_lanes[index].Definition.LaneId, laneId, StringComparison.OrdinalIgnoreCase))
+            {
+                return _lanes[index];
+            }
+        }
+
+        return null;
     }
 }

@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -377,6 +378,40 @@ public partial class FactoryPlayerController : CharacterBody3D, IFactoryInventor
     public string BuildStatsSignature()
     {
         return $"{Mathf.RoundToInt(GlobalPosition.X * 10.0f)}|{Mathf.RoundToInt(GlobalPosition.Z * 10.0f)}|{_inventory.OccupiedSlotCount}|{_activeHotbarIndex}|{_hotbarPlacementArmed}";
+    }
+
+    public FactoryPlayerRuntimeSnapshot CaptureRuntimeSnapshot()
+    {
+        return new FactoryPlayerRuntimeSnapshot
+        {
+            Position = FactoryRuntimeVec3.FromVector3(GlobalPosition),
+            ActiveHotbarIndex = _activeHotbarIndex,
+            IsHotbarPlacementArmed = _hotbarPlacementArmed,
+            SelectedInventoryId = BackpackInventoryId,
+            SelectedSlot = FactoryRuntimeInt2.FromVector2I(new Vector2I(_activeHotbarIndex, 0)),
+            Inventory = FactoryRuntimeSnapshotValues.CaptureInventory(BackpackInventoryId, _inventory)
+        };
+    }
+
+    public void ApplyRuntimeSnapshot(FactoryPlayerRuntimeSnapshot snapshot, SimulationController simulation)
+    {
+        if (!FactoryRuntimeSnapshotValues.TryRestoreInventory(_inventory, snapshot.Inventory, simulation))
+        {
+            throw new InvalidOperationException("Player backpack snapshot could not be restored.");
+        }
+
+        GlobalPosition = snapshot.Position.ToVector3();
+        SelectHotbarIndex(Mathf.Clamp(snapshot.ActiveHotbarIndex, 0, HotbarSlotCount - 1));
+        if (snapshot.IsHotbarPlacementArmed)
+        {
+            RearmHotbarPlacement();
+        }
+        else
+        {
+            DisarmHotbarPlacement();
+        }
+
+        RefreshActiveSlotState();
     }
 
     private FactoryInventorySectionModel BuildBackpackSection()

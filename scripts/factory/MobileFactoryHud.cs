@@ -134,6 +134,8 @@ public partial class MobileFactoryHud : CanvasLayer
     public event Action? InteriorMapSaveRequested;
     public event Action? WorldMapSourceSaveRequested;
     public event Action? InteriorMapSourceSaveRequested;
+    public event Action<string>? RuntimeSaveRequested;
+    public event Action<string>? RuntimeLoadRequested;
     public event Action<string>? WorkspaceSelected;
 
     public override void _Ready()

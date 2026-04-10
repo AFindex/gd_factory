@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 
 public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
@@ -226,6 +227,46 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
         }
 
         _tracers.Clear();
+    }
+
+    protected override void CaptureRuntimeState(FactoryStructureRuntimeSnapshot snapshot)
+    {
+        base.CaptureRuntimeState(snapshot);
+        snapshot.Inventories.Add(FactoryRuntimeSnapshotValues.CaptureInventory("turret-ammo", _ammoInventory));
+        snapshot.State["shots_fired"] = FactoryRuntimeSnapshotValues.FormatInt(_shotsFired);
+        snapshot.State["attack_cooldown"] = FactoryRuntimeSnapshotValues.FormatDouble(_attackCooldown);
+        snapshot.State["target_yaw"] = FactoryRuntimeSnapshotValues.FormatFloat(_targetYaw);
+        snapshot.State["current_yaw"] = FactoryRuntimeSnapshotValues.FormatFloat(_currentYaw);
+    }
+
+    protected override void ApplyRuntimeState(FactoryStructureRuntimeSnapshot snapshot, SimulationController simulation)
+    {
+        base.ApplyRuntimeState(snapshot, simulation);
+        for (var index = 0; index < snapshot.Inventories.Count; index++)
+        {
+            if (snapshot.Inventories[index].InventoryId != "turret-ammo")
+            {
+                continue;
+            }
+
+            if (!FactoryRuntimeSnapshotValues.TryRestoreInventory(_ammoInventory, snapshot.Inventories[index], simulation))
+            {
+                throw new InvalidOperationException($"Gun turret '{GetRuntimeStructureKey()}' could not restore ammo.");
+            }
+        }
+
+        _shotsFired = FactoryRuntimeSnapshotValues.TryGetInt(snapshot.State, "shots_fired", out var shotsFired)
+            ? Mathf.Max(0, shotsFired)
+            : 0;
+        _attackCooldown = FactoryRuntimeSnapshotValues.TryGetDouble(snapshot.State, "attack_cooldown", out var attackCooldown)
+            ? Mathf.Max(0.0, attackCooldown)
+            : 0.0;
+        _targetYaw = FactoryRuntimeSnapshotValues.TryGetFloat(snapshot.State, "target_yaw", out var targetYaw)
+            ? targetYaw
+            : 0.0f;
+        _currentYaw = FactoryRuntimeSnapshotValues.TryGetFloat(snapshot.State, "current_yaw", out var currentYaw)
+            ? currentYaw
+            : 0.0f;
     }
 
     protected override void BuildVisuals()

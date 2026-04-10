@@ -51,6 +51,7 @@ public partial class SimulationController : Node
     public int TotalProjectileLaunchCount { get; private set; }
     public int DestroyedStructureCount { get; private set; }
     public int DefeatedEnemyCount { get; private set; }
+    public int NextItemId => _nextItemId;
 
     public void Configure(GridManager grid)
     {
@@ -75,6 +76,17 @@ public partial class SimulationController : Node
         return new FactoryItem(_nextItemId++, sourceKind, itemKind);
     }
 
+    public FactoryItem CreateItemWithId(int id, BuildPrototypeKind sourceKind, FactoryItemKind itemKind = FactoryItemKind.GenericCargo)
+    {
+        EnsureNextItemId(id + 1);
+        return new FactoryItem(id, sourceKind, itemKind);
+    }
+
+    public void EnsureNextItemId(int nextId)
+    {
+        _nextItemId = Mathf.Max(_nextItemId, nextId);
+    }
+
     public void RegisterCombatSystem(IFactoryCombatSystem combatSystem)
     {
         if (!_combatSystems.Contains(combatSystem))
@@ -86,6 +98,43 @@ public partial class SimulationController : Node
     public void UnregisterCombatSystem(IFactoryCombatSystem combatSystem)
     {
         _combatSystems.Remove(combatSystem);
+    }
+
+    public IReadOnlyList<FactoryEnemyActor> SnapshotActiveEnemies()
+    {
+        return new List<FactoryEnemyActor>(_hostiles);
+    }
+
+    public void ClearCombatActors()
+    {
+        var hostiles = new List<FactoryEnemyActor>(_hostiles);
+        _hostiles.Clear();
+        _defeatedHostiles.Clear();
+        for (var index = 0; index < hostiles.Count; index++)
+        {
+            if (GodotObject.IsInstanceValid(hostiles[index]))
+            {
+                hostiles[index].QueueFree();
+            }
+        }
+
+        var projectiles = new List<FactoryCombatProjectile>(_projectiles);
+        _projectiles.Clear();
+        _expiredProjectiles.Clear();
+        for (var index = 0; index < projectiles.Count; index++)
+        {
+            if (GodotObject.IsInstanceValid(projectiles[index]))
+            {
+                projectiles[index].QueueFree();
+            }
+        }
+    }
+
+    public void RestoreRuntimeCounters(int destroyedStructureCount, int defeatedEnemyCount, int totalProjectileLaunchCount)
+    {
+        DestroyedStructureCount = Mathf.Max(0, destroyedStructureCount);
+        DefeatedEnemyCount = Mathf.Max(0, defeatedEnemyCount);
+        TotalProjectileLaunchCount = Mathf.Max(0, totalProjectileLaunchCount);
     }
 
     public void RegisterEnemy(FactoryEnemyActor hostile)

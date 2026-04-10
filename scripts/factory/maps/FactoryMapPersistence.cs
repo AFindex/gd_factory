@@ -20,6 +20,16 @@ public sealed class FactoryMapSaveResult
 
 public static class FactoryMapPersistence
 {
+    public static FactoryMapDocument CaptureWorldMapDocument(string templatePath, GridManager grid)
+    {
+        return CaptureWorldDocument(templatePath, templatePath, grid);
+    }
+
+    public static FactoryMapDocument CaptureInteriorMapDocument(string templatePath, MobileFactorySite site, string? profileId = null)
+    {
+        return CaptureInteriorDocument(templatePath, templatePath, site, profileId);
+    }
+
     public static FactoryMapSaveResult SaveWorldMap(string sourcePath, GridManager grid)
     {
         EnsurePersistenceAllowed();
@@ -70,7 +80,10 @@ public static class FactoryMapPersistence
             document.Deposits.Add(BuildDepositEntry(deposits[index]));
         }
 
-        CaptureStructures(document.Structures, grid.GetStructures());
+        CaptureStructures(
+            document.Structures,
+            grid.GetStructures(),
+            structure => !MobileFactoryBoundaryAttachmentCatalog.IsAttachmentKind(structure.Kind));
         return FactoryMapValidator.ValidateDocument(document);
     }
 
@@ -157,11 +170,19 @@ public static class FactoryMapPersistence
             new Vector2I(maxX - minX + 1, maxY - minY + 1));
     }
 
-    private static void CaptureStructures(List<FactoryMapStructureEntry> destination, IEnumerable<FactoryStructure> structures)
+    private static void CaptureStructures(
+        List<FactoryMapStructureEntry> destination,
+        IEnumerable<FactoryStructure> structures,
+        Func<FactoryStructure, bool>? includeStructure = null)
     {
         var captured = new List<FactoryMapStructureEntry>();
         foreach (var structure in structures)
         {
+            if (includeStructure is not null && !includeStructure(structure))
+            {
+                continue;
+            }
+
             var entry = new FactoryMapStructureEntry(structure.Kind, structure.Cell, structure.Facing);
             var recipeId = structure.CaptureMapRecipeId();
             if (!string.IsNullOrWhiteSpace(recipeId))

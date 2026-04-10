@@ -6,6 +6,7 @@ public sealed partial class WorldBruteEnemy : FactoryEnemyActor
     protected override Color BodyColor => new Color("334155");
     protected override Vector3 BodySize => new Vector3(1.18f, 1.28f, 1.18f);
 
+    public override string EnemyTypeId => "world-brute";
     public override string DisplayName => "大世界重装兽";
     public override float MaxHealth => 560.0f;
     public override float MoveSpeed => 1.28f;
@@ -38,6 +39,7 @@ public sealed partial class WorldSiegeEnemy : FactoryEnemyActor
     protected override Vector3 AttackOriginOffset => new Vector3(0.0f, 0.92f, 0.0f);
     protected override Vector3 AttackImpactOffset => new Vector3(0.0f, 0.86f, 0.0f);
 
+    public override string EnemyTypeId => "world-siege";
     public override string DisplayName => "大世界攻城体";
     public override float MaxHealth => 840.0f;
     public override float MoveSpeed => 0.94f;
