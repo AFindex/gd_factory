@@ -723,6 +723,11 @@ public partial class FactoryDemo
             && !worldPackedProfile.Tint.IsEqualApprox(interiorFeedProfile.Tint)
             && worldBulkProfile.PlaceholderScale.X > worldPackedProfile.PlaceholderScale.X
             && worldPackedProfile.PlaceholderScale.X > interiorFeedProfile.PlaceholderScale.X;
+        var interiorCarrierResolved =
+            interiorFeedDescriptors.Primary.Mode == FactoryTransportRenderMode.ModelNode
+            && !interiorFeedDescriptors.Primary.IsBatchable
+            && interiorFeedDescriptors.Primary.BatchKey.Contains("interior:", global::System.StringComparison.Ordinal)
+            && FactoryPresentation.GetItemDisplayName(interiorFeedItem).Contains("舱内", global::System.StringComparison.Ordinal);
 
         placeholderVisual.QueueFree();
         billboardVisual.QueueFree();
@@ -742,6 +747,7 @@ public partial class FactoryDemo
             && ammoDescriptors.ResolveBatchableForTier(FactoryTransportRenderTier.Near).Mode == FactoryTransportRenderMode.Billboard
             && worldBulkDescriptors.Primary.BatchKey != worldPackedDescriptors.Primary.BatchKey
             && worldPackedDescriptors.Primary.BatchKey != interiorFeedDescriptors.Primary.BatchKey
+            && interiorCarrierResolved
             && distinctBaselineColors
             && cargoDisplayNamesDiffer
             && cargoProfilesDiffer
@@ -875,6 +881,9 @@ public partial class FactoryDemo
             && hotCoreEnergy > coolCoreEnergy
             && hotFireboxEnergy > coolFireboxEnergy
             && hotPlumeScale > coolPlumeScale;
+        var interiorNamingVerified =
+            FactoryIndustrialStandards.GetInteriorPresentationLabel(BuildPrototypeKind.Belt).Contains("供料", global::System.StringComparison.Ordinal)
+            && FactoryIndustrialStandards.GetInteriorCarrierLabel(FactoryItemKind.IronOre).Contains("矿罐", global::System.StringComparison.Ordinal);
 
         authoredController.Root.Free();
         fallbackController.Root.Free();
@@ -886,7 +895,8 @@ public partial class FactoryDemo
             && fallbackResolved
             && genericResolved
             && legacyResolved
-            && smelterHotCoolVerified;
+            && smelterHotCoolVerified
+            && interiorNamingVerified;
     }
 
     private static MeshInstance3D? FindFirstMesh(Node node)

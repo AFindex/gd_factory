@@ -74,6 +74,37 @@ public partial class PowerPoleStructure : FactoryStructure, IFactoryPowerNode
             new Vector3(0.0f, 0.02f, 0.0f));
         _powerRange.Visible = false;
 
+        if (SiteKind == FactorySiteKind.Interior)
+        {
+            CreateBox("Base", new Vector3(CellSize * 0.44f, 0.14f, CellSize * 0.44f), new Color("1C1917"), new Vector3(0.0f, 0.07f, 0.0f));
+            CreateBox("BusRoot", new Vector3(CellSize * 0.26f, 0.24f, CellSize * 0.26f), new Color("57534E"), new Vector3(0.0f, 0.20f, 0.0f));
+            _pole = CreateBox("Pole", new Vector3(CellSize * 0.12f, 0.92f, CellSize * 0.12f), new Color("FBBF24"), new Vector3(0.0f, 0.46f, 0.0f));
+            _crossbar = CreateBox("Crossbar", new Vector3(CellSize * 0.56f, 0.10f, CellSize * 0.10f), new Color("FDE68A"), new Vector3(0.0f, 0.92f, 0.0f));
+            CreateBox("BusNorth", new Vector3(CellSize * 0.10f, 0.10f, CellSize * 0.24f), new Color("FCD34D"), new Vector3(0.0f, 0.62f, -CellSize * 0.20f));
+            CreateBox("BusSouth", new Vector3(CellSize * 0.10f, 0.10f, CellSize * 0.24f), new Color("FCD34D"), new Vector3(0.0f, 0.62f, CellSize * 0.20f));
+            _lamp = CreateBox("Lamp", new Vector3(CellSize * 0.12f, 0.12f, CellSize * 0.12f), new Color("FEF08A"), new Vector3(0.0f, 1.08f, 0.0f));
+
+            _deployElapsed = 0.0;
+            if (_pole is not null)
+            {
+                _pole.Scale = new Vector3(1.0f, 0.02f, 1.0f);
+                _pole.Position = new Vector3(0.0f, 0.03f, 0.0f);
+            }
+
+            if (_crossbar is not null)
+            {
+                _crossbar.Scale = new Vector3(0.08f, 1.0f, 1.0f);
+                _crossbar.Position = new Vector3(0.0f, 0.74f, 0.0f);
+            }
+
+            if (_lamp is not null)
+            {
+                _lamp.Scale = Vector3.One * 0.65f;
+                _lamp.Position = new Vector3(0.0f, 0.82f, 0.0f);
+            }
+            return;
+        }
+
         CreateBox("Footing", new Vector3(CellSize * 0.32f, 0.12f, CellSize * 0.32f), new Color("475569"), new Vector3(0.0f, 0.06f, 0.0f));
         CreateBox("SupportBase", new Vector3(CellSize * 0.22f, 0.18f, CellSize * 0.22f), new Color("78716C"), new Vector3(0.0f, 0.18f, 0.0f));
         _pole = CreateBox("Pole", new Vector3(CellSize * 0.12f, 1.48f, CellSize * 0.12f), new Color("A16207"), new Vector3(0.0f, 0.74f, 0.0f));

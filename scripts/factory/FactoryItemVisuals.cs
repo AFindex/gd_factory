@@ -107,7 +107,9 @@ public sealed class FactoryTransportVisualProfile
         Texture2D? texture = null,
         Func<float, Node3D>? modelFactory = null,
         bool allowTexturedMeshFallback = true,
-        bool allowBillboardFallback = true)
+        bool allowBillboardFallback = true,
+        string? profileId = null,
+        bool preferModelPrimary = false)
     {
         Tint = tint;
         PlaceholderScale = placeholderScale ?? new Vector3(0.18f, 0.18f, 0.18f);
@@ -117,6 +119,8 @@ public sealed class FactoryTransportVisualProfile
         ModelFactory = modelFactory;
         AllowTexturedMeshFallback = allowTexturedMeshFallback;
         AllowBillboardFallback = allowBillboardFallback;
+        ProfileId = string.IsNullOrWhiteSpace(profileId) ? "default" : profileId;
+        PreferModelPrimary = preferModelPrimary;
     }
 
     public Color Tint { get; }
@@ -127,6 +131,8 @@ public sealed class FactoryTransportVisualProfile
     public Func<float, Node3D>? ModelFactory { get; }
     public bool AllowTexturedMeshFallback { get; }
     public bool AllowBillboardFallback { get; }
+    public string ProfileId { get; }
+    public bool PreferModelPrimary { get; }
 
     public FactoryTransportRenderDescriptorSet ResolveRenderDescriptors(FactoryItemKind itemKind, float cellSize)
     {
@@ -185,7 +191,7 @@ public static partial class FactoryItemCatalog
 
     public static string GetDisplayName(FactoryItemKind itemKind, FactoryCargoForm cargoForm)
     {
-        return $"{GetDisplayName(itemKind)}（{FactoryPresentation.GetCargoFormLabel(cargoForm)}）";
+        return FactoryIndustrialStandards.GetCargoPresentationLabel(itemKind, cargoForm);
     }
 
     public static Color GetAccentColor(FactoryItemKind itemKind)
@@ -239,16 +245,9 @@ public static partial class FactoryItemCatalog
                 texture: baseProfile.Texture,
                 modelFactory: baseProfile.ModelFactory,
                 allowTexturedMeshFallback: baseProfile.AllowTexturedMeshFallback,
-                allowBillboardFallback: baseProfile.AllowBillboardFallback),
-            FactoryCargoForm.InteriorFeed => new FactoryTransportVisualProfile(
-                GetAccentColor(itemKind, cargoForm),
-                placeholderScale: baseProfile.PlaceholderScale * new Vector3(0.68f, 0.52f, 0.68f),
-                texturedMeshScale: baseProfile.TexturedMeshScale * new Vector3(0.64f, 0.46f, 0.64f),
-                billboardScale: baseProfile.BillboardScale * 0.72f,
-                texture: baseProfile.Texture,
-                modelFactory: baseProfile.ModelFactory,
-                allowTexturedMeshFallback: baseProfile.AllowTexturedMeshFallback,
-                allowBillboardFallback: baseProfile.AllowBillboardFallback),
+                allowBillboardFallback: baseProfile.AllowBillboardFallback,
+                profileId: $"world-bulk:{itemKind}"),
+            FactoryCargoForm.InteriorFeed => CreateInteriorFeedProfile(itemKind, baseProfile),
             _ => new FactoryTransportVisualProfile(
                 GetAccentColor(itemKind, cargoForm),
                 placeholderScale: baseProfile.PlaceholderScale * new Vector3(0.96f, 0.84f, 0.96f),
@@ -257,7 +256,88 @@ public static partial class FactoryItemCatalog
                 texture: baseProfile.Texture,
                 modelFactory: baseProfile.ModelFactory,
                 allowTexturedMeshFallback: baseProfile.AllowTexturedMeshFallback,
-                allowBillboardFallback: baseProfile.AllowBillboardFallback)
+                allowBillboardFallback: baseProfile.AllowBillboardFallback,
+                profileId: $"world-packed:{itemKind}")
+        };
+    }
+
+    private static FactoryTransportVisualProfile CreateInteriorFeedProfile(FactoryItemKind itemKind, FactoryTransportVisualProfile baseProfile)
+    {
+        var tint = GetAccentColor(itemKind, FactoryCargoForm.InteriorFeed);
+        var carrierLabel = FactoryIndustrialStandards.GetInteriorCarrierLabel(itemKind);
+        return itemKind switch
+        {
+            FactoryItemKind.Coal or FactoryItemKind.IronOre or FactoryItemKind.CopperOre or FactoryItemKind.StoneOre or FactoryItemKind.SulfurOre or FactoryItemKind.QuartzOre
+                => new FactoryTransportVisualProfile(
+                    tint,
+                    placeholderScale: new Vector3(0.20f, 0.24f, 0.20f),
+                    texturedMeshScale: new Vector3(0.18f, 0.22f, 0.18f),
+                    billboardScale: baseProfile.BillboardScale * 0.74f,
+                    texture: baseProfile.Texture,
+                    modelFactory: cellSize => FactoryTransportModelLibrary.CreateInteriorCanisterModel(cellSize, tint),
+                    allowTexturedMeshFallback: true,
+                    allowBillboardFallback: true,
+                    profileId: $"interior:{carrierLabel}:{itemKind}",
+                    preferModelPrimary: true),
+            FactoryItemKind.IronPlate or FactoryItemKind.CopperPlate or FactoryItemKind.SteelPlate or FactoryItemKind.StoneBrick or FactoryItemKind.Glass
+                => new FactoryTransportVisualProfile(
+                    tint,
+                    placeholderScale: new Vector3(0.26f, 0.12f, 0.20f),
+                    texturedMeshScale: new Vector3(0.22f, 0.12f, 0.18f),
+                    billboardScale: baseProfile.BillboardScale * 0.78f,
+                    texture: baseProfile.Texture,
+                    modelFactory: cellSize => FactoryTransportModelLibrary.CreateInteriorTrayModel(cellSize, tint),
+                    allowTexturedMeshFallback: true,
+                    allowBillboardFallback: true,
+                    profileId: $"interior:{carrierLabel}:{itemKind}",
+                    preferModelPrimary: true),
+            FactoryItemKind.CopperWire or FactoryItemKind.CircuitBoard
+                => new FactoryTransportVisualProfile(
+                    tint,
+                    placeholderScale: new Vector3(0.24f, 0.14f, 0.18f),
+                    texturedMeshScale: new Vector3(0.20f, 0.12f, 0.16f),
+                    billboardScale: baseProfile.BillboardScale * 0.76f,
+                    texture: baseProfile.Texture,
+                    modelFactory: cellSize => FactoryTransportModelLibrary.CreateInteriorElectronicsCassetteModel(cellSize, tint),
+                    allowTexturedMeshFallback: true,
+                    allowBillboardFallback: true,
+                    profileId: $"interior:{carrierLabel}:{itemKind}",
+                    preferModelPrimary: true),
+            FactoryItemKind.AmmoMagazine or FactoryItemKind.HighVelocityAmmo
+                => new FactoryTransportVisualProfile(
+                    tint,
+                    placeholderScale: new Vector3(0.22f, 0.16f, 0.16f),
+                    texturedMeshScale: new Vector3(0.20f, 0.14f, 0.14f),
+                    billboardScale: baseProfile.BillboardScale * 0.74f,
+                    texture: baseProfile.Texture,
+                    modelFactory: cellSize => FactoryTransportModelLibrary.CreateInteriorAmmoCassetteModel(cellSize, tint),
+                    allowTexturedMeshFallback: true,
+                    allowBillboardFallback: true,
+                    profileId: $"interior:{carrierLabel}:{itemKind}",
+                    preferModelPrimary: true),
+            FactoryItemKind.SulfurCrystal
+                => new FactoryTransportVisualProfile(
+                    tint,
+                    placeholderScale: new Vector3(0.18f, 0.22f, 0.18f),
+                    texturedMeshScale: new Vector3(0.16f, 0.20f, 0.16f),
+                    billboardScale: baseProfile.BillboardScale * 0.72f,
+                    texture: baseProfile.Texture,
+                    modelFactory: cellSize => FactoryTransportModelLibrary.CreateInteriorCrystalCaseModel(cellSize, tint),
+                    allowTexturedMeshFallback: true,
+                    allowBillboardFallback: true,
+                    profileId: $"interior:{carrierLabel}:{itemKind}",
+                    preferModelPrimary: true),
+            _ => new FactoryTransportVisualProfile(
+                tint,
+                placeholderScale: new Vector3(0.22f, 0.16f, 0.18f),
+                texturedMeshScale: new Vector3(0.20f, 0.14f, 0.16f),
+                billboardScale: baseProfile.BillboardScale * 0.76f,
+                texture: baseProfile.Texture,
+                modelFactory: cellSize => FactoryTransportModelLibrary.CreateInteriorUtilityCassetteModel(cellSize, tint),
+                allowTexturedMeshFallback: true,
+                allowBillboardFallback: true,
+                profileId: $"interior:{carrierLabel}:{itemKind}",
+                preferModelPrimary: true)
         };
     }
 
@@ -491,7 +571,7 @@ public static class FactoryTransportVisualFactory
 
     public static Node3D CreateVisual(FactoryItem item, float cellSize)
     {
-        return CreateVisual(item.ItemKind, cellSize);
+        return CreateNodeForDescriptor(ResolveDescriptorSet(item, cellSize).Primary, item.ItemKind, cellSize);
     }
 
     public static Node3D CreateVisual(FactoryItemKind itemKind, float cellSize)
@@ -502,46 +582,13 @@ public static class FactoryTransportVisualFactory
     public static FactoryTransportRenderDescriptorSet ResolveDescriptorSet(FactoryItem item, float cellSize)
     {
         var profile = FactoryItemCatalog.ResolveVisualProfile(item);
-        var placeholder = CreatePlaceholderDescriptor(item.ItemKind, profile, cellSize);
-        var billboard = CreateBillboardDescriptor(item.ItemKind, profile, cellSize) ?? placeholder;
-        var textured = CreateTexturedDescriptor(item.ItemKind, profile, cellSize) ?? billboard;
-        var primary = profile.AllowBillboardFallback && profile.Texture is not null
-            ? billboard
-            : profile.AllowTexturedMeshFallback && profile.Texture is not null
-                ? textured
-                : placeholder;
-        var mid = primary.Mode == FactoryTransportRenderMode.Billboard
-            ? billboard
-            : profile.AllowTexturedMeshFallback && profile.Texture is not null
-                ? textured
-                : billboard;
-        var far = profile.AllowBillboardFallback && profile.Texture is not null
-            ? billboard
-            : placeholder;
-        return new FactoryTransportRenderDescriptorSet(primary, mid, far);
+        return ResolveDescriptorSet(item.ItemKind, profile, cellSize);
     }
 
     public static FactoryTransportRenderDescriptorSet ResolveDescriptorSet(FactoryItemKind itemKind, float cellSize)
     {
         var definition = FactoryItemCatalog.GetDefinition(itemKind);
-        var profile = definition.VisualProfile;
-        var placeholder = CreatePlaceholderDescriptor(itemKind, profile, cellSize);
-        var billboard = CreateBillboardDescriptor(itemKind, profile, cellSize) ?? placeholder;
-        var textured = CreateTexturedDescriptor(itemKind, profile, cellSize) ?? billboard;
-        var primary = profile.AllowBillboardFallback && profile.Texture is not null
-            ? billboard
-            : profile.AllowTexturedMeshFallback && profile.Texture is not null
-                ? textured
-                : placeholder;
-        var mid = primary.Mode == FactoryTransportRenderMode.Billboard
-            ? billboard
-            : profile.AllowTexturedMeshFallback && profile.Texture is not null
-                ? textured
-                : billboard;
-        var far = profile.AllowBillboardFallback && profile.Texture is not null
-            ? billboard
-            : placeholder;
-        return new FactoryTransportRenderDescriptorSet(primary, mid, far);
+        return ResolveDescriptorSet(itemKind, definition.VisualProfile, cellSize);
     }
 
     public static Mesh GetSharedMesh(FactoryTransportRenderDescriptor descriptor)
@@ -635,10 +682,36 @@ public static class FactoryTransportVisualFactory
         }
     }
 
+    private static FactoryTransportRenderDescriptorSet ResolveDescriptorSet(FactoryItemKind itemKind, FactoryTransportVisualProfile profile, float cellSize)
+    {
+        var placeholder = CreatePlaceholderDescriptor(itemKind, profile, cellSize);
+        var billboard = CreateBillboardDescriptor(itemKind, profile, cellSize) ?? placeholder;
+        var textured = CreateTexturedDescriptor(itemKind, profile, cellSize) ?? billboard;
+        var model = profile.ModelFactory is not null ? CreateModelDescriptor(itemKind, profile, cellSize) : null;
+        var primary = profile.PreferModelPrimary && model is not null
+            ? model
+            : profile.AllowBillboardFallback && profile.Texture is not null
+                ? billboard
+                : profile.AllowTexturedMeshFallback && profile.Texture is not null
+                    ? textured
+                    : model ?? placeholder;
+        var mid = primary.Mode == FactoryTransportRenderMode.ModelNode
+            ? (profile.AllowTexturedMeshFallback && profile.Texture is not null ? textured : billboard)
+            : primary.Mode == FactoryTransportRenderMode.Billboard
+                ? billboard
+                : profile.AllowTexturedMeshFallback && profile.Texture is not null
+                    ? textured
+                    : billboard;
+        var far = profile.AllowBillboardFallback && profile.Texture is not null
+            ? billboard
+            : placeholder;
+        return new FactoryTransportRenderDescriptorSet(primary, mid, far);
+    }
+
     private static FactoryTransportRenderDescriptor CreatePlaceholderDescriptor(FactoryItemKind itemKind, FactoryTransportVisualProfile profile, float cellSize)
     {
         return new FactoryTransportRenderDescriptor(
-            $"placeholder:{itemKind}:{FormatVector3(profile.PlaceholderScale * cellSize)}:{profile.Tint.ToHtml()}",
+            $"placeholder:{itemKind}:{profile.ProfileId}:{FormatVector3(profile.PlaceholderScale * cellSize)}:{profile.Tint.ToHtml()}",
             FactoryTransportRenderMode.Placeholder,
             profile.Tint,
             profile.PlaceholderScale * cellSize,
@@ -653,7 +726,7 @@ public static class FactoryTransportVisualFactory
         }
 
         return new FactoryTransportRenderDescriptor(
-            $"textured:{itemKind}:{profile.Texture.GetInstanceId()}:{FormatVector3(profile.TexturedMeshScale * cellSize)}",
+            $"textured:{itemKind}:{profile.ProfileId}:{profile.Texture.GetInstanceId()}:{FormatVector3(profile.TexturedMeshScale * cellSize)}",
             FactoryTransportRenderMode.TexturedBox,
             profile.Tint,
             profile.TexturedMeshScale * cellSize,
@@ -669,7 +742,7 @@ public static class FactoryTransportVisualFactory
         }
 
         return new FactoryTransportRenderDescriptor(
-            $"billboard:{itemKind}:{profile.Texture.GetInstanceId()}:{FormatVector2(profile.BillboardScale * cellSize)}",
+            $"billboard:{itemKind}:{profile.ProfileId}:{profile.Texture.GetInstanceId()}:{FormatVector2(profile.BillboardScale * cellSize)}",
             FactoryTransportRenderMode.Billboard,
             profile.Tint,
             profile.PlaceholderScale * cellSize,
@@ -680,7 +753,7 @@ public static class FactoryTransportVisualFactory
     private static FactoryTransportRenderDescriptor CreateModelDescriptor(FactoryItemKind itemKind, FactoryTransportVisualProfile profile, float cellSize)
     {
         return new FactoryTransportRenderDescriptor(
-            $"model:{itemKind}:{FormatVector3(profile.PlaceholderScale * cellSize)}",
+            $"model:{itemKind}:{profile.ProfileId}:{FormatVector3(profile.PlaceholderScale * cellSize)}",
             FactoryTransportRenderMode.ModelNode,
             profile.Tint,
             profile.PlaceholderScale * cellSize,
@@ -978,6 +1051,114 @@ internal static class FactoryGeneratedItemTextureLibrary
 
 internal static class FactoryTransportModelLibrary
 {
+    public static Node3D CreateInteriorCanisterModel(float cellSize, Color tint)
+    {
+        var root = new Node3D();
+        root.AddChild(CreateMesh("CanisterBody", new CylinderMesh
+        {
+            TopRadius = cellSize * 0.08f,
+            BottomRadius = cellSize * 0.08f,
+            Height = cellSize * 0.22f
+        }, tint.Darkened(0.08f), new Vector3(0.0f, 0.0f, 0.0f)));
+        root.AddChild(CreateMesh("CanisterCap", new CylinderMesh
+        {
+            TopRadius = cellSize * 0.07f,
+            BottomRadius = cellSize * 0.07f,
+            Height = cellSize * 0.04f
+        }, new Color("E2E8F0"), new Vector3(0.0f, cellSize * 0.12f, 0.0f)));
+        root.AddChild(CreateMesh("CanisterBand", new BoxMesh
+        {
+            Size = new Vector3(cellSize * 0.14f, cellSize * 0.04f, cellSize * 0.04f)
+        }, tint.Lightened(0.28f), new Vector3(0.0f, 0.0f, cellSize * 0.08f)));
+        return root;
+    }
+
+    public static Node3D CreateInteriorTrayModel(float cellSize, Color tint)
+    {
+        var root = new Node3D();
+        root.AddChild(CreateMesh("TrayBase", new BoxMesh
+        {
+            Size = new Vector3(cellSize * 0.22f, cellSize * 0.06f, cellSize * 0.16f)
+        }, new Color("334155"), Vector3.Zero));
+        root.AddChild(CreateMesh("TrayCargo", new BoxMesh
+        {
+            Size = new Vector3(cellSize * 0.18f, cellSize * 0.04f, cellSize * 0.12f)
+        }, tint, new Vector3(0.0f, cellSize * 0.04f, 0.0f)));
+        root.AddChild(CreateMesh("TrayStripe", new BoxMesh
+        {
+            Size = new Vector3(cellSize * 0.16f, cellSize * 0.02f, cellSize * 0.03f)
+        }, tint.Lightened(0.24f), new Vector3(0.0f, cellSize * 0.08f, 0.0f)));
+        return root;
+    }
+
+    public static Node3D CreateInteriorElectronicsCassetteModel(float cellSize, Color tint)
+    {
+        var root = new Node3D();
+        root.AddChild(CreateMesh("CassetteBody", new BoxMesh
+        {
+            Size = new Vector3(cellSize * 0.22f, cellSize * 0.12f, cellSize * 0.14f)
+        }, new Color("1E293B"), Vector3.Zero));
+        root.AddChild(CreateMesh("CassetteFace", new BoxMesh
+        {
+            Size = new Vector3(cellSize * 0.16f, cellSize * 0.08f, cellSize * 0.02f)
+        }, tint, new Vector3(0.0f, 0.0f, cellSize * 0.08f)));
+        root.AddChild(CreateMesh("CassettePort", new BoxMesh
+        {
+            Size = new Vector3(cellSize * 0.06f, cellSize * 0.03f, cellSize * 0.02f)
+        }, new Color("E2E8F0"), new Vector3(0.0f, cellSize * 0.03f, cellSize * 0.09f)));
+        return root;
+    }
+
+    public static Node3D CreateInteriorAmmoCassetteModel(float cellSize, Color tint)
+    {
+        var root = new Node3D();
+        root.AddChild(CreateMesh("AmmoBody", new BoxMesh
+        {
+            Size = new Vector3(cellSize * 0.18f, cellSize * 0.14f, cellSize * 0.12f)
+        }, tint.Darkened(0.06f), Vector3.Zero));
+        root.AddChild(CreateMesh("AmmoRack", new BoxMesh
+        {
+            Size = new Vector3(cellSize * 0.14f, cellSize * 0.04f, cellSize * 0.10f)
+        }, new Color("1F2937"), new Vector3(0.0f, cellSize * 0.05f, 0.0f)));
+        root.AddChild(CreateMesh("AmmoStripe", new BoxMesh
+        {
+            Size = new Vector3(cellSize * 0.12f, cellSize * 0.02f, cellSize * 0.02f)
+        }, tint.Lightened(0.18f), new Vector3(0.0f, cellSize * 0.08f, cellSize * 0.06f)));
+        return root;
+    }
+
+    public static Node3D CreateInteriorCrystalCaseModel(float cellSize, Color tint)
+    {
+        var root = new Node3D();
+        root.AddChild(CreateMesh("CaseBody", new BoxMesh
+        {
+            Size = new Vector3(cellSize * 0.18f, cellSize * 0.16f, cellSize * 0.18f)
+        }, new Color("334155"), Vector3.Zero));
+        root.AddChild(CreateMesh("CrystalCore", new PrismMesh
+        {
+            Size = new Vector3(cellSize * 0.08f, cellSize * 0.14f, cellSize * 0.08f)
+        }, tint, new Vector3(0.0f, cellSize * 0.02f, 0.0f)));
+        return root;
+    }
+
+    public static Node3D CreateInteriorUtilityCassetteModel(float cellSize, Color tint)
+    {
+        var root = new Node3D();
+        root.AddChild(CreateMesh("UtilityBody", new BoxMesh
+        {
+            Size = new Vector3(cellSize * 0.20f, cellSize * 0.14f, cellSize * 0.16f)
+        }, new Color("334155"), Vector3.Zero));
+        root.AddChild(CreateMesh("UtilityPanel", new BoxMesh
+        {
+            Size = new Vector3(cellSize * 0.14f, cellSize * 0.08f, cellSize * 0.02f)
+        }, tint, new Vector3(0.0f, 0.0f, cellSize * 0.09f)));
+        root.AddChild(CreateMesh("UtilityLatch", new BoxMesh
+        {
+            Size = new Vector3(cellSize * 0.06f, cellSize * 0.04f, cellSize * 0.02f)
+        }, new Color("E2E8F0"), new Vector3(0.0f, cellSize * 0.03f, cellSize * 0.10f)));
+        return root;
+    }
+
     public static Node3D CreateGearModel(float cellSize)
     {
         var root = new Node3D();

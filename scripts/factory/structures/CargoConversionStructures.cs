@@ -130,6 +130,15 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
 
     protected override void BuildVisuals()
     {
+        if (SiteKind == FactorySiteKind.Interior)
+        {
+            CreateInteriorModuleShell(this, "Unpacker", new Vector3(CellSize * 1.42f, 0.44f, CellSize * 0.94f), new Color("164E63"), new Color("7DD3FC"), new Vector3(0.0f, 0.30f, 0.0f));
+            CreateInteriorTray(this, "UnpackerFeed", new Vector3(CellSize * 1.52f, 0.08f, CellSize * 0.18f), new Color("0369A1"), new Color("DBEAFE"), new Vector3(0.0f, 0.16f, 0.0f));
+            CreateBox("UnpackerLatch", new Vector3(CellSize * 0.26f, 0.30f, CellSize * 0.42f), new Color("E0F2FE"), new Vector3(CellSize * 0.48f, 0.34f, 0.0f));
+            CreateInteriorIndicatorLight(this, "UnpackerLamp", new Color("7DD3FC"), new Vector3(-CellSize * 0.46f, 0.50f, 0.0f), CellSize * 0.08f);
+            return;
+        }
+
         CreateBox("Deck", new Vector3(CellSize * 1.8f, 0.16f, CellSize * 1.2f), new Color("164E63"), new Vector3(0.0f, 0.08f, 0.0f));
         CreateBox("Chamber", new Vector3(CellSize * 1.1f, 0.48f, CellSize * 0.78f), new Color("38BDF8"), new Vector3(-CellSize * 0.18f, 0.32f, 0.0f));
         CreateBox("FeedRail", new Vector3(CellSize * 1.9f, 0.08f, CellSize * 0.18f), new Color("BAE6FD"), new Vector3(0.0f, 0.22f, 0.0f));
@@ -145,6 +154,15 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
 
     protected override void BuildVisuals()
     {
+        if (SiteKind == FactorySiteKind.Interior)
+        {
+            CreateInteriorModuleShell(this, "Packer", new Vector3(CellSize * 1.42f, 0.44f, CellSize * 0.94f), new Color("7C2D12"), new Color("FDBA74"), new Vector3(0.0f, 0.30f, 0.0f));
+            CreateInteriorTray(this, "PackerFeed", new Vector3(CellSize * 1.52f, 0.08f, CellSize * 0.18f), new Color("EA580C"), new Color("FED7AA"), new Vector3(0.0f, 0.16f, 0.0f));
+            CreateBox("PackerClamp", new Vector3(CellSize * 0.24f, 0.30f, CellSize * 0.62f), new Color("FED7AA"), new Vector3(CellSize * 0.46f, 0.32f, 0.0f));
+            CreateInteriorIndicatorLight(this, "PackerLamp", new Color("FB923C"), new Vector3(-CellSize * 0.46f, 0.50f, 0.0f), CellSize * 0.08f);
+            return;
+        }
+
         CreateBox("Deck", new Vector3(CellSize * 1.8f, 0.16f, CellSize * 1.2f), new Color("7C2D12"), new Vector3(0.0f, 0.08f, 0.0f));
         CreateBox("Compressor", new Vector3(CellSize * 1.0f, 0.46f, CellSize * 0.84f), new Color("F97316"), new Vector3(-CellSize * 0.10f, 0.32f, 0.0f));
         CreateBox("Clamp", new Vector3(CellSize * 0.28f, 0.34f, CellSize * 0.72f), new Color("FDBA74"), new Vector3(CellSize * 0.56f, 0.30f, 0.0f));
@@ -229,6 +247,15 @@ public partial class TransferBufferStructure : FactoryStructure, IFactoryItemPro
 
     protected override void BuildVisuals()
     {
+        if (SiteKind == FactorySiteKind.Interior)
+        {
+            CreateBox("BufferWell", new Vector3(CellSize * 0.84f, 0.12f, CellSize * 0.84f), new Color("042F2E"), new Vector3(0.0f, 0.06f, 0.0f));
+            CreateInteriorTray(this, "BufferDrawer", new Vector3(CellSize * 0.56f, 0.16f, CellSize * 0.50f), new Color("0F766E"), new Color("99F6E4"), new Vector3(0.0f, 0.18f, 0.0f));
+            CreateBox("BufferHandle", new Vector3(CellSize * 0.10f, 0.08f, CellSize * 0.46f), new Color("CCFBF1"), new Vector3(CellSize * 0.24f, 0.24f, 0.0f));
+            CreateInteriorIndicatorLight(this, "BufferLamp", new Color("5EEAD4"), new Vector3(-CellSize * 0.24f, 0.26f, 0.0f), CellSize * 0.07f);
+            return;
+        }
+
         CreateBox("Trench", new Vector3(CellSize * 0.84f, 0.12f, CellSize * 0.84f), new Color("0F766E"), new Vector3(0.0f, 0.06f, 0.0f));
         CreateBox("Tray", new Vector3(CellSize * 0.56f, 0.14f, CellSize * 0.56f), new Color("14B8A6"), new Vector3(0.0f, 0.18f, 0.0f));
         CreateBox("PanelNorth", new Vector3(CellSize * 0.64f, 0.10f, CellSize * 0.10f), new Color("99F6E4"), new Vector3(0.0f, 0.26f, -CellSize * 0.24f));

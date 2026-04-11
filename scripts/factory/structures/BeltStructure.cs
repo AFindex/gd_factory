@@ -70,6 +70,37 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
 
     protected override void BuildVisuals()
     {
+        if (SiteKind == FactorySiteKind.Interior)
+        {
+            _centerMesh = CreateBox(
+                "CabinChannelCore",
+                new Vector3(CellSize * 0.48f, 0.08f, CellSize * 0.30f),
+                new Color("0F172A"),
+                new Vector3(0.0f, 0.12f, 0.0f));
+            _inputArmMesh = CreateBox(
+                "CabinInputTray",
+                new Vector3(CellSize * 0.50f, 0.10f, CellSize * 0.18f),
+                new Color("1D4ED8"),
+                Vector3.Zero);
+            _outputArmMesh = CreateBox(
+                "CabinOutputTray",
+                new Vector3(CellSize * 0.50f, 0.10f, CellSize * 0.18f),
+                new Color("2563EB"),
+                Vector3.Zero);
+            _arrowMesh = CreateBox(
+                "CabinDirectionStrip",
+                new Vector3(CellSize * 0.18f, 0.03f, CellSize * 0.10f),
+                new Color("BAE6FD"),
+                new Vector3(0.26f * CellSize, 0.18f, 0.0f));
+            CreateBox(
+                "CabinTrayCap",
+                new Vector3(CellSize * 0.24f, 0.05f, CellSize * 0.24f),
+                new Color("CBD5E1"),
+                new Vector3(0.0f, 0.18f, 0.0f));
+            RefreshTopology();
+            return;
+        }
+
         _centerMesh = CreateColoredBox(
             "Center",
             new Vector3(CellSize * 0.42f, 0.12f, CellSize * 0.42f),

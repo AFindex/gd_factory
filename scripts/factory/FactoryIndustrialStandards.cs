@@ -224,6 +224,97 @@ public static class FactoryIndustrialStandards
         };
     }
 
+    public static string GetInteriorPresentationLabel(BuildPrototypeKind kind)
+    {
+        return kind switch
+        {
+            BuildPrototypeKind.Belt => "嵌入供料轨",
+            BuildPrototypeKind.Splitter => "配流节点",
+            BuildPrototypeKind.Merger => "汇流节点",
+            BuildPrototypeKind.Bridge => "穿舱跨线",
+            BuildPrototypeKind.Storage => "检修仓格",
+            BuildPrototypeKind.LargeStorageDepot => "模块仓段",
+            BuildPrototypeKind.Inserter => "移载机械臂",
+            BuildPrototypeKind.Smelter => "熔炼模块舱",
+            BuildPrototypeKind.Assembler => "装配模块舱",
+            BuildPrototypeKind.AmmoAssembler => "弹药装填舱",
+            BuildPrototypeKind.Generator => "动力核心舱",
+            BuildPrototypeKind.PowerPole => "舱内母线节点",
+            BuildPrototypeKind.CargoUnpacker => "解包处理舱",
+            BuildPrototypeKind.CargoPacker => "封包处理舱",
+            BuildPrototypeKind.TransferBuffer => "抽屉缓冲槽",
+            BuildPrototypeKind.InputPort => "入舱适配接口",
+            BuildPrototypeKind.OutputPort => "出舱适配接口",
+            BuildPrototypeKind.MiningInputPort => "采矿接入接口",
+            BuildPrototypeKind.GunTurret => "轻型炮塔硬点",
+            BuildPrototypeKind.HeavyGunTurret => "重型炮塔硬点",
+            BuildPrototypeKind.Wall => "维护隔断",
+            BuildPrototypeKind.Sink => "舱内回收端",
+            _ => GetSiteAwarePrototypeLabel(kind, FactorySiteKind.Interior)
+        };
+    }
+
+    public static string GetInteriorPreviewSummary(BuildPrototypeKind kind)
+    {
+        return kind switch
+        {
+            BuildPrototypeKind.Belt => "把维护层上方的标准供料导入嵌入轨道。",
+            BuildPrototypeKind.Splitter => "把一条供料轨拆分到多个舱段接口。",
+            BuildPrototypeKind.Merger => "把多个舱段输出汇入单一供料轨。",
+            BuildPrototypeKind.Bridge => "让两层嵌入物流在同格交叉而不混线。",
+            BuildPrototypeKind.Storage => "在维护通路边暂存舱内标准化载具。",
+            BuildPrototypeKind.LargeStorageDepot => "提供可维护的大体积舱段仓储。",
+            BuildPrototypeKind.Inserter => "在维护层与嵌入物流层之间移载载具。",
+            BuildPrototypeKind.CargoUnpacker => "把世界标准货包解成舱内标准载具。",
+            BuildPrototypeKind.CargoPacker => "把舱内标准载具重新封成世界货包。",
+            BuildPrototypeKind.TransferBuffer => "在交汇位置临时整理和排队载具。",
+            BuildPrototypeKind.Generator => "以舱内模块化方式供给动力母线。",
+            BuildPrototypeKind.PowerPole => "扩展舱内维护层的供电母线。",
+            BuildPrototypeKind.Smelter => "以模块舱方式持续炼制板材。",
+            BuildPrototypeKind.Assembler => "以舱段装配面板持续组装中间品。",
+            BuildPrototypeKind.AmmoAssembler => "围绕炮塔硬点供给弹药载具。",
+            BuildPrototypeKind.InputPort => "把世界侧物流平稳接入舱内维护层。",
+            BuildPrototypeKind.OutputPort => "把舱内封包货物推送回世界侧。",
+            BuildPrototypeKind.MiningInputPort => "将采矿前端与舱内维护层对接。",
+            BuildPrototypeKind.GunTurret => "作为轻型武器硬点守住舱体边界。",
+            BuildPrototypeKind.HeavyGunTurret => "作为重型武器井位守住舱体边界。",
+            _ => "作为维护层可进入的标准舱段模块。"
+        };
+    }
+
+    public static string GetCargoPresentationLabel(FactoryItemKind itemKind, FactoryCargoForm cargoForm)
+    {
+        return cargoForm switch
+        {
+            FactoryCargoForm.WorldBulk => $"{FactoryItemCatalog.GetDisplayName(itemKind)}（世界散装）",
+            FactoryCargoForm.WorldPacked => $"{FactoryItemCatalog.GetDisplayName(itemKind)}（世界封装）",
+            FactoryCargoForm.InteriorFeed => $"{FactoryItemCatalog.GetDisplayName(itemKind)}（{GetInteriorCarrierLabel(itemKind)}）",
+            _ => $"{FactoryItemCatalog.GetDisplayName(itemKind)}（{FactoryPresentation.GetCargoFormLabel(cargoForm)}）"
+        };
+    }
+
+    public static string GetInteriorCarrierLabel(FactoryItemKind itemKind)
+    {
+        return itemKind switch
+        {
+            FactoryItemKind.Coal or FactoryItemKind.IronOre or FactoryItemKind.CopperOre or FactoryItemKind.StoneOre or FactoryItemKind.SulfurOre or FactoryItemKind.QuartzOre
+                => "舱内矿罐",
+            FactoryItemKind.IronPlate or FactoryItemKind.CopperPlate or FactoryItemKind.SteelPlate or FactoryItemKind.StoneBrick or FactoryItemKind.Glass
+                => "层叠托盘",
+            FactoryItemKind.CopperWire or FactoryItemKind.CircuitBoard
+                => "电子料盒",
+            FactoryItemKind.Gear or FactoryItemKind.MachinePart or FactoryItemKind.BuildingKit
+                => "部件匣盒",
+            FactoryItemKind.BatteryPack or FactoryItemKind.RepairKit
+                => "维护匣盒",
+            FactoryItemKind.AmmoMagazine or FactoryItemKind.HighVelocityAmmo
+                => "弹药匣",
+            FactoryItemKind.SulfurCrystal
+                => "密封晶匣",
+            _ => "标准供料盒"
+        };
+    }
+
     public static IReadOnlyList<BuildPrototypeKind> GetHotkeyPaletteKinds(FactorySiteKind siteKind, int maxCount)
     {
         var catalog = GetBuildCatalog(siteKind);

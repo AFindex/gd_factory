@@ -1909,8 +1909,11 @@ public partial class MobileFactoryDemo : Node3D
             _mobileFactory.InteriorSite.WorldRotationRadians + FactoryDirection.ToYRotationRadians(_selectedInteriorFacing),
             0.0f);
 
+        var accent = _definitions.TryGetValue(_selectedInteriorKind, out var selectedDefinition)
+            ? selectedDefinition.Tint
+            : new Color("67E8F9");
         var tint = _canPlaceInteriorCell
-            ? new Color(0.35f, 0.95f, 0.55f, 0.45f)
+            ? new Color(accent.R, accent.G, accent.B, 0.45f)
             : new Color(1.0f, 0.35f, 0.35f, 0.45f);
         var previewSize = FactoryPlacement.GetPreviewBaseSize(_mobileFactory.InteriorSite, _selectedInteriorKind);
         _interiorPreviewCell.Mesh = new BoxMesh
@@ -4113,17 +4116,7 @@ public partial class MobileFactoryDemo : Node3D
             return $"可在内部格 ({cell.X}, {cell.Y}) 铺设{displayName}，并把供料并入 ({mergeTargetCell.X}, {mergeTargetCell.Y}) 的嵌入物流层。";
         }
 
-        if (kind == BuildPrototypeKind.Merger)
-        {
-            return $"可在内部格 ({cell.X}, {cell.Y}) 放置{displayName}，把三路舱内供料汇入同一模块接口。";
-        }
-
-        if (kind == BuildPrototypeKind.CargoUnpacker || kind == BuildPrototypeKind.CargoPacker || kind == BuildPrototypeKind.TransferBuffer)
-        {
-            return $"可在内部格 ({cell.X}, {cell.Y}) 布置{displayName}，让维护通路与嵌入物流层在这里交汇。";
-        }
-
-        return $"可在内部格 ({cell.X}, {cell.Y}) 放置{displayName}，作为维护层可进入的舱段模块。";
+        return $"可在内部格 ({cell.X}, {cell.Y}) 放置{displayName}。{FactoryIndustrialStandards.GetInteriorPreviewSummary(kind)}";
     }
 
     private static IReadOnlyList<BuildPrototypeKind> GetInteriorHotkeyPalette()
@@ -4133,9 +4126,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private string GetInteriorDisplayName(BuildPrototypeKind kind)
     {
-        return _definitions.TryGetValue(kind, out var definition)
-            ? definition.DisplayName
-            : FactoryIndustrialStandards.GetSiteAwarePrototypeLabel(kind, FactorySiteKind.Interior);
+        return FactoryIndustrialStandards.GetInteriorPresentationLabel(kind);
     }
 
 

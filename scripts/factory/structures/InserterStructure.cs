@@ -120,6 +120,61 @@ public partial class InserterStructure : FactoryStructure
 
     protected override void BuildVisuals()
     {
+        if (SiteKind == FactorySiteKind.Interior)
+        {
+            CreateBox("Base", new Vector3(CellSize * 0.82f, 0.12f, CellSize * 0.82f), new Color("0F172A"), new Vector3(0.0f, 0.06f, 0.0f));
+            CreateInteriorTray(this, "InputTray", new Vector3(CellSize * 0.30f, 0.08f, CellSize * 0.18f), new Color("1D4ED8"), new Color("DBEAFE"), new Vector3(-CellSize * 0.26f, 0.12f, 0.0f));
+            CreateInteriorTray(this, "OutputTray", new Vector3(CellSize * 0.30f, 0.08f, CellSize * 0.18f), new Color("0F766E"), new Color("CCFBF1"), new Vector3(CellSize * 0.26f, 0.12f, 0.0f));
+            CreateBox("Column", new Vector3(CellSize * 0.16f, 0.52f, CellSize * 0.16f), new Color("475569"), new Vector3(0.0f, 0.38f, 0.0f));
+            CreateBox("ServiceCap", new Vector3(CellSize * 0.26f, 0.10f, CellSize * 0.26f), new Color("CBD5E1"), new Vector3(0.0f, 0.66f, 0.0f));
+
+            _shoulderPivot = new Node3D
+            {
+                Name = "ShoulderPivot",
+                Position = new Vector3(0.0f, 0.68f, 0.0f)
+            };
+            AddChild(_shoulderPivot);
+
+            CreateArmMesh(
+                _shoulderPivot,
+                "UpperArm",
+                new Vector3(CellSize * 0.28f, 0.07f, 0.09f),
+                new Color("94A3B8"),
+                new Vector3(CellSize * 0.14f, 0.0f, 0.0f));
+
+            _elbowPivot = new Node3D
+            {
+                Name = "ElbowPivot",
+                Position = new Vector3(CellSize * 0.28f, 0.0f, 0.0f)
+            };
+            _shoulderPivot.AddChild(_elbowPivot);
+
+            CreateArmMesh(
+                _elbowPivot,
+                "Forearm",
+                new Vector3(CellSize * 0.24f, 0.07f, 0.08f),
+                new Color("38BDF8"),
+                new Vector3(CellSize * 0.12f, 0.0f, 0.0f));
+
+            _claw = CreateArmMesh(
+                _elbowPivot,
+                "Claw",
+                new Vector3(CellSize * 0.10f, 0.10f, 0.18f),
+                new Color("F8FAFC"),
+                new Vector3(CellSize * 0.24f, 0.0f, 0.0f));
+
+            _heldVisualAnchor = new Node3D
+            {
+                Name = "HeldItemAnchor",
+                Position = new Vector3(CellSize * 0.24f, CellSize * 0.09f, 0.0f)
+            };
+            _elbowPivot.AddChild(_heldVisualAnchor);
+
+            CreateInteriorIndicatorLight(this, "ServiceLamp", new Color("67E8F9"), new Vector3(0.0f, 0.78f, 0.0f), CellSize * 0.07f);
+            UpdateArmPose(0.0f);
+            return;
+        }
+
         CreateBox("Base", new Vector3(CellSize * 0.72f, 0.16f, CellSize * 0.72f), new Color("78350F"), new Vector3(0.0f, 0.08f, 0.0f));
         CreateBox("Column", new Vector3(CellSize * 0.18f, 0.72f, CellSize * 0.18f), new Color("A16207"), new Vector3(0.0f, 0.44f, 0.0f));
         CreateBox("InputMarker", new Vector3(CellSize * 0.16f, 0.05f, CellSize * 0.12f), new Color("FED7AA"), new Vector3(-CellSize * 0.28f, 0.16f, 0.0f));

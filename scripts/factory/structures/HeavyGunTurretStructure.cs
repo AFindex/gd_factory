@@ -240,6 +240,35 @@ public partial class HeavyGunTurretStructure : FactoryStructure, IFactoryItemRec
 
     protected override void BuildVisuals()
     {
+        if (SiteKind == FactorySiteKind.Interior)
+        {
+            CreateBox("Base", new Vector3(CellSize * 1.84f, 0.18f, CellSize * 1.84f), new Color("111827"), new Vector3(0.0f, 0.09f, 0.0f));
+            CreateBox("Well", new Vector3(CellSize * 1.24f, 0.24f, CellSize * 1.24f), new Color("1E293B"), new Vector3(0.0f, 0.20f, 0.0f));
+
+            _headPivot = new Node3D
+            {
+                Name = "HeadPivot",
+                Position = new Vector3(0.0f, 0.54f, 0.0f)
+            };
+            AddChild(_headPivot);
+
+            CreateArmMesh(_headPivot, "TurretBody", new Vector3(CellSize * 0.88f, 0.46f, CellSize * 0.74f), new Color("64748B"), new Vector3(0.0f, 0.20f, 0.0f));
+            _barrel = CreateArmMesh(_headPivot, "Barrel", new Vector3(CellSize * 0.96f, 0.18f, 0.22f), new Color("CBD5E1"), new Vector3(CellSize * 0.42f, 0.20f, 0.0f));
+            CreateArmMesh(_headPivot, "CounterWeight", new Vector3(CellSize * 0.22f, 0.24f, CellSize * 0.42f), new Color("475569"), new Vector3(-CellSize * 0.36f, 0.18f, 0.0f));
+
+            _muzzlePoint = new Node3D
+            {
+                Name = "MuzzlePoint",
+                Position = new Vector3(CellSize * 0.86f, 0.20f, 0.0f)
+            };
+            _headPivot.AddChild(_muzzlePoint);
+
+            _muzzleFlash = CreateArmMesh(_muzzlePoint, "MuzzleFlash", new Vector3(0.22f, 0.22f, 0.22f), new Color("FDE68A"), Vector3.Zero);
+            _muzzleFlash.Visible = false;
+            _ammoIndicator = CreateBox("AmmoIndicator", new Vector3(CellSize * 0.20f, 0.24f, CellSize * 0.20f), new Color("F59E0B"), new Vector3(-CellSize * 0.52f, 0.90f, 0.0f));
+            return;
+        }
+
         CreateBox("Base", new Vector3(CellSize * 1.84f, 0.28f, CellSize * 1.84f), new Color("111827"), new Vector3(0.0f, 0.14f, 0.0f));
         CreateBox("Plinth", new Vector3(CellSize * 1.34f, 0.38f, CellSize * 1.34f), new Color("334155"), new Vector3(0.0f, 0.34f, 0.0f));
 

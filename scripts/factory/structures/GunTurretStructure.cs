@@ -273,6 +273,35 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
 
     protected override void BuildVisuals()
     {
+        if (SiteKind == FactorySiteKind.Interior)
+        {
+            CreateBox("Base", new Vector3(CellSize * 0.88f, 0.18f, CellSize * 0.88f), new Color("111827"), new Vector3(0.0f, 0.09f, 0.0f));
+            CreateBox("Well", new Vector3(CellSize * 0.62f, 0.20f, CellSize * 0.62f), new Color("1F2937"), new Vector3(0.0f, 0.18f, 0.0f));
+
+            _headPivot = new Node3D
+            {
+                Name = "HeadPivot",
+                Position = new Vector3(0.0f, 0.42f, 0.0f)
+            };
+            AddChild(_headPivot);
+
+            CreateArmMesh(_headPivot, "TurretBody", new Vector3(CellSize * 0.46f, 0.28f, CellSize * 0.46f), new Color("64748B"), new Vector3(0.0f, 0.14f, 0.0f));
+            _barrel = CreateArmMesh(_headPivot, "Barrel", new Vector3(CellSize * 0.54f, 0.12f, 0.14f), new Color("CBD5E1"), new Vector3(CellSize * 0.24f, 0.14f, 0.0f));
+            CreateArmMesh(_headPivot, "Shield", new Vector3(CellSize * 0.32f, 0.10f, CellSize * 0.30f), new Color("94A3B8"), new Vector3(0.0f, 0.04f, 0.0f));
+
+            _muzzlePoint = new Node3D
+            {
+                Name = "MuzzlePoint",
+                Position = new Vector3(CellSize * 0.46f, 0.14f, 0.0f)
+            };
+            _headPivot.AddChild(_muzzlePoint);
+
+            _muzzleFlash = CreateArmMesh(_muzzlePoint, "MuzzleFlash", new Vector3(0.14f, 0.14f, 0.14f), new Color("FDE68A"), Vector3.Zero);
+            _muzzleFlash.Visible = false;
+            _ammoIndicator = CreateBox("AmmoIndicator", new Vector3(CellSize * 0.14f, 0.18f, CellSize * 0.14f), new Color("FACC15"), new Vector3(-CellSize * 0.22f, 0.54f, 0.0f));
+            return;
+        }
+
         CreateBox("Base", new Vector3(CellSize * 0.82f, 0.24f, CellSize * 0.82f), new Color("1F2937"), new Vector3(0.0f, 0.12f, 0.0f));
 
         _headPivot = new Node3D

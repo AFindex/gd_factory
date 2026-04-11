@@ -247,6 +247,37 @@ public partial class GeneratorStructure : FactoryStructure, IFactoryItemReceiver
 
     protected override void BuildVisuals()
     {
+        if (SiteKind == FactorySiteKind.Interior)
+        {
+            _powerRange = CreateDisc(
+                "PowerRange",
+                CellSize * PowerConnectionRangeCells,
+                0.03f,
+                new Color(0.98f, 0.66f, 0.19f, 0.12f),
+                new Vector3(0.0f, 0.02f, 0.0f));
+            _powerRange.Visible = false;
+
+            CreateBox("Base", new Vector3(CellSize * 0.96f, 0.16f, CellSize * 0.96f), new Color("1C1917"), new Vector3(0.0f, 0.08f, 0.0f));
+            CreateInteriorModuleShell(this, "GeneratorCabin", new Vector3(CellSize * 0.78f, 0.74f, CellSize * 0.78f), new Color("44403C"), new Color("A8A29E"), new Vector3(0.0f, 0.56f, 0.0f));
+            CreateBox("FuelDrawer", new Vector3(CellSize * 0.22f, 0.30f, CellSize * 0.26f), new Color("57534E"), new Vector3(CellSize * 0.28f, 0.32f, 0.18f));
+            CreateBox("BusCoupler", new Vector3(CellSize * 0.18f, 0.18f, CellSize * 0.54f), new Color("FBBF24"), new Vector3(-CellSize * 0.28f, 0.72f, 0.0f));
+            CreateBox("HeatStack", new Vector3(CellSize * 0.12f, 0.40f, CellSize * 0.12f), new Color("A8A29E"), new Vector3(-CellSize * 0.28f, 1.08f, CellSize * 0.20f));
+            _beacon = CreateBox("Beacon", new Vector3(CellSize * 0.12f, 0.12f, CellSize * 0.12f), new Color("FBBF24"), new Vector3(CellSize * 0.26f, 0.96f, CellSize * 0.18f));
+
+            _rotorRig = new Node3D
+            {
+                Name = "RotorRig",
+                Position = new Vector3(0.0f, 0.70f, 0.0f)
+            };
+            AddChild(_rotorRig);
+            _rotorCore = CreateTurbineCylinder(_rotorRig, "RotorCore", CellSize * 0.08f, CellSize * 0.18f, new Color("CBD5E1"), Vector3.Zero);
+            CreateFanBlades(_rotorRig);
+            _rotorMarker = CreateBox(_rotorRig, "RotorMarker", new Vector3(CellSize * 0.05f, CellSize * 0.10f, CellSize * 0.06f), new Color("FDE047"), new Vector3(CellSize * 0.17f, 0.0f, 0.0f));
+            _steamParticles = CreateSteamParticles();
+            AddChild(_steamParticles);
+            return;
+        }
+
         _powerRange = CreateDisc(
             "PowerRange",
             CellSize * PowerConnectionRangeCells,

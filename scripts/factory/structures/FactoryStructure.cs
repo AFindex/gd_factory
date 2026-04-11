@@ -2,8 +2,28 @@ using Godot;
 using System;
 using System.Collections.Generic;
 
+public enum FactoryInteriorVisualRole
+{
+    EmbeddedLogistics,
+    ServiceModule,
+    BufferCabinet,
+    PowerNode,
+    Hardpoint,
+    HullInterface,
+    MaintenanceBarrier
+}
+
 public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IFactoryStructureDetailProvider, IFactoryInventoryEndpointProvider
 {
+    private readonly record struct FactoryInteriorVisualStyle(
+        Color DeckColor,
+        Color TrimColor,
+        Color AccentColor,
+        Color LabelColor,
+        bool UsesChannel,
+        bool UsesServiceWalkway,
+        bool UsesHardpointRing);
+
     private bool _visualsBuilt;
     private Node3D? _structureVisualRoot;
     private FactoryStructureVisualProfile? _visualProfile;
@@ -413,6 +433,11 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
 
     protected virtual FactoryStructureVisualProfile CreateVisualProfile()
     {
+        if (CreateSiteAwareVisualProfile(SiteKind) is FactoryStructureVisualProfile siteAwareProfile)
+        {
+            return siteAwareProfile;
+        }
+
         return new FactoryStructureVisualProfile(
             proceduralBuilder: _ =>
             {
@@ -442,6 +467,38 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
     {
     }
 
+    protected virtual FactoryStructureVisualProfile? CreateSiteAwareVisualProfile(FactorySiteKind siteKind)
+    {
+        return null;
+    }
+
+    protected virtual FactoryInteriorVisualRole GetInteriorVisualRole()
+    {
+        return Kind switch
+        {
+            BuildPrototypeKind.Belt or BuildPrototypeKind.Splitter or BuildPrototypeKind.Merger or BuildPrototypeKind.Bridge or BuildPrototypeKind.Inserter
+                => FactoryInteriorVisualRole.EmbeddedLogistics,
+            BuildPrototypeKind.TransferBuffer or BuildPrototypeKind.Storage or BuildPrototypeKind.LargeStorageDepot or BuildPrototypeKind.CargoUnpacker or BuildPrototypeKind.CargoPacker or BuildPrototypeKind.Sink
+                => FactoryInteriorVisualRole.BufferCabinet,
+            BuildPrototypeKind.Generator or BuildPrototypeKind.Smelter or BuildPrototypeKind.Assembler or BuildPrototypeKind.AmmoAssembler
+                => FactoryInteriorVisualRole.ServiceModule,
+            BuildPrototypeKind.PowerPole
+                => FactoryInteriorVisualRole.PowerNode,
+            BuildPrototypeKind.GunTurret or BuildPrototypeKind.HeavyGunTurret
+                => FactoryInteriorVisualRole.Hardpoint,
+            BuildPrototypeKind.InputPort or BuildPrototypeKind.OutputPort or BuildPrototypeKind.MiningInputPort
+                => FactoryInteriorVisualRole.HullInterface,
+            BuildPrototypeKind.Wall
+                => FactoryInteriorVisualRole.MaintenanceBarrier,
+            _ => FactoryInteriorVisualRole.ServiceModule
+        };
+    }
+
+    protected string GetInteriorPresentationLabel()
+    {
+        return FactoryIndustrialStandards.GetInteriorPresentationLabel(Kind);
+    }
+
     protected virtual void BuildSitePresentationAccents()
     {
         if (SiteKind != FactorySiteKind.Interior)
@@ -453,49 +510,94 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
         var deckWidth = Mathf.Max(CellSize * 0.96f, previewSize.X + (CellSize * 0.14f));
         var deckDepth = Mathf.Max(CellSize * 0.96f, previewSize.Y + (CellSize * 0.14f));
         var visualParent = GetVisualParent();
+        var style = ResolveInteriorVisualStyle();
 
         CreateBox(
             visualParent,
             "MaintenanceDeck",
             new Vector3(deckWidth, 0.07f, deckDepth),
-            new Color("0F172A"),
+            style.DeckColor,
             new Vector3(0.0f, 0.035f, 0.0f));
         CreateBox(
             visualParent,
             "MaintenanceTrim",
             new Vector3(deckWidth * 0.92f, 0.02f, deckDepth * 0.92f),
-            new Color("334155"),
+            style.TrimColor,
             new Vector3(0.0f, 0.075f, 0.0f));
+        CreateInteriorLabelPlate(
+            visualParent,
+            "CabinLabel",
+            GetInteriorPresentationLabel(),
+            style.LabelColor,
+            new Vector3(0.0f, 0.11f, -deckDepth * 0.28f),
+            Mathf.Clamp(previewSize.X / CellSize, 1.0f, 3.0f));
 
-        if (UsesEmbeddedCargoChannel())
+        if (style.UsesHardpointRing)
+        {
+            CreateBox(
+                visualParent,
+                "HardpointRingOuter",
+                new Vector3(deckWidth * 0.88f, 0.02f, deckDepth * 0.88f),
+                style.AccentColor.Darkened(0.24f),
+                new Vector3(0.0f, 0.094f, 0.0f));
+            CreateBox(
+                visualParent,
+                "HardpointRingInner",
+                new Vector3(deckWidth * 0.54f, 0.025f, deckDepth * 0.54f),
+                style.AccentColor,
+                new Vector3(0.0f, 0.108f, 0.0f));
+        }
+
+        if (style.UsesChannel)
         {
             CreateBox(
                 visualParent,
                 "CargoChannel",
                 new Vector3(deckWidth * 0.88f, 0.03f, Mathf.Max(CellSize * 0.16f, deckDepth * 0.24f)),
-                new Color("155E75"),
+                style.AccentColor.Darkened(0.18f),
                 new Vector3(0.0f, 0.095f, 0.0f));
             CreateBox(
                 visualParent,
                 "CargoChannelStripe",
                 new Vector3(deckWidth * 0.64f, 0.01f, Mathf.Max(CellSize * 0.05f, deckDepth * 0.08f)),
-                new Color("67E8F9"),
+                style.AccentColor.Lightened(0.24f),
                 new Vector3(0.0f, 0.118f, 0.0f));
-            return;
+            CreateBox(
+                visualParent,
+                "CargoChannelLeftRail",
+                new Vector3(deckWidth * 0.86f, 0.03f, Mathf.Max(CellSize * 0.03f, deckDepth * 0.05f)),
+                style.LabelColor,
+                new Vector3(0.0f, 0.108f, -Mathf.Max(CellSize * 0.14f, deckDepth * 0.12f)));
+            CreateBox(
+                visualParent,
+                "CargoChannelRightRail",
+                new Vector3(deckWidth * 0.86f, 0.03f, Mathf.Max(CellSize * 0.03f, deckDepth * 0.05f)),
+                style.LabelColor,
+                new Vector3(0.0f, 0.108f, Mathf.Max(CellSize * 0.14f, deckDepth * 0.12f)));
+        }
+
+        if (style.UsesServiceWalkway)
+        {
+            CreateBox(
+                visualParent,
+                "MaintenanceWalkway",
+                new Vector3(deckWidth * 0.86f, 0.02f, Mathf.Max(CellSize * 0.22f, deckDepth * 0.24f)),
+                style.TrimColor.Lightened(0.08f),
+                new Vector3(0.0f, 0.085f, (deckDepth * 0.5f) - Mathf.Max(CellSize * 0.12f, deckDepth * 0.12f)));
         }
 
         CreateBox(
             visualParent,
-            "MaintenanceWalkway",
-            new Vector3(deckWidth * 0.86f, 0.02f, Mathf.Max(CellSize * 0.22f, deckDepth * 0.24f)),
-            new Color("475569"),
-            new Vector3(0.0f, 0.085f, (deckDepth * 0.5f) - Mathf.Max(CellSize * 0.12f, deckDepth * 0.12f)));
-        CreateBox(
-            visualParent,
             "AccessPanel",
             new Vector3(Mathf.Max(CellSize * 0.18f, deckWidth * 0.14f), 0.10f, Mathf.Max(CellSize * 0.20f, deckDepth * 0.18f)),
-            new Color("CBD5E1"),
+            style.LabelColor,
             new Vector3((deckWidth * 0.5f) - Mathf.Max(CellSize * 0.14f, deckWidth * 0.10f), 0.13f, 0.0f));
+        CreateInteriorIndicatorLight(
+            visualParent,
+            "StatusLamp",
+            style.AccentColor.Lightened(0.28f),
+            new Vector3((-deckWidth * 0.5f) + Mathf.Max(CellSize * 0.12f, deckWidth * 0.10f), 0.14f, 0.0f),
+            CellSize * 0.06f);
     }
 
     protected MeshInstance3D CreateBox(string name, Vector3 size, Color color, Vector3? localPosition = null)
@@ -557,6 +659,43 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
 
         parent.AddChild(mesh);
         return mesh;
+    }
+
+    protected void CreateInteriorModuleShell(Node parent, string prefix, Vector3 shellSize, Color shellColor, Color trimColor, Vector3 localPosition)
+    {
+        CreateBox(parent, $"{prefix}Shell", shellSize, shellColor, localPosition);
+        CreateBox(parent, $"{prefix}TopPlate", new Vector3(shellSize.X * 0.88f, Mathf.Max(CellSize * 0.06f, shellSize.Y * 0.10f), shellSize.Z * 0.88f), trimColor, localPosition + new Vector3(0.0f, shellSize.Y * 0.42f, 0.0f));
+        CreateBox(parent, $"{prefix}SideSpine", new Vector3(Mathf.Max(CellSize * 0.08f, shellSize.X * 0.10f), shellSize.Y * 0.86f, shellSize.Z * 0.64f), trimColor.Darkened(0.05f), localPosition + new Vector3((-shellSize.X * 0.36f), shellSize.Y * 0.02f, 0.0f));
+    }
+
+    protected void CreateInteriorTray(Node parent, string prefix, Vector3 traySize, Color trayColor, Color railColor, Vector3 localPosition)
+    {
+        CreateBox(parent, $"{prefix}Tray", traySize, trayColor, localPosition);
+        CreateBox(parent, $"{prefix}RailNorth", new Vector3(traySize.X * 0.94f, traySize.Y * 0.68f, Mathf.Max(CellSize * 0.03f, traySize.Z * 0.10f)), railColor, localPosition + new Vector3(0.0f, traySize.Y * 0.18f, -traySize.Z * 0.34f));
+        CreateBox(parent, $"{prefix}RailSouth", new Vector3(traySize.X * 0.94f, traySize.Y * 0.68f, Mathf.Max(CellSize * 0.03f, traySize.Z * 0.10f)), railColor, localPosition + new Vector3(0.0f, traySize.Y * 0.18f, traySize.Z * 0.34f));
+    }
+
+    protected void CreateInteriorIndicatorLight(Node parent, string name, Color color, Vector3 localPosition, float size)
+    {
+        var lamp = CreateBox(parent, name, new Vector3(size, size, size), color, localPosition);
+        if (lamp.MaterialOverride is StandardMaterial3D material)
+        {
+            material.Roughness = 0.18f;
+            material.EmissionEnabled = true;
+            material.Emission = color;
+            material.EmissionEnergyMultiplier = 1.45f;
+        }
+    }
+
+    protected void CreateInteriorLabelPlate(Node parent, string prefix, string label, Color color, Vector3 localPosition, float widthScale = 1.0f)
+    {
+        var plateWidth = Mathf.Max(CellSize * 0.24f, CellSize * 0.28f * widthScale);
+        CreateBox(parent, $"{prefix}Plate", new Vector3(plateWidth, 0.04f, CellSize * 0.12f), color.Darkened(0.38f), localPosition);
+        CreateBox(parent, $"{prefix}Stripe", new Vector3(plateWidth * 0.82f, 0.02f, CellSize * 0.05f), color, localPosition + new Vector3(0.0f, 0.018f, 0.0f));
+        if (!string.IsNullOrWhiteSpace(label))
+        {
+            CreateBox(parent, $"{prefix}_{label}", new Vector3(Mathf.Max(CellSize * 0.06f, plateWidth * 0.18f), 0.03f, CellSize * 0.03f), color.Lightened(0.18f), localPosition + new Vector3(0.0f, 0.030f, 0.0f));
+        }
     }
 
     protected static FactoryInventorySectionModel CreateInventorySection(
@@ -634,6 +773,69 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
     private Node GetVisualParent()
     {
         return _currentVisualParent ?? this;
+    }
+
+    private FactoryInteriorVisualStyle ResolveInteriorVisualStyle()
+    {
+        return GetInteriorVisualRole() switch
+        {
+            FactoryInteriorVisualRole.EmbeddedLogistics => new FactoryInteriorVisualStyle(
+                new Color("081018"),
+                new Color("223244"),
+                new Color("38BDF8"),
+                new Color("D7F5FF"),
+                UsesChannel: true,
+                UsesServiceWalkway: false,
+                UsesHardpointRing: false),
+            FactoryInteriorVisualRole.BufferCabinet => new FactoryInteriorVisualStyle(
+                new Color("111827"),
+                new Color("334155"),
+                new Color("2DD4BF"),
+                new Color("E2F8F3"),
+                UsesChannel: true,
+                UsesServiceWalkway: true,
+                UsesHardpointRing: false),
+            FactoryInteriorVisualRole.PowerNode => new FactoryInteriorVisualStyle(
+                new Color("19140A"),
+                new Color("5B4B18"),
+                new Color("FBBF24"),
+                new Color("FEF3C7"),
+                UsesChannel: false,
+                UsesServiceWalkway: true,
+                UsesHardpointRing: false),
+            FactoryInteriorVisualRole.Hardpoint => new FactoryInteriorVisualStyle(
+                new Color("160B12"),
+                new Color("3F1D2E"),
+                new Color("FB7185"),
+                new Color("FCE7F3"),
+                UsesChannel: false,
+                UsesServiceWalkway: true,
+                UsesHardpointRing: true),
+            FactoryInteriorVisualRole.HullInterface => new FactoryInteriorVisualStyle(
+                new Color("0B1322"),
+                new Color("1E3A5F"),
+                new Color("60A5FA"),
+                new Color("DBEAFE"),
+                UsesChannel: true,
+                UsesServiceWalkway: true,
+                UsesHardpointRing: false),
+            FactoryInteriorVisualRole.MaintenanceBarrier => new FactoryInteriorVisualStyle(
+                new Color("151515"),
+                new Color("44403C"),
+                new Color("E2E8F0"),
+                new Color("F8FAFC"),
+                UsesChannel: false,
+                UsesServiceWalkway: true,
+                UsesHardpointRing: false),
+            _ => new FactoryInteriorVisualStyle(
+                new Color("101722"),
+                new Color("334155"),
+                new Color("67E8F9"),
+                new Color("E2E8F0"),
+                UsesChannel: false,
+                UsesServiceWalkway: true,
+                UsesHardpointRing: false)
+        };
     }
 
     private bool UsesEmbeddedCargoChannel()

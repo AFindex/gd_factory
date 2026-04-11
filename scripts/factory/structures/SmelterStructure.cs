@@ -44,6 +44,45 @@ public partial class SmelterStructure : FactoryRecipeMachineStructure
         controller.Root.AddChild(bodyRig);
         controller.RegisterNodeAnchor(FurnaceBodyAlias, bodyRig);
 
+        if (SiteKind == FactorySiteKind.Interior)
+        {
+            CreateBox(bodyRig, "Base", new Vector3(CellSize * 0.98f, 0.14f, CellSize * 0.98f), new Color("1C1917"), new Vector3(0.0f, 0.07f, 0.0f));
+            CreateInteriorModuleShell(bodyRig, "SmelterCabin", new Vector3(CellSize * 0.80f, 0.82f, CellSize * 0.82f), new Color("44403C"), new Color("A8A29E"), new Vector3(0.0f, 0.62f, 0.0f));
+            CreateBox(bodyRig, "IntakeDrawer", new Vector3(CellSize * 0.44f, 0.14f, CellSize * 0.18f), new Color("A16207"), new Vector3(0.0f, 0.34f, CellSize * 0.30f));
+
+            var cabinFurnaceCore = CreateBox(bodyRig, "FurnaceCore", new Vector3(CellSize * 0.34f, 0.34f, CellSize * 0.42f), new Color("FB923C"), new Vector3(0.0f, 0.62f, 0.0f));
+            ConfigureGlowMaterial(cabinFurnaceCore, new Color("EA580C"), 2.2f);
+            RegisterMaterialAlias(controller, CoreGlowAlias, cabinFurnaceCore);
+
+            var cabinFireboxGlow = CreateBox(bodyRig, "FireboxGlow", new Vector3(CellSize * 0.22f, 0.20f, CellSize * 0.10f), new Color("FDBA74"), new Vector3(0.0f, 0.54f, CellSize * 0.34f));
+            ConfigureGlowMaterial(cabinFireboxGlow, new Color("F97316"), 2.8f);
+            RegisterMaterialAlias(controller, FireboxGlowAlias, cabinFireboxGlow);
+
+            var cabinEmberBand = CreateBox(bodyRig, "EmberBand", new Vector3(CellSize * 0.42f, 0.05f, CellSize * 0.50f), new Color(1.0f, 0.60f, 0.18f, 0.72f), new Vector3(0.0f, 0.92f, 0.0f));
+            if (cabinEmberBand.MaterialOverride is StandardMaterial3D cabinEmberMaterial)
+            {
+                cabinEmberMaterial.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+                cabinEmberMaterial.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
+                cabinEmberMaterial.EmissionEnabled = true;
+                cabinEmberMaterial.Emission = new Color("F97316");
+                cabinEmberMaterial.EmissionEnergyMultiplier = 1.9f;
+            }
+            RegisterMaterialAlias(controller, EmberBandAlias, cabinEmberBand);
+
+            CreateBox(bodyRig, "ExhaustStack", new Vector3(CellSize * 0.12f, 0.44f, CellSize * 0.12f), new Color("71717A"), new Vector3(-CellSize * 0.22f, 1.06f, 0.0f));
+            var cabinExhaustGlow = CreateBox(bodyRig, "ExhaustGlow", new Vector3(CellSize * 0.10f, 0.10f, CellSize * 0.10f), new Color("FDBA74"), new Vector3(-CellSize * 0.22f, 1.34f, 0.0f));
+            ConfigureGlowMaterial(cabinExhaustGlow, new Color("FB923C"), 2.0f);
+            RegisterMaterialAlias(controller, ExhaustGlowAlias, cabinExhaustGlow);
+
+            var cabinSmokeParticles = CreateSmokeParticles();
+            cabinSmokeParticles.Name = "HeatPlume";
+            cabinSmokeParticles.Position = new Vector3(-CellSize * 0.22f, 1.42f, 0.0f);
+            cabinSmokeParticles.Scale = new Vector3(0.72f, 0.72f, 0.72f);
+            bodyRig.AddChild(cabinSmokeParticles);
+            controller.RegisterNodeAnchor(HeatPlumeAlias, cabinSmokeParticles);
+            return;
+        }
+
         CreateBox(bodyRig, "Base", new Vector3(CellSize * 0.98f, 0.18f, CellSize * 0.98f), new Color("292524"), new Vector3(0.0f, 0.09f, 0.0f));
         CreateBox(bodyRig, "Footing", new Vector3(CellSize * 0.88f, 0.16f, CellSize * 0.88f), new Color("44403C"), new Vector3(0.0f, 0.22f, 0.0f));
         CreateBox(bodyRig, "BodyShell", new Vector3(CellSize * 0.82f, 0.88f, CellSize * 0.82f), new Color("57534E"), new Vector3(0.0f, 0.70f, 0.0f));
