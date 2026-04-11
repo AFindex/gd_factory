@@ -257,7 +257,7 @@ public static class FactoryDemoSmokeSupport
 
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"mobile:{snapshot.FactoryId}|{snapshot.State}|{Format(snapshot.HullPosition.X)},{Format(snapshot.HullPosition.Y)},{Format(snapshot.HullPosition.Z)}|{snapshot.TransitFacing}|{snapshot.HasAnchorCell}|{snapshot.AnchorCell.X},{snapshot.AnchorCell.Y}|{snapshot.DeploymentFacing}");
+            $"mobile:{snapshot.FactoryId}|{snapshot.State}|{Format(snapshot.HullPosition.X)},{Format(snapshot.HullPosition.Y)},{Format(snapshot.HullPosition.Z)}|heading={(snapshot.HasHullHeadingRadians ? Format(snapshot.HullHeadingRadians) : "missing")}|{snapshot.TransitFacing}|{snapshot.HasAnchorCell}|{snapshot.AnchorCell.X},{snapshot.AnchorCell.Y}|{snapshot.DeploymentFacing}");
     }
 
     private static string SummarizeInventory(FactoryRuntimeInventorySnapshot snapshot)

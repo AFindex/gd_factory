@@ -305,7 +305,7 @@ public sealed class MobileFactoryInstance
             && Mathf.Abs(NormalizeAngle(FactoryDirection.ToYRotationRadians(targetFacing) - _currentHeadingRadians)) <= AutopilotArrivalAngle;
     }
 
-    public void SetTransitPose(Vector3 worldPosition, FacingDirection facing)
+    public void SetTransitPose(Vector3 worldPosition, FacingDirection facing, float? headingRadians = null)
     {
         ReleaseDeploymentReservations();
         ClearAttachmentBindings();
@@ -314,7 +314,7 @@ public sealed class MobileFactoryInstance
         AnchorCell = null;
         State = MobileFactoryLifecycleState.InTransit;
         DeploymentFacing = facing;
-        _currentHeadingRadians = FactoryDirection.ToYRotationRadians(facing);
+        _currentHeadingRadians = headingRadians ?? FactoryDirection.ToYRotationRadians(facing);
         ApplyHullTransform(worldPosition, _currentHeadingRadians);
         InteriorSite.SetRuntimeState(true, true);
         _simulation.RebuildTopology();
@@ -639,6 +639,8 @@ public sealed class MobileFactoryInstance
             FactoryId = FactoryId,
             State = state,
             HullPosition = FactoryRuntimeVec3.FromVector3(_hullRoot.Position),
+            HasHullHeadingRadians = true,
+            HullHeadingRadians = _currentHeadingRadians,
             TransitFacing = TransitFacing,
             HasAnchorCell = AnchorCell.HasValue,
             AnchorCell = FactoryRuntimeInt2.FromVector2I(AnchorCell ?? Vector2I.Zero),
@@ -664,7 +666,10 @@ public sealed class MobileFactoryInstance
             return;
         }
 
-        SetTransitPose(snapshot.HullPosition.ToVector3(), snapshot.TransitFacing);
+        SetTransitPose(
+            snapshot.HullPosition.ToVector3(),
+            snapshot.TransitFacing,
+            snapshot.HasHullHeadingRadians ? snapshot.HullHeadingRadians : null);
     }
 
     public void ClearInteriorStructures(bool rebuildTopology = true)

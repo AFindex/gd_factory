@@ -157,6 +157,8 @@ public sealed class FactoryMobileFactoryRuntimeSnapshot
     public string FactoryId { get; set; } = string.Empty;
     public MobileFactoryLifecycleState State { get; set; }
     public FactoryRuntimeVec3 HullPosition { get; set; }
+    public bool HasHullHeadingRadians { get; set; }
+    public float HullHeadingRadians { get; set; }
     public FacingDirection TransitFacing { get; set; }
     public bool HasAnchorCell { get; set; }
     public FactoryRuntimeInt2 AnchorCell { get; set; }

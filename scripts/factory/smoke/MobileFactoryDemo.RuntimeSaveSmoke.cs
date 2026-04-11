@@ -160,6 +160,35 @@ public partial class MobileFactoryDemo
         var attachmentTransitRestored = expectedAttachmentSummary == restoredAttachmentSummary;
         var worldRestored = expectedWorldSinkSummary == restoredWorldSinkSummary;
 
+        var transitSlotId = $"{slotId}-transit";
+        _mobileFactory.ReturnToTransitMode();
+        await WaitForCondition(() => _mobileFactory.State == MobileFactoryLifecycleState.InTransit, 2.0f);
+        await ToSignal(GetTree().CreateTimer(0.35f), SceneTreeTimer.SignalName.Timeout);
+        _mobileFactory.ApplyTransitInput(_grid, 0.45f, 1.0f, 0.41);
+        var expectedTransitDocument = BuildRuntimeSnapshotDocument(transitSlotId);
+        FactoryRuntimeSavePersistence.Save(expectedTransitDocument);
+        expectedTransitDocument = FactoryRuntimeSavePersistence.Load(transitSlotId);
+        var expectedTransitMobile = FactoryDemoSmokeSupport.SummarizeMobileFactorySnapshot(expectedTransitDocument.MobileFactory);
+        var transitHeadingIsPrecise = expectedTransitDocument.MobileFactory is not null
+            && expectedTransitDocument.MobileFactory.HasHullHeadingRadians
+            && Mathf.Abs(
+                FactoryDirection.ToYRotationRadians(expectedTransitDocument.MobileFactory.TransitFacing)
+                - expectedTransitDocument.MobileFactory.HullHeadingRadians) > 0.05f;
+
+        _mobileFactory.ApplyTransitInput(_grid, -0.25f, -1.0f, 0.36);
+        _combatDirector?.ClearLanes();
+        LoadRuntimeSnapshot(transitSlotId);
+        if (_worldPreviewMessage.Contains("失败", StringComparison.Ordinal)
+            || _interiorPreviewMessage.Contains("失败", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Focused mobile transit runtime load failed: world='{_worldPreviewMessage}' interior='{_interiorPreviewMessage}'.");
+        }
+
+        var restoredTransitDocument = BuildRuntimeSnapshotDocument($"{transitSlotId}-restored");
+        var restoredTransitMobile = FactoryDemoSmokeSupport.SummarizeMobileFactorySnapshot(restoredTransitDocument.MobileFactory);
+        var transitHeadingRestored = expectedTransitMobile == restoredTransitMobile;
+
         var stablePlayerPosition = _playerController.GlobalPosition;
         var stableMobileSummary = FactoryDemoSmokeSupport.SummarizeMobileFactorySnapshot(_mobileFactory.CaptureRuntimeSnapshot());
         var stableStructureCount = _simulation.RegisteredStructureCount;
@@ -192,6 +221,8 @@ public partial class MobileFactoryDemo
             || !interiorAssemblerRestored
             || !attachmentTransitRestored
             || !worldRestored
+            || !transitHeadingIsPrecise
+            || !transitHeadingRestored
             || !expectedWorldPathsCaptured
             || !expectedInteriorPathsCaptured
             || !indexPathsCaptured
@@ -229,12 +260,12 @@ public partial class MobileFactoryDemo
             }
 
             GD.PushError(
-                $"MOBILE_FACTORY_RUNTIME_SAVE_SMOKE_FAILED player={playerRestored} combat={combatRestored} enemies={enemiesRestored} mobile={mobileRestored} interiorStorage={interiorStorageRestored} interiorAssembler={interiorAssemblerRestored} attachment={attachmentTransitRestored} world={worldRestored} worldPaths={expectedWorldPathsCaptured} interiorPaths={expectedInteriorPathsCaptured} indexPaths={indexPathsCaptured} unsupported={unsupportedRejected} corrupt={corruptRejected}");
+                $"MOBILE_FACTORY_RUNTIME_SAVE_SMOKE_FAILED player={playerRestored} combat={combatRestored} enemies={enemiesRestored} mobile={mobileRestored} interiorStorage={interiorStorageRestored} interiorAssembler={interiorAssemblerRestored} attachment={attachmentTransitRestored} world={worldRestored} transitPrecise={transitHeadingIsPrecise} transitRestored={transitHeadingRestored} worldPaths={expectedWorldPathsCaptured} interiorPaths={expectedInteriorPathsCaptured} indexPaths={indexPathsCaptured} unsupported={unsupportedRejected} corrupt={corruptRejected}");
             return false;
         }
 
         GD.Print(
-            $"MOBILE_FACTORY_RUNTIME_SAVE_SMOKE player={playerRestored} combat={combatRestored} enemies={enemiesRestored} mobile={mobileRestored} interiorStorage={interiorStorageRestored} interiorAssembler={interiorAssemblerRestored} attachment={attachmentTransitRestored} world={worldRestored} worldPaths={expectedWorldPathsCaptured} interiorPaths={expectedInteriorPathsCaptured} indexPaths={indexPathsCaptured} unsupported={unsupportedRejected} corrupt={corruptRejected}");
+            $"MOBILE_FACTORY_RUNTIME_SAVE_SMOKE player={playerRestored} combat={combatRestored} enemies={enemiesRestored} mobile={mobileRestored} interiorStorage={interiorStorageRestored} interiorAssembler={interiorAssemblerRestored} attachment={attachmentTransitRestored} world={worldRestored} transitPrecise={transitHeadingIsPrecise} transitRestored={transitHeadingRestored} worldPaths={expectedWorldPathsCaptured} interiorPaths={expectedInteriorPathsCaptured} indexPaths={indexPathsCaptured} unsupported={unsupportedRejected} corrupt={corruptRejected}");
         return true;
     }
 }
