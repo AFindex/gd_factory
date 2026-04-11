@@ -61,7 +61,14 @@ public sealed class GridManager : IFactorySite
 
     public bool CanPlaceStructure(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing, out string reason)
     {
+        var siteKind = FactoryIndustrialStandards.ResolveSiteKind(this);
         reason = string.Empty;
+        if (!FactoryIndustrialStandards.IsStructureAllowed(kind, siteKind))
+        {
+            reason = FactoryIndustrialStandards.GetPlacementCompatibilityError(kind, siteKind);
+            return false;
+        }
+
         var footprintCells = FactoryPlacement.ResolveFootprintCells(kind, cell, facing);
         var matchedResourceCell = false;
         for (var index = 0; index < footprintCells.Count; index++)

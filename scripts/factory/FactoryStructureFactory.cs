@@ -75,6 +75,23 @@ public static class FactoryStructureFactory
                 new[] { Vector2I.Zero, Vector2I.Right, Vector2I.Down, Vector2I.Right + Vector2I.Down },
                 inputOffsetEast: new Vector2I(-1, 0),
                 outputOffsetEast: new Vector2I(2, 0))),
+        [BuildPrototypeKind.CargoUnpacker] = new FactoryStructureDefinition(
+            BuildPrototypeKind.CargoUnpacker,
+            () => new CargoUnpackerStructure(),
+            false,
+            true,
+            MultiPortProcessingFootprint),
+        [BuildPrototypeKind.CargoPacker] = new FactoryStructureDefinition(
+            BuildPrototypeKind.CargoPacker,
+            () => new CargoPackerStructure(),
+            true,
+            true,
+            MultiPortProcessingFootprint),
+        [BuildPrototypeKind.TransferBuffer] = new FactoryStructureDefinition(
+            BuildPrototypeKind.TransferBuffer,
+            () => new TransferBufferStructure(),
+            false,
+            true),
         [BuildPrototypeKind.Inserter] = new FactoryStructureDefinition(BuildPrototypeKind.Inserter, () => new InserterStructure(), true, true),
         [BuildPrototypeKind.Wall] = new FactoryStructureDefinition(BuildPrototypeKind.Wall, () => new WallStructure(), true, true),
         [BuildPrototypeKind.AmmoAssembler] = new FactoryStructureDefinition(BuildPrototypeKind.AmmoAssembler, () => new AmmoAssemblerStructure(), true, true, MultiPortProcessingFootprint),
@@ -99,14 +116,10 @@ public static class FactoryStructureFactory
             definition = Definitions[BuildPrototypeKind.Belt];
         }
 
-        if (placement.Site is GridManager && !definition.AllowWorldPlacement)
+        var siteKind = FactoryIndustrialStandards.ResolveSiteKind(placement.Site);
+        if (!FactoryIndustrialStandards.IsStructureAllowed(kind, siteKind))
         {
-            throw new InvalidOperationException($"Structure kind '{kind}' is not configured for world placement.");
-        }
-
-        if (placement.Site is MobileFactorySite && !definition.AllowMobileInterior)
-        {
-            throw new InvalidOperationException($"Structure kind '{kind}' is not configured for mobile interior placement.");
+            throw new InvalidOperationException(FactoryIndustrialStandards.GetPlacementCompatibilityError(kind, siteKind));
         }
 
         var structure = definition.Creator();

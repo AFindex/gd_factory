@@ -691,8 +691,17 @@ public partial class FactoryDemo
         var placeholderVisual = FactoryTransportVisualFactory.CreateVisual(new FactoryItem(-101, BuildPrototypeKind.MiningDrill, FactoryItemKind.IronOre), FactoryConstants.CellSize);
         var billboardVisual = FactoryTransportVisualFactory.CreateVisual(new FactoryItem(-102, BuildPrototypeKind.Assembler, FactoryItemKind.CopperWire), FactoryConstants.CellSize);
         var ammoVisual = FactoryTransportVisualFactory.CreateVisual(new FactoryItem(-103, BuildPrototypeKind.Assembler, FactoryItemKind.AmmoMagazine), FactoryConstants.CellSize);
+        var worldBulkItem = new FactoryItem(-104, BuildPrototypeKind.MiningDrill, FactoryItemKind.IronOre, FactoryCargoForm.WorldBulk);
+        var worldPackedItem = new FactoryItem(-105, BuildPrototypeKind.CargoPacker, FactoryItemKind.IronOre, FactoryCargoForm.WorldPacked);
+        var interiorFeedItem = new FactoryItem(-106, BuildPrototypeKind.CargoUnpacker, FactoryItemKind.IronOre, FactoryCargoForm.InteriorFeed);
         var copperDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(FactoryItemKind.CopperOre, FactoryConstants.CellSize);
         var ammoDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(FactoryItemKind.AmmoMagazine, FactoryConstants.CellSize);
+        var worldBulkProfile = FactoryItemCatalog.ResolveVisualProfile(worldBulkItem);
+        var worldPackedProfile = FactoryItemCatalog.ResolveVisualProfile(worldPackedItem);
+        var interiorFeedProfile = FactoryItemCatalog.ResolveVisualProfile(interiorFeedItem);
+        var worldBulkDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(worldBulkItem, FactoryConstants.CellSize);
+        var worldPackedDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(worldPackedItem, FactoryConstants.CellSize);
+        var interiorFeedDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(interiorFeedItem, FactoryConstants.CellSize);
 
         var placeholderMesh = FindFirstMesh(placeholderVisual);
         var billboardMesh = FindFirstMesh(billboardVisual);
@@ -706,6 +715,14 @@ public partial class FactoryDemo
             && FactoryItemCatalog.GetIconTexture(FactoryItemKind.IronPlate) is not null
             && FactoryItemCatalog.GetIconTexture(FactoryItemKind.CopperWire) is not null
             && FactoryItemCatalog.GetIconTexture(FactoryItemKind.HighVelocityAmmo) is not null;
+        var cargoDisplayNamesDiffer =
+            FactoryPresentation.GetItemDisplayName(worldBulkItem) != FactoryPresentation.GetItemDisplayName(worldPackedItem)
+            && FactoryPresentation.GetItemDisplayName(worldPackedItem) != FactoryPresentation.GetItemDisplayName(interiorFeedItem);
+        var cargoProfilesDiffer =
+            !worldBulkProfile.Tint.IsEqualApprox(worldPackedProfile.Tint)
+            && !worldPackedProfile.Tint.IsEqualApprox(interiorFeedProfile.Tint)
+            && worldBulkProfile.PlaceholderScale.X > worldPackedProfile.PlaceholderScale.X
+            && worldPackedProfile.PlaceholderScale.X > interiorFeedProfile.PlaceholderScale.X;
 
         placeholderVisual.QueueFree();
         billboardVisual.QueueFree();
@@ -723,7 +740,11 @@ public partial class FactoryDemo
             && ammoDescriptors.Primary.Mode == FactoryTransportRenderMode.Billboard
             && ammoDescriptors.Primary.IsBatchable
             && ammoDescriptors.ResolveBatchableForTier(FactoryTransportRenderTier.Near).Mode == FactoryTransportRenderMode.Billboard
+            && worldBulkDescriptors.Primary.BatchKey != worldPackedDescriptors.Primary.BatchKey
+            && worldPackedDescriptors.Primary.BatchKey != interiorFeedDescriptors.Primary.BatchKey
             && distinctBaselineColors
+            && cargoDisplayNamesDiffer
+            && cargoProfilesDiffer
             && iconsPresent;
     }
 

@@ -73,13 +73,44 @@ public partial class SimulationController : Node
 
     public FactoryItem CreateItem(BuildPrototypeKind sourceKind, FactoryItemKind itemKind = FactoryItemKind.GenericCargo)
     {
-        return new FactoryItem(_nextItemId++, sourceKind, itemKind);
+        return CreateItem(FactorySiteKind.World, sourceKind, itemKind);
+    }
+
+    public FactoryItem CreateItem(
+        IFactorySite site,
+        BuildPrototypeKind sourceKind,
+        FactoryItemKind itemKind = FactoryItemKind.GenericCargo,
+        FactoryCargoForm? cargoForm = null)
+    {
+        return CreateItem(FactoryIndustrialStandards.ResolveSiteKind(site), sourceKind, itemKind, cargoForm);
+    }
+
+    public FactoryItem CreateItem(
+        FactorySiteKind siteKind,
+        BuildPrototypeKind sourceKind,
+        FactoryItemKind itemKind = FactoryItemKind.GenericCargo,
+        FactoryCargoForm? cargoForm = null)
+    {
+        return new FactoryItem(
+            _nextItemId++,
+            sourceKind,
+            itemKind,
+            FactoryCargoRules.ResolveProducedCargoForm(siteKind, sourceKind, itemKind, cargoForm));
     }
 
     public FactoryItem CreateItemWithId(int id, BuildPrototypeKind sourceKind, FactoryItemKind itemKind = FactoryItemKind.GenericCargo)
     {
+        return CreateItemWithId(id, sourceKind, itemKind, FactoryCargoRules.ResolveProducedCargoForm(FactorySiteKind.World, sourceKind, itemKind));
+    }
+
+    public FactoryItem CreateItemWithId(
+        int id,
+        BuildPrototypeKind sourceKind,
+        FactoryItemKind itemKind,
+        FactoryCargoForm cargoForm)
+    {
         EnsureNextItemId(id + 1);
-        return new FactoryItem(id, sourceKind, itemKind);
+        return new FactoryItem(id, sourceKind, itemKind, cargoForm);
     }
 
     public void EnsureNextItemId(int nextId)

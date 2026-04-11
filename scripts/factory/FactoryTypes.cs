@@ -23,6 +23,9 @@ public enum BuildPrototypeKind
     GunTurret,
     HeavyGunTurret,
     LargeStorageDepot,
+    CargoUnpacker,
+    CargoPacker,
+    TransferBuffer,
     OutputPort,
     InputPort,
     MiningInputPort
@@ -52,6 +55,19 @@ public enum FactoryItemKind
     MachinePart,
     AmmoMagazine,
     HighVelocityAmmo
+}
+
+public enum FactorySiteKind
+{
+    World,
+    Interior
+}
+
+public enum FactoryCargoForm
+{
+    WorldBulk,
+    WorldPacked,
+    InteriorFeed
 }
 
 public enum FacingDirection
@@ -134,16 +150,26 @@ public enum FactoryStatusTone
 
 public sealed class FactoryItem
 {
-    public FactoryItem(int id, BuildPrototypeKind sourceKind, FactoryItemKind itemKind = FactoryItemKind.GenericCargo)
+    public FactoryItem(
+        int id,
+        BuildPrototypeKind sourceKind,
+        FactoryItemKind itemKind = FactoryItemKind.GenericCargo,
+        FactoryCargoForm cargoForm = FactoryCargoForm.WorldPacked)
     {
         Id = id;
         SourceKind = sourceKind;
         ItemKind = itemKind;
+        CargoForm = cargoForm;
     }
 
     public int Id { get; }
     public BuildPrototypeKind SourceKind { get; }
     public FactoryItemKind ItemKind { get; }
+    public FactoryCargoForm CargoForm { get; }
+    public FactoryItem WithCargoForm(BuildPrototypeKind sourceKind, FactoryCargoForm cargoForm)
+    {
+        return new FactoryItem(Id, sourceKind, ItemKind, cargoForm);
+    }
 }
 
 public sealed class BuildPrototypeDefinition
@@ -194,6 +220,9 @@ public static class FactoryPresentation
             BuildPrototypeKind.GunTurret => new Color("CBD5E1"),
             BuildPrototypeKind.HeavyGunTurret => new Color("E2E8F0"),
             BuildPrototypeKind.LargeStorageDepot => new Color("64748B"),
+            BuildPrototypeKind.CargoUnpacker => new Color("38BDF8"),
+            BuildPrototypeKind.CargoPacker => new Color("F97316"),
+            BuildPrototypeKind.TransferBuffer => new Color("14B8A6"),
             BuildPrototypeKind.OutputPort => new Color("FB923C"),
             BuildPrototypeKind.InputPort => new Color("60A5FA"),
             BuildPrototypeKind.MiningInputPort => new Color("34D399"),
@@ -226,6 +255,9 @@ public static class FactoryPresentation
             BuildPrototypeKind.GunTurret => "机枪炮塔",
             BuildPrototypeKind.HeavyGunTurret => "重型炮塔",
             BuildPrototypeKind.LargeStorageDepot => "大型仓储",
+            BuildPrototypeKind.CargoUnpacker => "解包模块",
+            BuildPrototypeKind.CargoPacker => "封包模块",
+            BuildPrototypeKind.TransferBuffer => "中转缓冲",
             BuildPrototypeKind.OutputPort => "输出端口",
             BuildPrototypeKind.InputPort => "输入端口",
             BuildPrototypeKind.MiningInputPort => "采矿输入端口",
@@ -243,11 +275,22 @@ public static class FactoryPresentation
         return FactoryItemCatalog.GetDisplayName(itemKind);
     }
 
+    public static string GetCargoFormLabel(FactoryCargoForm cargoForm)
+    {
+        return cargoForm switch
+        {
+            FactoryCargoForm.WorldBulk => "世界散装",
+            FactoryCargoForm.WorldPacked => "世界封装",
+            FactoryCargoForm.InteriorFeed => "内部供料",
+            _ => cargoForm.ToString()
+        };
+    }
+
     public static string GetItemDisplayName(FactoryItem item)
     {
         return item.ItemKind == FactoryItemKind.BuildingKit
             ? GetBuildPrototypeDisplayName(item.SourceKind)
-            : GetItemKindLabel(item.ItemKind);
+            : FactoryItemCatalog.GetDisplayName(item.ItemKind, item.CargoForm);
     }
 
     public static Color GetItemAccentColor(FactoryItemKind itemKind)
@@ -259,7 +302,7 @@ public static class FactoryPresentation
     {
         return item.ItemKind == FactoryItemKind.BuildingKit
             ? GetBuildPrototypeAccentColor(item.SourceKind)
-            : GetItemAccentColor(item.ItemKind);
+            : FactoryItemCatalog.GetAccentColor(item.ItemKind, item.CargoForm);
     }
 
     public static Texture2D? GetItemIcon(FactoryItemKind itemKind)

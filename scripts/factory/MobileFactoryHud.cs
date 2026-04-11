@@ -15,46 +15,6 @@ public partial class MobileFactoryHud : CanvasLayer
     private const string SavesWorkspaceId = "saves";
     private const float EditorSidebarWidth = 292.0f;
     private const int CompactTabFontSize = 10;
-    private static readonly (string Title, BuildPrototypeKind[] Kinds)[] EditorPaletteCategories =
-    {
-        ("物流", new[]
-        {
-            BuildPrototypeKind.Belt,
-            BuildPrototypeKind.Splitter,
-            BuildPrototypeKind.Merger,
-            BuildPrototypeKind.Bridge,
-            BuildPrototypeKind.Storage,
-            BuildPrototypeKind.LargeStorageDepot,
-            BuildPrototypeKind.Inserter,
-            BuildPrototypeKind.Sink
-        }),
-        ("生产电力", new[]
-        {
-            BuildPrototypeKind.Generator,
-            BuildPrototypeKind.PowerPole,
-            BuildPrototypeKind.Smelter,
-            BuildPrototypeKind.Assembler,
-            BuildPrototypeKind.AmmoAssembler
-        }),
-        ("防御", new[]
-        {
-            BuildPrototypeKind.Wall,
-            BuildPrototypeKind.GunTurret,
-            BuildPrototypeKind.HeavyGunTurret
-        }),
-        ("站点与验证", new[]
-        {
-            BuildPrototypeKind.Loader,
-            BuildPrototypeKind.Unloader,
-            BuildPrototypeKind.LargeStorageDepot
-        }),
-        ("边界接口", new[]
-        {
-            BuildPrototypeKind.OutputPort,
-            BuildPrototypeKind.InputPort,
-            BuildPrototypeKind.MiningInputPort
-        })
-    };
 
     private static readonly Color EditorFocusColor = FactoryUiTheme.BorderStrong;
     private static readonly Color WorldFocusColor = FactoryUiTheme.Border;
@@ -337,7 +297,7 @@ public partial class MobileFactoryHud : CanvasLayer
 
         if (interactionMode == FactoryInteractionMode.Build && kind.HasValue)
         {
-            _selectionLabel.Text = $"[BUILD] 内部模式：建造 | {GetKindLabel(kind.Value)} | 朝向 {FactoryDirection.ToLabel(facing)}";
+            _selectionLabel.Text = $"[BUILD] 内部模式：建造 | {FactoryIndustrialStandards.GetSiteAwarePrototypeLabel(kind.Value, FactorySiteKind.Interior)} | 朝向 {FactoryDirection.ToLabel(facing)}";
             RefreshPaletteButtons(kind.Value);
         }
         else if (interactionMode == FactoryInteractionMode.Delete)
@@ -455,11 +415,12 @@ public partial class MobileFactoryHud : CanvasLayer
             FactoryInteractionMode.Delete => "删除模式",
             _ => "交互模式"
         };
-        _editorModeLabel.Text = $"[EDITOR] {paneText} | 生命周期：{stateText} | {interactionText} | 当前内部件数：{structureCount}";
+        var maintenanceNote = FactoryIndustrialStandards.GetBuildCatalog(FactorySiteKind.Interior).MaintenanceNote;
+        _editorModeLabel.Text = $"[EDITOR] {paneText} | 生命周期：{stateText} | {interactionText} | 当前内部件数：{structureCount}\n{maintenanceNote}";
 
         if (_testingEditorStateLabel is not null)
         {
-            _testingEditorStateLabel.Text = $"[CHECK] {paneText} | 生命周期：{stateText} | {interactionText} | 当前内部件数：{structureCount}";
+            _testingEditorStateLabel.Text = $"[CHECK] {paneText} | 生命周期：{stateText} | {interactionText} | 当前内部件数：{structureCount}\n{maintenanceNote}";
         }
     }
 

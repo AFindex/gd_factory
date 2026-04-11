@@ -154,6 +154,12 @@ public static class FactoryMapRuntimeLoader
         for (var i = 0; i < document.Structures.Count; i++)
         {
             var entry = document.Structures[i];
+            if (!FactoryIndustrialStandards.IsStructureAllowed(entry.Kind, FactorySiteKind.Interior))
+            {
+                throw new InvalidDataException(
+                    $"Interior map '{resourcePath}' contains a site-catalog mismatch: {FactoryIndustrialStandards.GetPlacementCompatibilityError(entry.Kind, FactorySiteKind.Interior)}");
+            }
+
             if (!MobileFactoryBoundaryAttachmentCatalog.IsAttachmentKind(entry.Kind))
             {
                 continue;
@@ -310,7 +316,7 @@ structure|Belt|0|0|South
                 for (var count = 0; count < seed.Count; count++)
                 {
                     structure.TryAcceptItem(
-                        simulation.CreateItem(entry.Kind, seed.ItemKind),
+                        simulation.CreateItem(structure.Site, entry.Kind, seed.ItemKind),
                         structure.GetInputCell(),
                         simulation);
                 }

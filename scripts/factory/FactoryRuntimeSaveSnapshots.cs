@@ -51,10 +51,11 @@ public sealed class FactoryRuntimeItemSnapshot
     public int Id { get; set; }
     public BuildPrototypeKind SourceKind { get; set; }
     public FactoryItemKind ItemKind { get; set; }
+    public FactoryCargoForm CargoForm { get; set; }
 
     public FactoryItem ToItem(SimulationController simulation)
     {
-        return simulation.CreateItemWithId(Id, SourceKind, ItemKind);
+        return simulation.CreateItemWithId(Id, SourceKind, ItemKind, CargoForm);
     }
 
     public static FactoryRuntimeItemSnapshot FromItem(FactoryItem item)
@@ -63,7 +64,8 @@ public sealed class FactoryRuntimeItemSnapshot
         {
             Id = item.Id,
             SourceKind = item.SourceKind,
-            ItemKind = item.ItemKind
+            ItemKind = item.ItemKind,
+            CargoForm = item.CargoForm
         };
     }
 }

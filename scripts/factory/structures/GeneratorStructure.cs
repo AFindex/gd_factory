@@ -43,6 +43,7 @@ public partial class GeneratorStructure : FactoryStructure, IFactoryItemReceiver
     {
         return IsOrthogonallyAdjacent(Cell, sourceCell)
             && FactoryItemCatalog.IsFuel(item.ItemKind)
+            && FactoryCargoRules.StructureAcceptsItem(Kind, FactoryIndustrialStandards.ResolveSiteKind(Site), item)
             && _fuelInventory.CanAcceptItem(item);
     }
 

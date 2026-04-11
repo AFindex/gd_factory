@@ -1,0 +1,26 @@
+# End-to-end dual-standards interior chain:
+# world mining input -> unpacker -> smelter -> packer -> world delivery
+version|1
+kind|Interior
+bounds|0|0|7|7
+
+structure|GunTurret|1|0|East
+seed|1|0|AmmoMagazine|6
+structure|Belt|6|1|East
+structure|MiningInputPort|0|3|West
+structure|CargoUnpacker|1|3|North
+structure|Belt|3|3|South
+structure|Belt|3|4|East
+structure|Smelter|4|4|East
+recipe|4|4|iron-smelting
+structure|Belt|5|4|East
+structure|Belt|6|4|North
+structure|CargoPacker|6|3|West
+structure|OutputPort|7|1|East
+structure|Generator|1|7|East
+seed|1|7|Coal|3
+structure|PowerPole|3|6|East
+structure|LargeStorageDepot|5|6|East
+structure|PowerPole|0|0|East
+structure|PowerPole|0|1|East
+structure|PowerPole|0|2|East

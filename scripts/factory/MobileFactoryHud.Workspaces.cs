@@ -653,6 +653,7 @@ public partial class MobileFactoryHud
 
     private void BuildEditorToolbar(Container parent)
     {
+        var catalog = FactoryIndustrialStandards.GetBuildCatalog(FactorySiteKind.Interior);
         var tabs = new TabContainer();
         tabs.MouseFilter = Control.MouseFilterEnum.Ignore;
         tabs.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
@@ -661,9 +662,9 @@ public partial class MobileFactoryHud
         FactoryUiTheme.ApplyTabContainerTheme(tabs);
         parent.AddChild(tabs);
 
-        for (var categoryIndex = 0; categoryIndex < EditorPaletteCategories.Length; categoryIndex++)
+        for (var categoryIndex = 0; categoryIndex < catalog.Categories.Count; categoryIndex++)
         {
-            var category = EditorPaletteCategories[categoryIndex];
+            var category = catalog.Categories[categoryIndex];
             var section = new VBoxContainer();
             section.Name = category.Title;
             section.MouseFilter = Control.MouseFilterEnum.Ignore;
@@ -679,12 +680,12 @@ public partial class MobileFactoryHud
             paletteGrid.AddThemeConstantOverride("v_separation", 6);
             section.AddChild(paletteGrid);
 
-            for (var kindIndex = 0; kindIndex < category.Kinds.Length; kindIndex++)
+            for (var kindIndex = 0; kindIndex < category.Kinds.Count; kindIndex++)
             {
                 var kind = category.Kinds[kindIndex];
                 var button = new Button
                 {
-                    Text = GetKindLabel(kind),
+                    Text = FactoryIndustrialStandards.GetBuildPaletteLabel(kind, FactorySiteKind.Interior),
                     ToggleMode = true,
                     MouseFilter = Control.MouseFilterEnum.Stop,
                     SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
@@ -838,32 +839,4 @@ public partial class MobileFactoryHud
         return FactoryUiTheme.CreatePanelStyle(FactoryUiTheme.SurfaceOverlay, borderColor, borderWidth: 2, cornerRadius: FactoryUiTheme.RadiusNone, contentMargin: 12);
     }
 
-    private static string GetKindLabel(BuildPrototypeKind kind)
-    {
-        return kind switch
-        {
-            BuildPrototypeKind.Belt => "传送带",
-            BuildPrototypeKind.Splitter => "分流器",
-            BuildPrototypeKind.Merger => "合并器",
-            BuildPrototypeKind.Bridge => "跨桥",
-            BuildPrototypeKind.Loader => "装载器",
-            BuildPrototypeKind.Unloader => "卸载器",
-            BuildPrototypeKind.Storage => "仓储",
-            BuildPrototypeKind.LargeStorageDepot => "大型仓储",
-            BuildPrototypeKind.Inserter => "机械臂",
-            BuildPrototypeKind.Wall => "墙体",
-            BuildPrototypeKind.AmmoAssembler => "弹药组装器",
-            BuildPrototypeKind.GunTurret => "机枪炮塔",
-            BuildPrototypeKind.HeavyGunTurret => "重型炮塔",
-            BuildPrototypeKind.OutputPort => "输出端口",
-            BuildPrototypeKind.InputPort => "输入端口",
-            BuildPrototypeKind.MiningInputPort => "采矿输入端口",
-            BuildPrototypeKind.Sink => "回收器",
-            BuildPrototypeKind.Generator => "发电机",
-            BuildPrototypeKind.PowerPole => "电线杆",
-            BuildPrototypeKind.Smelter => "熔炉",
-            BuildPrototypeKind.Assembler => "组装机",
-            _ => kind.ToString()
-        };
-    }
 }

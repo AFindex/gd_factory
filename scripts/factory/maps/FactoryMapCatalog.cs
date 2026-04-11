@@ -54,6 +54,7 @@ public static class FactoryMapCatalog
         var result = new List<FactoryMapCatalogEntry>();
         AddBundledEntry(result, FactoryMapPaths.StaticSandboxWorld, "Static Sandbox");
         AddBundledEntry(result, FactoryMapPaths.FocusedMobileWorld, "Mobile Focused World");
+        AddBundledEntry(result, FactoryMapPaths.DualStandardsMobileWorld, "Mobile Dual Standards World");
         AddRuntimeEntries(result, FactoryPersistencePaths.WorldMapDirectory);
         SortEntries(result);
         return result;
@@ -63,6 +64,7 @@ public static class FactoryMapCatalog
     {
         var result = new List<FactoryMapCatalogEntry>();
         AddBundledEntry(result, FactoryMapPaths.FocusedMobileInterior, "Mobile Focused Interior");
+        AddBundledEntry(result, FactoryMapPaths.DualStandardsMobileInterior, "Mobile Dual Standards Interior");
         AddRuntimeEntries(result, FactoryPersistencePaths.InteriorMapDirectory);
         SortEntries(result);
         return result;

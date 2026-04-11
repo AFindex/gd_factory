@@ -25,12 +25,13 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
     protected float CellSize { get; private set; } = FactoryConstants.CellSize;
     protected FactoryStructureFootprint Footprint { get; private set; } = FactoryStructureFootprint.SingleCell;
     protected FactoryStructureVisualController? VisualController => _visualController;
+    protected FactorySiteKind SiteKind => FactoryIndustrialStandards.ResolveSiteKind(Site);
 
     public IFactorySite Site { get; private set; } = null!;
     public Vector2I Cell { get; private set; }
     public FacingDirection Facing { get; protected set; }
     public string ReservationOwnerId { get; private set; } = string.Empty;
-    public string DisplayName => FactoryPresentation.GetKindLabel(Kind);
+    public string DisplayName => FactoryIndustrialStandards.GetSiteAwarePrototypeLabel(Kind, FactoryIndustrialStandards.ResolveSiteKind(Site));
     public virtual string InspectionTitle => $"{DisplayName} ({Cell.X}, {Cell.Y})";
     public virtual float MaxHealth => 36.0f;
     public float CurrentHealth => _currentHealth;
@@ -413,7 +414,11 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
     protected virtual FactoryStructureVisualProfile CreateVisualProfile()
     {
         return new FactoryStructureVisualProfile(
-            proceduralBuilder: _ => BuildVisuals());
+            proceduralBuilder: _ =>
+            {
+                BuildVisuals();
+                BuildSitePresentationAccents();
+            });
     }
 
     protected virtual FactoryStructureVisualState CreateVisualState(float tickAlpha)
@@ -435,6 +440,62 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
 
     protected virtual void BuildVisuals()
     {
+    }
+
+    protected virtual void BuildSitePresentationAccents()
+    {
+        if (SiteKind != FactorySiteKind.Interior)
+        {
+            return;
+        }
+
+        var previewSize = Footprint.GetPreviewSize(CellSize, Facing);
+        var deckWidth = Mathf.Max(CellSize * 0.96f, previewSize.X + (CellSize * 0.14f));
+        var deckDepth = Mathf.Max(CellSize * 0.96f, previewSize.Y + (CellSize * 0.14f));
+        var visualParent = GetVisualParent();
+
+        CreateBox(
+            visualParent,
+            "MaintenanceDeck",
+            new Vector3(deckWidth, 0.07f, deckDepth),
+            new Color("0F172A"),
+            new Vector3(0.0f, 0.035f, 0.0f));
+        CreateBox(
+            visualParent,
+            "MaintenanceTrim",
+            new Vector3(deckWidth * 0.92f, 0.02f, deckDepth * 0.92f),
+            new Color("334155"),
+            new Vector3(0.0f, 0.075f, 0.0f));
+
+        if (UsesEmbeddedCargoChannel())
+        {
+            CreateBox(
+                visualParent,
+                "CargoChannel",
+                new Vector3(deckWidth * 0.88f, 0.03f, Mathf.Max(CellSize * 0.16f, deckDepth * 0.24f)),
+                new Color("155E75"),
+                new Vector3(0.0f, 0.095f, 0.0f));
+            CreateBox(
+                visualParent,
+                "CargoChannelStripe",
+                new Vector3(deckWidth * 0.64f, 0.01f, Mathf.Max(CellSize * 0.05f, deckDepth * 0.08f)),
+                new Color("67E8F9"),
+                new Vector3(0.0f, 0.118f, 0.0f));
+            return;
+        }
+
+        CreateBox(
+            visualParent,
+            "MaintenanceWalkway",
+            new Vector3(deckWidth * 0.86f, 0.02f, Mathf.Max(CellSize * 0.22f, deckDepth * 0.24f)),
+            new Color("475569"),
+            new Vector3(0.0f, 0.085f, (deckDepth * 0.5f) - Mathf.Max(CellSize * 0.12f, deckDepth * 0.12f)));
+        CreateBox(
+            visualParent,
+            "AccessPanel",
+            new Vector3(Mathf.Max(CellSize * 0.18f, deckWidth * 0.14f), 0.10f, Mathf.Max(CellSize * 0.20f, deckDepth * 0.18f)),
+            new Color("CBD5E1"),
+            new Vector3((deckWidth * 0.5f) - Mathf.Max(CellSize * 0.14f, deckWidth * 0.10f), 0.13f, 0.0f));
     }
 
     protected MeshInstance3D CreateBox(string name, Vector3 size, Color color, Vector3? localPosition = null)
@@ -573,6 +634,19 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
     private Node GetVisualParent()
     {
         return _currentVisualParent ?? this;
+    }
+
+    private bool UsesEmbeddedCargoChannel()
+    {
+        return IsTransportNode
+            || this is FlowTransportStructure
+            || Kind == BuildPrototypeKind.TransferBuffer
+            || Kind == BuildPrototypeKind.Inserter
+            || Kind == BuildPrototypeKind.InputPort
+            || Kind == BuildPrototypeKind.MiningInputPort
+            || Kind == BuildPrototypeKind.OutputPort
+            || Kind == BuildPrototypeKind.CargoUnpacker
+            || Kind == BuildPrototypeKind.CargoPacker;
     }
 
     private void BuildCombatVisuals()

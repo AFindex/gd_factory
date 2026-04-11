@@ -12,41 +12,6 @@ public partial class FactoryHud : CanvasLayer
     private const string TestingWorkspaceId = "testing";
     private const string SavesWorkspaceId = "saves";
     private const int CompactTabFontSize = 10;
-    private static readonly (string Title, BuildPrototypeKind[] Kinds)[] BuildPaletteCategories =
-    {
-        ("物流与缓存", new[]
-        {
-            BuildPrototypeKind.Belt,
-            BuildPrototypeKind.Splitter,
-            BuildPrototypeKind.Merger,
-            BuildPrototypeKind.Bridge,
-            BuildPrototypeKind.Storage,
-            BuildPrototypeKind.LargeStorageDepot,
-            BuildPrototypeKind.Inserter,
-            BuildPrototypeKind.Sink
-        }),
-        ("生产与电力", new[]
-        {
-            BuildPrototypeKind.MiningDrill,
-            BuildPrototypeKind.Generator,
-            BuildPrototypeKind.PowerPole,
-            BuildPrototypeKind.Smelter,
-            BuildPrototypeKind.Assembler,
-            BuildPrototypeKind.AmmoAssembler
-        }),
-        ("防御与设施", new[]
-        {
-            BuildPrototypeKind.Wall,
-            BuildPrototypeKind.GunTurret,
-            BuildPrototypeKind.HeavyGunTurret
-        }),
-        ("站点与验证", new[]
-        {
-            BuildPrototypeKind.Loader,
-            BuildPrototypeKind.Unloader,
-            BuildPrototypeKind.LargeStorageDepot
-        })
-    };
 
     private readonly Dictionary<BuildPrototypeKind, Button> _selectionButtons = new();
     private readonly Dictionary<string, Control> _workspacePanels = new();
@@ -262,7 +227,7 @@ public partial class FactoryHud : CanvasLayer
         }
 
         var detailText = details ?? string.Empty;
-        _selectedLabel.Text = $"[SELECT] 当前建造：{FactoryPresentation.GetKindLabel(kind.Value)}\n{detailText}";
+        _selectedLabel.Text = $"[SELECT] 当前建造：{FactoryIndustrialStandards.GetSiteAwarePrototypeLabel(kind.Value, FactorySiteKind.World)}\n{detailText}";
         _selectedLabel.TooltipText = detailText;
     }
 
@@ -897,6 +862,7 @@ public partial class FactoryHud : CanvasLayer
 
     private void BuildSelectionCategories(Container parent)
     {
+        var catalog = FactoryIndustrialStandards.GetBuildCatalog(FactorySiteKind.World);
         var tabs = new TabContainer();
         tabs.MouseFilter = Control.MouseFilterEnum.Ignore;
         tabs.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
@@ -905,9 +871,9 @@ public partial class FactoryHud : CanvasLayer
         FactoryUiTheme.ApplyTabContainerTheme(tabs);
         parent.AddChild(tabs);
 
-        for (var index = 0; index < BuildPaletteCategories.Length; index++)
+        for (var index = 0; index < catalog.Categories.Count; index++)
         {
-            var category = BuildPaletteCategories[index];
+            var category = catalog.Categories[index];
             var section = new VBoxContainer();
             section.Name = category.Title;
             section.MouseFilter = Control.MouseFilterEnum.Ignore;
@@ -923,7 +889,7 @@ public partial class FactoryHud : CanvasLayer
             buttonGrid.AddThemeConstantOverride("v_separation", 6);
             section.AddChild(buttonGrid);
 
-            for (var kindIndex = 0; kindIndex < category.Kinds.Length; kindIndex++)
+            for (var kindIndex = 0; kindIndex < category.Kinds.Count; kindIndex++)
             {
                 var kind = category.Kinds[kindIndex];
                 CreateSelectionButton(buttonGrid, kind, GetBuildPaletteLabel(kind));
@@ -933,29 +899,7 @@ public partial class FactoryHud : CanvasLayer
 
     private static string GetBuildPaletteLabel(BuildPrototypeKind kind)
     {
-        return kind switch
-        {
-            BuildPrototypeKind.Belt => "2 传送带",
-            BuildPrototypeKind.Sink => "3 回收站",
-            BuildPrototypeKind.Splitter => "4 分流器",
-            BuildPrototypeKind.Merger => "5 合并器",
-            BuildPrototypeKind.Bridge => "6 跨桥",
-            BuildPrototypeKind.Loader => "7 装载器",
-            BuildPrototypeKind.Unloader => "8 卸载器",
-            BuildPrototypeKind.Storage => "9 仓储",
-            BuildPrototypeKind.Inserter => "0 机械臂",
-            BuildPrototypeKind.MiningDrill => "采矿机",
-            BuildPrototypeKind.Generator => "发电机",
-            BuildPrototypeKind.PowerPole => "电线杆",
-            BuildPrototypeKind.Smelter => "熔炉",
-            BuildPrototypeKind.Assembler => "组装机",
-            BuildPrototypeKind.LargeStorageDepot => "大型仓储",
-            BuildPrototypeKind.Wall => "墙体",
-            BuildPrototypeKind.AmmoAssembler => "弹药组装器",
-            BuildPrototypeKind.GunTurret => "机枪炮塔",
-            BuildPrototypeKind.HeavyGunTurret => "重型炮塔",
-            _ => FactoryPresentation.GetKindLabel(kind)
-        };
+        return FactoryIndustrialStandards.GetBuildPaletteLabel(kind, FactorySiteKind.World);
     }
 
     private static bool BlocksInteractiveInput(Control? control, Control? container)

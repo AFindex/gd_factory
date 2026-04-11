@@ -6,7 +6,9 @@ public partial class MobileFactoryDemo
     private const float MiningPortSmokeDeployTimeoutSeconds = 24.0f;
     private static bool RunFactoryMapSmokeChecks()
     {
-        return FactoryMapSmokeSupport.VerifyTargets(FactoryMapValidationCatalog.FocusedMobileBundleTargetId);
+        return FactoryMapSmokeSupport.VerifyTargets(
+            FactoryMapValidationCatalog.FocusedMobileBundleTargetId,
+            FactoryMapValidationCatalog.DualStandardsMobileBundleTargetId);
     }
     private static Vector2I GetPrimaryInputCell(FactoryStructure structure)
     {

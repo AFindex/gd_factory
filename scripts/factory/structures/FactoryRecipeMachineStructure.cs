@@ -440,9 +440,11 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
 
     private bool CanAcceptInput(FactoryItem item, Vector2I sourceCell)
     {
+        var siteKind = FactoryIndustrialStandards.ResolveSiteKind(Site);
         if (!CanReceiveFrom(sourceCell)
             || ActiveRecipe.Inputs.Count == 0
-            || !_inputInventory.CanAcceptItem(item))
+            || !_inputInventory.CanAcceptItem(item)
+            || !FactoryCargoRules.StructureAcceptsItem(Kind, siteKind, item))
         {
             return false;
         }
@@ -450,12 +452,14 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
         for (var index = 0; index < ActiveRecipe.Inputs.Count; index++)
         {
             var ingredient = ActiveRecipe.Inputs[index];
-            if (ingredient.ItemKind != item.ItemKind)
+            var requiredCargoForm = ResolveRequiredCargoForm(ingredient);
+            if (ingredient.ItemKind != item.ItemKind
+                || (requiredCargoForm.HasValue && item.CargoForm != requiredCargoForm.Value))
             {
                 continue;
             }
 
-            return _inputInventory.CountByKind(item.ItemKind) < ingredient.Amount * 2;
+            return _inputInventory.CountByKind(item.ItemKind, requiredCargoForm) < ingredient.Amount * 2;
         }
 
         return false;
@@ -463,7 +467,10 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
 
     private bool CanAcceptDetailInputItem(FactoryItem item)
     {
-        if (ActiveRecipe.Inputs.Count == 0 || !_inputInventory.CanAcceptItem(item))
+        var siteKind = FactoryIndustrialStandards.ResolveSiteKind(Site);
+        if (ActiveRecipe.Inputs.Count == 0
+            || !_inputInventory.CanAcceptItem(item)
+            || !FactoryCargoRules.StructureAcceptsItem(Kind, siteKind, item))
         {
             return false;
         }
@@ -471,12 +478,14 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
         for (var index = 0; index < ActiveRecipe.Inputs.Count; index++)
         {
             var ingredient = ActiveRecipe.Inputs[index];
-            if (ingredient.ItemKind != item.ItemKind)
+            var requiredCargoForm = ResolveRequiredCargoForm(ingredient);
+            if (ingredient.ItemKind != item.ItemKind
+                || (requiredCargoForm.HasValue && item.CargoForm != requiredCargoForm.Value))
             {
                 continue;
             }
 
-            return _inputInventory.CountByKind(item.ItemKind) < ingredient.Amount * 2;
+            return _inputInventory.CountByKind(item.ItemKind, requiredCargoForm) < ingredient.Amount * 2;
         }
 
         return false;
@@ -492,7 +501,7 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
         for (var index = 0; index < ActiveRecipe.Inputs.Count; index++)
         {
             var ingredient = ActiveRecipe.Inputs[index];
-            if (_inputInventory.CountByKind(ingredient.ItemKind) < ingredient.Amount)
+            if (_inputInventory.CountByKind(ingredient.ItemKind, ResolveRequiredCargoForm(ingredient)) < ingredient.Amount)
             {
                 return false;
             }
@@ -520,9 +529,10 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
         for (var index = 0; index < ActiveRecipe.Inputs.Count; index++)
         {
             var ingredient = ActiveRecipe.Inputs[index];
+            var requiredCargoForm = ResolveRequiredCargoForm(ingredient);
             for (var amountIndex = 0; amountIndex < ingredient.Amount; amountIndex++)
             {
-                _inputInventory.TryTakeFirstMatching(ingredient.ItemKind, out _);
+                _inputInventory.TryTakeFirstMatching(ingredient.ItemKind, requiredCargoForm, out _);
             }
         }
     }
@@ -534,9 +544,21 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
             var output = ActiveRecipe.Outputs[index];
             for (var amountIndex = 0; amountIndex < output.Amount; amountIndex++)
             {
-                _outputInventory.TryAddItem(simulation.CreateItem(Kind, output.ItemKind));
+                _outputInventory.TryAddItem(simulation.CreateItem(Site, Kind, output.ItemKind, output.CargoForm));
             }
         }
+    }
+
+    private FactoryCargoForm? ResolveRequiredCargoForm(FactoryRecipeIngredientDefinition ingredient)
+    {
+        if (ingredient.CargoForm.HasValue)
+        {
+            return ingredient.CargoForm.Value;
+        }
+
+        return FactoryIndustrialStandards.ResolveSiteKind(Site) == FactorySiteKind.Interior
+            ? FactoryCargoForm.InteriorFeed
+            : null;
     }
 
     private void TryDispatchBufferedOutput(SimulationController simulation)

@@ -36,6 +36,7 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
     public bool CanReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
         return FactoryPresentation.IsAmmoItem(item.ItemKind)
+            && FactoryCargoRules.StructureAcceptsItem(Kind, FactoryIndustrialStandards.ResolveSiteKind(Site), item)
             && IsOrthogonallyAdjacent(Cell, sourceCell)
             && _ammoInventory.CanAcceptItem(item);
     }
@@ -53,6 +54,7 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
     public override bool CanAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
         return FactoryPresentation.IsAmmoItem(item.ItemKind)
+            && FactoryCargoRules.StructureAcceptsItem(Kind, FactoryIndustrialStandards.ResolveSiteKind(Site), item)
             && IsOrthogonallyAdjacent(Cell, sourceCell)
             && _ammoInventory.CanAcceptItem(item);
     }

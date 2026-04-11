@@ -29,6 +29,7 @@ public partial class FactoryDemo : Node3D
         [BuildPrototypeKind.Bridge] = new BuildPrototypeDefinition(BuildPrototypeKind.Bridge, "跨桥", new Color("F59E0B"), "让南北和东西两路物流跨越而不互连。"),
         [BuildPrototypeKind.Loader] = new BuildPrototypeDefinition(BuildPrototypeKind.Loader, "装载器", new Color("FDBA74"), "把后方带上的物品装入前方机器或回收端。"),
         [BuildPrototypeKind.Unloader] = new BuildPrototypeDefinition(BuildPrototypeKind.Unloader, "卸载器", new Color("93C5FD"), "把机器端输出卸到前方传送网络。"),
+        [BuildPrototypeKind.CargoPacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoPacker, "封包站", new Color("F97316"), "把外场产物压成世界标准封装货物，供移动工厂边界或远程收货链继续运输。"),
         [BuildPrototypeKind.Storage] = new BuildPrototypeDefinition(BuildPrototypeKind.Storage, "仓储", new Color("94A3B8"), "缓存多件物品，可向前输出，也能被机械臂抓取。"),
         [BuildPrototypeKind.LargeStorageDepot] = new BuildPrototypeDefinition(BuildPrototypeKind.LargeStorageDepot, "大型仓储", new Color("64748B"), "占据 2x2 空间的大型缓存仓，可作为更稳定的物流缓冲点。"),
         [BuildPrototypeKind.Inserter] = new BuildPrototypeDefinition(BuildPrototypeKind.Inserter, "机械臂", new Color("FACC15"), "从后方抓取一件物品并向前投送。"),
@@ -1656,9 +1657,9 @@ public partial class FactoryDemo : Node3D
         }
 
         var definition = FactoryStructureFactory.GetDefinition(entry.Kind);
-        if (!definition.AllowWorldPlacement)
+        if (!FactoryIndustrialStandards.IsStructureAllowed(entry.Kind, FactorySiteKind.World))
         {
-            return $"{FactoryPresentation.GetKindLabel(entry.Kind)} 只能放在移动工厂内部。";
+            return FactoryIndustrialStandards.GetPlacementCompatibilityError(entry.Kind, FactorySiteKind.World);
         }
 
         if (!_grid.IsInBounds(targetCell))

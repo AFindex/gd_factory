@@ -163,6 +163,8 @@ public static class FactoryMapPaths
     public const string StaticSandboxWorld = "res://data/factory/maps/static-sandbox-world.nfmap";
     public const string FocusedMobileWorld = "res://data/factory/maps/mobile-focused-world.nfmap";
     public const string FocusedMobileInterior = "res://data/factory/maps/mobile-focused-interior.nfmap";
+    public const string DualStandardsMobileWorld = "res://data/factory/maps/mobile-dual-standards-world.nfmap";
+    public const string DualStandardsMobileInterior = "res://data/factory/maps/mobile-dual-standards-interior.nfmap";
 }
 
 public static class FactoryMapSerializer
@@ -579,14 +581,12 @@ public static class FactoryMapValidator
                 throw new InvalidDataException($"Unsupported structure kind '{structure.Kind}'.");
             }
 
-            if (document.Kind == FactoryMapKind.World && !definition.AllowWorldPlacement)
+            var siteKind = document.Kind == FactoryMapKind.Interior
+                ? FactorySiteKind.Interior
+                : FactorySiteKind.World;
+            if (!FactoryIndustrialStandards.IsStructureAllowed(structure.Kind, siteKind))
             {
-                throw new InvalidDataException($"Structure '{structure.Kind}' cannot be placed on a world map.");
-            }
-
-            if (document.Kind == FactoryMapKind.Interior && !definition.AllowMobileInterior)
-            {
-                throw new InvalidDataException($"Structure '{structure.Kind}' cannot be placed on an interior map.");
+                throw new InvalidDataException(FactoryIndustrialStandards.GetPlacementCompatibilityError(structure.Kind, siteKind));
             }
 
             if (!primaryCells.Add(structure.Cell))

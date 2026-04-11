@@ -136,12 +136,33 @@ internal static class FactoryMapValidationTopologyHelper
 {
     public static IReadOnlyList<Vector2I> GetInputCells(FactoryStructure structure)
     {
-        return FactoryTransportTopology.GetInputCells(structure);
+        return structure.Kind switch
+        {
+            BuildPrototypeKind.InputPort => System.Array.Empty<Vector2I>(),
+            BuildPrototypeKind.MiningInputPort => System.Array.Empty<Vector2I>(),
+            BuildPrototypeKind.OutputPort => new[]
+            {
+                structure.Cell - FactoryDirection.ToCellOffset(structure.Facing)
+            },
+            _ => FactoryTransportTopology.GetInputCells(structure)
+        };
     }
 
     public static IReadOnlyList<Vector2I> GetOutputCells(FactoryStructure structure)
     {
-        return FactoryTransportTopology.GetOutputCells(structure);
+        return structure.Kind switch
+        {
+            BuildPrototypeKind.InputPort => new[]
+            {
+                structure.Cell - FactoryDirection.ToCellOffset(structure.Facing)
+            },
+            BuildPrototypeKind.MiningInputPort => new[]
+            {
+                structure.Cell - FactoryDirection.ToCellOffset(structure.Facing)
+            },
+            BuildPrototypeKind.OutputPort => System.Array.Empty<Vector2I>(),
+            _ => FactoryTransportTopology.GetOutputCells(structure)
+        };
     }
 
     public static bool TryGetInputProvider(FactoryStructure receiver, Vector2I inputCell, out FactoryStructure? provider)
@@ -152,15 +173,19 @@ internal static class FactoryMapValidationTopologyHelper
             return false;
         }
 
+        var candidateOutputCells = GetOutputCells(candidate);
         foreach (var occupiedCell in receiver.GetOccupiedCells())
         {
-            if (!candidate.CanOutputTo(occupiedCell))
+            for (var outputIndex = 0; outputIndex < candidateOutputCells.Count; outputIndex++)
             {
-                continue;
-            }
+                if (candidateOutputCells[outputIndex] != occupiedCell)
+                {
+                    continue;
+                }
 
-            provider = candidate;
-            return true;
+                provider = candidate;
+                return true;
+            }
         }
 
         return false;
@@ -175,13 +200,18 @@ internal static class FactoryMapValidationTopologyHelper
         }
 
         var sourceCell = source.GetTransferOutputCell(outputCell);
-        if (!candidate.CanReceiveFrom(sourceCell))
+        var candidateInputCells = GetInputCells(candidate);
+        for (var inputIndex = 0; inputIndex < candidateInputCells.Count; inputIndex++)
         {
-            return false;
-        }
+            if (candidateInputCells[inputIndex] != sourceCell)
+            {
+                continue;
+            }
 
-        receiver = candidate;
-        return true;
+            receiver = candidate;
+            return true;
+        }
+        return false;
     }
 }
 
@@ -355,8 +385,11 @@ public static partial class FactoryMapValidationService
         SimulationController simulation,
         List<FactoryMapValidationDiagnostic> diagnostics)
     {
+        var context = new FactoryMapValidationContext(targetId, mapPath, document, structures, simulation);
         AnalyzeConnectivity(targetId, mapPath, structures, simulation, diagnostics);
-        AnalyzeRecipeSemantics(new FactoryMapValidationContext(targetId, mapPath, document, structures, simulation), diagnostics);
+        AnalyzeRecipeSemantics(context, diagnostics);
+        AnalyzeBoundaryFlowSemantics(context, diagnostics);
+        AnalyzeDualStandardsChain(context, diagnostics);
     }
 
     private static List<FactoryMapValidationDiagnostic> BuildFocusDiagnostics(FactoryMapValidationContext context, Vector2I cell)
@@ -418,7 +451,246 @@ public static partial class FactoryMapValidationService
         AnalyzeLogisticsConnectivity(context.TargetId, context.MapPath, structure, diagnostics);
         AnalyzePowerConnectivity(context.TargetId, context.MapPath, structure, CollectPowerNodes(context.Structures), context.Simulation, diagnostics);
         AnalyzeRecipeSemantics(context, diagnostics, structure, includeSatisfiedInfo: true);
+        AnalyzeBoundaryFlowSemantics(context, diagnostics, structure, includeSatisfiedInfo: true);
         return diagnostics;
+    }
+
+    private static void AnalyzeBoundaryFlowSemantics(
+        FactoryMapValidationContext context,
+        List<FactoryMapValidationDiagnostic> diagnostics,
+        FactoryStructure? focusStructure = null,
+        bool includeSatisfiedInfo = false)
+    {
+        for (var i = 0; i < context.Structures.Count; i++)
+        {
+            var structure = context.Structures[i];
+            if (focusStructure is not null && structure != focusStructure)
+            {
+                continue;
+            }
+
+            var expectation = FactoryCargoRules.DescribeBoundaryExpectation(structure.Kind);
+            if (includeSatisfiedInfo && !string.IsNullOrWhiteSpace(expectation))
+            {
+                diagnostics.Add(new FactoryMapValidationDiagnostic(
+                    context.TargetId,
+                    FactoryMapValidationSeverity.Info,
+                    "boundary-flow",
+                    expectation,
+                    context.MapPath,
+                    structure.Kind,
+                    structure.Cell));
+            }
+
+            switch (structure.Kind)
+            {
+                case BuildPrototypeKind.InputPort:
+                case BuildPrototypeKind.MiningInputPort:
+                    if (TryFindReachableDownstreamStructure(context, structure, IsInteriorUnpacker, CanRelayCargoPath, out var unpacker))
+                    {
+                        if (includeSatisfiedInfo && unpacker is not null)
+                        {
+                            diagnostics.Add(new FactoryMapValidationDiagnostic(
+                                context.TargetId,
+                                FactoryMapValidationSeverity.Info,
+                                "boundary-flow",
+                                $"Boundary intake reaches {unpacker.Kind} at ({unpacker.Cell.X}, {unpacker.Cell.Y}) before entering the interior feed network.",
+                                context.MapPath,
+                                structure.Kind,
+                                structure.Cell));
+                        }
+                    }
+                    else
+                    {
+                        diagnostics.Add(new FactoryMapValidationDiagnostic(
+                            context.TargetId,
+                            FactoryMapValidationSeverity.Warning,
+                            "boundary-flow",
+                            "Boundary intake has no reachable CargoUnpacker; cross-standard intake will stay blocked or semantically incomplete.",
+                            context.MapPath,
+                            structure.Kind,
+                            structure.Cell));
+                    }
+
+                    break;
+
+                case BuildPrototypeKind.OutputPort:
+                    if (TryFindReachableUpstreamStructure(context, structure, IsInteriorPacker, CanRelayCargoPath, out var packer))
+                    {
+                        if (includeSatisfiedInfo && packer is not null)
+                        {
+                            diagnostics.Add(new FactoryMapValidationDiagnostic(
+                                context.TargetId,
+                                FactoryMapValidationSeverity.Info,
+                                "boundary-flow",
+                                $"Boundary output is staged by {packer.Kind} at ({packer.Cell.X}, {packer.Cell.Y}) before leaving the hull.",
+                                context.MapPath,
+                                structure.Kind,
+                                structure.Cell));
+                        }
+                    }
+                    else
+                    {
+                        diagnostics.Add(new FactoryMapValidationDiagnostic(
+                            context.TargetId,
+                            FactoryMapValidationSeverity.Warning,
+                            "boundary-flow",
+                            "Boundary output has no reachable CargoPacker; interior feed cannot be exported as world-standard cargo.",
+                            context.MapPath,
+                            structure.Kind,
+                            structure.Cell));
+                    }
+
+                    break;
+
+                case BuildPrototypeKind.CargoUnpacker:
+                    if (!TryFindReachableUpstreamStructure(context, structure, IsBoundaryIntake, CanRelayCargoPath, out _))
+                    {
+                        diagnostics.Add(new FactoryMapValidationDiagnostic(
+                            context.TargetId,
+                            FactoryMapValidationSeverity.Warning,
+                            "cargo-conversion",
+                            "CargoUnpacker has no reachable world-side intake attachment upstream.",
+                            context.MapPath,
+                            structure.Kind,
+                            structure.Cell));
+                    }
+
+                    if (!TryFindReachableDownstreamStructure(context, structure, IsInteriorProcessingNode, CanRelayCargoPath, out _))
+                    {
+                        diagnostics.Add(new FactoryMapValidationDiagnostic(
+                            context.TargetId,
+                            FactoryMapValidationSeverity.Warning,
+                            "cargo-conversion",
+                            "CargoUnpacker does not feed any reachable interior processing or staging node.",
+                            context.MapPath,
+                            structure.Kind,
+                            structure.Cell));
+                    }
+
+                    break;
+
+                case BuildPrototypeKind.CargoPacker:
+                    if (!TryFindReachableUpstreamStructure(context, structure, IsInteriorProcessingNode, CanRelayCargoPath, out _))
+                    {
+                        diagnostics.Add(new FactoryMapValidationDiagnostic(
+                            context.TargetId,
+                            FactoryMapValidationSeverity.Warning,
+                            "cargo-conversion",
+                            "CargoPacker has no reachable interior feed source upstream.",
+                            context.MapPath,
+                            structure.Kind,
+                            structure.Cell));
+                    }
+
+                    if (!TryFindReachableDownstreamStructure(context, structure, structureCandidate => structureCandidate.Kind == BuildPrototypeKind.OutputPort, CanRelayCargoPath, out _))
+                    {
+                        diagnostics.Add(new FactoryMapValidationDiagnostic(
+                            context.TargetId,
+                            FactoryMapValidationSeverity.Warning,
+                            "cargo-conversion",
+                            "CargoPacker does not reach any boundary output port downstream.",
+                            context.MapPath,
+                            structure.Kind,
+                            structure.Cell));
+                    }
+
+                    break;
+            }
+        }
+    }
+
+    private static void AnalyzeDualStandardsChain(
+        FactoryMapValidationContext context,
+        List<FactoryMapValidationDiagnostic> diagnostics)
+    {
+        FactoryStructure? completedIntake = null;
+        FactoryStructure? completedUnpacker = null;
+        FactoryStructure? completedProcessing = null;
+        FactoryStructure? completedPacker = null;
+        FactoryStructure? completedOutput = null;
+
+        for (var i = 0; i < context.Structures.Count; i++)
+        {
+            var structure = context.Structures[i];
+            if (!IsBoundaryIntake(structure))
+            {
+                continue;
+            }
+
+            if (!TryFindReachableDownstreamStructure(context, structure, IsInteriorUnpacker, CanRelayCargoPath, out var unpacker)
+                || unpacker is null)
+            {
+                continue;
+            }
+
+            if (!TryFindReachableDownstreamStructure(context, unpacker, IsInteriorProcessingNode, CanRelayCargoPath, out var processingNode)
+                || processingNode is null)
+            {
+                continue;
+            }
+
+            if (!TryFindReachableDownstreamStructure(context, processingNode, IsInteriorPacker, CanRelayCargoPath, out var packer)
+                || packer is null)
+            {
+                continue;
+            }
+
+            if (!TryFindReachableDownstreamStructure(context, packer, candidate => candidate.Kind == BuildPrototypeKind.OutputPort, CanRelayCargoPath, out var outputPort)
+                || outputPort is null)
+            {
+                continue;
+            }
+
+            completedIntake = structure;
+            completedUnpacker = unpacker;
+            completedProcessing = processingNode;
+            completedPacker = packer;
+            completedOutput = outputPort;
+            break;
+        }
+
+        var hasDualStandardStructures = false;
+        for (var i = 0; i < context.Structures.Count; i++)
+        {
+            if (IsBoundaryIntake(context.Structures[i])
+                || context.Structures[i].Kind == BuildPrototypeKind.CargoUnpacker
+                || context.Structures[i].Kind == BuildPrototypeKind.CargoPacker
+                || context.Structures[i].Kind == BuildPrototypeKind.OutputPort)
+            {
+                hasDualStandardStructures = true;
+                break;
+            }
+        }
+
+        if (!hasDualStandardStructures)
+        {
+            return;
+        }
+
+        if (completedIntake is not null
+            && completedUnpacker is not null
+            && completedProcessing is not null
+            && completedPacker is not null
+            && completedOutput is not null)
+        {
+            diagnostics.Add(new FactoryMapValidationDiagnostic(
+                context.TargetId,
+                FactoryMapValidationSeverity.Info,
+                "dual-standards-chain",
+                $"Validated one world-to-interior chain: {completedIntake.Kind} -> {completedUnpacker.Kind} -> {completedProcessing.Kind} -> {completedPacker.Kind} -> {completedOutput.Kind}.",
+                context.MapPath,
+                completedIntake.Kind,
+                completedIntake.Cell));
+            return;
+        }
+
+        diagnostics.Add(new FactoryMapValidationDiagnostic(
+            context.TargetId,
+            FactoryMapValidationSeverity.Warning,
+            "dual-standards-chain",
+            "No complete world-to-interior-to-world conversion chain was found in the reconstructed layout.",
+            context.MapPath));
     }
 
     private static void AnalyzeRecipeSemantics(
@@ -653,7 +925,8 @@ public static partial class FactoryMapValidationService
 
         if (!TryGetActiveRecipe(structure, out var recipe) || recipe is null)
         {
-            return false;
+            return structure.Kind == BuildPrototypeKind.CargoUnpacker
+                || structure.Kind == BuildPrototypeKind.CargoPacker;
         }
 
         for (var i = 0; i < recipe.Outputs.Count; i++)
@@ -675,6 +948,8 @@ public static partial class FactoryMapValidationService
             case BuildPrototypeKind.LargeStorageDepot:
             case BuildPrototypeKind.Sink:
             case BuildPrototypeKind.OutputPort:
+            case BuildPrototypeKind.CargoUnpacker:
+            case BuildPrototypeKind.CargoPacker:
                 return true;
             case BuildPrototypeKind.Generator:
                 return FactoryItemCatalog.IsFuel(itemKind);
@@ -709,6 +984,123 @@ public static partial class FactoryMapValidationService
     private static bool CanRelayDownstream(FactoryStructure structure)
     {
         return CanRelayUpstream(structure);
+    }
+
+    private static bool TryFindReachableDownstreamStructure(
+        FactoryMapValidationContext context,
+        FactoryStructure structure,
+        Func<FactoryStructure, bool> matches,
+        Func<FactoryStructure, bool> canRelay,
+        out FactoryStructure? found)
+    {
+        found = null;
+        var visited = new HashSet<ulong> { structure.GetInstanceId() };
+        var queue = new Queue<FactoryStructure>(context.GetDownstreamNeighbors(structure));
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            if (!visited.Add(current.GetInstanceId()))
+            {
+                continue;
+            }
+
+            if (matches(current))
+            {
+                found = current;
+                return true;
+            }
+
+            if (!canRelay(current))
+            {
+                continue;
+            }
+
+            var downstream = context.GetDownstreamNeighbors(current);
+            for (var i = 0; i < downstream.Count; i++)
+            {
+                queue.Enqueue(downstream[i]);
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryFindReachableUpstreamStructure(
+        FactoryMapValidationContext context,
+        FactoryStructure structure,
+        Func<FactoryStructure, bool> matches,
+        Func<FactoryStructure, bool> canRelay,
+        out FactoryStructure? found)
+    {
+        found = null;
+        var visited = new HashSet<ulong> { structure.GetInstanceId() };
+        var queue = new Queue<FactoryStructure>(context.GetUpstreamNeighbors(structure));
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            if (!visited.Add(current.GetInstanceId()))
+            {
+                continue;
+            }
+
+            if (matches(current))
+            {
+                found = current;
+                return true;
+            }
+
+            if (!canRelay(current))
+            {
+                continue;
+            }
+
+            var upstream = context.GetUpstreamNeighbors(current);
+            for (var i = 0; i < upstream.Count; i++)
+            {
+                queue.Enqueue(upstream[i]);
+            }
+        }
+
+        return false;
+    }
+
+    private static bool CanRelayCargoPath(FactoryStructure structure)
+    {
+        return structure is FlowTransportStructure
+            || structure.Kind == BuildPrototypeKind.Storage
+            || structure.Kind == BuildPrototypeKind.LargeStorageDepot
+            || structure.Kind == BuildPrototypeKind.TransferBuffer
+            || structure.Kind == BuildPrototypeKind.Smelter
+            || structure.Kind == BuildPrototypeKind.Assembler
+            || structure.Kind == BuildPrototypeKind.AmmoAssembler
+            || structure.Kind == BuildPrototypeKind.CargoUnpacker
+            || structure.Kind == BuildPrototypeKind.CargoPacker;
+    }
+
+    private static bool IsBoundaryIntake(FactoryStructure structure)
+    {
+        return structure.Kind == BuildPrototypeKind.InputPort
+            || structure.Kind == BuildPrototypeKind.MiningInputPort;
+    }
+
+    private static bool IsInteriorUnpacker(FactoryStructure structure)
+    {
+        return structure.Kind == BuildPrototypeKind.CargoUnpacker;
+    }
+
+    private static bool IsInteriorPacker(FactoryStructure structure)
+    {
+        return structure.Kind == BuildPrototypeKind.CargoPacker;
+    }
+
+    private static bool IsInteriorProcessingNode(FactoryStructure structure)
+    {
+        return structure.Kind == BuildPrototypeKind.TransferBuffer
+            || structure.Kind == BuildPrototypeKind.Smelter
+            || structure.Kind == BuildPrototypeKind.Assembler
+            || structure.Kind == BuildPrototypeKind.AmmoAssembler
+            || structure.Kind == BuildPrototypeKind.Storage
+            || structure.Kind == BuildPrototypeKind.LargeStorageDepot;
     }
 
     private static bool TryGetActiveRecipe(FactoryStructure structure, out FactoryRecipeDefinition? recipe)

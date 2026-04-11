@@ -154,6 +154,7 @@ internal sealed class FactoryInventoryItemStack
     public bool CanAccept(FactoryItem item)
     {
         return item.ItemKind == ItemKind
+            && item.CargoForm == PeekFirst().CargoForm
             && (item.ItemKind != FactoryItemKind.BuildingKit || item.SourceKind == PeekFirst().SourceKind)
             && !IsFull;
     }
@@ -629,10 +630,17 @@ public sealed class FactorySlottedItemInventory
 
     public bool TryPeekFirstMatching(FactoryItemKind itemKind, out FactoryItem? item)
     {
+        return TryPeekFirstMatching(itemKind, null, out item);
+    }
+
+    public bool TryPeekFirstMatching(FactoryItemKind itemKind, FactoryCargoForm? cargoForm, out FactoryItem? item)
+    {
         for (var index = 0; index < _slotOrder.Count; index++)
         {
             var slot = _slotOrder[index];
-            if (_items.TryGetValue(slot, out var stack) && stack.ItemKind == itemKind)
+            if (_items.TryGetValue(slot, out var stack)
+                && stack.ItemKind == itemKind
+                && (!cargoForm.HasValue || stack.PeekFirst().CargoForm == cargoForm.Value))
             {
                 item = stack.PeekFirst();
                 return true;
@@ -645,10 +653,18 @@ public sealed class FactorySlottedItemInventory
 
     public bool TryTakeFirstMatching(FactoryItemKind itemKind, out FactoryItem? item)
     {
+        return TryTakeFirstMatching(itemKind, null, out item);
+    }
+
+    public bool TryTakeFirstMatching(FactoryItemKind itemKind, FactoryCargoForm? cargoForm, out FactoryItem? item)
+    {
         for (var index = 0; index < _slotOrder.Count; index++)
         {
             var slot = _slotOrder[index];
-            if (_items.TryGetValue(slot, out var stack) && stack.ItemKind == itemKind && stack.TryTakeFirst(out item))
+            if (_items.TryGetValue(slot, out var stack)
+                && stack.ItemKind == itemKind
+                && (!cargoForm.HasValue || stack.PeekFirst().CargoForm == cargoForm.Value)
+                && stack.TryTakeFirst(out item))
             {
                 _itemCount--;
                 if (stack.IsEmpty)
@@ -683,12 +699,13 @@ public sealed class FactorySlottedItemInventory
         return snapshot;
     }
 
-    public int CountByKind(FactoryItemKind itemKind)
+    public int CountByKind(FactoryItemKind itemKind, FactoryCargoForm? cargoForm = null)
     {
         var total = 0;
         foreach (var stack in _items.Values)
         {
-            if (stack.ItemKind == itemKind)
+            if (stack.ItemKind == itemKind
+                && (!cargoForm.HasValue || stack.PeekFirst().CargoForm == cargoForm.Value))
             {
                 total += stack.Count;
             }
@@ -850,6 +867,11 @@ public sealed class FactorySlottedItemInventory
         for (var index = 1; index < items.Count; index++)
         {
             if (items[index].ItemKind != first.ItemKind)
+            {
+                return false;
+            }
+
+            if (items[index].CargoForm != first.CargoForm)
             {
                 return false;
             }

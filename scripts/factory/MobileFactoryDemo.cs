@@ -30,31 +30,6 @@ public partial class MobileFactoryDemo : Node3D
     private static readonly Vector2I FocusedIronBufferCell = new(1, 4);
     private static readonly Vector2I FocusedWireBufferCell = new(1, 5);
     private static readonly Vector2I FocusedDepotAnchorCell = new(5, 6);
-    private static readonly BuildPrototypeKind[] InteriorPalette =
-    {
-        BuildPrototypeKind.Belt,
-        BuildPrototypeKind.Splitter,
-        BuildPrototypeKind.Merger,
-        BuildPrototypeKind.Bridge,
-        BuildPrototypeKind.Loader,
-        BuildPrototypeKind.Unloader,
-        BuildPrototypeKind.Sink,
-        BuildPrototypeKind.Storage,
-        BuildPrototypeKind.LargeStorageDepot,
-        BuildPrototypeKind.Inserter,
-        BuildPrototypeKind.Wall,
-        BuildPrototypeKind.AmmoAssembler,
-        BuildPrototypeKind.GunTurret,
-        BuildPrototypeKind.HeavyGunTurret,
-        BuildPrototypeKind.OutputPort,
-        BuildPrototypeKind.InputPort,
-        BuildPrototypeKind.MiningInputPort,
-        BuildPrototypeKind.Generator,
-        BuildPrototypeKind.PowerPole,
-        BuildPrototypeKind.Smelter,
-        BuildPrototypeKind.Assembler
-    };
-
     private static readonly Key[] InteriorPaletteKeys =
     {
         Key.Key1,
@@ -81,8 +56,9 @@ public partial class MobileFactoryDemo : Node3D
         [BuildPrototypeKind.Splitter] = new BuildPrototypeDefinition(BuildPrototypeKind.Splitter, "分流器", new Color("C4B5FD"), "将后方输入分到左右两路。"),
         [BuildPrototypeKind.Merger] = new BuildPrototypeDefinition(BuildPrototypeKind.Merger, "合并器", new Color("99F6E4"), "把后方、左侧和右侧三路物流汇成前方一路。"),
         [BuildPrototypeKind.Bridge] = new BuildPrototypeDefinition(BuildPrototypeKind.Bridge, "跨桥", new Color("F59E0B"), "让南北和东西两路物流跨越而不互连。"),
-        [BuildPrototypeKind.Loader] = new BuildPrototypeDefinition(BuildPrototypeKind.Loader, "装载器", new Color("FDBA74"), "把后方带上的物品装入前方机器或回收端。"),
-        [BuildPrototypeKind.Unloader] = new BuildPrototypeDefinition(BuildPrototypeKind.Unloader, "卸载器", new Color("93C5FD"), "把机器端输出卸到前方传送网络。"),
+        [BuildPrototypeKind.CargoUnpacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoUnpacker, "解包模块", new Color("38BDF8"), "把世界散装或封装货物拆成舱内供料单元，供后续模块处理。"),
+        [BuildPrototypeKind.CargoPacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoPacker, "封包模块", new Color("F97316"), "把内部供料重新压成世界标准封装货物，便于跨边界输出。"),
+        [BuildPrototypeKind.TransferBuffer] = new BuildPrototypeDefinition(BuildPrototypeKind.TransferBuffer, "中转缓冲槽", new Color("14B8A6"), "位于维护通路边的嵌入缓冲槽，用来整理舱内标准化供料。"),
         [BuildPrototypeKind.Sink] = new BuildPrototypeDefinition(BuildPrototypeKind.Sink, "回收器", new Color("FDE68A"), "吞掉输入物品并作为内部消费端。"),
         [BuildPrototypeKind.Storage] = new BuildPrototypeDefinition(BuildPrototypeKind.Storage, "仓储", new Color("94A3B8"), "缓存多件物品，可向前输出，也能被机械臂抓取。"),
         [BuildPrototypeKind.LargeStorageDepot] = new BuildPrototypeDefinition(BuildPrototypeKind.LargeStorageDepot, "大型仓储", new Color("64748B"), "占据 2x2 内部格子的仓储缓冲区，用于宽体移动工厂案例。"),
@@ -91,9 +67,9 @@ public partial class MobileFactoryDemo : Node3D
         [BuildPrototypeKind.AmmoAssembler] = new BuildPrototypeDefinition(BuildPrototypeKind.AmmoAssembler, "弹药组装器", new Color("FB923C"), "在内部持续生产弹药，直接喂给炮塔。"),
         [BuildPrototypeKind.GunTurret] = new BuildPrototypeDefinition(BuildPrototypeKind.GunTurret, "机枪炮塔", new Color("CBD5E1"), "会跟随移动工厂整体旋转，对世界中的敌人自动转向并射击。"),
         [BuildPrototypeKind.HeavyGunTurret] = new BuildPrototypeDefinition(BuildPrototypeKind.HeavyGunTurret, "重型炮塔", new Color("E2E8F0"), "占据 2x2 内部格子，消耗高速弹药并发射独立炮弹。"),
-        [BuildPrototypeKind.OutputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.OutputPort, "输出端口", new Color("FB923C"), "将移动工厂内部物流送往世界网格。"),
-        [BuildPrototypeKind.InputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.InputPort, "输入端口", new Color("60A5FA"), "把世界侧物流导入移动工厂内部。"),
-        [BuildPrototypeKind.MiningInputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.MiningInputPort, "采矿输入端口", new Color("34D399"), "部署后会在工厂外侧展开完整采矿预览；有矿位会部署蓝色采矿桩，无矿位会保留黄色标记。"),
+        [BuildPrototypeKind.OutputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.OutputPort, "输出端口", new Color("FB923C"), "将已经封包的舱内货物送往世界网格。"),
+        [BuildPrototypeKind.InputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.InputPort, "输入端口", new Color("60A5FA"), "把世界封装物流导入舱内，再由解包模块转换为维护层可理解的供料。"),
+        [BuildPrototypeKind.MiningInputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.MiningInputPort, "采矿输入端口", new Color("34D399"), "部署后会在工厂外侧展开完整采矿预览；散装原料会先穿过舱壳，再交给解包模块处理。"),
         [BuildPrototypeKind.Generator] = new BuildPrototypeDefinition(BuildPrototypeKind.Generator, "发电机", new Color("FB923C"), "消耗煤炭发电，为移动工厂内部设备提供基础电力。"),
         [BuildPrototypeKind.PowerPole] = new BuildPrototypeDefinition(BuildPrototypeKind.PowerPole, "电线杆", new Color("FDE68A"), "延伸移动工厂内部的供电覆盖，并可预览连线。"),
         [BuildPrototypeKind.Smelter] = new BuildPrototypeDefinition(BuildPrototypeKind.Smelter, "熔炉", new Color("CBD5E1"), "消耗电力把矿石炼成铁板，便于在内部试配生产链。"),
@@ -1442,16 +1418,17 @@ public partial class MobileFactoryDemo : Node3D
             return true;
         }
 
-        for (var i = 0; i < InteriorPalette.Length && i < InteriorPaletteKeys.Length; i++)
+        var interiorPalette = GetInteriorHotkeyPalette();
+        for (var i = 0; i < interiorPalette.Count && i < InteriorPaletteKeys.Length; i++)
         {
             if (keyEvent.Keycode != InteriorPaletteKeys[i])
             {
                 continue;
             }
 
-            SelectInteriorBuildKind(_selectedInteriorKind == InteriorPalette[i] && _interiorInteractionMode == FactoryInteractionMode.Build
+            SelectInteriorBuildKind(_selectedInteriorKind == interiorPalette[i] && _interiorInteractionMode == FactoryInteractionMode.Build
                 ? null
-                : InteriorPalette[i]);
+                : interiorPalette[i]);
             return true;
         }
 
@@ -2522,6 +2499,7 @@ public partial class MobileFactoryDemo : Node3D
             $"Profile: {_mobileFactory.Profile.Id}\n" +
             $"Preset: {_mobileFactory.InteriorPreset.Id}\n" +
             $"State: {stateText} | Anchor: {anchorText}\n" +
+            $"Interior standard: {FactoryIndustrialStandards.GetBuildCatalog(FactorySiteKind.Interior).PreviewStyleLabel}\n" +
             $"Interior structures: {CountEditableInteriorStructures()}\n" +
             $"Connected input ports: {CountConnectedAttachments(BuildPrototypeKind.InputPort)} | Mining inputs: {CountConnectedAttachments(BuildPrototypeKind.MiningInputPort)}\n" +
             $"Connected output ports: {CountConnectedAttachments(BuildPrototypeKind.OutputPort)}";
@@ -2776,7 +2754,7 @@ public partial class MobileFactoryDemo : Node3D
         TraceLog($"PlaceInteriorStructure cell={_hoveredInteriorCell} kind={placementKind} usesPlayerInventory={usesPlayerInventory} placed={placed}");
         if (placed)
         {
-            _interiorPreviewMessage = $"已在内部格 ({_hoveredInteriorCell.X}, {_hoveredInteriorCell.Y}) 放置{_definitions[placementKind].DisplayName}。";
+            _interiorPreviewMessage = $"已在内部格 ({_hoveredInteriorCell.X}, {_hoveredInteriorCell.Y}) 放置{GetInteriorDisplayName(placementKind)}。";
             if (usesPlayerInventory)
             {
                 var consumed = TryConsumeSelectedPlayerPlaceable();
@@ -3317,9 +3295,9 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         var definition = FactoryStructureFactory.GetDefinition(entry.Kind);
-        if (!definition.AllowMobileInterior)
+        if (!FactoryIndustrialStandards.IsStructureAllowed(entry.Kind, FactorySiteKind.Interior))
         {
-            return $"{FactoryPresentation.GetKindLabel(entry.Kind)} 不能放在移动工厂内部。";
+            return FactoryIndustrialStandards.GetPlacementCompatibilityError(entry.Kind, FactorySiteKind.Interior);
         }
 
         if (!_mobileFactory.InteriorSite.IsInBounds(targetCell))
@@ -4127,20 +4105,37 @@ public partial class MobileFactoryDemo : Node3D
 
     private string DescribeInteriorPlacementPreview(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
     {
-        var displayName = _definitions[kind].DisplayName;
+        var displayName = GetInteriorDisplayName(kind);
         if (_mobileFactory is not null
             && kind == BuildPrototypeKind.Belt
             && FactoryTransportTopology.TryGetBeltMidspanMergeTarget(_mobileFactory.InteriorSite, cell, facing, out var mergeTargetCell))
         {
-            return $"可在内部格 ({cell.X}, {cell.Y}) 放置{displayName}，并以 T 字方式并入 ({mergeTargetCell.X}, {mergeTargetCell.Y}) 的传送带。";
+            return $"可在内部格 ({cell.X}, {cell.Y}) 铺设{displayName}，并把供料并入 ({mergeTargetCell.X}, {mergeTargetCell.Y}) 的嵌入物流层。";
         }
 
         if (kind == BuildPrototypeKind.Merger)
         {
-            return $"可在内部格 ({cell.X}, {cell.Y}) 放置{displayName}，三入口分别来自后方、左侧和右侧。";
+            return $"可在内部格 ({cell.X}, {cell.Y}) 放置{displayName}，把三路舱内供料汇入同一模块接口。";
         }
 
-        return $"可在内部格 ({cell.X}, {cell.Y}) 放置{displayName}。";
+        if (kind == BuildPrototypeKind.CargoUnpacker || kind == BuildPrototypeKind.CargoPacker || kind == BuildPrototypeKind.TransferBuffer)
+        {
+            return $"可在内部格 ({cell.X}, {cell.Y}) 布置{displayName}，让维护通路与嵌入物流层在这里交汇。";
+        }
+
+        return $"可在内部格 ({cell.X}, {cell.Y}) 放置{displayName}，作为维护层可进入的舱段模块。";
+    }
+
+    private static IReadOnlyList<BuildPrototypeKind> GetInteriorHotkeyPalette()
+    {
+        return FactoryIndustrialStandards.GetHotkeyPaletteKinds(FactorySiteKind.Interior, InteriorPaletteKeys.Length);
+    }
+
+    private string GetInteriorDisplayName(BuildPrototypeKind kind)
+    {
+        return _definitions.TryGetValue(kind, out var definition)
+            ? definition.DisplayName
+            : FactoryIndustrialStandards.GetSiteAwarePrototypeLabel(kind, FactorySiteKind.Interior);
     }
 
 

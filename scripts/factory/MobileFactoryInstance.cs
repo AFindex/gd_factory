@@ -422,6 +422,12 @@ public sealed class MobileFactoryInstance
 
     public bool CanPlaceInterior(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
     {
+        var siteKind = FactoryIndustrialStandards.ResolveSiteKind(InteriorSite);
+        if (!FactoryIndustrialStandards.IsStructureAllowed(kind, siteKind))
+        {
+            return false;
+        }
+
         if (MobileFactoryBoundaryAttachmentCatalog.IsAttachmentKind(kind))
         {
             return CanPlaceAttachment(kind, cell, facing);
@@ -588,6 +594,12 @@ public sealed class MobileFactoryInstance
             else
             {
                 lines.Add($"{displayLabel} {i + 1}：朝{FactoryDirection.ToLabel(attachment.Facing)}，当前{stateLabel}");
+            }
+
+            var expectation = FactoryCargoRules.DescribeBoundaryExpectation(attachment.Kind);
+            if (!string.IsNullOrWhiteSpace(expectation))
+            {
+                lines[^1] += $" | {expectation}";
             }
         }
 

@@ -220,6 +220,7 @@ public static class FactoryMapValidationCatalog
 {
     public const string StaticSandboxWorldTargetId = "static-sandbox-world";
     public const string FocusedMobileBundleTargetId = "focused-mobile-bundle";
+    public const string DualStandardsMobileBundleTargetId = "dual-standards-mobile-bundle";
 
     private static readonly FactoryMapValidationTarget[] Targets =
     {
@@ -239,6 +240,17 @@ public static class FactoryMapValidationCatalog
             {
                 new FactoryMapValidationDeploymentProbe("anchor-a", "Focused logistics anchor A", new Vector2I(-6, -3), FacingDirection.East),
                 new FactoryMapValidationDeploymentProbe("anchor-b", "Focused logistics anchor B", new Vector2I(2, 3), FacingDirection.East)
+            }),
+        new(
+            DualStandardsMobileBundleTargetId,
+            "Dual Standards Mobile Bundle",
+            FactoryMapValidationTargetKind.MobileFactoryBundle,
+            FactoryMapPaths.DualStandardsMobileWorld,
+            FactoryMapPaths.DualStandardsMobileInterior,
+            MobileFactoryScenarioLibrary.CreateFocusedDemoProfile,
+            new[]
+            {
+                new FactoryMapValidationDeploymentProbe("dual-anchor-b", "Dual-standards logistics anchor B", new Vector2I(2, 3), FacingDirection.East)
             })
     };
 

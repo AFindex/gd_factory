@@ -2,26 +2,30 @@ using System.Collections.Generic;
 
 public sealed class FactoryRecipeIngredientDefinition
 {
-    public FactoryRecipeIngredientDefinition(FactoryItemKind itemKind, int amount)
+    public FactoryRecipeIngredientDefinition(FactoryItemKind itemKind, int amount, FactoryCargoForm? cargoForm = null)
     {
         ItemKind = itemKind;
         Amount = amount < 1 ? 1 : amount;
+        CargoForm = cargoForm;
     }
 
     public FactoryItemKind ItemKind { get; }
     public int Amount { get; }
+    public FactoryCargoForm? CargoForm { get; }
 }
 
 public sealed class FactoryRecipeOutputDefinition
 {
-    public FactoryRecipeOutputDefinition(FactoryItemKind itemKind, int amount)
+    public FactoryRecipeOutputDefinition(FactoryItemKind itemKind, int amount, FactoryCargoForm? cargoForm = null)
     {
         ItemKind = itemKind;
         Amount = amount < 1 ? 1 : amount;
+        CargoForm = cargoForm;
     }
 
     public FactoryItemKind ItemKind { get; }
     public int Amount { get; }
+    public FactoryCargoForm? CargoForm { get; }
 }
 
 public sealed class FactoryRecipeDefinition

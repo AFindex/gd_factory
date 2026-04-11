@@ -388,7 +388,7 @@ public partial class MobileFactoryOutputPortStructure : MobileFactoryBoundaryAtt
     protected override bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell)
     {
         targetCell = Cell + FactoryDirection.ToCellOffset(Facing);
-        return true;
+        return FactoryCargoRules.StructureAcceptsItem(Kind, FactorySiteKind.Interior, item);
     }
 
     protected override bool TryDispatchItem(TransitItemState state, SimulationController simulation)
@@ -460,7 +460,8 @@ public partial class MobileFactoryInputPortStructure : MobileFactoryBoundaryAtta
     protected override bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell)
     {
         targetCell = Cell - FactoryDirection.ToCellOffset(Facing);
-        return IsWorldFlowReady;
+        return IsWorldFlowReady
+            && FactoryCargoRules.StructureAcceptsItem(Kind, FactorySiteKind.Interior, item);
     }
 
     protected override bool TryDispatchItem(TransitItemState state, SimulationController simulation)
@@ -654,7 +655,7 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
         var outputKind = FactoryResourceCatalog.GetOutputItemKind(_resourceKind.Value);
         foreach (var stakeCell in GetReadyStakeCellsForMining())
         {
-            var item = simulation.CreateItem(Kind, outputKind);
+            var item = simulation.CreateItem(FactorySiteKind.World, Kind, outputKind, FactoryCargoForm.WorldBulk);
             if (!TryReceiveProvidedItem(item, stakeCell, simulation))
             {
                 continue;
@@ -854,7 +855,8 @@ public partial class MobileFactoryMiningInputPortStructure : MobileFactoryBounda
     protected override bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell)
     {
         targetCell = Cell - FactoryDirection.ToCellOffset(Facing);
-        return IsWorldFlowReady;
+        return IsWorldFlowReady
+            && FactoryCargoRules.StructureAcceptsItem(Kind, FactorySiteKind.Interior, item);
     }
 
     protected override int GetTransitLaneKey(Vector2I sourceCell, Vector2I targetCell)

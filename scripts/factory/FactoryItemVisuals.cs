@@ -183,9 +183,26 @@ public static partial class FactoryItemCatalog
         return GetDefinition(itemKind).DisplayName;
     }
 
+    public static string GetDisplayName(FactoryItemKind itemKind, FactoryCargoForm cargoForm)
+    {
+        return $"{GetDisplayName(itemKind)}（{FactoryPresentation.GetCargoFormLabel(cargoForm)}）";
+    }
+
     public static Color GetAccentColor(FactoryItemKind itemKind)
     {
         return GetDefinition(itemKind).AccentColor;
+    }
+
+    public static Color GetAccentColor(FactoryItemKind itemKind, FactoryCargoForm cargoForm)
+    {
+        var accent = GetAccentColor(itemKind);
+        return cargoForm switch
+        {
+            FactoryCargoForm.WorldBulk => accent.Darkened(0.10f),
+            FactoryCargoForm.WorldPacked => accent.Lightened(0.06f),
+            FactoryCargoForm.InteriorFeed => accent.Lightened(0.18f),
+            _ => accent
+        };
     }
 
     public static bool IsFuel(FactoryItemKind itemKind)
@@ -201,6 +218,47 @@ public static partial class FactoryItemCatalog
     public static int GetMaxStackSize(FactoryItemKind itemKind)
     {
         return GetDefinition(itemKind).MaxStackSize;
+    }
+
+    public static FactoryTransportVisualProfile ResolveVisualProfile(FactoryItem item)
+    {
+        return ResolveVisualProfile(item.ItemKind, item.CargoForm);
+    }
+
+    public static FactoryTransportVisualProfile ResolveVisualProfile(FactoryItemKind itemKind, FactoryCargoForm cargoForm)
+    {
+        var definition = GetDefinition(itemKind);
+        var baseProfile = definition.VisualProfile;
+        return cargoForm switch
+        {
+            FactoryCargoForm.WorldBulk => new FactoryTransportVisualProfile(
+                GetAccentColor(itemKind, cargoForm),
+                placeholderScale: baseProfile.PlaceholderScale * new Vector3(1.12f, 1.0f, 1.12f),
+                texturedMeshScale: baseProfile.TexturedMeshScale * new Vector3(1.08f, 1.0f, 1.08f),
+                billboardScale: baseProfile.BillboardScale * 1.08f,
+                texture: baseProfile.Texture,
+                modelFactory: baseProfile.ModelFactory,
+                allowTexturedMeshFallback: baseProfile.AllowTexturedMeshFallback,
+                allowBillboardFallback: baseProfile.AllowBillboardFallback),
+            FactoryCargoForm.InteriorFeed => new FactoryTransportVisualProfile(
+                GetAccentColor(itemKind, cargoForm),
+                placeholderScale: baseProfile.PlaceholderScale * new Vector3(0.68f, 0.52f, 0.68f),
+                texturedMeshScale: baseProfile.TexturedMeshScale * new Vector3(0.64f, 0.46f, 0.64f),
+                billboardScale: baseProfile.BillboardScale * 0.72f,
+                texture: baseProfile.Texture,
+                modelFactory: baseProfile.ModelFactory,
+                allowTexturedMeshFallback: baseProfile.AllowTexturedMeshFallback,
+                allowBillboardFallback: baseProfile.AllowBillboardFallback),
+            _ => new FactoryTransportVisualProfile(
+                GetAccentColor(itemKind, cargoForm),
+                placeholderScale: baseProfile.PlaceholderScale * new Vector3(0.96f, 0.84f, 0.96f),
+                texturedMeshScale: baseProfile.TexturedMeshScale * new Vector3(1.12f, 0.88f, 1.12f),
+                billboardScale: baseProfile.BillboardScale * 0.96f,
+                texture: baseProfile.Texture,
+                modelFactory: baseProfile.ModelFactory,
+                allowTexturedMeshFallback: baseProfile.AllowTexturedMeshFallback,
+                allowBillboardFallback: baseProfile.AllowBillboardFallback)
+        };
     }
 
     public static bool TryGetFuelValueSeconds(FactoryItemKind itemKind, out float burnSeconds)
@@ -443,7 +501,24 @@ public static class FactoryTransportVisualFactory
 
     public static FactoryTransportRenderDescriptorSet ResolveDescriptorSet(FactoryItem item, float cellSize)
     {
-        return ResolveDescriptorSet(item.ItemKind, cellSize);
+        var profile = FactoryItemCatalog.ResolveVisualProfile(item);
+        var placeholder = CreatePlaceholderDescriptor(item.ItemKind, profile, cellSize);
+        var billboard = CreateBillboardDescriptor(item.ItemKind, profile, cellSize) ?? placeholder;
+        var textured = CreateTexturedDescriptor(item.ItemKind, profile, cellSize) ?? billboard;
+        var primary = profile.AllowBillboardFallback && profile.Texture is not null
+            ? billboard
+            : profile.AllowTexturedMeshFallback && profile.Texture is not null
+                ? textured
+                : placeholder;
+        var mid = primary.Mode == FactoryTransportRenderMode.Billboard
+            ? billboard
+            : profile.AllowTexturedMeshFallback && profile.Texture is not null
+                ? textured
+                : billboard;
+        var far = profile.AllowBillboardFallback && profile.Texture is not null
+            ? billboard
+            : placeholder;
+        return new FactoryTransportRenderDescriptorSet(primary, mid, far);
     }
 
     public static FactoryTransportRenderDescriptorSet ResolveDescriptorSet(FactoryItemKind itemKind, float cellSize)

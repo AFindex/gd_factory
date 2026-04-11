@@ -26,6 +26,7 @@ public partial class HeavyGunTurretStructure : FactoryStructure, IFactoryItemRec
     public bool CanReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
         return FactoryPresentation.IsAmmoItem(item.ItemKind)
+            && FactoryCargoRules.StructureAcceptsItem(Kind, FactoryIndustrialStandards.ResolveSiteKind(Site), item)
             && IsAdjacentToFootprint(sourceCell)
             && _ammoInventory.CanAcceptItem(item);
     }
