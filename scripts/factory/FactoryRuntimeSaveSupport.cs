@@ -8,14 +8,17 @@ public static class FactoryRuntimeSaveSupport
         string siteId,
         FactoryMapKind kind,
         FactoryMapDocument document,
-        IEnumerable<FactoryStructure> structures)
+        IEnumerable<FactoryStructure> structures,
+        string loadedMapPath)
     {
         var snapshot = new FactoryRuntimeSiteSnapshot
         {
             SiteId = siteId,
             Kind = kind,
-            MapData = FactoryMapSerializer.Serialize(document)
+            MapData = FactoryMapSerializer.Serialize(document),
+            LoadedMapPath = loadedMapPath
         };
+        PopulateSitePaths(snapshot, document);
 
         foreach (var structure in structures)
         {
@@ -140,5 +143,39 @@ public static class FactoryRuntimeSaveSupport
         }
 
         return result;
+    }
+
+    private static void PopulateSitePaths(FactoryRuntimeSiteSnapshot snapshot, FactoryMapDocument document)
+    {
+        var loadedPath = snapshot.LoadedMapPath?.Trim() ?? string.Empty;
+        var projectPath = string.Empty;
+        var runtimePath = string.Empty;
+        if (!string.IsNullOrWhiteSpace(loadedPath))
+        {
+            if (FactoryPersistencePaths.IsRuntimePersistencePath(loadedPath))
+            {
+                runtimePath = loadedPath;
+            }
+            else
+            {
+                projectPath = loadedPath;
+                runtimePath = FactoryPersistencePaths.BuildRuntimeMapSavePath(loadedPath, snapshot.Kind);
+            }
+        }
+
+        if (document.Metadata.TryGetValue("runtime_saved_from", out var runtimeSavedFrom)
+            && !string.IsNullOrWhiteSpace(runtimeSavedFrom))
+        {
+            projectPath = runtimeSavedFrom.Trim();
+            if (string.IsNullOrWhiteSpace(runtimePath))
+            {
+                runtimePath = string.IsNullOrWhiteSpace(loadedPath)
+                    ? FactoryPersistencePaths.BuildRuntimeMapSavePath(projectPath, snapshot.Kind)
+                    : loadedPath;
+            }
+        }
+
+        snapshot.ProjectMapPath = projectPath;
+        snapshot.RuntimeMapPath = runtimePath;
     }
 }

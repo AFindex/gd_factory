@@ -8,6 +8,7 @@ public partial class MobileFactoryDemo
     private void InitializePersistenceHud()
     {
         _hud?.SetPersistenceStatus(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: true));
+        RefreshRuntimeSaveLibrary();
     }
 
     private void HandleWorldMapSaveRequested()
@@ -147,6 +148,7 @@ public partial class MobileFactoryDemo
             ShowWorldEvent(status, false);
         }
 
+        RefreshRuntimeSaveLibrary();
         UpdateHud();
     }
 
@@ -195,11 +197,6 @@ public partial class MobileFactoryDemo
                 interiorMapDocument,
                 MobileFactoryScenarioLibrary.CreateFocusedDemoProfile(),
                 $"{slotId}#interior");
-            if (_combatDirector is not null && document.CombatDirector is not null)
-            {
-                _combatDirector.ValidateRuntimeSnapshot(document.CombatDirector);
-            }
-
             FactoryRuntimeSaveSupport.ValidateEnemySnapshots(document.Enemies);
 
             TearDownRuntimeSession();
@@ -223,6 +220,7 @@ public partial class MobileFactoryDemo
 
             if (_combatDirector is not null && document.CombatDirector is not null)
             {
+                _combatDirector.ValidateRuntimeSnapshot(document.CombatDirector);
                 _combatDirector.ApplyRuntimeSnapshot(document.CombatDirector, _simulation);
             }
 
@@ -254,6 +252,7 @@ public partial class MobileFactoryDemo
             ShowWorldEvent(status, false);
         }
 
+        RefreshRuntimeSaveLibrary();
         UpdateHud();
     }
 
@@ -288,12 +287,14 @@ public partial class MobileFactoryDemo
             _grid.SiteId,
             FactoryMapKind.World,
             worldDocument,
-            FilterWorldRuntimeStructures(_grid.GetStructures())));
+            FilterWorldRuntimeStructures(_grid.GetStructures()),
+            worldSourcePath));
         snapshot.Sites.Add(FactoryRuntimeSaveSupport.BuildSiteSnapshot(
             _mobileFactory.InteriorSite.SiteId,
             FactoryMapKind.Interior,
             interiorDocument,
-            _mobileFactory.InteriorSite.GetStructures()));
+            _mobileFactory.InteriorSite.GetStructures(),
+            interiorSourcePath));
 
         var enemies = _simulation.SnapshotActiveEnemies();
         for (var index = 0; index < enemies.Count; index++)
@@ -443,5 +444,11 @@ public partial class MobileFactoryDemo
                 yield return structure;
             }
         }
+    }
+
+    private void RefreshRuntimeSaveLibrary()
+    {
+        var slots = FactoryRuntimeSavePersistence.LoadIndex().Slots;
+        _hud?.SetRuntimeSaveLibrary(slots);
     }
 }

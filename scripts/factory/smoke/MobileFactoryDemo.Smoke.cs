@@ -277,8 +277,8 @@ public partial class MobileFactoryDemo
 
         var workspaceIds = _hud.GetWorkspaceIds();
         var required = UseLargeTestScenario
-            ? new[] { OverviewWorkspaceId, BuildTestWorkspaceId, BlueprintWorkspaceId, DiagnosticsWorkspaceId, DetailsWorkspaceId }
-            : new[] { CommandWorkspaceId, EditorWorkspaceId, BlueprintWorkspaceId, DetailsWorkspaceId };
+            ? new[] { OverviewWorkspaceId, BuildTestWorkspaceId, BlueprintWorkspaceId, DiagnosticsWorkspaceId, SavesWorkspaceId, DetailsWorkspaceId }
+            : new[] { CommandWorkspaceId, EditorWorkspaceId, TestingWorkspaceId, BlueprintWorkspaceId, SavesWorkspaceId, DetailsWorkspaceId };
         if (!FactoryDemoSmokeSupport.ContainsAllWorkspaces(workspaceIds, required))
         {
             return false;
@@ -294,9 +294,21 @@ public partial class MobileFactoryDemo
         await ToSignal(GetTree().CreateTimer(0.05f), SceneTreeTimer.SignalName.Timeout);
         var buildReady = _hud.ActiveWorkspaceId == buildWorkspaceId && _hud.IsWorkspaceVisible(buildWorkspaceId) && _editorOpen;
 
+        var testingReady = true;
+        if (!UseLargeTestScenario)
+        {
+            _hud.SelectWorkspace(TestingWorkspaceId);
+            await ToSignal(GetTree().CreateTimer(0.05f), SceneTreeTimer.SignalName.Timeout);
+            testingReady = _hud.ActiveWorkspaceId == TestingWorkspaceId && _hud.IsWorkspaceVisible(TestingWorkspaceId) && _editorOpen;
+        }
+
         _hud.SelectWorkspace(DetailsWorkspaceId);
         await ToSignal(GetTree().CreateTimer(0.05f), SceneTreeTimer.SignalName.Timeout);
         var detailsReady = _hud.ActiveWorkspaceId == DetailsWorkspaceId && _hud.IsWorkspaceVisible(DetailsWorkspaceId) && _editorOpen;
+
+        _hud.SelectWorkspace(SavesWorkspaceId);
+        await ToSignal(GetTree().CreateTimer(0.05f), SceneTreeTimer.SignalName.Timeout);
+        var savesReady = _hud.ActiveWorkspaceId == SavesWorkspaceId && _hud.IsWorkspaceVisible(SavesWorkspaceId) && _editorOpen;
 
         var worldWorkspaceId = UseLargeTestScenario ? DiagnosticsWorkspaceId : CommandWorkspaceId;
         _hud.SelectWorkspace(worldWorkspaceId);
@@ -315,7 +327,7 @@ public partial class MobileFactoryDemo
             SetEditorOpenState(false);
         }
 
-        return blueprintReady && buildReady && detailsReady && worldReady;
+        return blueprintReady && buildReady && testingReady && detailsReady && savesReady && worldReady;
     }
 
     private static bool HasWorkspace(string workspaceId, IReadOnlyList<string> workspaceIds)

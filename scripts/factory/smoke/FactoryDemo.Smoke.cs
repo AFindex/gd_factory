@@ -546,7 +546,7 @@ public partial class FactoryDemo
         }
 
         var workspaceIds = _hud.GetWorkspaceIds();
-        var required = new[] { BuildWorkspaceId, BlueprintWorkspaceId, TelemetryWorkspaceId, CombatWorkspaceId, TestingWorkspaceId };
+        var required = new[] { BuildWorkspaceId, BlueprintWorkspaceId, TelemetryWorkspaceId, CombatWorkspaceId, TestingWorkspaceId, SavesWorkspaceId };
         if (!FactoryDemoSmokeSupport.ContainsAllWorkspaces(workspaceIds, required))
         {
             return false;
@@ -564,6 +564,9 @@ public partial class FactoryDemo
         _hud.SelectWorkspace(TestingWorkspaceId);
         var testingVisible = _hud.ActiveWorkspaceId == TestingWorkspaceId && _hud.IsWorkspaceVisible(TestingWorkspaceId);
 
+        _hud.SelectWorkspace(SavesWorkspaceId);
+        var savesVisible = _hud.ActiveWorkspaceId == SavesWorkspaceId && _hud.IsWorkspaceVisible(SavesWorkspaceId);
+
         _hud.SelectWorkspace(BuildWorkspaceId);
         var buildVisible = _hud.ActiveWorkspaceId == BuildWorkspaceId && _hud.IsWorkspaceVisible(BuildWorkspaceId);
 
@@ -571,6 +574,7 @@ public partial class FactoryDemo
             && telemetryVisible
             && combatVisible
             && testingVisible
+            && savesVisible
             && buildVisible;
     }
 

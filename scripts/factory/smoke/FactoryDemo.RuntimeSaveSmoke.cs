@@ -122,10 +122,20 @@ public partial class FactoryDemo
         var expectedStorageSummary = FactoryDemoSmokeSupport.SummarizeStructureSnapshot(expectedStorage);
         var expectedGeneratorSummary = FactoryDemoSmokeSupport.SummarizeStructureSnapshot(expectedGenerator);
         var expectedTransitSummary = FactoryDemoSmokeSupport.SummarizeStructureSnapshot(expectedTransit);
+        var expectedSitePathsCaptured =
+            !string.IsNullOrWhiteSpace(expectedWorldSite.LoadedMapPath)
+            && !string.IsNullOrWhiteSpace(expectedWorldSite.ProjectMapPath)
+            && !string.IsNullOrWhiteSpace(expectedWorldSite.RuntimeMapPath);
+        var indexRecord = FactoryRuntimeSavePersistence.LoadIndex().Slots.Find(slot => string.Equals(slot.SlotId, slotId, StringComparison.OrdinalIgnoreCase));
+        var indexPathsCaptured = indexRecord is not null
+            && indexRecord.Sites.Count == 1
+            && !string.IsNullOrWhiteSpace(indexRecord.Sites[0].ProjectMapPath)
+            && !string.IsNullOrWhiteSpace(indexRecord.Sites[0].RuntimeMapPath);
 
         _playerController.GlobalPosition = _grid.CellToWorld(storageCell + new Vector2I(4, 4));
         PlaceStructure(BuildPrototypeKind.Belt, storageCell + new Vector2I(0, 3), FacingDirection.North);
         await ToSignal(GetTree().CreateTimer(2.2f), SceneTreeTimer.SignalName.Timeout);
+        _combatDirector?.ClearLanes();
 
         LoadRuntimeSnapshot(slotId);
 
@@ -187,16 +197,18 @@ public partial class FactoryDemo
             || !transitRestored
             || !combatRestored
             || !enemiesRestored
+            || !expectedSitePathsCaptured
+            || !indexPathsCaptured
             || !unsupportedRejected
             || !corruptRejected)
         {
             GD.PushError(
-                $"FACTORY_RUNTIME_SAVE_SMOKE_FAILED player={playerRestored} storage={storageRestored} generator={generatorRestored} transit={transitRestored} combat={combatRestored} enemies={enemiesRestored} unsupported={unsupportedRejected} corrupt={corruptRejected}");
+                $"FACTORY_RUNTIME_SAVE_SMOKE_FAILED player={playerRestored} storage={storageRestored} generator={generatorRestored} transit={transitRestored} combat={combatRestored} enemies={enemiesRestored} sitePaths={expectedSitePathsCaptured} indexPaths={indexPathsCaptured} unsupported={unsupportedRejected} corrupt={corruptRejected}");
             return false;
         }
 
         GD.Print(
-            $"FACTORY_RUNTIME_SAVE_SMOKE player={playerRestored} storage={storageRestored} generator={generatorRestored} transit={transitRestored} combat={combatRestored} enemies={enemiesRestored} unsupported={unsupportedRejected} corrupt={corruptRejected}");
+            $"FACTORY_RUNTIME_SAVE_SMOKE player={playerRestored} storage={storageRestored} generator={generatorRestored} transit={transitRestored} combat={combatRestored} enemies={enemiesRestored} sitePaths={expectedSitePathsCaptured} indexPaths={indexPathsCaptured} unsupported={unsupportedRejected} corrupt={corruptRejected}");
         return true;
     }
 

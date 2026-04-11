@@ -7,6 +7,7 @@ public partial class FactoryDemo
     private void InitializePersistenceHud()
     {
         _hud?.SetPersistenceStatus(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: false));
+        RefreshRuntimeSaveLibrary();
     }
 
     private void HandleMapSaveRequested()
@@ -76,6 +77,7 @@ public partial class FactoryDemo
             _hud?.SetPersistenceStatus($"进度保存失败：{ex.Message}");
         }
 
+        RefreshRuntimeSaveLibrary();
         UpdateHud();
     }
 
@@ -98,11 +100,6 @@ public partial class FactoryDemo
                 throw new InvalidOperationException("该进度存档缺少玩家状态。");
             }
 
-            if (_combatDirector is not null && document.CombatDirector is not null)
-            {
-                _combatDirector.ValidateRuntimeSnapshot(document.CombatDirector);
-            }
-
             FactoryRuntimeSaveSupport.ValidateEnemySnapshots(document.Enemies);
 
             TearDownRuntimeSession();
@@ -118,6 +115,7 @@ public partial class FactoryDemo
             ConfigureCombatScenarios();
             if (_combatDirector is not null && document.CombatDirector is not null)
             {
+                _combatDirector.ValidateRuntimeSnapshot(document.CombatDirector);
                 _combatDirector.ApplyRuntimeSnapshot(document.CombatDirector, _simulation);
             }
 
@@ -144,6 +142,7 @@ public partial class FactoryDemo
             _hud?.SetPersistenceStatus($"进度读取失败：{ex.Message}");
         }
 
+        RefreshRuntimeSaveLibrary();
         UpdateHud();
     }
 
@@ -170,7 +169,8 @@ public partial class FactoryDemo
             _grid.SiteId,
             FactoryMapKind.World,
             worldDocument,
-            _grid.GetStructures()));
+            _grid.GetStructures(),
+            sourcePath));
 
         var enemies = _simulation.SnapshotActiveEnemies();
         for (var index = 0; index < enemies.Count; index++)
@@ -246,5 +246,11 @@ public partial class FactoryDemo
         }
 
         throw new InvalidOperationException($"进度存档缺少站点 '{siteId}'。");
+    }
+
+    private void RefreshRuntimeSaveLibrary()
+    {
+        var slots = FactoryRuntimeSavePersistence.LoadIndex().Slots;
+        _hud?.SetRuntimeSaveLibrary(slots);
     }
 }

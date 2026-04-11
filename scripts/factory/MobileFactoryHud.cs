@@ -6,11 +6,13 @@ public partial class MobileFactoryHud : CanvasLayer
 {
     private const string CommandWorkspaceId = "command";
     private const string EditorWorkspaceId = "editor";
+    private const string TestingWorkspaceId = "testing";
     private const string BlueprintWorkspaceId = "blueprints";
     private const string DetailsWorkspaceId = "details";
     private const string OverviewWorkspaceId = "overview";
     private const string BuildTestWorkspaceId = "build-test";
     private const string DiagnosticsWorkspaceId = "diagnostics";
+    private const string SavesWorkspaceId = "saves";
     private const float EditorSidebarWidth = 292.0f;
     private const int CompactTabFontSize = 10;
     private static readonly (string Title, BuildPrototypeKind[] Kinds)[] EditorPaletteCategories =
@@ -92,6 +94,15 @@ public partial class MobileFactoryHud : CanvasLayer
     private Label? _worldWorkspaceHintLabel;
     private Label? _editorWorkspaceHintLabel;
     private Label? _saveStatusLabel;
+    private Label? _saveLibraryStatusLabel;
+    private VBoxContainer? _saveLibraryList;
+    private LineEdit? _saveWorkspaceSlotEdit;
+    private Label? _testingEditorStateLabel;
+    private Label? _testingSelectionTargetLabel;
+    private Label? _testingPreviewLabel;
+    private Label? _testingPortStatusLabel;
+    private Label? _testingHintLabel;
+    private Label? _testingPersistenceLabel;
     private PanelContainer? _inspectionPanel;
     private Label? _inspectionTitleLabel;
     private Label? _inspectionBodyLabel;
@@ -136,6 +147,7 @@ public partial class MobileFactoryHud : CanvasLayer
     public event Action? InteriorMapSourceSaveRequested;
     public event Action<string>? RuntimeSaveRequested;
     public event Action<string>? RuntimeLoadRequested;
+    public event Action? RuntimeSaveLibraryRefreshRequested;
     public event Action<string>? WorkspaceSelected;
 
     public override void _Ready()
@@ -347,6 +359,12 @@ public partial class MobileFactoryHud : CanvasLayer
             _editorPreviewLabel.Text = $"{(isValid ? "[OK]" : "[BLOCK]")} 内部预览：{text}";
             _editorPreviewLabel.Modulate = FactoryUiTheme.GetStatusTone(isValid);
         }
+
+        if (_testingPreviewLabel is not null)
+        {
+            _testingPreviewLabel.Text = $"{(isValid ? "[OK]" : "[BLOCK]")} 验证提示：{text}";
+            _testingPreviewLabel.Modulate = FactoryUiTheme.GetStatusTone(isValid);
+        }
     }
 
     public void SetPortStatus(string text)
@@ -355,6 +373,12 @@ public partial class MobileFactoryHud : CanvasLayer
         {
             _portStatusLabel.Text = $"[PORT] {text}";
             _portStatusLabel.Modulate = FactoryUiTheme.TextSubtle;
+        }
+
+        if (_testingPortStatusLabel is not null)
+        {
+            _testingPortStatusLabel.Text = $"[PORT] {text}";
+            _testingPortStatusLabel.Modulate = FactoryUiTheme.TextSubtle;
         }
     }
 
@@ -378,6 +402,11 @@ public partial class MobileFactoryHud : CanvasLayer
         if (_selectionTargetLabel is not null)
         {
             _selectionTargetLabel.Text = $"[TARGET] 内部选中：{text}";
+        }
+
+        if (_testingSelectionTargetLabel is not null)
+        {
+            _testingSelectionTargetLabel.Text = $"[TARGET] 验证目标：{text}";
         }
     }
 
@@ -427,6 +456,11 @@ public partial class MobileFactoryHud : CanvasLayer
             _ => "交互模式"
         };
         _editorModeLabel.Text = $"[EDITOR] {paneText} | 生命周期：{stateText} | {interactionText} | 当前内部件数：{structureCount}";
+
+        if (_testingEditorStateLabel is not null)
+        {
+            _testingEditorStateLabel.Text = $"[CHECK] {paneText} | 生命周期：{stateText} | {interactionText} | 当前内部件数：{structureCount}";
+        }
     }
 
     public void SetHintText(string text)
@@ -439,6 +473,11 @@ public partial class MobileFactoryHud : CanvasLayer
         if (_diagnosticsHintLabel is not null)
         {
             _diagnosticsHintLabel.Text = text;
+        }
+
+        if (_testingHintLabel is not null)
+        {
+            _testingHintLabel.Text = text;
         }
     }
 
@@ -482,6 +521,40 @@ public partial class MobileFactoryHud : CanvasLayer
         {
             _saveStatusLabel.Text = text;
         }
+
+        if (_saveLibraryStatusLabel is not null)
+        {
+            _saveLibraryStatusLabel.Text = text;
+        }
+
+        if (_testingPersistenceLabel is not null)
+        {
+            _testingPersistenceLabel.Text = text;
+        }
+    }
+
+    public void SetRuntimeSaveLibrary(IReadOnlyList<FactoryRuntimeSaveSlotMetadata> slots)
+    {
+        if (_saveLibraryList is null)
+        {
+            return;
+        }
+
+        foreach (var child in _saveLibraryList.GetChildren())
+        {
+            child.QueueFree();
+        }
+
+        if (slots.Count == 0)
+        {
+            _saveLibraryList.AddChild(CreateEditorLabel("当前还没有进度存档。", 11, FactoryUiTheme.TextMuted));
+            return;
+        }
+
+        for (var slotIndex = 0; slotIndex < slots.Count; slotIndex++)
+        {
+            _saveLibraryList.AddChild(CreateSaveLibraryCard(slots[slotIndex]));
+        }
     }
 
     public bool BlocksInput(Control? control)
@@ -508,5 +581,75 @@ public partial class MobileFactoryHud : CanvasLayer
             || ContainsScreenPoint(_topChromePanel, screenPoint)
             || ContainsScreenPoint(_infoPanel, screenPoint)
             || ContainsScreenPoint(_editorPanel, screenPoint);
+    }
+
+    private Control CreateSaveLibraryCard(FactoryRuntimeSaveSlotMetadata slot)
+    {
+        var card = new PanelContainer();
+        card.MouseFilter = Control.MouseFilterEnum.Ignore;
+        card.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        card.AddThemeStyleboxOverride("panel", FactoryUiTheme.CreatePanelStyle(FactoryUiTheme.SurfaceOverlay, FactoryUiTheme.BorderSoft, 1, FactoryUiTheme.RadiusNone, 8));
+        card.TooltipText = FactoryRuntimeSavePersistence.BuildSlotTooltip(slot);
+
+        var margin = new MarginContainer();
+        margin.MouseFilter = Control.MouseFilterEnum.Ignore;
+        margin.AddThemeConstantOverride("margin_left", 8);
+        margin.AddThemeConstantOverride("margin_top", 7);
+        margin.AddThemeConstantOverride("margin_right", 8);
+        margin.AddThemeConstantOverride("margin_bottom", 7);
+        card.AddChild(margin);
+
+        var body = new VBoxContainer();
+        body.MouseFilter = Control.MouseFilterEnum.Ignore;
+        body.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        body.AddThemeConstantOverride("separation", 3);
+        margin.AddChild(body);
+
+        var header = new HBoxContainer();
+        header.MouseFilter = Control.MouseFilterEnum.Ignore;
+        header.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        header.AddThemeConstantOverride("separation", 8);
+        body.AddChild(header);
+
+        var title = CreateEditorLabel(slot.DisplayName, 12, FactoryUiTheme.Text);
+        title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        header.AddChild(title);
+
+        var loadButton = new Button
+        {
+            Text = "读取",
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            CustomMinimumSize = new Vector2(62.0f, 24.0f),
+            Disabled = UseLargeScenarioWorkspaces
+        };
+        loadButton.AddThemeFontSizeOverride("font_size", 10);
+        FactoryUiTheme.ApplyButtonTheme(loadButton, compact: true);
+        loadButton.TooltipText = UseLargeScenarioWorkspaces
+            ? "large scenario 当前不支持运行时进度读档"
+            : $"直接读取存档 {slot.SlotId}";
+        loadButton.Pressed += () =>
+        {
+            if (_saveWorkspaceSlotEdit is not null)
+            {
+                _saveWorkspaceSlotEdit.Text = slot.SlotId;
+            }
+
+            RuntimeLoadRequested?.Invoke(slot.SlotId);
+        };
+        header.AddChild(loadButton);
+
+        var meta = CreateEditorLabel(
+            $"{FactoryRuntimeSavePersistence.FormatSavedAtDisplay(slot.SavedAtUtc)}  |  {slot.SiteCount} 站点",
+            10,
+            FactoryUiTheme.TextSubtle);
+        body.AddChild(meta);
+
+        var maps = CreateEditorLabel(FactoryRuntimeSavePersistence.BuildSlotCompactSummary(slot), 10, FactoryUiTheme.TextMuted);
+        body.AddChild(maps);
+
+        var file = CreateEditorLabel(slot.ResourcePath, 10, FactoryUiTheme.TextFaint);
+        body.AddChild(file);
+
+        return card;
     }
 }

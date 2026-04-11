@@ -10,6 +10,7 @@ public partial class FactoryDemo : Node3D
     private const string TelemetryWorkspaceId = "telemetry";
     private const string CombatWorkspaceId = "combat";
     private const string TestingWorkspaceId = "testing";
+    private const string SavesWorkspaceId = "saves";
     private const float PreviewPowerPoleWireHeight = FactoryPreviewOverlaySupport.PreviewPowerPoleWireHeight;
     private const int PreviewPowerPoleConnectionRangeCells = FactoryPreviewOverlaySupport.PreviewPowerPoleConnectionRangeCells;
 
@@ -404,6 +405,7 @@ public partial class FactoryDemo : Node3D
         _hud.MapSourceSaveRequested += HandleMapSourceSaveRequested;
         _hud.RuntimeSaveRequested += HandleRuntimeSaveRequested;
         _hud.RuntimeLoadRequested += HandleRuntimeLoadRequested;
+        _hud.RuntimeSaveLibraryRefreshRequested += RefreshRuntimeSaveLibrary;
         _hud.BlueprintSelected += HandleBlueprintSelected;
         _hud.BlueprintApplyRequested += EnterBlueprintApplyMode;
         _hud.BlueprintConfirmRequested += ConfirmBlueprintApply;
@@ -1333,6 +1335,11 @@ public partial class FactoryDemo : Node3D
             && !HasActiveBlueprintWorkspaceState())
         {
             _previewMessage = "蓝图工作区已打开：按住 Shift 左键拖拽框选保存，或先在库里准备一个蓝图。";
+        }
+
+        if (workspaceId == SavesWorkspaceId)
+        {
+            RefreshRuntimeSaveLibrary();
         }
     }
 

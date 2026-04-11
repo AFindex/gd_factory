@@ -103,11 +103,26 @@ public partial class MobileFactoryDemo
         var expectedAttachmentSummary = FactoryDemoSmokeSupport.SummarizeStructureSnapshot(expectedAttachment);
         var expectedWorldSinkSummary = FactoryDemoSmokeSupport.SummarizeStructureSnapshot(
             FactoryDemoSmokeSupport.FindRequiredStructure(expectedWorldSite, BuildPrototypeKind.Sink, _sinkA?.Cell ?? AnchorA));
+        var expectedWorldPathsCaptured =
+            !string.IsNullOrWhiteSpace(expectedWorldSite.LoadedMapPath)
+            && !string.IsNullOrWhiteSpace(expectedWorldSite.ProjectMapPath)
+            && !string.IsNullOrWhiteSpace(expectedWorldSite.RuntimeMapPath);
+        var expectedInteriorPathsCaptured =
+            !string.IsNullOrWhiteSpace(expectedInteriorSite.LoadedMapPath)
+            && !string.IsNullOrWhiteSpace(expectedInteriorSite.ProjectMapPath)
+            && !string.IsNullOrWhiteSpace(expectedInteriorSite.RuntimeMapPath);
+        var indexRecord = FactoryRuntimeSavePersistence.LoadIndex().Slots.Find(slot => string.Equals(slot.SlotId, slotId, StringComparison.OrdinalIgnoreCase));
+        var indexPathsCaptured = indexRecord is not null
+            && indexRecord.Sites.Count == 2
+            && indexRecord.Sites.TrueForAll(site =>
+                !string.IsNullOrWhiteSpace(site.ProjectMapPath)
+                && !string.IsNullOrWhiteSpace(site.RuntimeMapPath));
 
         _playerController.GlobalPosition = _mobileFactory.WorldFocusPoint + new Vector3(-2.4f, 0.0f, -1.8f);
         _mobileFactory.ReturnToTransitMode();
         await WaitForCondition(() => _mobileFactory.State == MobileFactoryLifecycleState.InTransit, 2.0f);
         await ToSignal(GetTree().CreateTimer(1.2f), SceneTreeTimer.SignalName.Timeout);
+        _combatDirector?.ClearLanes();
 
         LoadRuntimeSnapshot(slotId);
         if (_worldPreviewMessage.Contains("失败", StringComparison.Ordinal)
@@ -177,6 +192,9 @@ public partial class MobileFactoryDemo
             || !interiorAssemblerRestored
             || !attachmentTransitRestored
             || !worldRestored
+            || !expectedWorldPathsCaptured
+            || !expectedInteriorPathsCaptured
+            || !indexPathsCaptured
             || !unsupportedRejected
             || !corruptRejected)
         {
@@ -211,12 +229,12 @@ public partial class MobileFactoryDemo
             }
 
             GD.PushError(
-                $"MOBILE_FACTORY_RUNTIME_SAVE_SMOKE_FAILED player={playerRestored} combat={combatRestored} enemies={enemiesRestored} mobile={mobileRestored} interiorStorage={interiorStorageRestored} interiorAssembler={interiorAssemblerRestored} attachment={attachmentTransitRestored} world={worldRestored} unsupported={unsupportedRejected} corrupt={corruptRejected}");
+                $"MOBILE_FACTORY_RUNTIME_SAVE_SMOKE_FAILED player={playerRestored} combat={combatRestored} enemies={enemiesRestored} mobile={mobileRestored} interiorStorage={interiorStorageRestored} interiorAssembler={interiorAssemblerRestored} attachment={attachmentTransitRestored} world={worldRestored} worldPaths={expectedWorldPathsCaptured} interiorPaths={expectedInteriorPathsCaptured} indexPaths={indexPathsCaptured} unsupported={unsupportedRejected} corrupt={corruptRejected}");
             return false;
         }
 
         GD.Print(
-            $"MOBILE_FACTORY_RUNTIME_SAVE_SMOKE player={playerRestored} combat={combatRestored} enemies={enemiesRestored} mobile={mobileRestored} interiorStorage={interiorStorageRestored} interiorAssembler={interiorAssemblerRestored} attachment={attachmentTransitRestored} world={worldRestored} unsupported={unsupportedRejected} corrupt={corruptRejected}");
+            $"MOBILE_FACTORY_RUNTIME_SAVE_SMOKE player={playerRestored} combat={combatRestored} enemies={enemiesRestored} mobile={mobileRestored} interiorStorage={interiorStorageRestored} interiorAssembler={interiorAssemblerRestored} attachment={attachmentTransitRestored} world={worldRestored} worldPaths={expectedWorldPathsCaptured} interiorPaths={expectedInteriorPathsCaptured} indexPaths={indexPathsCaptured} unsupported={unsupportedRejected} corrupt={corruptRejected}");
         return true;
     }
 }

@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Text;
 using System.Linq;
 using System.Text.Json;
 
@@ -24,6 +25,19 @@ public sealed class FactoryRuntimeSaveSlotMetadata
     public string DisplayName { get; set; } = string.Empty;
     public string SavedAtUtc { get; set; } = string.Empty;
     public int SiteCount { get; set; }
+    public string ResourcePath { get; set; } = string.Empty;
+    public List<FactoryRuntimeSaveSiteMetadata> Sites { get; set; } = new();
+}
+
+public sealed class FactoryRuntimeSaveSiteMetadata
+{
+    public string SiteId { get; set; } = string.Empty;
+    public FactoryMapKind Kind { get; set; }
+    public string DisplayName { get; set; } = string.Empty;
+    public string LoadedMapPath { get; set; } = string.Empty;
+    public string ProjectMapPath { get; set; } = string.Empty;
+    public string RuntimeMapPath { get; set; } = string.Empty;
+    public int StructureCount { get; set; }
 }
 
 public sealed class FactoryRuntimeSaveIndex
@@ -95,6 +109,9 @@ public sealed class FactoryRuntimeSiteSnapshot
     public string SiteId { get; set; } = string.Empty;
     public FactoryMapKind Kind { get; set; }
     public string MapData { get; set; } = string.Empty;
+    public string LoadedMapPath { get; set; } = string.Empty;
+    public string ProjectMapPath { get; set; } = string.Empty;
+    public string RuntimeMapPath { get; set; } = string.Empty;
     public List<FactoryStructureRuntimeSnapshot> Structures { get; set; } = new();
 }
 
@@ -354,7 +371,128 @@ public static class FactoryRuntimeSavePersistence
             ?? new FactoryRuntimeSaveIndex();
         index.Version = SupportedVersion;
         index.Slots ??= new List<FactoryRuntimeSaveSlotMetadata>();
+        for (var slotIndex = 0; slotIndex < index.Slots.Count; slotIndex++)
+        {
+            NormalizeSlotMetadata(index.Slots[slotIndex]);
+        }
+
         return index;
+    }
+
+    public static string BuildLibrarySummary(int maxSlots = 12)
+    {
+        if (!FactoryPersistencePaths.IsPersistenceEnabled())
+        {
+            return "当前运行处于 smoke/validate 模式，进度存档列表不可用。";
+        }
+
+        var index = LoadIndex();
+        var builder = new StringBuilder();
+        builder.Append("存档目录：");
+        builder.Append(FactoryPersistencePaths.GetRuntimeSaveDirectoryGlobalPath());
+
+        if (index.Slots.Count == 0)
+        {
+            builder.AppendLine();
+            builder.Append("暂无进度存档。");
+            return builder.ToString();
+        }
+
+        var visibleCount = Math.Min(Math.Max(1, maxSlots), index.Slots.Count);
+        for (var slotIndex = 0; slotIndex < visibleCount; slotIndex++)
+        {
+            var slot = index.Slots[slotIndex];
+            builder.AppendLine();
+            builder.AppendLine();
+            builder.AppendLine($"[{slotIndex + 1}] {slot.DisplayName} ({slot.SlotId})");
+            builder.AppendLine($"时间：{FormatSavedAtDisplay(slot.SavedAtUtc)} | 站点：{Math.Max(slot.SiteCount, slot.Sites.Count)} | 文件：{slot.ResourcePath}");
+
+            if (slot.Sites.Count == 0)
+            {
+                builder.AppendLine("缺少地图摘要（旧存档或索引尚未刷新）。");
+                continue;
+            }
+
+            for (var siteIndex = 0; siteIndex < slot.Sites.Count; siteIndex++)
+            {
+                var site = slot.Sites[siteIndex];
+                var kindLabel = site.Kind == FactoryMapKind.Interior ? "内部" : "世界";
+                builder.AppendLine($"- {kindLabel} / {site.DisplayName} | site={site.SiteId} | 结构={site.StructureCount}");
+                if (!string.IsNullOrWhiteSpace(site.LoadedMapPath))
+                {
+                    builder.AppendLine($"  当前：{site.LoadedMapPath}");
+                }
+
+                if (!string.IsNullOrWhiteSpace(site.ProjectMapPath))
+                {
+                    builder.AppendLine($"  工程：{site.ProjectMapPath}");
+                }
+
+                if (!string.IsNullOrWhiteSpace(site.RuntimeMapPath))
+                {
+                    builder.AppendLine($"  运行时：{site.RuntimeMapPath}");
+                }
+            }
+        }
+
+        if (index.Slots.Count > visibleCount)
+        {
+            builder.AppendLine();
+            builder.Append($"... 还有 {index.Slots.Count - visibleCount} 个存档未显示。");
+        }
+
+        return builder.ToString();
+    }
+
+    public static string BuildSlotCompactSummary(FactoryRuntimeSaveSlotMetadata slot)
+    {
+        NormalizeSlotMetadata(slot);
+        if (slot.Sites.Count == 0)
+        {
+            return "旧存档：缺少地图摘要";
+        }
+
+        var parts = new List<string>(slot.Sites.Count);
+        for (var siteIndex = 0; siteIndex < slot.Sites.Count; siteIndex++)
+        {
+            var site = slot.Sites[siteIndex];
+            var kindLabel = site.Kind == FactoryMapKind.Interior ? "内部" : "世界";
+            var label = string.IsNullOrWhiteSpace(site.DisplayName) ? site.SiteId : site.DisplayName;
+            parts.Add($"{kindLabel} {label.Replace("世界：", string.Empty).Replace("内部：", string.Empty)}");
+        }
+
+        return string.Join("  ·  ", parts);
+    }
+
+    public static string BuildSlotTooltip(FactoryRuntimeSaveSlotMetadata slot)
+    {
+        NormalizeSlotMetadata(slot);
+        var builder = new StringBuilder();
+        builder.AppendLine($"{slot.DisplayName} ({slot.SlotId})");
+        builder.AppendLine($"时间：{FormatSavedAtDisplay(slot.SavedAtUtc)}");
+        builder.AppendLine($"文件：{slot.ResourcePath}");
+        for (var siteIndex = 0; siteIndex < slot.Sites.Count; siteIndex++)
+        {
+            var site = slot.Sites[siteIndex];
+            builder.AppendLine();
+            builder.AppendLine($"{site.DisplayName} | site={site.SiteId} | 结构={site.StructureCount}");
+            if (!string.IsNullOrWhiteSpace(site.LoadedMapPath))
+            {
+                builder.AppendLine($"当前：{site.LoadedMapPath}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(site.ProjectMapPath))
+            {
+                builder.AppendLine($"工程：{site.ProjectMapPath}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(site.RuntimeMapPath))
+            {
+                builder.AppendLine($"运行时：{site.RuntimeMapPath}");
+            }
+        }
+
+        return builder.ToString().TrimEnd();
     }
 
     public static FactoryRuntimeSaveSnapshotDocument ValidateDocument(FactoryRuntimeSaveSnapshotDocument document)
@@ -393,6 +531,8 @@ public static class FactoryRuntimeSavePersistence
                 throw new InvalidDataException($"Runtime save snapshot site '{site.SiteId}' is missing embedded map data.");
             }
 
+            NormalizeSiteMetadata(site);
+
             var seenStructureKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (var structureIndex = 0; structureIndex < site.Structures.Count; structureIndex++)
             {
@@ -427,13 +567,7 @@ public static class FactoryRuntimeSavePersistence
     {
         var index = LoadIndex();
         var existing = index.Slots.FindIndex(slot => string.Equals(slot.SlotId, document.SlotId, StringComparison.OrdinalIgnoreCase));
-        var record = new FactoryRuntimeSaveSlotMetadata
-        {
-            SlotId = document.SlotId,
-            DisplayName = document.DisplayName,
-            SavedAtUtc = document.SavedAtUtc,
-            SiteCount = document.Sites.Count
-        };
+        var record = BuildSlotMetadata(document);
 
         if (existing >= 0)
         {
@@ -462,5 +596,233 @@ public static class FactoryRuntimeSavePersistence
         {
             throw new InvalidOperationException("Runtime persistence is disabled while smoke tests or validation commands are running.");
         }
+    }
+
+    private static FactoryRuntimeSaveSlotMetadata BuildSlotMetadata(FactoryRuntimeSaveSnapshotDocument document)
+    {
+        var metadata = new FactoryRuntimeSaveSlotMetadata
+        {
+            SlotId = document.SlotId,
+            DisplayName = document.DisplayName,
+            SavedAtUtc = document.SavedAtUtc,
+            SiteCount = document.Sites.Count,
+            ResourcePath = FactoryPersistencePaths.BuildRuntimeSaveFilePath(document.SlotId)
+        };
+
+        for (var siteIndex = 0; siteIndex < document.Sites.Count; siteIndex++)
+        {
+            metadata.Sites.Add(BuildSiteMetadata(document.Sites[siteIndex]));
+        }
+
+        return metadata;
+    }
+
+    private static FactoryRuntimeSaveSiteMetadata BuildSiteMetadata(FactoryRuntimeSiteSnapshot site)
+    {
+        NormalizeSiteMetadata(site);
+        return new FactoryRuntimeSaveSiteMetadata
+        {
+            SiteId = site.SiteId,
+            Kind = site.Kind,
+            DisplayName = BuildSiteDisplayName(site),
+            LoadedMapPath = site.LoadedMapPath,
+            ProjectMapPath = site.ProjectMapPath,
+            RuntimeMapPath = site.RuntimeMapPath,
+            StructureCount = site.Structures.Count
+        };
+    }
+
+    private static void NormalizeSlotMetadata(FactoryRuntimeSaveSlotMetadata slot)
+    {
+        slot.SlotId = FactoryPersistencePaths.SanitizeRuntimeSaveSlotId(slot.SlotId);
+        slot.DisplayName = string.IsNullOrWhiteSpace(slot.DisplayName) ? slot.SlotId : slot.DisplayName;
+        slot.ResourcePath = string.IsNullOrWhiteSpace(slot.ResourcePath)
+            ? FactoryPersistencePaths.BuildRuntimeSaveFilePath(slot.SlotId)
+            : slot.ResourcePath;
+        slot.Sites ??= new List<FactoryRuntimeSaveSiteMetadata>();
+
+        var needsHydration = slot.Sites.Count == 0;
+        if (!needsHydration)
+        {
+            for (var siteIndex = 0; siteIndex < slot.Sites.Count; siteIndex++)
+            {
+                var site = slot.Sites[siteIndex];
+                site.SiteId ??= string.Empty;
+                site.DisplayName = string.IsNullOrWhiteSpace(site.DisplayName)
+                    ? BuildDisplayNameFromPath(site.ProjectMapPath, site.RuntimeMapPath, site.LoadedMapPath, site.Kind, site.SiteId)
+                    : site.DisplayName;
+                site.LoadedMapPath ??= string.Empty;
+                site.ProjectMapPath ??= string.Empty;
+                site.RuntimeMapPath ??= string.Empty;
+            }
+        }
+
+        if (!needsHydration)
+        {
+            slot.SiteCount = Math.Max(slot.SiteCount, slot.Sites.Count);
+            return;
+        }
+
+        try
+        {
+            var document = Load(slot.SlotId);
+            var hydrated = BuildSlotMetadata(document);
+            slot.DisplayName = string.IsNullOrWhiteSpace(slot.DisplayName) ? hydrated.DisplayName : slot.DisplayName;
+            slot.SavedAtUtc = string.IsNullOrWhiteSpace(slot.SavedAtUtc) ? hydrated.SavedAtUtc : slot.SavedAtUtc;
+            slot.SiteCount = hydrated.SiteCount;
+            slot.ResourcePath = hydrated.ResourcePath;
+            slot.Sites = hydrated.Sites;
+        }
+        catch (Exception)
+        {
+            slot.SiteCount = Math.Max(slot.SiteCount, slot.Sites.Count);
+        }
+    }
+
+    private static void NormalizeSiteMetadata(FactoryRuntimeSiteSnapshot site)
+    {
+        site.LoadedMapPath ??= string.Empty;
+        site.ProjectMapPath ??= string.Empty;
+        site.RuntimeMapPath ??= string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(site.LoadedMapPath)
+            && !string.IsNullOrWhiteSpace(site.ProjectMapPath)
+            && !string.IsNullOrWhiteSpace(site.RuntimeMapPath))
+        {
+            return;
+        }
+
+        FactoryMapDocument? document = null;
+        if (!string.IsNullOrWhiteSpace(site.MapData))
+        {
+            try
+            {
+                document = FactoryMapValidator.ValidateDocument(
+                    FactoryMapSerializer.Deserialize(site.MapData, $"{site.SiteId}.nfmap"));
+            }
+            catch (Exception)
+            {
+                document = null;
+            }
+        }
+
+        PopulateBestEffortSitePaths(site, document);
+    }
+
+    private static void PopulateBestEffortSitePaths(FactoryRuntimeSiteSnapshot site, FactoryMapDocument? document)
+    {
+        var loadedPath = site.LoadedMapPath.Trim();
+        var projectPath = site.ProjectMapPath.Trim();
+        var runtimePath = site.RuntimeMapPath.Trim();
+        var runtimeSavedFrom = string.Empty;
+        if (document is not null
+            && document.Metadata.TryGetValue("runtime_saved_from", out var sourcePath)
+            && !string.IsNullOrWhiteSpace(sourcePath))
+        {
+            runtimeSavedFrom = sourcePath.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(projectPath))
+        {
+            if (!string.IsNullOrWhiteSpace(loadedPath) && !FactoryPersistencePaths.IsRuntimePersistencePath(loadedPath))
+            {
+                projectPath = loadedPath;
+            }
+            else if (!string.IsNullOrWhiteSpace(runtimeSavedFrom))
+            {
+                projectPath = runtimeSavedFrom;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(runtimePath))
+        {
+            if (!string.IsNullOrWhiteSpace(loadedPath) && FactoryPersistencePaths.IsRuntimePersistencePath(loadedPath))
+            {
+                runtimePath = loadedPath;
+            }
+            else if (!string.IsNullOrWhiteSpace(projectPath))
+            {
+                runtimePath = FactoryPersistencePaths.BuildRuntimeMapSavePath(projectPath, site.Kind);
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(loadedPath))
+        {
+            if (!string.IsNullOrWhiteSpace(runtimeSavedFrom) && !string.IsNullOrWhiteSpace(runtimePath))
+            {
+                loadedPath = runtimePath;
+            }
+            else if (!string.IsNullOrWhiteSpace(projectPath))
+            {
+                loadedPath = projectPath;
+            }
+            else if (!string.IsNullOrWhiteSpace(runtimePath))
+            {
+                loadedPath = runtimePath;
+            }
+        }
+
+        site.LoadedMapPath = loadedPath;
+        site.ProjectMapPath = projectPath;
+        site.RuntimeMapPath = runtimePath;
+    }
+
+    private static string BuildSiteDisplayName(FactoryRuntimeSiteSnapshot site)
+    {
+        return BuildDisplayNameFromPath(site.ProjectMapPath, site.RuntimeMapPath, site.LoadedMapPath, site.Kind, site.SiteId);
+    }
+
+    private static string BuildDisplayNameFromPath(
+        string? projectPath,
+        string? runtimePath,
+        string? loadedPath,
+        FactoryMapKind kind,
+        string siteId)
+    {
+        var name = string.Empty;
+        if (!string.IsNullOrWhiteSpace(projectPath))
+        {
+            name = HumanizeStem(Path.GetFileNameWithoutExtension(projectPath));
+        }
+        else if (!string.IsNullOrWhiteSpace(runtimePath))
+        {
+            name = HumanizeStem(Path.GetFileNameWithoutExtension(runtimePath));
+        }
+        else if (!string.IsNullOrWhiteSpace(loadedPath))
+        {
+            name = HumanizeStem(Path.GetFileNameWithoutExtension(loadedPath));
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = string.IsNullOrWhiteSpace(siteId) ? "未命名地图" : siteId;
+        }
+
+        var kindLabel = kind == FactoryMapKind.Interior ? "内部" : "世界";
+        return $"{kindLabel}：{name}";
+    }
+
+    private static string HumanizeStem(string stem)
+    {
+        if (string.IsNullOrWhiteSpace(stem))
+        {
+            return "未命名地图";
+        }
+
+        return stem
+            .Replace("-runtime", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace('-', ' ')
+            .Replace('_', ' ')
+            .Trim();
+    }
+
+    public static string FormatSavedAtDisplay(string savedAtUtc)
+    {
+        if (DateTimeOffset.TryParse(savedAtUtc, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
+        {
+            return parsed.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+        }
+
+        return savedAtUtc;
     }
 }

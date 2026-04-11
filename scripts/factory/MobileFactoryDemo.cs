@@ -6,11 +6,13 @@ public partial class MobileFactoryDemo : Node3D
 {
     private const string CommandWorkspaceId = "command";
     private const string EditorWorkspaceId = "editor";
+    private const string TestingWorkspaceId = "testing";
     private const string BlueprintWorkspaceId = "blueprints";
     private const string DetailsWorkspaceId = "details";
     private const string OverviewWorkspaceId = "overview";
     private const string BuildTestWorkspaceId = "build-test";
     private const string DiagnosticsWorkspaceId = "diagnostics";
+    private const string SavesWorkspaceId = "saves";
     private const int InteriorRenderLayer = 1;
     private const int HullRenderLayer = 2;
     private const float PreviewPowerPoleWireHeight = FactoryPreviewOverlaySupport.PreviewPowerPoleWireHeight;
@@ -502,6 +504,7 @@ public partial class MobileFactoryDemo : Node3D
         _hud.InteriorMapSourceSaveRequested += HandleInteriorMapSourceSaveRequested;
         _hud.RuntimeSaveRequested += HandleRuntimeSaveRequested;
         _hud.RuntimeLoadRequested += HandleRuntimeLoadRequested;
+        _hud.RuntimeSaveLibraryRefreshRequested += RefreshRuntimeSaveLibrary;
         _hud.BlueprintSelected += HandleInteriorBlueprintSelected;
         _hud.BlueprintApplyRequested += EnterInteriorBlueprintApplyMode;
         _hud.BlueprintConfirmRequested += ConfirmInteriorBlueprintApply;
@@ -2473,13 +2476,18 @@ public partial class MobileFactoryDemo : Node3D
             _interiorPreviewMessage = exitMessage ?? string.Empty;
         }
 
-        if (workspaceId == BlueprintWorkspaceId || workspaceId == GetHudBuildWorkspaceId())
+        if (workspaceId == BlueprintWorkspaceId || workspaceId == GetHudBuildWorkspaceId() || workspaceId == TestingWorkspaceId || workspaceId == SavesWorkspaceId)
         {
             if (!_editorOpen)
             {
                 SetEditorOpenState(true);
                 FocusFactoryForCurrentMode();
             }
+        }
+
+        if (workspaceId == SavesWorkspaceId)
+        {
+            RefreshRuntimeSaveLibrary();
         }
     }
 

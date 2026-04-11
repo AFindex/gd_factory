@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 public partial class FactoryHud : CanvasLayer
 {
@@ -9,6 +10,7 @@ public partial class FactoryHud : CanvasLayer
     private const string TelemetryWorkspaceId = "telemetry";
     private const string CombatWorkspaceId = "combat";
     private const string TestingWorkspaceId = "testing";
+    private const string SavesWorkspaceId = "saves";
     private const int CompactTabFontSize = 10;
     private static readonly (string Title, BuildPrototypeKind[] Kinds)[] BuildPaletteCategories =
     {
@@ -67,6 +69,9 @@ public partial class FactoryHud : CanvasLayer
     private Label? _testingTargetLabel;
     private Label? _testingPreviewLabel;
     private Label? _testingSaveStatusLabel;
+    private Label? _saveWorkspaceStatusLabel;
+    private VBoxContainer? _saveLibraryList;
+    private LineEdit? _saveWorkspaceSlotEdit;
     private PanelContainer? _inspectionPanel;
     private Label? _inspectionTitleLabel;
     private Label? _inspectionBodyLabel;
@@ -89,6 +94,7 @@ public partial class FactoryHud : CanvasLayer
     public event Action? MapSourceSaveRequested;
     public event Action<string>? RuntimeSaveRequested;
     public event Action<string>? RuntimeLoadRequested;
+    public event Action? RuntimeSaveLibraryRefreshRequested;
     public event Action<string>? WorkspaceSelected;
 
     public string ProfilerText => _profilerLabel?.Text ?? string.Empty;
@@ -166,6 +172,7 @@ public partial class FactoryHud : CanvasLayer
         workspaceRoot.AddChild(BuildTelemetryWorkspace());
         workspaceRoot.AddChild(BuildCombatWorkspace());
         workspaceRoot.AddChild(BuildTestingWorkspace());
+        workspaceRoot.AddChild(BuildSaveWorkspace());
         ApplyWorkspaceVisibility();
 
         _detailWindow = new FactoryStructureDetailWindow();
@@ -431,6 +438,35 @@ public partial class FactoryHud : CanvasLayer
         {
             _testingSaveStatusLabel.Text = text;
         }
+
+        if (_saveWorkspaceStatusLabel is not null)
+        {
+            _saveWorkspaceStatusLabel.Text = text;
+        }
+    }
+
+    public void SetRuntimeSaveLibrary(IReadOnlyList<FactoryRuntimeSaveSlotMetadata> slots)
+    {
+        if (_saveLibraryList is null)
+        {
+            return;
+        }
+
+        foreach (var child in _saveLibraryList.GetChildren())
+        {
+            child.QueueFree();
+        }
+
+        if (slots.Count == 0)
+        {
+            _saveLibraryList.AddChild(CreateValueLabel("当前还没有进度存档。", FactoryUiTheme.TextMuted));
+            return;
+        }
+
+        for (var slotIndex = 0; slotIndex < slots.Count; slotIndex++)
+        {
+            _saveLibraryList.AddChild(CreateSaveLibraryCard(slots[slotIndex]));
+        }
     }
 
     private IReadOnlyList<FactoryWorkspaceDescriptor> BuildWorkspaceDescriptors()
@@ -441,7 +477,8 @@ public partial class FactoryHud : CanvasLayer
             new FactoryWorkspaceDescriptor(BlueprintWorkspaceId, "蓝图"),
             new FactoryWorkspaceDescriptor(TelemetryWorkspaceId, "遥测"),
             new FactoryWorkspaceDescriptor(CombatWorkspaceId, "战斗"),
-            new FactoryWorkspaceDescriptor(TestingWorkspaceId, "验证")
+            new FactoryWorkspaceDescriptor(TestingWorkspaceId, "验证"),
+            new FactoryWorkspaceDescriptor(SavesWorkspaceId, "存档")
         };
     }
 
@@ -588,6 +625,7 @@ public partial class FactoryHud : CanvasLayer
 
         jumpGrid.AddChild(CreateWorkspaceJumpButton("打开建造工作区", BuildWorkspaceId));
         jumpGrid.AddChild(CreateWorkspaceJumpButton("打开蓝图工作区", BlueprintWorkspaceId));
+        jumpGrid.AddChild(CreateWorkspaceJumpButton("打开存档工作区", SavesWorkspaceId));
         jumpGrid.AddChild(CreateActionButton("导出运行时副本", () => MapSaveRequested?.Invoke()));
         jumpGrid.AddChild(CreateActionButton("保存到当前源", () => MapSourceSaveRequested?.Invoke()));
 
@@ -601,6 +639,7 @@ public partial class FactoryHud : CanvasLayer
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
         };
         FactoryUiTheme.ApplyLineEditTheme(runtimeSlotEdit);
+        _saveWorkspaceSlotEdit = runtimeSlotEdit;
         body.AddChild(runtimeSlotEdit);
 
         var runtimeGrid = new GridContainer();
@@ -624,6 +663,52 @@ public partial class FactoryHud : CanvasLayer
 
         body.AddChild(CreateDivider());
         body.AddChild(CreateValueLabel("建议验证路径：观察采矿与接收站吞吐、点击建筑查看详情、Shift+左键框选蓝图、Delete/X 验证拆除与恢复。", FactoryUiTheme.TextSubtle));
+
+        return workspace;
+    }
+
+    private Control BuildSaveWorkspace()
+    {
+        var (workspace, body) = CreateWorkspacePanel(SavesWorkspaceId);
+        body.AddChild(CreateSectionLabel("存档工作区", 14, FactoryUiTheme.Text));
+        body.AddChild(CreateValueLabel("这里会列出当前运行时进度存档，并补充站点对应的当前地图路径、工程路径和运行时路径，方便调试实际快照来源。", FactoryUiTheme.TextSubtle));
+
+        body.AddChild(CreateDivider());
+        body.AddChild(CreateSectionLabel("快速存读", 12, FactoryUiTheme.Text));
+        var runtimeSlotEdit = new LineEdit
+        {
+            Text = "progress-1",
+            PlaceholderText = "输入存档名",
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+        };
+        FactoryUiTheme.ApplyLineEditTheme(runtimeSlotEdit);
+        body.AddChild(runtimeSlotEdit);
+
+        var runtimeGrid = new GridContainer();
+        runtimeGrid.Columns = 2;
+        runtimeGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        runtimeGrid.AddThemeConstantOverride("h_separation", 6);
+        runtimeGrid.AddThemeConstantOverride("v_separation", 6);
+        runtimeGrid.AddChild(CreateActionButton("保存进度", () => RuntimeSaveRequested?.Invoke(runtimeSlotEdit.Text?.Trim() ?? string.Empty)));
+        runtimeGrid.AddChild(CreateActionButton("读取进度", () => RuntimeLoadRequested?.Invoke(runtimeSlotEdit.Text?.Trim() ?? string.Empty)));
+        runtimeGrid.AddChild(CreateActionButton("刷新列表", () => RuntimeSaveLibraryRefreshRequested?.Invoke()));
+        runtimeGrid.AddChild(CreateWorkspaceJumpButton("返回验证工作区", TestingWorkspaceId));
+        body.AddChild(runtimeGrid);
+
+        body.AddChild(CreateDivider());
+        _saveWorkspaceStatusLabel = CreateValueLabel(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: false), FactoryUiTheme.TextSubtle);
+        body.AddChild(_saveWorkspaceStatusLabel);
+
+        body.AddChild(CreateDivider());
+        body.AddChild(CreateSectionLabel("存档列表", 12, FactoryUiTheme.Text));
+        var list = new VBoxContainer();
+        list.MouseFilter = Control.MouseFilterEnum.Ignore;
+        list.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        list.AddThemeConstantOverride("separation", 6);
+        _saveLibraryList = list;
+        body.AddChild(list);
+        list.AddChild(CreateValueLabel("正在读取存档列表...", FactoryUiTheme.TextMuted));
 
         return workspace;
     }
@@ -676,6 +761,76 @@ public partial class FactoryHud : CanvasLayer
         FactoryUiTheme.ApplyButtonTheme(button);
         button.Pressed += pressed;
         return button;
+    }
+
+    private Control CreateSaveLibraryCard(FactoryRuntimeSaveSlotMetadata slot)
+    {
+        var card = new PanelContainer();
+        card.MouseFilter = Control.MouseFilterEnum.Ignore;
+        card.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        card.AddThemeStyleboxOverride("panel", FactoryUiTheme.CreatePanelStyle(FactoryUiTheme.SurfaceOverlay, FactoryUiTheme.BorderSoft, 1, FactoryUiTheme.RadiusNone, 8));
+        card.TooltipText = FactoryRuntimeSavePersistence.BuildSlotTooltip(slot);
+
+        var margin = new MarginContainer();
+        margin.MouseFilter = Control.MouseFilterEnum.Ignore;
+        margin.AddThemeConstantOverride("margin_left", 8);
+        margin.AddThemeConstantOverride("margin_top", 7);
+        margin.AddThemeConstantOverride("margin_right", 8);
+        margin.AddThemeConstantOverride("margin_bottom", 7);
+        card.AddChild(margin);
+
+        var body = new VBoxContainer();
+        body.MouseFilter = Control.MouseFilterEnum.Ignore;
+        body.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        body.AddThemeConstantOverride("separation", 3);
+        margin.AddChild(body);
+
+        var header = new HBoxContainer();
+        header.MouseFilter = Control.MouseFilterEnum.Ignore;
+        header.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        header.AddThemeConstantOverride("separation", 8);
+        body.AddChild(header);
+
+        var title = CreateValueLabel(slot.DisplayName, FactoryUiTheme.Text);
+        title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        title.AddThemeFontSizeOverride("font_size", 13);
+        header.AddChild(title);
+
+        var loadButton = new Button
+        {
+            Text = "读取",
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            CustomMinimumSize = new Vector2(64.0f, 26.0f)
+        };
+        loadButton.AddThemeFontSizeOverride("font_size", 11);
+        FactoryUiTheme.ApplyButtonTheme(loadButton, compact: true);
+        loadButton.TooltipText = $"直接读取存档 {slot.SlotId}";
+        loadButton.Pressed += () =>
+        {
+            if (_saveWorkspaceSlotEdit is not null)
+            {
+                _saveWorkspaceSlotEdit.Text = slot.SlotId;
+            }
+
+            RuntimeLoadRequested?.Invoke(slot.SlotId);
+        };
+        header.AddChild(loadButton);
+
+        var meta = CreateValueLabel(
+            $"{FactoryRuntimeSavePersistence.FormatSavedAtDisplay(slot.SavedAtUtc)}  |  {slot.SiteCount} 站点",
+            FactoryUiTheme.TextSubtle);
+        meta.AddThemeFontSizeOverride("font_size", 11);
+        body.AddChild(meta);
+
+        var maps = CreateValueLabel(FactoryRuntimeSavePersistence.BuildSlotCompactSummary(slot), FactoryUiTheme.TextMuted);
+        maps.AddThemeFontSizeOverride("font_size", 11);
+        body.AddChild(maps);
+
+        var file = CreateValueLabel(slot.ResourcePath, FactoryUiTheme.TextFaint);
+        file.AddThemeFontSizeOverride("font_size", 10);
+        body.AddChild(file);
+
+        return card;
     }
 
     private void HandleWorkspaceSelected(string workspaceId)

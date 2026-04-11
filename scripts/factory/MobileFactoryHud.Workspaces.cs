@@ -10,8 +10,8 @@ public partial class MobileFactoryHud
         topChrome.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
         topChrome.MouseFilter = Control.MouseFilterEnum.Stop;
         topChrome.TooltipText = UseLargeScenarioWorkspaces
-            ? "切换总览、场景验证、蓝图、诊断和工厂详情工作区。"
-            : "切换指挥、内部编辑、蓝图和工厂详情工作区。";
+            ? "切换总览、场景验证、蓝图、诊断、存档和工厂详情工作区。"
+            : "切换指挥、内部编辑、验证、蓝图、存档和工厂详情工作区。";
         AddChild(topChrome);
         _topChromePanel = topChrome;
 
@@ -218,7 +218,12 @@ public partial class MobileFactoryHud
         sidebar.AddChild(workspaceHost);
 
         workspaceHost.AddChild(BuildEditorToolWorkspace(GetPrimaryEditorWorkspaceId()));
+        if (!UseLargeScenarioWorkspaces)
+        {
+            workspaceHost.AddChild(BuildTestingWorkspace());
+        }
         workspaceHost.AddChild(BuildBlueprintWorkspace());
+        workspaceHost.AddChild(BuildSaveWorkspace());
 
         _editorWorkspaceHintLabel = CreateEditorLabel("当前工作区主要在左侧世界信息面板中展开；右侧继续保留视口。", 11, FactoryUiTheme.TextSubtle);
         _editorWorkspaceHintLabel.Visible = false;
@@ -244,13 +249,16 @@ public partial class MobileFactoryHud
                 new FactoryWorkspaceDescriptor(BuildTestWorkspaceId, "场景验证"),
                 new FactoryWorkspaceDescriptor(BlueprintWorkspaceId, "蓝图"),
                 new FactoryWorkspaceDescriptor(DiagnosticsWorkspaceId, "诊断"),
+                new FactoryWorkspaceDescriptor(SavesWorkspaceId, "存档"),
                 new FactoryWorkspaceDescriptor(DetailsWorkspaceId, "工厂详情")
             }
             : new[]
             {
                 new FactoryWorkspaceDescriptor(CommandWorkspaceId, "指挥"),
                 new FactoryWorkspaceDescriptor(EditorWorkspaceId, "内部编辑"),
+                new FactoryWorkspaceDescriptor(TestingWorkspaceId, "验证"),
                 new FactoryWorkspaceDescriptor(BlueprintWorkspaceId, "蓝图"),
+                new FactoryWorkspaceDescriptor(SavesWorkspaceId, "存档"),
                 new FactoryWorkspaceDescriptor(DetailsWorkspaceId, "工厂详情")
             };
     }
@@ -355,6 +363,7 @@ public partial class MobileFactoryHud
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
         };
         FactoryUiTheme.ApplyLineEditTheme(runtimeSlotEdit);
+        _saveWorkspaceSlotEdit = runtimeSlotEdit;
         body.AddChild(runtimeSlotEdit);
 
         var runtimeGrid = new GridContainer();
@@ -431,6 +440,107 @@ public partial class MobileFactoryHud
         _blueprintPanel.CancelRequested += () => BlueprintCancelRequested?.Invoke();
         blueprintMargin.AddChild(_blueprintPanel);
         _editorWorkspacePanels[BlueprintWorkspaceId] = workspace;
+        return workspace;
+    }
+
+    private Control BuildTestingWorkspace()
+    {
+        var (workspace, body) = CreateWorkspacePanel(_editorWorkspacePanels, TestingWorkspaceId);
+        body.AddChild(CreateEditorLabel("验证工作区", 14, FactoryUiTheme.Text));
+        body.AddChild(CreateEditorLabel("把 focused mobile demo 的观察、存读档和持久化状态整理成一个独立面板，便于像普通 sandbox 一样做回归验证。", 11, FactoryUiTheme.TextSubtle));
+
+        var jumpGrid = new GridContainer();
+        jumpGrid.Columns = 2;
+        jumpGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        jumpGrid.AddThemeConstantOverride("h_separation", 6);
+        jumpGrid.AddThemeConstantOverride("v_separation", 6);
+        body.AddChild(jumpGrid);
+        jumpGrid.AddChild(CreateEditorActionButton("打开内部编辑", () => SetActiveWorkspace(EditorWorkspaceId)));
+        jumpGrid.AddChild(CreateEditorActionButton("打开蓝图页", () => SetActiveWorkspace(BlueprintWorkspaceId)));
+        jumpGrid.AddChild(CreateEditorActionButton("打开存档页", () => SetActiveWorkspace(SavesWorkspaceId)));
+        jumpGrid.AddChild(CreateEditorActionButton("返回指挥页", () => SetActiveWorkspace(CommandWorkspaceId)));
+
+        body.AddChild(CreateDivider());
+        body.AddChild(CreateEditorLabel("地图导出", 12, FactoryUiTheme.TextMuted));
+        var exportGrid = new GridContainer();
+        exportGrid.Columns = 2;
+        exportGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        exportGrid.AddThemeConstantOverride("h_separation", 6);
+        exportGrid.AddThemeConstantOverride("v_separation", 6);
+        exportGrid.AddChild(CreateEditorActionButton("导出世界副本", () => WorldMapSaveRequested?.Invoke()));
+        exportGrid.AddChild(CreateEditorActionButton("覆盖世界源", () => WorldMapSourceSaveRequested?.Invoke()));
+        exportGrid.AddChild(CreateEditorActionButton("导出内部副本", () => InteriorMapSaveRequested?.Invoke()));
+        exportGrid.AddChild(CreateEditorActionButton("覆盖内部源", () => InteriorMapSourceSaveRequested?.Invoke()));
+        body.AddChild(exportGrid);
+
+        body.AddChild(CreateDivider());
+        _testingEditorStateLabel = CreateEditorLabel("验证状态：等待工厂状态更新。", 11, FactoryUiTheme.TextMuted);
+        _testingSelectionTargetLabel = CreateEditorLabel("[TARGET] 验证目标：未选中建筑", 11, FactoryUiTheme.TextMuted);
+        _testingPreviewLabel = CreateEditorLabel("[BLOCK] 验证提示：等待状态更新。", 11, FactoryUiTheme.TextMuted);
+        _testingPortStatusLabel = CreateEditorLabel("[PORT] 等待端口状态更新。", 11, FactoryUiTheme.TextSubtle);
+        _testingHintLabel = CreateEditorLabel("等待操作提示更新。", 11, FactoryUiTheme.TextSubtle);
+        _testingPersistenceLabel = CreateEditorLabel(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: true), 11, FactoryUiTheme.TextSubtle);
+        body.AddChild(_testingEditorStateLabel);
+        body.AddChild(_testingSelectionTargetLabel);
+        body.AddChild(_testingPreviewLabel);
+        body.AddChild(_testingPortStatusLabel);
+        body.AddChild(_testingHintLabel);
+        body.AddChild(_testingPersistenceLabel);
+
+        body.AddChild(CreateDivider());
+        body.AddChild(CreateEditorLabel("建议路径：观察部署提示与端口连接状态，打开内部编辑验证放置/拆除，再切到存档页直接保存或读回当前快照。", 11, FactoryUiTheme.TextSubtle));
+
+        return workspace;
+    }
+
+    private Control BuildSaveWorkspace()
+    {
+        var (workspace, body) = CreateWorkspacePanel(_editorWorkspacePanels, SavesWorkspaceId);
+        body.AddChild(CreateEditorLabel("存档工作区", 14, FactoryUiTheme.Text));
+        body.AddChild(CreateEditorLabel("列出当前运行时存档，并显示每个站点的当前地图路径、工程路径和运行时路径，方便排查快照来源。", 11, FactoryUiTheme.TextSubtle));
+
+        body.AddChild(CreateDivider());
+        body.AddChild(CreateEditorLabel("快速存读", 12, FactoryUiTheme.TextMuted));
+        var runtimeSlotEdit = new LineEdit
+        {
+            Text = "progress-1",
+            PlaceholderText = "输入存档名",
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
+        };
+        FactoryUiTheme.ApplyLineEditTheme(runtimeSlotEdit);
+        body.AddChild(runtimeSlotEdit);
+
+        var runtimeGrid = new GridContainer();
+        runtimeGrid.Columns = 2;
+        runtimeGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        runtimeGrid.AddThemeConstantOverride("h_separation", 6);
+        runtimeGrid.AddThemeConstantOverride("v_separation", 6);
+        runtimeGrid.AddChild(CreateEditorActionButton("保存进度", () => RuntimeSaveRequested?.Invoke(runtimeSlotEdit.Text?.Trim() ?? string.Empty)));
+        runtimeGrid.AddChild(CreateEditorActionButton("读取进度", () => RuntimeLoadRequested?.Invoke(runtimeSlotEdit.Text?.Trim() ?? string.Empty)));
+        runtimeGrid.AddChild(CreateEditorActionButton("刷新列表", () => RuntimeSaveLibraryRefreshRequested?.Invoke()));
+        runtimeGrid.AddChild(CreateEditorActionButton("返回建造页", () => SetActiveWorkspace(GetPrimaryEditorWorkspaceId())));
+        body.AddChild(runtimeGrid);
+
+        if (UseLargeScenarioWorkspaces)
+        {
+            body.AddChild(CreateEditorLabel("提示：large scenario 目前只支持浏览存档列表，不支持保存/读取运行时进度。", 11, FactoryUiTheme.StatusWarn));
+        }
+
+        body.AddChild(CreateDivider());
+        _saveLibraryStatusLabel = CreateEditorLabel(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: true), 11, FactoryUiTheme.TextSubtle);
+        body.AddChild(_saveLibraryStatusLabel);
+
+        body.AddChild(CreateDivider());
+        body.AddChild(CreateEditorLabel("存档列表", 12, FactoryUiTheme.TextMuted));
+        var list = new VBoxContainer();
+        list.MouseFilter = Control.MouseFilterEnum.Ignore;
+        list.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        list.AddThemeConstantOverride("separation", 6);
+        _saveLibraryList = list;
+        body.AddChild(list);
+        list.AddChild(CreateEditorLabel("正在读取存档列表...", 11, FactoryUiTheme.TextMuted));
+
         return workspace;
     }
 
