@@ -115,6 +115,69 @@ public static class FactoryRecipeCatalog
             new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.HighVelocityAmmo, 1) })
     };
 
+    public static readonly IReadOnlyList<FactoryRecipeDefinition> DebugOreSourceRecipes = new[]
+    {
+        new FactoryRecipeDefinition(
+            "debug-ore-bundle",
+            "调试原料包",
+            "无成本轮转基础矿物与原料，供物流与加工回归使用。",
+            BuildPrototypeKind.DebugOreSource,
+            0.75f,
+            0.0f,
+            null,
+            new[]
+            {
+                new FactoryRecipeOutputDefinition(FactoryItemKind.Coal, 1),
+                new FactoryRecipeOutputDefinition(FactoryItemKind.IronOre, 1),
+                new FactoryRecipeOutputDefinition(FactoryItemKind.CopperOre, 1),
+                new FactoryRecipeOutputDefinition(FactoryItemKind.StoneOre, 1),
+                new FactoryRecipeOutputDefinition(FactoryItemKind.SulfurOre, 1),
+                new FactoryRecipeOutputDefinition(FactoryItemKind.QuartzOre, 1)
+            })
+    };
+
+    public static readonly IReadOnlyList<FactoryRecipeDefinition> DebugPartSourceRecipes = new[]
+    {
+        new FactoryRecipeDefinition(
+            "debug-part-bundle",
+            "调试部件包",
+            "无成本轮转常用板材和中间件，方便验证组装与缓存。",
+            BuildPrototypeKind.DebugPartSource,
+            0.85f,
+            0.0f,
+            null,
+            new[]
+            {
+                new FactoryRecipeOutputDefinition(FactoryItemKind.IronPlate, 1),
+                new FactoryRecipeOutputDefinition(FactoryItemKind.CopperPlate, 1),
+                new FactoryRecipeOutputDefinition(FactoryItemKind.SteelPlate, 1),
+                new FactoryRecipeOutputDefinition(FactoryItemKind.CopperWire, 1),
+                new FactoryRecipeOutputDefinition(FactoryItemKind.CircuitBoard, 1),
+                new FactoryRecipeOutputDefinition(FactoryItemKind.Gear, 1),
+                new FactoryRecipeOutputDefinition(FactoryItemKind.MachinePart, 1),
+                new FactoryRecipeOutputDefinition(FactoryItemKind.Glass, 1)
+            })
+    };
+
+    public static readonly IReadOnlyList<FactoryRecipeDefinition> DebugCombatSourceRecipes = new[]
+    {
+        new FactoryRecipeDefinition(
+            "debug-combat-bundle",
+            "调试战备包",
+            "无成本轮转弹药与维护补给，用于验证防线和支援链。",
+            BuildPrototypeKind.DebugCombatSource,
+            0.95f,
+            0.0f,
+            null,
+            new[]
+            {
+                new FactoryRecipeOutputDefinition(FactoryItemKind.AmmoMagazine, 1),
+                new FactoryRecipeOutputDefinition(FactoryItemKind.HighVelocityAmmo, 1),
+                new FactoryRecipeOutputDefinition(FactoryItemKind.BatteryPack, 1),
+                new FactoryRecipeOutputDefinition(FactoryItemKind.RepairKit, 1)
+            })
+    };
+
     public static readonly IReadOnlyList<FactoryRecipeDefinition> MiningDrillRecipes = new[]
     {
         new FactoryRecipeDefinition(

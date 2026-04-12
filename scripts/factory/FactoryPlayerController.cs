@@ -93,6 +93,10 @@ public partial class FactoryPlayerController : CharacterBody3D, IFactoryInventor
         AddStructureKitStack(simulation, BuildPrototypeKind.GunTurret, 6);
         AddStructureKitStack(simulation, BuildPrototypeKind.HeavyGunTurret, 4);
         AddStructureKitStack(simulation, BuildPrototypeKind.LargeStorageDepot, 4);
+        AddStructureKitStack(simulation, BuildPrototypeKind.DebugOreSource, 1);
+        AddStructureKitStack(simulation, BuildPrototypeKind.DebugPartSource, 1);
+        AddStructureKitStack(simulation, BuildPrototypeKind.DebugCombatSource, 1);
+        AddStructureKitStack(simulation, BuildPrototypeKind.DebugPowerGenerator, 1);
 
         RefreshActiveSlotState();
     }
@@ -231,7 +235,7 @@ public partial class FactoryPlayerController : CharacterBody3D, IFactoryInventor
             || !_inventory.TryPeekSlot(slot, out var item)
             || item is null
             || !FactoryPresentation.TryGetPlaceableStructureKind(item, out kind)
-            || !_inventory.TryTakeFromSlot(slot, out _))
+            || (!FactoryIndustrialStandards.IsDebugStructure(kind) && !_inventory.TryTakeFromSlot(slot, out _)))
         {
             return false;
         }

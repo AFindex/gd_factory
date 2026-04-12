@@ -28,7 +28,11 @@ public enum BuildPrototypeKind
     TransferBuffer,
     OutputPort,
     InputPort,
-    MiningInputPort
+    MiningInputPort,
+    DebugOreSource,
+    DebugPartSource,
+    DebugCombatSource,
+    DebugPowerGenerator
 }
 
 public enum FactoryItemKind
@@ -226,6 +230,10 @@ public static class FactoryPresentation
             BuildPrototypeKind.OutputPort => new Color("FB923C"),
             BuildPrototypeKind.InputPort => new Color("60A5FA"),
             BuildPrototypeKind.MiningInputPort => new Color("34D399"),
+            BuildPrototypeKind.DebugOreSource => new Color("4ADE80"),
+            BuildPrototypeKind.DebugPartSource => new Color("22D3EE"),
+            BuildPrototypeKind.DebugCombatSource => new Color("FB7185"),
+            BuildPrototypeKind.DebugPowerGenerator => new Color("FBBF24"),
             _ => new Color("7DD3FC")
         };
     }
@@ -261,6 +269,10 @@ public static class FactoryPresentation
             BuildPrototypeKind.OutputPort => "输出端口",
             BuildPrototypeKind.InputPort => "输入端口",
             BuildPrototypeKind.MiningInputPort => "采矿输入端口",
+            BuildPrototypeKind.DebugOreSource => "调试原料源",
+            BuildPrototypeKind.DebugPartSource => "调试部件源",
+            BuildPrototypeKind.DebugCombatSource => "调试战备源",
+            BuildPrototypeKind.DebugPowerGenerator => "永久测试发电机",
             _ => kind.ToString()
         };
     }

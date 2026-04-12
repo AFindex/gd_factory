@@ -1099,6 +1099,9 @@ public static partial class FactoryMapValidationService
             || structure.Kind == BuildPrototypeKind.Smelter
             || structure.Kind == BuildPrototypeKind.Assembler
             || structure.Kind == BuildPrototypeKind.AmmoAssembler
+            || structure.Kind == BuildPrototypeKind.DebugOreSource
+            || structure.Kind == BuildPrototypeKind.DebugPartSource
+            || structure.Kind == BuildPrototypeKind.DebugCombatSource
             || structure.Kind == BuildPrototypeKind.Storage
             || structure.Kind == BuildPrototypeKind.LargeStorageDepot;
     }

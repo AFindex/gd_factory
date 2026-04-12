@@ -30,6 +30,10 @@ public partial class FactoryDemo : Node3D
         [BuildPrototypeKind.Loader] = new BuildPrototypeDefinition(BuildPrototypeKind.Loader, "装载器", new Color("FDBA74"), "把后方带上的物品装入前方机器或回收端。"),
         [BuildPrototypeKind.Unloader] = new BuildPrototypeDefinition(BuildPrototypeKind.Unloader, "卸载器", new Color("93C5FD"), "把机器端输出卸到前方传送网络。"),
         [BuildPrototypeKind.CargoPacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoPacker, "封包站", new Color("F97316"), "把外场产物压成世界标准封装货物，供移动工厂边界或远程收货链继续运输。"),
+        [BuildPrototypeKind.DebugOreSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugOreSource, "调试原料源", new Color("4ADE80"), "无成本轮转煤炭与多种矿物原料，便于快速验证物流与加工链。"),
+        [BuildPrototypeKind.DebugPartSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugPartSource, "调试部件源", new Color("22D3EE"), "无成本轮转板材与中间件，便于快速验证制造、缓存与装卸。"),
+        [BuildPrototypeKind.DebugCombatSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugCombatSource, "调试战备源", new Color("FB7185"), "无成本轮转弹药和维护补给，便于快速验证防线与支援链。"),
+        [BuildPrototypeKind.DebugPowerGenerator] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugPowerGenerator, "永久测试发电机", new Color("FBBF24"), "调试专用永久供电机，无需燃料即可持续给周边电网供能。"),
         [BuildPrototypeKind.Storage] = new BuildPrototypeDefinition(BuildPrototypeKind.Storage, "仓储", new Color("94A3B8"), "缓存多件物品，可向前输出，也能被机械臂抓取。"),
         [BuildPrototypeKind.LargeStorageDepot] = new BuildPrototypeDefinition(BuildPrototypeKind.LargeStorageDepot, "大型仓储", new Color("64748B"), "占据 2x2 空间的大型缓存仓，可作为更稳定的物流缓冲点。"),
         [BuildPrototypeKind.Inserter] = new BuildPrototypeDefinition(BuildPrototypeKind.Inserter, "机械臂", new Color("FACC15"), "从后方抓取一件物品并向前投送。"),
@@ -1189,7 +1193,7 @@ public partial class FactoryDemo : Node3D
     private bool IsPowerPreviewActive()
     {
         return _interactionMode == FactoryInteractionMode.Build
-            ? _hasHoveredCell && (_selectedBuildKind == BuildPrototypeKind.Generator || _selectedBuildKind == BuildPrototypeKind.PowerPole)
+            ? _hasHoveredCell && (_selectedBuildKind == BuildPrototypeKind.Generator || _selectedBuildKind == BuildPrototypeKind.DebugPowerGenerator || _selectedBuildKind == BuildPrototypeKind.PowerPole)
             : _interactionMode == FactoryInteractionMode.Interact && _selectedStructure is IFactoryPowerNode;
     }
 
@@ -1228,6 +1232,7 @@ public partial class FactoryDemo : Node3D
         {
             PowerPoleStructure => 1.44f,
             GeneratorStructure => 1.06f,
+            DebugPowerGeneratorStructure => 1.12f,
             _ => 1.18f
         };
         return structure.GlobalPosition + new Vector3(0.0f, height, 0.0f);

@@ -154,7 +154,14 @@ public partial class FactoryWorkspaceChrome : PanelContainer
                 CustomMinimumSize = new Vector2(0.0f, isCompact ? 26.0f : 30.0f)
             };
             button.AddThemeFontSizeOverride("font_size", isCompact ? 10 : 11);
-            FactoryUiTheme.ApplyButtonTheme(button, compact: isCompact);
+            if (isCompact)
+            {
+                FactoryUiTheme.ApplyTabButtonTheme(button);
+            }
+            else
+            {
+                FactoryUiTheme.ApplyButtonTheme(button, compact: false);
+            }
             button.Pressed += () => SetActiveWorkspace(workspaceId);
             _workspaceRow.AddChild(button);
             _workspaceButtons[workspaceId] = button;
@@ -176,11 +183,17 @@ public partial class FactoryWorkspaceChrome : PanelContainer
         _titleLabel.Visible = hasTitle;
         _subtitleLabel.Text = _pendingSubtitle;
         _subtitleLabel.Visible = hasSubtitle;
-        _body.AddThemeConstantOverride("separation", isCompact ? 4 : 8);
-        _margin.AddThemeConstantOverride("margin_left", isCompact ? 8 : 12);
-        _margin.AddThemeConstantOverride("margin_top", isCompact ? 6 : 10);
-        _margin.AddThemeConstantOverride("margin_right", isCompact ? 8 : 12);
-        _margin.AddThemeConstantOverride("margin_bottom", isCompact ? 6 : 10);
+        AddThemeStyleboxOverride(
+            "panel",
+            isCompact
+                ? FactoryUiTheme.CreatePanelStyle(Colors.Transparent, Colors.Transparent, borderWidth: 0, cornerRadius: FactoryUiTheme.RadiusNone, contentMargin: 0)
+                : FactoryUiTheme.CreateChromePanelStyle());
+        _body.AddThemeConstantOverride("separation", isCompact ? 0 : 8);
+        _margin.AddThemeConstantOverride("margin_left", isCompact ? 0 : 12);
+        _margin.AddThemeConstantOverride("margin_top", isCompact ? 0 : 10);
+        _margin.AddThemeConstantOverride("margin_right", isCompact ? 0 : 12);
+        _margin.AddThemeConstantOverride("margin_bottom", isCompact ? 0 : 10);
+        _workspaceRow?.AddThemeConstantOverride("separation", isCompact ? 2 : 6);
         RebuildWorkspaceButtons();
         SetActiveWorkspace(_pendingActiveWorkspaceId, emitSignal: false);
     }

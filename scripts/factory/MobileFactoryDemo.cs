@@ -65,6 +65,10 @@ public partial class MobileFactoryDemo : Node3D
         [BuildPrototypeKind.CargoUnpacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoUnpacker, "解包模块", new Color("38BDF8"), "单件解包处理舱。世界大货物会以原尺寸进入舱体，再被拆成可在料轨上流动的小载具。"),
         [BuildPrototypeKind.CargoPacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoPacker, "封包模块", new Color("F97316"), "单件封包处理舱。舱内小载具在这里重新组合成一个世界标准大货物后再出舱。"),
         [BuildPrototypeKind.TransferBuffer] = new BuildPrototypeDefinition(BuildPrototypeKind.TransferBuffer, "中转缓冲槽", new Color("14B8A6"), "大件转换节拍缓冲架，用来为解包/封包链路整理待处理或待出舱载荷。"),
+        [BuildPrototypeKind.DebugOreSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugOreSource, "原矿调试舱", new Color("4ADE80"), "无成本轮转煤炭与多种矿物原料，便于直接调试舱内供料链。"),
+        [BuildPrototypeKind.DebugPartSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugPartSource, "部件调试舱", new Color("22D3EE"), "无成本轮转板材和中间件，便于快速调试舱内加工链与缓存。"),
+        [BuildPrototypeKind.DebugCombatSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugCombatSource, "战备调试舱", new Color("FB7185"), "无成本轮转弹药与维护补给，便于快速调试炮塔和支援链。"),
+        [BuildPrototypeKind.DebugPowerGenerator] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugPowerGenerator, "永久测试动力舱", new Color("FBBF24"), "调试专用永久供电模块，无需燃料即可持续给舱内电网供能。"),
         [BuildPrototypeKind.Sink] = new BuildPrototypeDefinition(BuildPrototypeKind.Sink, "回收器", new Color("FDE68A"), "吞掉输入物品并作为内部消费端。"),
         [BuildPrototypeKind.Storage] = new BuildPrototypeDefinition(BuildPrototypeKind.Storage, "仓储", new Color("94A3B8"), "缓存多件物品，可向前输出，也能被机械臂抓取。"),
         [BuildPrototypeKind.LargeStorageDepot] = new BuildPrototypeDefinition(BuildPrototypeKind.LargeStorageDepot, "大型仓储", new Color("64748B"), "占据 2x2 内部格子的仓储缓冲区，用于宽体移动工厂案例。"),
@@ -535,6 +539,7 @@ public partial class MobileFactoryDemo : Node3D
         _hud.EditorPaletteSelected += OnEditorPaletteSelected;
         _hud.EditorRotateRequested += OnEditorRotateRequested;
         _hud.EditModeToggleRequested += ToggleEditorMode;
+        _hud.EditorBuildModeRequested += EnterInteriorBuildMode;
         _hud.EditorInteractionModeRequested += EnterInteriorInteractionMode;
         _hud.EditorDeleteModeRequested += EnterInteriorDeleteMode;
         _hud.FactoryCommandModeToggleRequested += ToggleFactoryCommandMode;
@@ -2466,7 +2471,7 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         return _interiorInteractionMode == FactoryInteractionMode.Build
-            ? _hasHoveredInteriorCell && (_selectedInteriorKind == BuildPrototypeKind.Generator || _selectedInteriorKind == BuildPrototypeKind.PowerPole)
+            ? _hasHoveredInteriorCell && (_selectedInteriorKind == BuildPrototypeKind.Generator || _selectedInteriorKind == BuildPrototypeKind.DebugPowerGenerator || _selectedInteriorKind == BuildPrototypeKind.PowerPole)
             : _interiorInteractionMode == FactoryInteractionMode.Interact && _selectedInteriorStructure is IFactoryPowerNode;
     }
 
@@ -2502,6 +2507,7 @@ public partial class MobileFactoryDemo : Node3D
         {
             PowerPoleStructure => 1.44f,
             GeneratorStructure => 1.06f,
+            DebugPowerGeneratorStructure => 1.12f,
             _ => 1.18f
         };
         return structure.GlobalPosition + new Vector3(0.0f, height, 0.0f);
@@ -3352,6 +3358,11 @@ public partial class MobileFactoryDemo : Node3D
 
         _selectedInteriorKind = kind.Value;
         _interiorInteractionMode = FactoryInteractionMode.Build;
+    }
+
+    private void EnterInteriorBuildMode()
+    {
+        SelectInteriorBuildKind(_selectedInteriorKind);
     }
 
     private void EnterInteriorInteractionMode()

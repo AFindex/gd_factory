@@ -24,6 +24,8 @@ public partial class MobileFactoryHud : CanvasLayer
     private readonly Dictionary<string, Control> _editorWorkspacePanels = new();
 
     private PanelContainer? _topChromePanel;
+    private Control? _overviewHeaderChromeHost;
+    private Button? _overviewCollapseButton;
     private FactoryWorkspaceChrome? _workspaceChrome;
     private PanelContainer? _worldFocusFrame;
     private StyleBoxFlat? _worldFocusFrameStyle;
@@ -74,22 +76,55 @@ public partial class MobileFactoryHud : CanvasLayer
     private Button? _observerButton;
     private Button? _deployButton;
     private Button? _editModeButton;
+    private Button? _editorBuildModeButton;
+    private Button? _editorInteractionModeButton;
+    private Button? _editorDeleteModeButton;
     private float _editorProgress;
+    private float _overviewCollapseProgress;
     private bool _editorOpen;
     private bool _editorViewportFocused;
     private bool _editorOperationFocused;
+    private bool _overviewCollapsed;
+    private FactoryInteractionMode _editorInteractionMode = FactoryInteractionMode.Interact;
 
     public bool UseLargeScenarioWorkspaces { get; set; }
     public SubViewport EditorViewport => _editorViewport!;
     public bool IsEditorVisible => _editorOpen;
-    public string PortStatusText => _portStatusLabel?.Text ?? string.Empty;
+    public string PortStatusText => _portStatusLabel?.Text ?? _testingPortStatusLabel?.Text ?? string.Empty;
     public bool IsDetailVisible => _detailWindow?.IsShowing ?? false;
     public string DetailTitleText => _detailWindow?.CurrentTitleText ?? string.Empty;
     public string ActiveWorkspaceId => _workspaceChrome?.ActiveWorkspaceId ?? string.Empty;
+    public bool IsOverviewCollapsed => _overviewCollapsed;
+    public string OverviewCollapseButtonText => _overviewCollapseButton?.Text ?? string.Empty;
+    public float OverviewVisibleWidth
+    {
+        get
+        {
+            if (_infoPanel is null)
+            {
+                return 0.0f;
+            }
+
+            var rect = _infoPanel.GetGlobalRect();
+            var viewportRect = GetViewport().GetVisibleRect();
+            var visibleLeft = Mathf.Max(rect.Position.X, viewportRect.Position.X);
+            var visibleRight = Mathf.Min(rect.End.X, viewportRect.End.X);
+            return Mathf.Max(0.0f, visibleRight - visibleLeft);
+        }
+    }
+    public bool IsEditorOperationPanelBuildFocused => _editorModeLabel is null
+        && _selectionLabel is null
+        && _editorPreviewLabel is null
+        && _inspectionPanel is null;
+    public bool IsWorkspaceChromeEmbeddedInOverview => _workspaceChrome is not null
+        && _overviewHeaderChromeHost is not null
+        && _workspaceChrome.GetParent() == _topChromePanel
+        && _topChromePanel?.GetParent() == _overviewHeaderChromeHost;
 
     public event Action<BuildPrototypeKind>? EditorPaletteSelected;
     public event Action<int>? EditorRotateRequested;
     public event Action? EditModeToggleRequested;
+    public event Action? EditorBuildModeRequested;
     public event Action? EditorInteractionModeRequested;
     public event Action? EditorDeleteModeRequested;
     public event Action? FactoryCommandModeToggleRequested;
@@ -141,6 +176,8 @@ public partial class MobileFactoryHud : CanvasLayer
     {
         var target = _editorOpen ? 1.0f : 0.0f;
         _editorProgress = Mathf.MoveToward(_editorProgress, target, (float)delta * 4.5f);
+        var overviewTarget = _overviewCollapsed ? 1.0f : 0.0f;
+        _overviewCollapseProgress = Mathf.MoveToward(_overviewCollapseProgress, overviewTarget, (float)delta * 5.0f);
         UpdateLayout();
     }
 
@@ -161,6 +198,17 @@ public partial class MobileFactoryHud : CanvasLayer
     }
 
     public void SelectWorkspace(string workspaceId) => _workspaceChrome?.SetActiveWorkspace(workspaceId);
+
+    public void ToggleOverviewCollapsed()
+    {
+        SetOverviewCollapsed(!_overviewCollapsed);
+    }
+
+    public void SetOverviewCollapsed(bool collapsed)
+    {
+        _overviewCollapsed = collapsed;
+        RefreshOverviewCollapseButton();
+    }
 
     public void SetEditorOpen(bool isOpen)
     {
@@ -308,26 +356,33 @@ public partial class MobileFactoryHud : CanvasLayer
 
     public void SetEditorSelection(FactoryInteractionMode interactionMode, BuildPrototypeKind? kind, FacingDirection facing)
     {
-        if (_selectionLabel is null)
-        {
-            return;
-        }
-
+        _editorInteractionMode = interactionMode;
         if (interactionMode == FactoryInteractionMode.Build && kind.HasValue)
         {
-            _selectionLabel.Text = $"[BUILD] 内部模式：建造 | {FactoryIndustrialStandards.GetSiteAwarePrototypeLabel(kind.Value, FactorySiteKind.Interior)} | 朝向 {FactoryDirection.ToLabel(facing)}";
+            if (_selectionLabel is not null)
+            {
+                _selectionLabel.Text = $"[BUILD] 内部模式：建造 | {FactoryIndustrialStandards.GetSiteAwarePrototypeLabel(kind.Value, FactorySiteKind.Interior)} | 朝向 {FactoryDirection.ToLabel(facing)}";
+            }
             RefreshPaletteButtons(kind.Value);
         }
         else if (interactionMode == FactoryInteractionMode.Delete)
         {
-            _selectionLabel.Text = "[DELETE] 内部模式：删除 | X 切换，右键退出，Shift 可框选删除";
+            if (_selectionLabel is not null)
+            {
+                _selectionLabel.Text = "[DELETE] 内部模式：删除 | X 切换，右键退出，Shift 可框选删除";
+            }
             RefreshPaletteButtons(null);
         }
         else
         {
-            _selectionLabel.Text = "[INTERACT] 内部模式：交互 | 点击建筑查看状态";
+            if (_selectionLabel is not null)
+            {
+                _selectionLabel.Text = "[INTERACT] 内部模式：交互 | 点击建筑查看状态";
+            }
             RefreshPaletteButtons(null);
         }
+
+        RefreshEditorModeButtons();
     }
 
     public void SetEditorPreview(bool isValid, string text)
@@ -419,11 +474,7 @@ public partial class MobileFactoryHud : CanvasLayer
 
     public void SetEditorState(bool isOpen, MobileFactoryLifecycleState lifecycleState, int structureCount, FactoryInteractionMode interactionMode)
     {
-        if (_editorModeLabel is null)
-        {
-            return;
-        }
-
+        _editorInteractionMode = interactionMode;
         var stateText = lifecycleState switch
         {
             MobileFactoryLifecycleState.Deployed => "已部署",
@@ -439,12 +490,17 @@ public partial class MobileFactoryHud : CanvasLayer
             _ => "交互模式"
         };
         var maintenanceNote = FactoryIndustrialStandards.GetBuildCatalog(FactorySiteKind.Interior).MaintenanceNote;
-        _editorModeLabel.Text = $"[EDITOR] {paneText} | 生命周期：{stateText} | {interactionText} | 当前内部件数：{structureCount}\n{maintenanceNote}";
+        if (_editorModeLabel is not null)
+        {
+            _editorModeLabel.Text = $"[EDITOR] {paneText} | 生命周期：{stateText} | {interactionText} | 当前内部件数：{structureCount}\n{maintenanceNote}";
+        }
 
         if (_testingEditorStateLabel is not null)
         {
             _testingEditorStateLabel.Text = $"[CHECK] {paneText} | 生命周期：{stateText} | {interactionText} | 当前内部件数：{structureCount}\n{maintenanceNote}";
         }
+
+        RefreshEditorModeButtons();
     }
 
     public void SetHintText(string text)
@@ -518,6 +574,19 @@ public partial class MobileFactoryHud : CanvasLayer
         }
     }
 
+    private void RefreshOverviewCollapseButton()
+    {
+        if (_overviewCollapseButton is null)
+        {
+            return;
+        }
+
+        _overviewCollapseButton.Text = _overviewCollapsed ? "> 展开" : "收起 <";
+        _overviewCollapseButton.TooltipText = _overviewCollapsed
+            ? "将移动工厂总览向右侧滑出并重新显示。"
+            : "将移动工厂总览向左侧滑隐藏，腾出更多世界与编辑空间。";
+    }
+
     public void SetRuntimeSaveLibrary(IReadOnlyList<FactoryRuntimeSaveSlotMetadata> slots)
     {
         if (_saveLibraryList is null)
@@ -578,7 +647,24 @@ public partial class MobileFactoryHud : CanvasLayer
         }
 
         _editModeButton.Text = _editorOpen ? "退出编辑模式 (F)" : "进入编辑模式 (F)";
-        _editModeButton.ButtonPressed = _editorOpen;
+    }
+
+    private void RefreshEditorModeButtons()
+    {
+        if (_editorBuildModeButton is not null)
+        {
+            _editorBuildModeButton.ButtonPressed = _editorInteractionMode == FactoryInteractionMode.Build;
+        }
+
+        if (_editorInteractionModeButton is not null)
+        {
+            _editorInteractionModeButton.ButtonPressed = _editorInteractionMode == FactoryInteractionMode.Interact;
+        }
+
+        if (_editorDeleteModeButton is not null)
+        {
+            _editorDeleteModeButton.ButtonPressed = _editorInteractionMode == FactoryInteractionMode.Delete;
+        }
     }
 
     private Control CreateSaveLibraryCard(FactoryRuntimeSaveSlotMetadata slot)

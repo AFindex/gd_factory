@@ -480,9 +480,9 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
                 => FactoryInteriorVisualRole.EmbeddedLogistics,
             BuildPrototypeKind.TransferBuffer or BuildPrototypeKind.Storage or BuildPrototypeKind.LargeStorageDepot or BuildPrototypeKind.CargoUnpacker or BuildPrototypeKind.CargoPacker or BuildPrototypeKind.Sink
                 => FactoryInteriorVisualRole.BufferCabinet,
-            BuildPrototypeKind.Generator or BuildPrototypeKind.Smelter or BuildPrototypeKind.Assembler or BuildPrototypeKind.AmmoAssembler
+            BuildPrototypeKind.Generator or BuildPrototypeKind.Smelter or BuildPrototypeKind.Assembler or BuildPrototypeKind.AmmoAssembler or BuildPrototypeKind.DebugOreSource or BuildPrototypeKind.DebugPartSource or BuildPrototypeKind.DebugCombatSource
                 => FactoryInteriorVisualRole.ServiceModule,
-            BuildPrototypeKind.PowerPole
+            BuildPrototypeKind.PowerPole or BuildPrototypeKind.DebugPowerGenerator
                 => FactoryInteriorVisualRole.PowerNode,
             BuildPrototypeKind.GunTurret or BuildPrototypeKind.HeavyGunTurret
                 => FactoryInteriorVisualRole.Hardpoint,

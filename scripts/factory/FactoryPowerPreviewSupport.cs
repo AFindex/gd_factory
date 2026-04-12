@@ -106,6 +106,9 @@ public static class FactoryPowerPreviewSupport
             case BuildPrototypeKind.Generator:
                 rangeCells = 5;
                 return true;
+            case BuildPrototypeKind.DebugPowerGenerator:
+                rangeCells = 6;
+                return true;
             case BuildPrototypeKind.PowerPole:
                 rangeCells = FactoryPreviewOverlaySupport.PreviewPowerPoleConnectionRangeCells;
                 return true;

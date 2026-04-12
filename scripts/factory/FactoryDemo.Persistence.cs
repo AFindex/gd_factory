@@ -7,7 +7,10 @@ public partial class FactoryDemo
     private void InitializePersistenceHud()
     {
         _hud?.SetPersistenceStatus(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: false));
-        RefreshRuntimeSaveLibrary();
+        if (FactoryPersistencePaths.IsPersistenceEnabled())
+        {
+            RefreshRuntimeSaveLibrary();
+        }
     }
 
     private void HandleMapSaveRequested()
@@ -250,6 +253,11 @@ public partial class FactoryDemo
 
     private void RefreshRuntimeSaveLibrary()
     {
+        if (!FactoryPersistencePaths.IsPersistenceEnabled())
+        {
+            return;
+        }
+
         var slots = FactoryRuntimeSavePersistence.LoadIndex().Slots;
         _hud?.SetRuntimeSaveLibrary(slots);
     }

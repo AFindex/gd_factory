@@ -7,12 +7,14 @@ public partial class MobileFactoryHud
     private void BuildTopChrome()
     {
         var topChrome = new PanelContainer();
-        topChrome.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
+        topChrome.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         topChrome.MouseFilter = Control.MouseFilterEnum.Stop;
+        topChrome.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        topChrome.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         topChrome.TooltipText = UseLargeScenarioWorkspaces
             ? "切换总览、场景验证、蓝图、诊断、存档和工厂详情工作区。"
             : "切换指挥、内部编辑、验证、蓝图、存档和工厂详情工作区。";
-        AddChild(topChrome);
+        topChrome.AddThemeStyleboxOverride("panel", FactoryUiTheme.CreatePanelStyle(Colors.Transparent, Colors.Transparent, borderWidth: 0, cornerRadius: FactoryUiTheme.RadiusNone, contentMargin: 0));
         _topChromePanel = topChrome;
 
         _workspaceChrome = new FactoryWorkspaceChrome();
@@ -74,7 +76,34 @@ public partial class MobileFactoryHud
         body.CustomMinimumSize = new Vector2(0.0f, 0.0f);
         bodyScroll.AddChild(body);
 
-        body.AddChild(CreateInfoLabel("移动工厂总览", 14, FactoryUiTheme.Text));
+        var header = new HBoxContainer();
+        header.MouseFilter = Control.MouseFilterEnum.Ignore;
+        header.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        header.CustomMinimumSize = new Vector2(0.0f, 40.0f);
+        header.AddThemeConstantOverride("separation", 0);
+        body.AddChild(header);
+
+        var chromeHost = new Control();
+        chromeHost.CustomMinimumSize = new Vector2(220.0f, 40.0f);
+        chromeHost.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        chromeHost.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
+        chromeHost.MouseFilter = Control.MouseFilterEnum.Stop;
+        chromeHost.ClipContents = true;
+        header.AddChild(chromeHost);
+        _overviewHeaderChromeHost = chromeHost;
+        if (_topChromePanel is not null)
+        {
+            _topChromePanel.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+            chromeHost.AddChild(_topChromePanel);
+        }
+
+        _overviewCollapseButton = CreateEditorActionButton("收起 <", () => ToggleOverviewCollapsed());
+        _overviewCollapseButton.CustomMinimumSize = new Vector2(84.0f, 28.0f);
+        _overviewCollapseButton.Size = _overviewCollapseButton.CustomMinimumSize;
+        AddChild(_overviewCollapseButton);
+        RefreshOverviewCollapseButton();
+
+        body.AddChild(CreateDivider());
         _modeLabel = CreateInfoLabel(string.Empty);
         _stateLabel = CreateInfoLabel(string.Empty);
         _hoverLabel = CreateInfoLabel(string.Empty);
@@ -184,58 +213,34 @@ public partial class MobileFactoryHud
         sidebar.CustomMinimumSize = new Vector2(EditorSidebarWidth - 20.0f, 0.0f);
         sidebarScroll.AddChild(sidebar);
 
-        sidebar.AddChild(CreateEditorLabel("编辑操作面板", 14, FactoryUiTheme.Text));
-        sidebar.AddChild(CreateEditorLabel("进入编辑模式后，建造、删除、旋转和蓝图快捷动作集中在这里；主工作区继续承载总览与流程页。", 11, FactoryUiTheme.TextSubtle));
-
-        var sessionRow = new GridContainer();
-        sessionRow.Columns = 2;
-        sessionRow.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        sessionRow.AddThemeConstantOverride("h_separation", 6);
-        sessionRow.AddThemeConstantOverride("v_separation", 6);
-        sidebar.AddChild(sessionRow);
-
         _editModeButton = CreateEditorActionButton("进入编辑模式 (F)", () => EditModeToggleRequested?.Invoke());
-        _editModeButton.ToggleMode = true;
-        sessionRow.AddChild(_editModeButton);
-        sessionRow.AddChild(CreateEditorActionButton("交互模式", () => EditorInteractionModeRequested?.Invoke()));
-        sessionRow.AddChild(CreateEditorActionButton("删除模式", () => EditorDeleteModeRequested?.Invoke()));
-        sessionRow.AddChild(CreateEditorActionButton("蓝图工作区", () => SetActiveWorkspace(BlueprintWorkspaceId)));
+        _editModeButton.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        sidebar.AddChild(_editModeButton);
 
-        var quickRow = new GridContainer();
-        quickRow.Columns = 2;
-        quickRow.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        quickRow.AddThemeConstantOverride("h_separation", 6);
-        quickRow.AddThemeConstantOverride("v_separation", 6);
-        sidebar.AddChild(quickRow);
-        quickRow.AddChild(CreateEditorActionButton("存档工作区", () => SetActiveWorkspace(SavesWorkspaceId)));
-        quickRow.AddChild(CreateEditorActionButton("工厂详情", () => SetActiveWorkspace(DetailsWorkspaceId)));
+        var modeRow = new GridContainer();
+        modeRow.Columns = 3;
+        modeRow.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        modeRow.AddThemeConstantOverride("h_separation", 6);
+        modeRow.AddThemeConstantOverride("v_separation", 6);
+        sidebar.AddChild(modeRow);
 
-        _editorModeLabel = CreateEditorLabel(string.Empty, 12, FactoryUiTheme.TextMuted);
-        _selectionLabel = CreateEditorLabel(string.Empty, 12, FactoryUiTheme.Text);
-        _selectionTargetLabel = CreateEditorLabel(string.Empty, 12, FactoryUiTheme.TextMuted);
-        _portStatusLabel = CreateEditorLabel(string.Empty, 12, FactoryUiTheme.TextSubtle);
-        sidebar.AddChild(_editorModeLabel);
-        sidebar.AddChild(_selectionLabel);
-        sidebar.AddChild(_selectionTargetLabel);
-        sidebar.AddChild(_portStatusLabel);
+        _editorBuildModeButton = CreateEditorActionButton("建造模式", () => EditorBuildModeRequested?.Invoke());
+        _editorBuildModeButton.ToggleMode = true;
+        modeRow.AddChild(_editorBuildModeButton);
 
-        _inspectionPanel = new PanelContainer { Visible = false };
-        sidebar.AddChild(_inspectionPanel);
-        var inspectionBody = new VBoxContainer();
-        inspectionBody.AddThemeConstantOverride("separation", 4);
-        _inspectionPanel.AddChild(inspectionBody);
-        _inspectionTitleLabel = CreateEditorLabel(string.Empty, 12, FactoryUiTheme.Text);
-        _inspectionBodyLabel = CreateEditorLabel(string.Empty, 11, FactoryUiTheme.TextMuted);
-        inspectionBody.AddChild(_inspectionTitleLabel);
-        inspectionBody.AddChild(_inspectionBodyLabel);
+        _editorInteractionModeButton = CreateEditorActionButton("交互模式", () => EditorInteractionModeRequested?.Invoke());
+        _editorInteractionModeButton.ToggleMode = true;
+        modeRow.AddChild(_editorInteractionModeButton);
+
+        _editorDeleteModeButton = CreateEditorActionButton("删除模式", () => EditorDeleteModeRequested?.Invoke());
+        _editorDeleteModeButton.ToggleMode = true;
+        modeRow.AddChild(_editorDeleteModeButton);
+
+        RefreshEditorModeButtons();
 
         sidebar.AddChild(CreateDivider());
         sidebar.AddChild(CreateEditorLabel("建造分类", 12, FactoryUiTheme.TextMuted));
         BuildEditorToolbar(sidebar);
-        sidebar.AddChild(CreateDivider());
-        _editorPreviewLabel = CreateEditorLabel("内部预览：等待状态更新。", 12, FactoryUiTheme.TextMuted);
-        sidebar.AddChild(_editorPreviewLabel);
-        sidebar.AddChild(CreateEditorLabel("提示：工作区用于切换总览、蓝图、存档、详情；编辑模式按钮只负责打开或关闭当前舱内编辑会话。", 11, FactoryUiTheme.TextSubtle));
 
         _detailWindow = new FactoryStructureDetailWindow();
         _detailWindow.InventoryMoveRequested += (inventoryId, fromSlot, toSlot, splitStack) => EditorDetailInventoryMoveRequested?.Invoke(inventoryId, fromSlot, toSlot, splitStack);
@@ -609,33 +614,43 @@ public partial class MobileFactoryHud
 
     private void UpdateLayout()
     {
-        if (_topChromePanel is null || _worldFocusFrame is null || _infoPanel is null || _editorViewportPanel is null || _editorPanel is null || _editorViewport is null || _editorViewportRect is null)
+        if (_worldFocusFrame is null || _infoPanel is null || _editorViewportPanel is null || _editorPanel is null || _editorViewport is null || _editorViewportRect is null)
         {
             return;
         }
 
         var viewportSize = GetViewport().GetVisibleRect().Size;
         var margin = new Vector2(18.0f, 18.0f);
-        var chromeHeight = 38.0f;
-        var contentTop = chromeHeight + 8.0f;
-        var contentHeight = Mathf.Max(240.0f, viewportSize.Y - contentTop - margin.Y);
+        var contentTop = margin.Y;
+        var contentHeight = Mathf.Max(240.0f, viewportSize.Y - margin.Y * 2.0f);
         var worldWidth = viewportSize.X / 6.0f;
-
-        _topChromePanel.Position = Vector2.Zero;
-        _topChromePanel.Size = new Vector2(viewportSize.X, chromeHeight);
 
         _worldFocusFrame.Position = new Vector2(0.0f, contentTop);
         _worldFocusFrame.Size = new Vector2(worldWidth, contentHeight);
 
         var infoWidth = Mathf.Clamp(viewportSize.X * 0.28f, 300.0f, 400.0f);
         var infoHeight = Mathf.Min(contentHeight, Mathf.Max(220.0f, contentHeight * 0.78f));
-        _infoPanel.Position = new Vector2(margin.X, contentTop);
+        var collapsedVisibleWidth = 54.0f;
+        var visibleInfoWidth = Mathf.Lerp(infoWidth, collapsedVisibleWidth, _overviewCollapseProgress);
+        var infoOffset = infoWidth - visibleInfoWidth;
+        _infoPanel.Position = new Vector2(margin.X - infoOffset, contentTop);
         _infoPanel.Size = new Vector2(infoWidth, infoHeight);
+        if (_overviewCollapseButton is not null)
+        {
+            var buttonSize = _overviewCollapseButton.GetCombinedMinimumSize();
+            buttonSize = new Vector2(
+                Mathf.Max(buttonSize.X, _overviewCollapseButton.CustomMinimumSize.X),
+                Mathf.Max(buttonSize.Y, _overviewCollapseButton.CustomMinimumSize.Y));
+            _overviewCollapseButton.Size = buttonSize;
+            var buttonX = _infoPanel.Position.X + _infoPanel.Size.X + 6.0f;
+            var buttonY = _infoPanel.Position.Y + 14.0f;
+            _overviewCollapseButton.Position = new Vector2(buttonX, buttonY);
+        }
 
         var editorOperationWidth = Mathf.Clamp(EditorSidebarWidth + 24.0f, 296.0f, 340.0f);
-        var editorViewportWidth = Mathf.Max(320.0f, viewportSize.X - infoWidth - editorOperationWidth - margin.X * 3.0f);
+        var editorViewportWidth = Mathf.Max(320.0f, viewportSize.X - visibleInfoWidth - editorOperationWidth - margin.X * 3.0f);
         var viewportClosedX = viewportSize.X + 20.0f;
-        var viewportOpenX = infoWidth + margin.X * 2.0f;
+        var viewportOpenX = visibleInfoWidth + margin.X * 2.0f;
         var viewportX = Mathf.Lerp(viewportClosedX, viewportOpenX, _editorProgress);
         var operationX = viewportX + editorViewportWidth + 10.0f;
 

@@ -77,6 +77,13 @@ public static class FactoryIndustrialStandards
                 BuildPrototypeKind.Wall,
                 BuildPrototypeKind.GunTurret,
                 BuildPrototypeKind.HeavyGunTurret
+            }),
+            new FactoryBuildPaletteCategoryDefinition("调试支援", new[]
+            {
+                BuildPrototypeKind.DebugOreSource,
+                BuildPrototypeKind.DebugPartSource,
+                BuildPrototypeKind.DebugCombatSource,
+                BuildPrototypeKind.DebugPowerGenerator
             })
         });
 
@@ -120,6 +127,13 @@ public static class FactoryIndustrialStandards
                 BuildPrototypeKind.GunTurret,
                 BuildPrototypeKind.HeavyGunTurret,
                 BuildPrototypeKind.Sink
+            }),
+            new FactoryBuildPaletteCategoryDefinition("调试舱段", new[]
+            {
+                BuildPrototypeKind.DebugOreSource,
+                BuildPrototypeKind.DebugPartSource,
+                BuildPrototypeKind.DebugCombatSource,
+                BuildPrototypeKind.DebugPowerGenerator
             })
         });
 
@@ -149,6 +163,14 @@ public static class FactoryIndustrialStandards
     public static FactoryBuildCatalogDefinition GetBuildCatalog(FactorySiteKind siteKind)
     {
         return siteKind == FactorySiteKind.Interior ? InteriorCatalog : WorldCatalog;
+    }
+
+    public static bool IsDebugStructure(BuildPrototypeKind kind)
+    {
+        return kind == BuildPrototypeKind.DebugOreSource
+            || kind == BuildPrototypeKind.DebugPartSource
+            || kind == BuildPrototypeKind.DebugCombatSource
+            || kind == BuildPrototypeKind.DebugPowerGenerator;
     }
 
     public static bool IsStructureAllowed(BuildPrototypeKind kind, FactorySiteKind siteKind)
@@ -189,6 +211,10 @@ public static class FactoryIndustrialStandards
             BuildPrototypeKind.InputPort => "入舱接口",
             BuildPrototypeKind.OutputPort => "出舱接口",
             BuildPrototypeKind.MiningInputPort => "采矿接入接口",
+            BuildPrototypeKind.DebugOreSource => "原矿调试舱",
+            BuildPrototypeKind.DebugPartSource => "部件调试舱",
+            BuildPrototypeKind.DebugCombatSource => "战备调试舱",
+            BuildPrototypeKind.DebugPowerGenerator => "永久测试动力舱",
             BuildPrototypeKind.GunTurret => "防卫炮座",
             BuildPrototypeKind.HeavyGunTurret => "重型防卫炮座",
             BuildPrototypeKind.Wall => "维护隔断",
@@ -213,6 +239,10 @@ public static class FactoryIndustrialStandards
                 BuildPrototypeKind.InputPort => "入舱接口",
                 BuildPrototypeKind.OutputPort => "出舱接口",
                 BuildPrototypeKind.MiningInputPort => "采矿接口",
+                BuildPrototypeKind.DebugOreSource => "原矿调试舱",
+                BuildPrototypeKind.DebugPartSource => "部件调试舱",
+                BuildPrototypeKind.DebugCombatSource => "战备调试舱",
+                BuildPrototypeKind.DebugPowerGenerator => "永久测试动力舱",
                 _ => GetSiteAwarePrototypeLabel(kind, siteKind)
             };
         }
@@ -246,6 +276,10 @@ public static class FactoryIndustrialStandards
             BuildPrototypeKind.InputPort => "入舱适配接口",
             BuildPrototypeKind.OutputPort => "出舱适配接口",
             BuildPrototypeKind.MiningInputPort => "采矿接入接口",
+            BuildPrototypeKind.DebugOreSource => "原矿调试模块",
+            BuildPrototypeKind.DebugPartSource => "部件调试模块",
+            BuildPrototypeKind.DebugCombatSource => "战备调试模块",
+            BuildPrototypeKind.DebugPowerGenerator => "永久测试动力模块",
             BuildPrototypeKind.GunTurret => "轻型炮塔硬点",
             BuildPrototypeKind.HeavyGunTurret => "重型炮塔硬点",
             BuildPrototypeKind.Wall => "维护隔断",
@@ -276,6 +310,10 @@ public static class FactoryIndustrialStandards
             BuildPrototypeKind.InputPort => "把单件世界大货物交给舱壳边界的转换入口，而不是直接送上供料轨。",
             BuildPrototypeKind.OutputPort => "把封包完成的世界大货物推送回世界侧重型物流。",
             BuildPrototypeKind.MiningInputPort => "将世界侧散装矿料接到壳体边界，再交给解包链处理。",
+            BuildPrototypeKind.DebugOreSource => "无成本轮转输出矿物与基础原料，用于快速验证供料链。",
+            BuildPrototypeKind.DebugPartSource => "无成本轮转输出板材与中间件，用于快速验证加工和缓存。",
+            BuildPrototypeKind.DebugCombatSource => "无成本轮转输出战备与维护补给，用于快速验证炮塔和支援链。",
+            BuildPrototypeKind.DebugPowerGenerator => "永久供电且无需燃料，适合给测试舱段稳定供能。",
             BuildPrototypeKind.GunTurret => "作为轻型武器硬点守住舱体边界。",
             BuildPrototypeKind.HeavyGunTurret => "作为重型武器井位守住舱体边界。",
             _ => "作为维护层可进入的标准舱段模块。"

@@ -86,7 +86,7 @@ public partial class LauncherNavigationOverlay : CanvasLayer
     public string ButtonText { get; set; } = "返回 Launcher";
 
     [Export]
-    public float TopMargin { get; set; } = 16.0f;
+    public float BottomMargin { get; set; } = 16.0f;
 
     [Export]
     public float RightMargin { get; set; } = 16.0f;
@@ -107,10 +107,12 @@ public partial class LauncherNavigationOverlay : CanvasLayer
         button.MouseFilter = Control.MouseFilterEnum.Stop;
         button.AnchorLeft = 1.0f;
         button.AnchorRight = 1.0f;
+        button.AnchorTop = 1.0f;
+        button.AnchorBottom = 1.0f;
         button.OffsetLeft = -164.0f - RightMargin;
         button.OffsetRight = -RightMargin;
-        button.OffsetTop = TopMargin;
-        button.OffsetBottom = TopMargin + 38.0f;
+        button.OffsetTop = -38.0f - BottomMargin;
+        button.OffsetBottom = -BottomMargin;
         button.AddThemeFontSizeOverride("font_size", 14);
         FactoryUiTheme.ApplyButtonTheme(button);
         button.Pressed += ReturnToLauncher;

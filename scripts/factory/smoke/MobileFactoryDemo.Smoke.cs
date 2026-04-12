@@ -74,6 +74,7 @@ public partial class MobileFactoryDemo
         var playerMoved = _playerController.GlobalPosition.DistanceTo(playerStartPosition) > 0.2f;
         var cameraFollowedPlayer = new Vector2(_cameraRig.Position.X, _cameraRig.Position.Z)
             .DistanceTo(new Vector2(_playerController.GlobalPosition.X, _playerController.GlobalPosition.Z)) < 1.8f;
+        var debugWorldSupportVerified = await RunDebugWorldSupportSmoke();
         var playerWorldPlacementWorked = false;
         if (TryArmPlayerWorldBuildForSmoke(out var smokeBuildKind))
         {
@@ -165,6 +166,7 @@ public partial class MobileFactoryDemo
         var detailWindowInTransit = await RunEditorDetailSmoke();
         var blueprintWorkflowInTransit = await RunInteriorBlueprintSmoke();
         var multiCellInteriorVerified = RunInteriorMultiCellSmoke();
+        var debugInteriorSupportVerified = await RunDebugInteriorSupportSmoke();
         PrimeMobileFactoryShowcase(_mobileFactory);
         await ToSignal(GetTree().CreateTimer(0.4f), SceneTreeTimer.SignalName.Timeout);
         inputTransitBaseline = _mobileFactory.CountAttachmentTransitItems(BuildPrototypeKind.InputPort);
@@ -316,15 +318,64 @@ public partial class MobileFactoryDemo
         await ToSignal(GetTree().CreateTimer(10.0f), SceneTreeTimer.SignalName.Timeout);
         var secondDelivered = GetScenarioDeliveryTotal() - secondDeliveredBaseline;
 
-        if (!startsInPlayerMode || !playerHudReady || !playerMoved || !cameraFollowedPlayer || !playerWorldPlacementWorked || !commandActive || !cameraLockedInCommand || !returnedToPlayerFromCommand || !observerActive || !returnedToPlayerFromObserver || !deployPreviewEntered || !returnedToPlayerFromDeploy || !editRestoresPlayerMode || !editRestoresFactoryMode || !editRestoresObserverMode || !editRestoresDeployMode || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !workspaceNavigationVerified || !operationPanelHover || !editorViewportHover || !worldHover || !detailWindowInTransit || !blueprintWorkflowInTransit || !multiCellInteriorVerified || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !placedSplitterPresentationVerified || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !mapFormatVerified || !contextualRotateWorks || !previewArrowTracksFacing || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !boundaryInterfaceVerified || !miniatureSyncedDeployed || !turretTrackedThreats || !mobileCombatActive || !recalled || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy)
+        if (!startsInPlayerMode || !playerHudReady || !playerMoved || !cameraFollowedPlayer || !debugWorldSupportVerified || !playerWorldPlacementWorked || !commandActive || !cameraLockedInCommand || !returnedToPlayerFromCommand || !observerActive || !returnedToPlayerFromObserver || !deployPreviewEntered || !returnedToPlayerFromDeploy || !editRestoresPlayerMode || !editRestoresFactoryMode || !editRestoresObserverMode || !editRestoresDeployMode || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !workspaceNavigationVerified || !operationPanelHover || !editorViewportHover || !worldHover || !detailWindowInTransit || !blueprintWorkflowInTransit || !multiCellInteriorVerified || !debugInteriorSupportVerified || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !placedSplitterPresentationVerified || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !mapFormatVerified || !contextualRotateWorks || !previewArrowTracksFacing || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !boundaryInterfaceVerified || !miniatureSyncedDeployed || !turretTrackedThreats || !mobileCombatActive || !recalled || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy)
         {
-            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsPlayer={startsInPlayerMode} playerHudReady={playerHudReady} playerMoved={playerMoved} cameraFollowedPlayer={cameraFollowedPlayer} playerWorldPlacementWorked={playerWorldPlacementWorked} commandActive={commandActive} cameraLocked={cameraLockedInCommand} returnedPlayerFromCommand={returnedToPlayerFromCommand} observerActive={observerActive} observerCamera={observerCameraActive} returnedPlayerFromObserver={returnedToPlayerFromObserver} deployPreviewEntered={deployPreviewEntered} returnedPlayerFromDeploy={returnedToPlayerFromDeploy} editRestoresPlayer={editRestoresPlayerMode} editRestoresFactory={editRestoresFactoryMode} editRestoresObserver={editRestoresObserverMode} editRestoresDeploy={editRestoresDeployMode} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} workspaceNavigation={workspaceNavigationVerified} operationHover={operationPanelHover} viewportHover={editorViewportHover} worldHover={worldHover} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} multiCellInterior={multiCellInteriorVerified} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} cabinPresentation={cabinPresentationVerified} splitterPresentation={placedSplitterPresentationVerified} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} mapFormat={mapFormatVerified} contextualRotateWorks={contextualRotateWorks} previewArrowTracksFacing={previewArrowTracksFacing} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} boundaryInterface={boundaryInterfaceVerified} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered}");
+            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsPlayer={startsInPlayerMode} playerHudReady={playerHudReady} playerMoved={playerMoved} cameraFollowedPlayer={cameraFollowedPlayer} debugWorldSupport={debugWorldSupportVerified} playerWorldPlacementWorked={playerWorldPlacementWorked} commandActive={commandActive} cameraLocked={cameraLockedInCommand} returnedPlayerFromCommand={returnedToPlayerFromCommand} observerActive={observerActive} observerCamera={observerCameraActive} returnedPlayerFromObserver={returnedToPlayerFromObserver} deployPreviewEntered={deployPreviewEntered} returnedPlayerFromDeploy={returnedToPlayerFromDeploy} editRestoresPlayer={editRestoresPlayerMode} editRestoresFactory={editRestoresFactoryMode} editRestoresObserver={editRestoresObserverMode} editRestoresDeploy={editRestoresDeployMode} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} workspaceNavigation={workspaceNavigationVerified} operationHover={operationPanelHover} viewportHover={editorViewportHover} worldHover={worldHover} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} multiCellInterior={multiCellInteriorVerified} debugInteriorSupport={debugInteriorSupportVerified} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} cabinPresentation={cabinPresentationVerified} splitterPresentation={placedSplitterPresentationVerified} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} mapFormat={mapFormatVerified} contextualRotateWorks={contextualRotateWorks} previewArrowTracksFacing={previewArrowTracksFacing} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} boundaryInterface={boundaryInterfaceVerified} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered}");
             GetTree().Quit(1);
             return;
         }
 
-        GD.Print($"MOBILE_FACTORY_SMOKE_OK playerMoved={playerMoved} commandActive={commandActive} observerActive={observerActive} mapFormat={mapFormatVerified} firstDelivered={firstDelivered} secondDelivered={secondDelivered} workspaceNavigation={workspaceNavigationVerified} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} multiCellInterior={multiCellInteriorVerified} turretShots={(escortTurret?.ShotsFired ?? -1)} combatKills={_simulation.DefeatedEnemyCount}");
+        GD.Print($"MOBILE_FACTORY_SMOKE_OK playerMoved={playerMoved} debugWorldSupport={debugWorldSupportVerified} commandActive={commandActive} observerActive={observerActive} mapFormat={mapFormatVerified} firstDelivered={firstDelivered} secondDelivered={secondDelivered} workspaceNavigation={workspaceNavigationVerified} debugInteriorSupport={debugInteriorSupportVerified} detailWindow={detailWindowInTransit} blueprintWorkflow={blueprintWorkflowInTransit} multiCellInterior={multiCellInteriorVerified} turretShots={(escortTurret?.ShotsFired ?? -1)} combatKills={_simulation.DefeatedEnemyCount}");
         GetTree().Quit();
+    }
+
+    private async Task<bool> RunDebugWorldSupportSmoke()
+    {
+        if (_grid is null || _simulation is null || _playerController is null)
+        {
+            return false;
+        }
+
+        var expectedKinds = new[]
+        {
+            BuildPrototypeKind.DebugOreSource,
+            BuildPrototypeKind.DebugPartSource,
+            BuildPrototypeKind.DebugCombatSource,
+            BuildPrototypeKind.DebugPowerGenerator
+        };
+        var catalogReady = CatalogContainsDebugCategory(
+            FactoryIndustrialStandards.GetBuildCatalog(FactorySiteKind.World),
+            "调试支援",
+            expectedKinds);
+        var authoredWorldDebugFree = !ContainsDebugStructure(_grid.GetStructures());
+        var playerStarterInventoryReady = PlayerInventoryContainsDebugKit();
+
+        var sourceCell = new Vector2I(-40, 36);
+        var facing = FacingDirection.East;
+        var sourceOutputCell = FactoryStructureFactory.GetFootprint(BuildPrototypeKind.DebugPartSource).ResolveOutputCell(sourceCell, facing);
+        var generatorCell = new Vector2I(-40, 33);
+        if (!_grid.CanPlaceStructure(BuildPrototypeKind.DebugPartSource, sourceCell, facing, out _)
+            || !_grid.CanPlaceStructure(BuildPrototypeKind.Sink, sourceOutputCell, facing, out _)
+            || !_grid.CanPlaceStructure(BuildPrototypeKind.DebugPowerGenerator, generatorCell, facing, out _))
+        {
+            return false;
+        }
+
+        var source = PlaceWorldStructure(BuildPrototypeKind.DebugPartSource, sourceCell, facing) as DebugPartSourceStructure;
+        var sink = PlaceWorldStructure(BuildPrototypeKind.Sink, sourceOutputCell, facing) as SinkStructure;
+        var generator = PlaceWorldStructure(BuildPrototypeKind.DebugPowerGenerator, generatorCell, facing) as DebugPowerGeneratorStructure;
+        if (source is null || sink is null || generator is null)
+        {
+            return false;
+        }
+
+        await ToSignal(GetTree().CreateTimer(2.5f), SceneTreeTimer.SignalName.Timeout);
+        var sourceDelivered = sink.DeliveredTotal > 0;
+        var generatorStable = Mathf.IsEqualApprox(generator.GetAvailablePower(_simulation), generator.NominalPowerSupply);
+
+        await ToSignal(GetTree().CreateTimer(0.8f), SceneTreeTimer.SignalName.Timeout);
+        var generatorStillStable = Mathf.IsEqualApprox(generator.GetAvailablePower(_simulation), generator.NominalPowerSupply);
+        return catalogReady && authoredWorldDebugFree && playerStarterInventoryReady && sourceDelivered && generatorStable && generatorStillStable;
     }
 
     private Vector2I? FindPlayerWorldBuildSmokeCell(BuildPrototypeKind kind, FacingDirection facing)
@@ -464,6 +515,23 @@ public partial class MobileFactoryDemo
         await ToSignal(GetTree().CreateTimer(0.05f), SceneTreeTimer.SignalName.Timeout);
         var savesReady = _hud.ActiveWorkspaceId == SavesWorkspaceId && _hud.IsWorkspaceVisible(SavesWorkspaceId) && _editorOpen == editorWasOpen;
 
+        var workspaceBeforeCollapse = _hud.ActiveWorkspaceId;
+        var expandedOverviewWidth = _hud.OverviewVisibleWidth;
+        var chromeEmbedded = _hud.IsWorkspaceChromeEmbeddedInOverview;
+        var editorPanelBuildFocused = _hud.IsEditorOperationPanelBuildFocused;
+        _hud.SetOverviewCollapsed(true);
+        await WaitForCondition(() => _hud.IsOverviewCollapsed && _hud.OverviewVisibleWidth < expandedOverviewWidth, 0.6f);
+        var collapsedOverviewWidth = _hud.OverviewVisibleWidth;
+        var collapseReady = _hud.IsOverviewCollapsed
+            && collapsedOverviewWidth < expandedOverviewWidth
+            && _hud.ActiveWorkspaceId == workspaceBeforeCollapse
+            && _hud.OverviewCollapseButtonText.Contains("展开", global::System.StringComparison.Ordinal);
+        _hud.SetOverviewCollapsed(false);
+        await WaitForCondition(() => !_hud.IsOverviewCollapsed && _hud.OverviewVisibleWidth >= expandedOverviewWidth - 4.0f, 0.6f);
+        var reopenOverviewReady = !_hud.IsOverviewCollapsed
+            && _hud.ActiveWorkspaceId == workspaceBeforeCollapse
+            && _hud.OverviewCollapseButtonText.Contains("收起", global::System.StringComparison.Ordinal);
+
         var worldWorkspaceId = UseLargeTestScenario ? DiagnosticsWorkspaceId : CommandWorkspaceId;
         _hud.SelectWorkspace(worldWorkspaceId);
         await ToSignal(GetTree().CreateTimer(0.05f), SceneTreeTimer.SignalName.Timeout);
@@ -492,12 +560,218 @@ public partial class MobileFactoryDemo
             await WaitForCondition(() => !_hud.IsEditorVisible, 0.4f);
         }
 
-        return blueprintReady && buildReady && testingReady && detailsReady && savesReady && worldReady && closePreservesWorkspace && reopenPreservesWorkspace;
+        return blueprintReady
+            && buildReady
+            && testingReady
+            && detailsReady
+            && savesReady
+            && chromeEmbedded
+            && editorPanelBuildFocused
+            && collapseReady
+            && reopenOverviewReady
+            && worldReady
+            && closePreservesWorkspace
+            && reopenPreservesWorkspace;
+    }
+
+    private async Task<bool> RunDebugInteriorSupportSmoke()
+    {
+        if (_mobileFactory is null || _simulation is null)
+        {
+            return false;
+        }
+
+        var expectedKinds = new[]
+        {
+            BuildPrototypeKind.DebugOreSource,
+            BuildPrototypeKind.DebugPartSource,
+            BuildPrototypeKind.DebugCombatSource,
+            BuildPrototypeKind.DebugPowerGenerator
+        };
+        var catalogReady = CatalogContainsDebugCategory(
+            FactoryIndustrialStandards.GetBuildCatalog(FactorySiteKind.Interior),
+            "调试舱段",
+            expectedKinds);
+        var authoredInteriorDebugFree = !ContainsDebugStructure(_mobileFactory.InteriorSite.GetStructures());
+
+        if (!TryFindInteriorPlacementWithOutput(BuildPrototypeKind.DebugCombatSource, FacingDirection.East, out var sourceCell, out var sinkCell)
+            || !TryFindInteriorPlacement(BuildPrototypeKind.DebugPowerGenerator, FacingDirection.East, out var generatorCell))
+        {
+            return false;
+        }
+
+        var sourcePlaced = _mobileFactory.PlaceInteriorStructure(BuildPrototypeKind.DebugCombatSource, sourceCell, FacingDirection.East);
+        var sinkPlaced = _mobileFactory.PlaceInteriorStructure(BuildPrototypeKind.Sink, sinkCell, FacingDirection.East);
+        var generatorPlaced = _mobileFactory.PlaceInteriorStructure(BuildPrototypeKind.DebugPowerGenerator, generatorCell, FacingDirection.East);
+        if (!sourcePlaced
+            || !sinkPlaced
+            || !generatorPlaced
+            || !_mobileFactory.TryGetInteriorStructure(sourceCell, out var sourceStructure)
+            || sourceStructure is not DebugCombatSourceStructure
+            || !_mobileFactory.TryGetInteriorStructure(sinkCell, out var sinkStructure)
+            || sinkStructure is not SinkStructure sink
+            || !_mobileFactory.TryGetInteriorStructure(generatorCell, out var generatorStructure)
+            || generatorStructure is not DebugPowerGeneratorStructure generator)
+        {
+            return false;
+        }
+
+        await ToSignal(GetTree().CreateTimer(2.5f), SceneTreeTimer.SignalName.Timeout);
+        var sourceDelivered = sink.DeliveredTotal > 0;
+        var generatorStable = Mathf.IsEqualApprox(generator.GetAvailablePower(_simulation), generator.NominalPowerSupply);
+
+        await ToSignal(GetTree().CreateTimer(0.8f), SceneTreeTimer.SignalName.Timeout);
+        var generatorStillStable = Mathf.IsEqualApprox(generator.GetAvailablePower(_simulation), generator.NominalPowerSupply);
+        var removedGenerator = _mobileFactory.RemoveInteriorStructure(generatorCell);
+        var removedSink = _mobileFactory.RemoveInteriorStructure(sinkCell);
+        var removedSource = _mobileFactory.RemoveInteriorStructure(sourceCell);
+        return catalogReady
+            && authoredInteriorDebugFree
+            && sourceDelivered
+            && generatorStable
+            && generatorStillStable
+            && removedGenerator
+            && removedSink
+            && removedSource;
     }
 
     private static bool HasWorkspace(string workspaceId, IReadOnlyList<string> workspaceIds)
     {
         return FactoryDemoSmokeSupport.HasWorkspace(workspaceIds, workspaceId);
+    }
+
+    private static bool CatalogContainsDebugCategory(FactoryBuildCatalogDefinition catalog, string categoryTitle, IReadOnlyList<BuildPrototypeKind> expectedKinds)
+    {
+        for (var categoryIndex = 0; categoryIndex < catalog.Categories.Count; categoryIndex++)
+        {
+            var category = catalog.Categories[categoryIndex];
+            if (!string.Equals(category.Title, categoryTitle, global::System.StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            for (var kindIndex = 0; kindIndex < expectedKinds.Count; kindIndex++)
+            {
+                var foundKind = false;
+                for (var categoryKindIndex = 0; categoryKindIndex < category.Kinds.Count; categoryKindIndex++)
+                {
+                    if (category.Kinds[categoryKindIndex] != expectedKinds[kindIndex])
+                    {
+                        continue;
+                    }
+
+                    foundKind = true;
+                    break;
+                }
+
+                if (!foundKind)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsDebugStructure(IEnumerable<FactoryStructure> structures)
+    {
+        foreach (var structure in structures)
+        {
+            if (FactoryIndustrialStandards.IsDebugStructure(structure.Kind))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool PlayerInventoryContainsDebugKit()
+    {
+        if (_playerController is null)
+        {
+            return false;
+        }
+
+        var snapshot = _playerController.BackpackInventory.Snapshot();
+        for (var index = 0; index < snapshot.Length; index++)
+        {
+            if (!snapshot[index].HasItem
+                || snapshot[index].Item is not FactoryItem item
+                || !FactoryPresentation.TryGetPlaceableStructureKind(item, out var kind)
+                || !FactoryIndustrialStandards.IsDebugStructure(kind))
+            {
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool TryFindInteriorPlacement(BuildPrototypeKind kind, FacingDirection facing, out Vector2I cell)
+    {
+        cell = Vector2I.Zero;
+        if (_mobileFactory is null)
+        {
+            return false;
+        }
+
+        for (var y = _mobileFactory.Profile.InteriorHeight - 1; y >= 0; y--)
+        {
+            for (var x = _mobileFactory.Profile.InteriorWidth - 1; x >= 0; x--)
+            {
+                var candidate = new Vector2I(x, y);
+                if (!_mobileFactory.CanPlaceInterior(kind, candidate, facing))
+                {
+                    continue;
+                }
+
+                cell = candidate;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool TryFindInteriorPlacementWithOutput(BuildPrototypeKind sourceKind, FacingDirection facing, out Vector2I sourceCell, out Vector2I sinkCell)
+    {
+        sourceCell = Vector2I.Zero;
+        sinkCell = Vector2I.Zero;
+        if (_mobileFactory is null)
+        {
+            return false;
+        }
+
+        var sourceFootprint = FactoryStructureFactory.GetFootprint(sourceKind);
+        for (var y = _mobileFactory.Profile.InteriorHeight - 1; y >= 0; y--)
+        {
+            for (var x = _mobileFactory.Profile.InteriorWidth - 1; x >= 0; x--)
+            {
+                var candidate = new Vector2I(x, y);
+                if (!_mobileFactory.CanPlaceInterior(sourceKind, candidate, facing))
+                {
+                    continue;
+                }
+
+                var outputCell = sourceFootprint.ResolveOutputCell(candidate, facing);
+                if (!_mobileFactory.CanPlaceInterior(BuildPrototypeKind.Sink, outputCell, facing))
+                {
+                    continue;
+                }
+
+                sourceCell = candidate;
+                sinkCell = outputCell;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private async void RunMiningPortSmokeChecks()

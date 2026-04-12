@@ -150,6 +150,28 @@ public static class FactoryUiTheme
         button.AddThemeColorOverride("icon_disabled_color", TextFaint);
     }
 
+    public static void ApplyTabButtonTheme(BaseButton button)
+    {
+        button.AddThemeStyleboxOverride("normal", CreateTabStyle(SurfaceInset, BorderMuted, 1));
+        button.AddThemeStyleboxOverride("hover", CreateTabStyle(SurfaceSelectedHover, BorderStrong, 2));
+        button.AddThemeStyleboxOverride("pressed", CreateTabStyle(SurfaceSelected, BorderStrong, 2));
+        button.AddThemeStyleboxOverride("hover_pressed", CreateTabStyle(SurfaceSelected, BorderStrong, 2));
+        button.AddThemeStyleboxOverride("focus", CreateTabStyle(SurfaceSelectedHover, BorderStrong, 2));
+        button.AddThemeStyleboxOverride("disabled", CreateTabStyle(SurfaceInset, BorderMuted, 1));
+        button.AddThemeColorOverride("font_color", TextMuted);
+        button.AddThemeColorOverride("font_hover_color", TextContrast);
+        button.AddThemeColorOverride("font_focus_color", TextContrast);
+        button.AddThemeColorOverride("font_pressed_color", TextContrast);
+        button.AddThemeColorOverride("font_hover_pressed_color", TextContrast);
+        button.AddThemeColorOverride("font_disabled_color", TextFaint);
+        button.AddThemeColorOverride("icon_normal_color", TextMuted);
+        button.AddThemeColorOverride("icon_hover_color", TextContrast);
+        button.AddThemeColorOverride("icon_focus_color", TextContrast);
+        button.AddThemeColorOverride("icon_pressed_color", TextContrast);
+        button.AddThemeColorOverride("icon_hover_pressed_color", TextContrast);
+        button.AddThemeColorOverride("icon_disabled_color", TextFaint);
+    }
+
     public static void ApplyLineEditTheme(LineEdit lineEdit)
     {
         lineEdit.AddThemeStyleboxOverride("normal", CreateButtonStyle(SurfaceInset, Border, 1, 10, 8));

@@ -49,6 +49,7 @@ public partial class FactoryDemo
         var playerInteractionVerified = await RunPlayerCharacterSmoke(probeCell);
 
         var initialStructureCount = _simulation.RegisteredStructureCount;
+        var debugWorldSupportVerified = await RunDebugWorldSupportSmoke();
         var poweredFactoryVerified = await RunPoweredFactorySmoke();
         var sinkStats = CollectSinkStats();
         ConfigureCombatScenarios();
@@ -72,6 +73,7 @@ public partial class FactoryDemo
         if (!placed
             || !removed
             || initialStructureCount < 40
+            || !debugWorldSupportVerified
             || !poweredFactoryVerified
             || string.IsNullOrWhiteSpace(profilerText)
             || !profilerText.Contains("FPS", global::System.StringComparison.Ordinal)
@@ -98,13 +100,72 @@ public partial class FactoryDemo
             || !previewArrowReady
             || !playerInteractionVerified)
         {
-              GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} beltDragAutoFacing={beltDragAutoFacingVerified} beltExistingJoinAutoFacing={beltExistingJoinAutoFacingVerified} assemblerPortPreview={assemblerPortPreviewVerified} playerInteraction={playerInteractionVerified} structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} miningBlueprint={miningBlueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} transportRenderTelemetry={transportRenderTelemetryVerified} transportRenderCulling={transportRenderCullingVerified} mapFormat={mapFormatVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
+              GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} beltDragAutoFacing={beltDragAutoFacingVerified} beltExistingJoinAutoFacing={beltExistingJoinAutoFacingVerified} assemblerPortPreview={assemblerPortPreviewVerified} playerInteraction={playerInteractionVerified} structures={initialStructureCount} debugWorldSupport={debugWorldSupportVerified} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} miningBlueprint={miningBlueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} transportRenderTelemetry={transportRenderTelemetryVerified} transportRenderCulling={transportRenderCullingVerified} mapFormat={mapFormatVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
             GetTree().Quit(1);
             return;
         }
 
-          GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} miningBlueprint={miningBlueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} transportRenderTelemetry={transportRenderTelemetryVerified} transportRenderCulling={transportRenderCullingVerified} mapFormat={mapFormatVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} beltDragAutoFacing={beltDragAutoFacingVerified} beltExistingJoinAutoFacing={beltExistingJoinAutoFacingVerified} assemblerPortPreview={assemblerPortPreviewVerified} previewArrowReady={previewArrowReady} playerInteraction={playerInteractionVerified}");
+          GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} debugWorldSupport={debugWorldSupportVerified} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} miningBlueprint={miningBlueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} transportRenderTelemetry={transportRenderTelemetryVerified} transportRenderCulling={transportRenderCullingVerified} mapFormat={mapFormatVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} beltDragAutoFacing={beltDragAutoFacingVerified} beltExistingJoinAutoFacing={beltExistingJoinAutoFacingVerified} assemblerPortPreview={assemblerPortPreviewVerified} previewArrowReady={previewArrowReady} playerInteraction={playerInteractionVerified}");
         GetTree().Quit();
+    }
+
+    private async Task<bool> RunDebugWorldSupportSmoke()
+    {
+        if (_grid is null || _simulation is null)
+        {
+            return false;
+        }
+
+        var expectedKinds = new[]
+        {
+            BuildPrototypeKind.DebugOreSource,
+            BuildPrototypeKind.DebugPartSource,
+            BuildPrototypeKind.DebugCombatSource,
+            BuildPrototypeKind.DebugPowerGenerator
+        };
+        var catalogReady = CatalogContainsDebugCategory(
+            FactoryIndustrialStandards.GetBuildCatalog(FactorySiteKind.World),
+            "调试支援",
+            expectedKinds);
+
+        var authoredLayoutDebugFree = true;
+        foreach (var structure in _grid.GetStructures())
+        {
+            if (!FactoryIndustrialStandards.IsDebugStructure(structure.Kind))
+            {
+                continue;
+            }
+
+            authoredLayoutDebugFree = false;
+            break;
+        }
+
+        var sourceCell = new Vector2I(-40, 40);
+        var sourceFacing = FacingDirection.East;
+        var sourceOutputCell = FactoryStructureFactory.GetFootprint(BuildPrototypeKind.DebugOreSource).ResolveOutputCell(sourceCell, sourceFacing);
+        var generatorCell = new Vector2I(-40, 37);
+        if (!TryValidateWorldPlacement(BuildPrototypeKind.DebugOreSource, sourceCell, sourceFacing, out _)
+            || !TryValidateWorldPlacement(BuildPrototypeKind.Sink, sourceOutputCell, sourceFacing, out _)
+            || !TryValidateWorldPlacement(BuildPrototypeKind.DebugPowerGenerator, generatorCell, sourceFacing, out _))
+        {
+            return false;
+        }
+
+        var source = PlaceStructure(BuildPrototypeKind.DebugOreSource, sourceCell, sourceFacing) as DebugOreSourceStructure;
+        var sink = PlaceStructure(BuildPrototypeKind.Sink, sourceOutputCell, sourceFacing) as SinkStructure;
+        var generator = PlaceStructure(BuildPrototypeKind.DebugPowerGenerator, generatorCell, sourceFacing) as DebugPowerGeneratorStructure;
+        if (source is null || sink is null || generator is null)
+        {
+            return false;
+        }
+
+        await ToSignal(GetTree().CreateTimer(2.4f), SceneTreeTimer.SignalName.Timeout);
+        var sourceDelivered = sink.DeliveredTotal > 0;
+        var generatorStable = Mathf.IsEqualApprox(generator.GetAvailablePower(_simulation), generator.NominalPowerSupply);
+
+        await ToSignal(GetTree().CreateTimer(0.8f), SceneTreeTimer.SignalName.Timeout);
+        var generatorStillStable = Mathf.IsEqualApprox(generator.GetAvailablePower(_simulation), generator.NominalPowerSupply);
+        return catalogReady && authoredLayoutDebugFree && sourceDelivered && generatorStable && generatorStillStable;
     }
 
     private async Task<bool> RunPlayerCharacterSmoke(Vector2I placementCell)
@@ -265,6 +326,42 @@ public partial class FactoryDemo
         }
 
         return 0;
+    }
+
+    private static bool CatalogContainsDebugCategory(FactoryBuildCatalogDefinition catalog, string categoryTitle, IReadOnlyList<BuildPrototypeKind> expectedKinds)
+    {
+        for (var categoryIndex = 0; categoryIndex < catalog.Categories.Count; categoryIndex++)
+        {
+            var category = catalog.Categories[categoryIndex];
+            if (!string.Equals(category.Title, categoryTitle, global::System.StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            for (var kindIndex = 0; kindIndex < expectedKinds.Count; kindIndex++)
+            {
+                var foundKind = false;
+                for (var categoryKindIndex = 0; categoryKindIndex < category.Kinds.Count; categoryKindIndex++)
+                {
+                    if (category.Kinds[categoryKindIndex] != expectedKinds[kindIndex])
+                    {
+                        continue;
+                    }
+
+                    foundKind = true;
+                    break;
+                }
+
+                if (!foundKind)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     private static Vector2I GetPrimaryInputCell(FactoryStructure structure)
