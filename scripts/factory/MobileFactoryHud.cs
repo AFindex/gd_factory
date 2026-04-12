@@ -29,6 +29,8 @@ public partial class MobileFactoryHud : CanvasLayer
     private StyleBoxFlat? _worldFocusFrameStyle;
     private Control? _overlayRoot;
     private PanelContainer? _infoPanel;
+    private PanelContainer? _editorViewportPanel;
+    private StyleBoxFlat? _editorViewportPanelStyle;
     private PanelContainer? _editorPanel;
     private StyleBoxFlat? _editorPanelStyle;
     private TextureRect? _editorViewportRect;
@@ -71,13 +73,15 @@ public partial class MobileFactoryHud : CanvasLayer
     private Button? _factoryCommandButton;
     private Button? _observerButton;
     private Button? _deployButton;
+    private Button? _editModeButton;
     private float _editorProgress;
     private bool _editorOpen;
-    private bool _editorFocused;
+    private bool _editorViewportFocused;
+    private bool _editorOperationFocused;
 
     public bool UseLargeScenarioWorkspaces { get; set; }
     public SubViewport EditorViewport => _editorViewport!;
-    public bool IsEditorVisible => _editorProgress > 0.01f;
+    public bool IsEditorVisible => _editorOpen;
     public string PortStatusText => _portStatusLabel?.Text ?? string.Empty;
     public bool IsDetailVisible => _detailWindow?.IsShowing ?? false;
     public string DetailTitleText => _detailWindow?.CurrentTitleText ?? string.Empty;
@@ -85,6 +89,9 @@ public partial class MobileFactoryHud : CanvasLayer
 
     public event Action<BuildPrototypeKind>? EditorPaletteSelected;
     public event Action<int>? EditorRotateRequested;
+    public event Action? EditModeToggleRequested;
+    public event Action? EditorInteractionModeRequested;
+    public event Action? EditorDeleteModeRequested;
     public event Action? FactoryCommandModeToggleRequested;
     public event Action? ObserverModeToggleRequested;
     public event Action? DeployModeToggleRequested;
@@ -155,13 +162,20 @@ public partial class MobileFactoryHud : CanvasLayer
 
     public void SelectWorkspace(string workspaceId) => _workspaceChrome?.SetActiveWorkspace(workspaceId);
 
-    public void SetEditorOpen(bool isOpen) => _editorOpen = isOpen;
+    public void SetEditorOpen(bool isOpen)
+    {
+        _editorOpen = isOpen;
+        RefreshEditModeButton();
+    }
 
     public bool IsPointerOverEditor(Vector2 mousePosition)
-        => _editorPanel is not null && _editorProgress > 0.01f && _editorPanel.GetGlobalRect().HasPoint(mousePosition);
+        => IsPointerOverEditorViewport(mousePosition) || IsPointerOverEditorOperationPanel(mousePosition);
 
     public bool IsPointerOverEditorViewport(Vector2 mousePosition)
         => _editorViewportRect is not null && _editorProgress > 0.01f && _editorViewportRect.GetGlobalRect().HasPoint(mousePosition);
+
+    public bool IsPointerOverEditorOperationPanel(Vector2 mousePosition)
+        => _editorPanel is not null && _editorProgress > 0.01f && _editorPanel.GetGlobalRect().HasPoint(mousePosition);
 
     public bool TryGetEditorMousePosition(Vector2 mousePosition, out Vector2 editorMousePosition)
     {
@@ -184,14 +198,15 @@ public partial class MobileFactoryHud : CanvasLayer
         return true;
     }
 
-    public void SetPaneFocus(bool editorOpen, bool editorFocused)
+    public void SetPaneFocus(bool editorOpen, bool editorViewportFocused, bool editorOperationFocused)
     {
         _editorOpen = editorOpen;
-        _editorFocused = editorFocused;
+        _editorViewportFocused = editorViewportFocused;
+        _editorOperationFocused = editorOperationFocused;
         RefreshFocusVisuals();
     }
 
-    public void SetControlMode(MobileFactoryControlMode controlMode, MobileFactoryLifecycleState lifecycleState, FacingDirection transitFacing, FacingDirection deployFacing)
+    public void SetControlMode(MobileFactoryControlMode controlMode, MobileFactoryLifecycleState lifecycleState, FacingDirection transitFacing, FacingDirection deployFacing, bool editSessionOpen)
     {
         if (_modeLabel is not null)
         {
@@ -203,7 +218,8 @@ public partial class MobileFactoryHud : CanvasLayer
                 MobileFactoryControlMode.Observer => "[OBSERVE] 观察模式",
                 _ => "[COMMAND] 工厂控制"
             };
-            _modeLabel.Text = $"{modeText} | 行进朝向：{FactoryDirection.ToLabel(transitFacing)} | 部署朝向：{FactoryDirection.ToLabel(deployFacing)}";
+            var editText = editSessionOpen ? "编辑会话：开启" : "编辑会话：关闭";
+            _modeLabel.Text = $"{modeText} | {editText} | 行进朝向：{FactoryDirection.ToLabel(transitFacing)} | 部署朝向：{FactoryDirection.ToLabel(deployFacing)}";
             _modeLabel.Modulate = controlMode switch
             {
                 MobileFactoryControlMode.Player => FactoryUiTheme.StatusOk,
@@ -215,25 +231,27 @@ public partial class MobileFactoryHud : CanvasLayer
         if (_factoryCommandButton is not null)
         {
             _factoryCommandButton.Text = controlMode == MobileFactoryControlMode.FactoryCommand
-                ? "返回玩家控制 (C)"
-                : "进入工厂控制 (C)";
+                ? "返回玩家 (C)"
+                : "工厂控制 (C)";
             _factoryCommandButton.ButtonPressed = controlMode == MobileFactoryControlMode.FactoryCommand;
             _factoryCommandButton.Disabled = lifecycleState == MobileFactoryLifecycleState.Recalling;
         }
 
         if (_observerButton is not null)
         {
-            _observerButton.Text = controlMode == MobileFactoryControlMode.Observer ? "返回玩家控制 (Tab)" : "进入观察模式 (Tab)";
+            _observerButton.Text = controlMode == MobileFactoryControlMode.Observer ? "返回玩家 (Tab)" : "观察模式 (Tab)";
             _observerButton.ButtonPressed = controlMode == MobileFactoryControlMode.Observer;
             _observerButton.Disabled = lifecycleState == MobileFactoryLifecycleState.Recalling;
         }
 
         if (_deployButton is not null)
         {
-            _deployButton.Text = controlMode == MobileFactoryControlMode.DeployPreview ? "取消部署 (G)" : "部署模式 (G)";
+            _deployButton.Text = controlMode == MobileFactoryControlMode.DeployPreview ? "取消部署 (G)" : "部署预览 (G)";
             _deployButton.ButtonPressed = controlMode == MobileFactoryControlMode.DeployPreview;
             _deployButton.Disabled = lifecycleState != MobileFactoryLifecycleState.InTransit;
         }
+
+        RefreshEditModeButton();
     }
 
     public void SetState(MobileFactoryLifecycleState state, Vector2I? anchorCell)
@@ -381,16 +399,21 @@ public partial class MobileFactoryHud : CanvasLayer
         }
     }
 
-    public void SetEditorFocusHint(bool overEditor)
+    public void SetEditorFocusHint(bool overEditorViewport, bool overEditorOperationPanel)
     {
+        var focusText = overEditorViewport
+            ? "[FOCUS] 鼠标焦点：内部编辑视口"
+            : overEditorOperationPanel
+                ? "[FOCUS] 鼠标焦点：编辑操作面板"
+                : "[FOCUS] 鼠标焦点：大世界";
         if (_focusLabel is not null)
         {
-            _focusLabel.Text = overEditor ? "[FOCUS] 鼠标焦点：内部编辑区" : "[FOCUS] 鼠标焦点：大世界";
+            _focusLabel.Text = focusText;
         }
 
         if (_diagnosticsFocusLabel is not null)
         {
-            _diagnosticsFocusLabel.Text = overEditor ? "[FOCUS] 鼠标焦点：内部编辑区" : "[FOCUS] 鼠标焦点：大世界";
+            _diagnosticsFocusLabel.Text = focusText;
         }
     }
 
@@ -408,7 +431,7 @@ public partial class MobileFactoryHud : CanvasLayer
             MobileFactoryLifecycleState.Recalling => "回收中",
             _ => "运输中"
         };
-        var paneText = isOpen ? "分屏编辑已展开" : "按 F 打开内部编辑";
+        var paneText = isOpen ? "编辑会话已开启，独立操作面板可用" : "按 F 或主面板按钮进入编辑模式";
         var interactionText = interactionMode switch
         {
             FactoryInteractionMode.Build => "建造模式",
@@ -452,7 +475,7 @@ public partial class MobileFactoryHud : CanvasLayer
 
     public void SetEditorStructureDetails(FactoryStructureDetailModel? model)
     {
-        if (_detailWindow is null || _editorPanel is null)
+        if (_detailWindow is null || (_editorViewportPanel is null && _editorPanel is null))
         {
             return;
         }
@@ -463,7 +486,8 @@ public partial class MobileFactoryHud : CanvasLayer
         }
         else
         {
-            _detailWindow.ShowDetails(model, _editorPanel.Position + new Vector2(28.0f, 24.0f));
+            var anchorPanel = _editorViewportPanel ?? _editorPanel!;
+            _detailWindow.ShowDetails(model, anchorPanel.Position + new Vector2(24.0f, 24.0f));
         }
     }
 
@@ -538,10 +562,23 @@ public partial class MobileFactoryHud : CanvasLayer
 
         return BlocksInteractiveInput(control, _topChromePanel)
             || BlocksInteractiveInput(control, _infoPanel)
+            || BlocksInteractiveInput(control, _editorViewportPanel)
             || BlocksInteractiveInput(control, _editorPanel)
             || ContainsScreenPoint(_topChromePanel, screenPoint)
             || ContainsScreenPoint(_infoPanel, screenPoint)
+            || ContainsScreenPoint(_editorViewportPanel, screenPoint)
             || ContainsScreenPoint(_editorPanel, screenPoint);
+    }
+
+    private void RefreshEditModeButton()
+    {
+        if (_editModeButton is null)
+        {
+            return;
+        }
+
+        _editModeButton.Text = _editorOpen ? "退出编辑模式 (F)" : "进入编辑模式 (F)";
+        _editModeButton.ButtonPressed = _editorOpen;
     }
 
     private Control CreateSaveLibraryCard(FactoryRuntimeSaveSlotMetadata slot)

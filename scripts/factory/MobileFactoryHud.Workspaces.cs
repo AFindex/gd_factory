@@ -98,6 +98,13 @@ public partial class MobileFactoryHud
             workspaceHost.AddChild(BuildWorldDiagnosticsWorkspace());
         }
         workspaceHost.AddChild(BuildWorldDetailWorkspace());
+        workspaceHost.AddChild(BuildEditorToolWorkspace(GetPrimaryEditorWorkspaceId()));
+        if (!UseLargeScenarioWorkspaces)
+        {
+            workspaceHost.AddChild(BuildTestingWorkspace());
+        }
+        workspaceHost.AddChild(BuildBlueprintWorkspace());
+        workspaceHost.AddChild(BuildSaveWorkspace());
 
         _worldWorkspaceHintLabel = CreateInfoLabel("当前工作区主要显示在右侧编辑面板。", 11, FactoryUiTheme.TextSubtle);
         _worldWorkspaceHintLabel.Visible = false;
@@ -106,39 +113,14 @@ public partial class MobileFactoryHud
 
     private void BuildEditorPanel()
     {
-        var panel = new PanelContainer();
-        panel.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
-        panel.MouseFilter = Control.MouseFilterEnum.Ignore;
-        panel.ClipContents = true;
-        _editorPanelStyle = CreatePanelStyle(Colors.Transparent);
-        panel.AddThemeStyleboxOverride("panel", _editorPanelStyle);
-        AddChild(panel);
-        _editorPanel = panel;
-
-        var chrome = new MarginContainer();
-        chrome.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        chrome.MouseFilter = Control.MouseFilterEnum.Ignore;
-        chrome.AddThemeConstantOverride("margin_left", 10);
-        chrome.AddThemeConstantOverride("margin_top", 10);
-        chrome.AddThemeConstantOverride("margin_right", 10);
-        chrome.AddThemeConstantOverride("margin_bottom", 10);
-        panel.AddChild(chrome);
-
-        var body = new HBoxContainer();
-        body.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        body.MouseFilter = Control.MouseFilterEnum.Ignore;
-        body.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        body.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
-        body.AddThemeConstantOverride("separation", 10);
-        chrome.AddChild(body);
-
         var viewportPanel = new PanelContainer();
+        viewportPanel.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
         viewportPanel.MouseFilter = Control.MouseFilterEnum.Ignore;
         viewportPanel.ClipContents = true;
-        viewportPanel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        viewportPanel.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
-        viewportPanel.AddThemeStyleboxOverride("panel", CreatePanelStyle(FactoryUiTheme.Border));
-        body.AddChild(viewportPanel);
+        _editorViewportPanelStyle = CreatePanelStyle(FactoryUiTheme.Border);
+        viewportPanel.AddThemeStyleboxOverride("panel", _editorViewportPanelStyle);
+        AddChild(viewportPanel);
+        _editorViewportPanel = viewportPanel;
 
         var viewportMargin = new MarginContainer();
         viewportMargin.SetAnchorsPreset(Control.LayoutPreset.FullRect);
@@ -165,22 +147,25 @@ public partial class MobileFactoryHud
         viewportMargin.AddChild(viewportRect);
         _editorViewportRect = viewportRect;
 
-        var sidebarPanel = new PanelContainer();
-        sidebarPanel.MouseFilter = Control.MouseFilterEnum.Ignore;
-        sidebarPanel.ClipContents = true;
-        sidebarPanel.CustomMinimumSize = new Vector2(EditorSidebarWidth, 0.0f);
-        sidebarPanel.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
-        sidebarPanel.AddThemeStyleboxOverride("panel", CreatePanelStyle(FactoryUiTheme.Border));
-        body.AddChild(sidebarPanel);
+        AddChild(viewport);
 
-        var sidebarMargin = new MarginContainer();
-        sidebarMargin.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        sidebarMargin.MouseFilter = Control.MouseFilterEnum.Ignore;
-        sidebarMargin.AddThemeConstantOverride("margin_left", 10);
-        sidebarMargin.AddThemeConstantOverride("margin_top", 10);
-        sidebarMargin.AddThemeConstantOverride("margin_right", 10);
-        sidebarMargin.AddThemeConstantOverride("margin_bottom", 10);
-        sidebarPanel.AddChild(sidebarMargin);
+        var panel = new PanelContainer();
+        panel.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
+        panel.MouseFilter = Control.MouseFilterEnum.Ignore;
+        panel.ClipContents = true;
+        _editorPanelStyle = CreatePanelStyle(Colors.Transparent);
+        panel.AddThemeStyleboxOverride("panel", _editorPanelStyle);
+        AddChild(panel);
+        _editorPanel = panel;
+
+        var chrome = new MarginContainer();
+        chrome.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        chrome.MouseFilter = Control.MouseFilterEnum.Ignore;
+        chrome.AddThemeConstantOverride("margin_left", 10);
+        chrome.AddThemeConstantOverride("margin_top", 10);
+        chrome.AddThemeConstantOverride("margin_right", 10);
+        chrome.AddThemeConstantOverride("margin_bottom", 10);
+        panel.AddChild(chrome);
 
         var sidebarScroll = new ScrollContainer();
         sidebarScroll.SetAnchorsPreset(Control.LayoutPreset.FullRect);
@@ -189,7 +174,7 @@ public partial class MobileFactoryHud
         sidebarScroll.MouseFilter = Control.MouseFilterEnum.Ignore;
         sidebarScroll.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         sidebarScroll.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
-        sidebarMargin.AddChild(sidebarScroll);
+        chrome.AddChild(sidebarScroll);
 
         var sidebar = new VBoxContainer();
         sidebar.MouseFilter = Control.MouseFilterEnum.Ignore;
@@ -199,7 +184,32 @@ public partial class MobileFactoryHud
         sidebar.CustomMinimumSize = new Vector2(EditorSidebarWidth - 20.0f, 0.0f);
         sidebarScroll.AddChild(sidebar);
 
-        sidebar.AddChild(CreateEditorLabel("内部编辑概览", 14, FactoryUiTheme.Text));
+        sidebar.AddChild(CreateEditorLabel("编辑操作面板", 14, FactoryUiTheme.Text));
+        sidebar.AddChild(CreateEditorLabel("进入编辑模式后，建造、删除、旋转和蓝图快捷动作集中在这里；主工作区继续承载总览与流程页。", 11, FactoryUiTheme.TextSubtle));
+
+        var sessionRow = new GridContainer();
+        sessionRow.Columns = 2;
+        sessionRow.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        sessionRow.AddThemeConstantOverride("h_separation", 6);
+        sessionRow.AddThemeConstantOverride("v_separation", 6);
+        sidebar.AddChild(sessionRow);
+
+        _editModeButton = CreateEditorActionButton("进入编辑模式 (F)", () => EditModeToggleRequested?.Invoke());
+        _editModeButton.ToggleMode = true;
+        sessionRow.AddChild(_editModeButton);
+        sessionRow.AddChild(CreateEditorActionButton("交互模式", () => EditorInteractionModeRequested?.Invoke()));
+        sessionRow.AddChild(CreateEditorActionButton("删除模式", () => EditorDeleteModeRequested?.Invoke()));
+        sessionRow.AddChild(CreateEditorActionButton("蓝图工作区", () => SetActiveWorkspace(BlueprintWorkspaceId)));
+
+        var quickRow = new GridContainer();
+        quickRow.Columns = 2;
+        quickRow.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        quickRow.AddThemeConstantOverride("h_separation", 6);
+        quickRow.AddThemeConstantOverride("v_separation", 6);
+        sidebar.AddChild(quickRow);
+        quickRow.AddChild(CreateEditorActionButton("存档工作区", () => SetActiveWorkspace(SavesWorkspaceId)));
+        quickRow.AddChild(CreateEditorActionButton("工厂详情", () => SetActiveWorkspace(DetailsWorkspaceId)));
+
         _editorModeLabel = CreateEditorLabel(string.Empty, 12, FactoryUiTheme.TextMuted);
         _selectionLabel = CreateEditorLabel(string.Empty, 12, FactoryUiTheme.Text);
         _selectionTargetLabel = CreateEditorLabel(string.Empty, 12, FactoryUiTheme.TextMuted);
@@ -209,27 +219,23 @@ public partial class MobileFactoryHud
         sidebar.AddChild(_selectionTargetLabel);
         sidebar.AddChild(_portStatusLabel);
 
+        _inspectionPanel = new PanelContainer { Visible = false };
+        sidebar.AddChild(_inspectionPanel);
+        var inspectionBody = new VBoxContainer();
+        inspectionBody.AddThemeConstantOverride("separation", 4);
+        _inspectionPanel.AddChild(inspectionBody);
+        _inspectionTitleLabel = CreateEditorLabel(string.Empty, 12, FactoryUiTheme.Text);
+        _inspectionBodyLabel = CreateEditorLabel(string.Empty, 11, FactoryUiTheme.TextMuted);
+        inspectionBody.AddChild(_inspectionTitleLabel);
+        inspectionBody.AddChild(_inspectionBodyLabel);
+
         sidebar.AddChild(CreateDivider());
-        var workspaceHost = new Control();
-        workspaceHost.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        workspaceHost.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
-        workspaceHost.MouseFilter = Control.MouseFilterEnum.Ignore;
-        workspaceHost.ClipContents = true;
-        sidebar.AddChild(workspaceHost);
-
-        workspaceHost.AddChild(BuildEditorToolWorkspace(GetPrimaryEditorWorkspaceId()));
-        if (!UseLargeScenarioWorkspaces)
-        {
-            workspaceHost.AddChild(BuildTestingWorkspace());
-        }
-        workspaceHost.AddChild(BuildBlueprintWorkspace());
-        workspaceHost.AddChild(BuildSaveWorkspace());
-
-        _editorWorkspaceHintLabel = CreateEditorLabel("当前工作区主要在左侧世界信息面板中展开；右侧继续保留视口。", 11, FactoryUiTheme.TextSubtle);
-        _editorWorkspaceHintLabel.Visible = false;
-        sidebar.AddChild(_editorWorkspaceHintLabel);
-
-        AddChild(viewport);
+        sidebar.AddChild(CreateEditorLabel("建造分类", 12, FactoryUiTheme.TextMuted));
+        BuildEditorToolbar(sidebar);
+        sidebar.AddChild(CreateDivider());
+        _editorPreviewLabel = CreateEditorLabel("内部预览：等待状态更新。", 12, FactoryUiTheme.TextMuted);
+        sidebar.AddChild(_editorPreviewLabel);
+        sidebar.AddChild(CreateEditorLabel("提示：工作区用于切换总览、蓝图、存档、详情；编辑模式按钮只负责打开或关闭当前舱内编辑会话。", 11, FactoryUiTheme.TextSubtle));
 
         _detailWindow = new FactoryStructureDetailWindow();
         _detailWindow.InventoryMoveRequested += (inventoryId, fromSlot, toSlot, splitStack) => EditorDetailInventoryMoveRequested?.Invoke(inventoryId, fromSlot, toSlot, splitStack);
@@ -276,24 +282,60 @@ public partial class MobileFactoryHud
             11,
             FactoryUiTheme.TextSubtle));
 
-        var actionsRow = new HBoxContainer();
-        actionsRow.AddThemeConstantOverride("separation", 8);
-        body.AddChild(actionsRow);
+        var actionsGrid = new GridContainer();
+        actionsGrid.Columns = 2;
+        actionsGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        actionsGrid.AddThemeConstantOverride("h_separation", 6);
+        actionsGrid.AddThemeConstantOverride("v_separation", 6);
+        body.AddChild(actionsGrid);
 
-        _factoryCommandButton = new Button { Text = "进入工厂控制 (C)", ToggleMode = true, CustomMinimumSize = new Vector2(146.0f, 34.0f), MouseFilter = Control.MouseFilterEnum.Stop };
+        _factoryCommandButton = new Button
+        {
+            Text = "工厂控制 (C)",
+            ToggleMode = true,
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            CustomMinimumSize = new Vector2(0.0f, 34.0f)
+        };
+        _factoryCommandButton.AddThemeFontSizeOverride("font_size", 11);
         FactoryUiTheme.ApplyButtonTheme(_factoryCommandButton);
         _factoryCommandButton.Pressed += () => FactoryCommandModeToggleRequested?.Invoke();
-        actionsRow.AddChild(_factoryCommandButton);
+        actionsGrid.AddChild(_factoryCommandButton);
 
-        _observerButton = new Button { Text = "进入观察模式 (Tab)", ToggleMode = true, CustomMinimumSize = new Vector2(146.0f, 34.0f), MouseFilter = Control.MouseFilterEnum.Stop };
+        _observerButton = new Button
+        {
+            Text = "观察模式 (Tab)",
+            ToggleMode = true,
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            CustomMinimumSize = new Vector2(0.0f, 34.0f)
+        };
+        _observerButton.AddThemeFontSizeOverride("font_size", 11);
         FactoryUiTheme.ApplyButtonTheme(_observerButton);
         _observerButton.Pressed += () => ObserverModeToggleRequested?.Invoke();
-        actionsRow.AddChild(_observerButton);
+        actionsGrid.AddChild(_observerButton);
 
-        _deployButton = new Button { Text = "部署模式 (G)", ToggleMode = true, CustomMinimumSize = new Vector2(126.0f, 34.0f), MouseFilter = Control.MouseFilterEnum.Stop };
+        _deployButton = new Button
+        {
+            Text = "部署预览 (G)",
+            ToggleMode = true,
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            CustomMinimumSize = new Vector2(0.0f, 34.0f)
+        };
+        _deployButton.AddThemeFontSizeOverride("font_size", 11);
         FactoryUiTheme.ApplyButtonTheme(_deployButton);
         _deployButton.Pressed += () => DeployModeToggleRequested?.Invoke();
-        actionsRow.AddChild(_deployButton);
+        actionsGrid.AddChild(_deployButton);
+
+        var utilityGrid = new GridContainer();
+        utilityGrid.Columns = 2;
+        utilityGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        utilityGrid.AddThemeConstantOverride("h_separation", 6);
+        utilityGrid.AddThemeConstantOverride("v_separation", 6);
+        body.AddChild(utilityGrid);
+        utilityGrid.AddChild(CreateEditorActionButton("编辑模式 (F)", () => EditModeToggleRequested?.Invoke()));
+        utilityGrid.AddChild(CreateEditorActionButton("工厂详情", () => SetActiveWorkspace(DetailsWorkspaceId)));
 
         _deliveryLabel = CreateInfoLabel(string.Empty);
         _combatLabel = CreateInfoLabel(string.Empty, 12, FactoryUiTheme.TextSubtle);
@@ -338,61 +380,26 @@ public partial class MobileFactoryHud
         var (workspace, body) = CreateWorkspacePanel(_editorWorkspacePanels, workspaceId);
         body.AddChild(CreateEditorLabel(UseLargeScenarioWorkspaces ? "场景验证面板" : "内部编辑工作区", 14, FactoryUiTheme.Text));
         body.AddChild(CreateEditorLabel(
-            UseLargeScenarioWorkspaces ? "把接收站、部署、内部布局和长时间流转观察拆到独立 panel 中，便于在 large scenario 里做定向验证。" : "内部建造、删除和结构观察集中在这里，蓝图工作流则通过独立菜单切换。",
+            UseLargeScenarioWorkspaces ? "用这个工作区概览当前场景的编辑入口、验证路径和相关工作区跳转；真正的编辑工具会在开启编辑会话后出现在独立操作面板里。" : "这里负责说明编辑流程与入口；真正的建造、删除、旋转和蓝图快捷操作会在开启编辑模式后进入独立操作面板。",
             11,
             FactoryUiTheme.TextSubtle));
 
-        var saveGrid = new GridContainer();
-        saveGrid.Columns = 2;
-        saveGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        saveGrid.AddThemeConstantOverride("h_separation", 6);
-        saveGrid.AddThemeConstantOverride("v_separation", 6);
-        body.AddChild(saveGrid);
-        saveGrid.AddChild(CreateEditorActionButton("导出世界副本", () => WorldMapSaveRequested?.Invoke()));
-        saveGrid.AddChild(CreateEditorActionButton("覆盖世界源", () => WorldMapSourceSaveRequested?.Invoke()));
-        saveGrid.AddChild(CreateEditorActionButton("导出内部副本", () => InteriorMapSaveRequested?.Invoke()));
-        saveGrid.AddChild(CreateEditorActionButton("覆盖内部源", () => InteriorMapSourceSaveRequested?.Invoke()));
+        var sessionGrid = new GridContainer();
+        sessionGrid.Columns = 2;
+        sessionGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        sessionGrid.AddThemeConstantOverride("h_separation", 6);
+        sessionGrid.AddThemeConstantOverride("v_separation", 6);
+        body.AddChild(sessionGrid);
+        sessionGrid.AddChild(CreateEditorActionButton("进入/退出编辑", () => EditModeToggleRequested?.Invoke()));
+        sessionGrid.AddChild(CreateEditorActionButton("打开蓝图页", () => SetActiveWorkspace(BlueprintWorkspaceId)));
+        sessionGrid.AddChild(CreateEditorActionButton("打开存档页", () => SetActiveWorkspace(SavesWorkspaceId)));
+        sessionGrid.AddChild(CreateEditorActionButton("查看工厂详情", () => SetActiveWorkspace(DetailsWorkspaceId)));
 
         body.AddChild(CreateDivider());
-        body.AddChild(CreateEditorLabel("进度存档", 12, FactoryUiTheme.TextMuted));
-        var runtimeSlotEdit = new LineEdit
-        {
-            Text = "progress-1",
-            PlaceholderText = "输入存档名",
-            MouseFilter = Control.MouseFilterEnum.Stop,
-            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
-        };
-        FactoryUiTheme.ApplyLineEditTheme(runtimeSlotEdit);
-        _saveWorkspaceSlotEdit = runtimeSlotEdit;
-        body.AddChild(runtimeSlotEdit);
-
-        var runtimeGrid = new GridContainer();
-        runtimeGrid.Columns = 2;
-        runtimeGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        runtimeGrid.AddThemeConstantOverride("h_separation", 6);
-        runtimeGrid.AddThemeConstantOverride("v_separation", 6);
-        runtimeGrid.AddChild(CreateEditorActionButton("保存进度", () => RuntimeSaveRequested?.Invoke(runtimeSlotEdit.Text?.Trim() ?? string.Empty)));
-        runtimeGrid.AddChild(CreateEditorActionButton("读取进度", () => RuntimeLoadRequested?.Invoke(runtimeSlotEdit.Text?.Trim() ?? string.Empty)));
-        body.AddChild(runtimeGrid);
-
-        _saveStatusLabel = CreateEditorLabel(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: true), 11, FactoryUiTheme.TextSubtle);
-        body.AddChild(_saveStatusLabel);
-
-        _inspectionPanel = new PanelContainer { Visible = false };
-        body.AddChild(_inspectionPanel);
-        var inspectionBody = new VBoxContainer();
-        inspectionBody.AddThemeConstantOverride("separation", 4);
-        _inspectionPanel.AddChild(inspectionBody);
-        _inspectionTitleLabel = CreateEditorLabel(string.Empty, 12, FactoryUiTheme.Text);
-        _inspectionBodyLabel = CreateEditorLabel(string.Empty, 11, FactoryUiTheme.TextMuted);
-        inspectionBody.AddChild(_inspectionTitleLabel);
-        inspectionBody.AddChild(_inspectionBodyLabel);
-
-        body.AddChild(CreateEditorLabel("建造分类", 12, FactoryUiTheme.TextMuted));
-        BuildEditorToolbar(body);
-        body.AddChild(CreateDivider());
-        _editorPreviewLabel = CreateEditorLabel("内部预览：等待状态更新。", 12, FactoryUiTheme.TextMuted);
-        body.AddChild(_editorPreviewLabel);
+        body.AddChild(CreateEditorLabel("编辑会话说明", 12, FactoryUiTheme.TextMuted));
+        body.AddChild(CreateEditorLabel("1. 先在这里或指挥页打开编辑模式。", 11, FactoryUiTheme.TextSubtle));
+        body.AddChild(CreateEditorLabel("2. 编辑视口负责放置与选中，右侧独立操作面板负责建造、删除、旋转和蓝图快捷动作。", 11, FactoryUiTheme.TextSubtle));
+        body.AddChild(CreateEditorLabel("3. 顶部工作区只切换总览、蓝图、存档、验证、详情，不会自动替你打开或关闭编辑模式。", 11, FactoryUiTheme.TextSubtle));
         return workspace;
     }
 
@@ -602,7 +609,7 @@ public partial class MobileFactoryHud
 
     private void UpdateLayout()
     {
-        if (_topChromePanel is null || _worldFocusFrame is null || _infoPanel is null || _editorPanel is null || _editorViewport is null || _editorViewportRect is null)
+        if (_topChromePanel is null || _worldFocusFrame is null || _infoPanel is null || _editorViewportPanel is null || _editorPanel is null || _editorViewport is null || _editorViewportRect is null)
         {
             return;
         }
@@ -620,22 +627,29 @@ public partial class MobileFactoryHud
         _worldFocusFrame.Position = new Vector2(0.0f, contentTop);
         _worldFocusFrame.Size = new Vector2(worldWidth, contentHeight);
 
-        var infoWidth = Mathf.Clamp(worldWidth - margin.X * 1.2f, 250.0f, 340.0f);
-        var infoTargetHeight = contentHeight * (_editorOpen ? 0.54f : 0.72f);
-        var infoHeight = Mathf.Min(contentHeight, Mathf.Max(180.0f, infoTargetHeight));
+        var infoWidth = Mathf.Clamp(viewportSize.X * 0.28f, 300.0f, 400.0f);
+        var infoHeight = Mathf.Min(contentHeight, Mathf.Max(220.0f, contentHeight * 0.78f));
         _infoPanel.Position = new Vector2(margin.X, contentTop);
         _infoPanel.Size = new Vector2(infoWidth, infoHeight);
 
-        var editorWidth = viewportSize.X - worldWidth - margin.X;
-        var left = Mathf.Lerp(viewportSize.X + 12.0f, worldWidth, _editorProgress);
-        _editorPanel.Position = new Vector2(left, contentTop);
-        _editorPanel.Size = new Vector2(editorWidth, contentHeight);
+        var editorOperationWidth = Mathf.Clamp(EditorSidebarWidth + 24.0f, 296.0f, 340.0f);
+        var editorViewportWidth = Mathf.Max(320.0f, viewportSize.X - infoWidth - editorOperationWidth - margin.X * 3.0f);
+        var viewportClosedX = viewportSize.X + 20.0f;
+        var viewportOpenX = infoWidth + margin.X * 2.0f;
+        var viewportX = Mathf.Lerp(viewportClosedX, viewportOpenX, _editorProgress);
+        var operationX = viewportX + editorViewportWidth + 10.0f;
+
+        _editorViewportPanel.Position = new Vector2(viewportX, contentTop);
+        _editorViewportPanel.Size = new Vector2(editorViewportWidth, contentHeight);
+
+        _editorPanel.Position = new Vector2(operationX, contentTop);
+        _editorPanel.Size = new Vector2(editorOperationWidth, contentHeight);
 
         var viewportRectSize = _editorViewportRect.Size;
         if (viewportRectSize.X <= 1.0f || viewportRectSize.Y <= 1.0f)
         {
             viewportRectSize = new Vector2(
-                Mathf.Max(320.0f, editorWidth - EditorSidebarWidth - 44.0f),
+                Mathf.Max(320.0f, editorViewportWidth - 20.0f),
                 Mathf.Max(180.0f, contentHeight - 32.0f));
         }
 
@@ -647,7 +661,11 @@ public partial class MobileFactoryHud
             _editorViewport.Size = viewportSize2D;
         }
 
-        _detailWindow?.SetDragBounds(new Rect2(_editorPanel.Position, _editorPanel.Size));
+        var dragLeft = Mathf.Min(_editorViewportPanel.Position.X, _editorPanel.Position.X);
+        var dragTop = Mathf.Min(_editorViewportPanel.Position.Y, _editorPanel.Position.Y);
+        var dragRight = Mathf.Max(_editorViewportPanel.Position.X + _editorViewportPanel.Size.X, _editorPanel.Position.X + _editorPanel.Size.X);
+        var dragBottom = Mathf.Max(_editorViewportPanel.Position.Y + _editorViewportPanel.Size.Y, _editorPanel.Position.Y + _editorPanel.Size.Y);
+        _detailWindow?.SetDragBounds(new Rect2(new Vector2(dragLeft, dragTop), new Vector2(dragRight - dragLeft, dragBottom - dragTop)));
         RefreshFocusVisuals();
     }
 
@@ -733,7 +751,7 @@ public partial class MobileFactoryHud
 
     private void RefreshFocusVisuals()
     {
-        if (_worldFocusFrame is null || _editorPanel is null)
+        if (_worldFocusFrame is null || _editorViewportPanel is null || _editorPanel is null)
         {
             return;
         }
@@ -742,12 +760,17 @@ public partial class MobileFactoryHud
         _worldFocusFrame.Visible = showFocus;
         if (_worldFocusFrameStyle is not null)
         {
-            FactoryUiTheme.ConfigureOutlineStyle(_worldFocusFrameStyle, showFocus && !_editorFocused ? WorldFocusColor : Colors.Transparent, borderWidth: 3, contentMargin: 12);
+            FactoryUiTheme.ConfigureOutlineStyle(_worldFocusFrameStyle, showFocus && !_editorViewportFocused && !_editorOperationFocused ? WorldFocusColor : Colors.Transparent, borderWidth: 3, contentMargin: 12);
+        }
+
+        if (_editorViewportPanelStyle is not null)
+        {
+            FactoryUiTheme.ConfigurePanelStyle(_editorViewportPanelStyle, FactoryUiTheme.SurfaceOverlay, showFocus && _editorViewportFocused ? EditorFocusColor : FactoryUiTheme.Border, borderWidth: 2, cornerRadius: FactoryUiTheme.RadiusNone, contentMargin: 12);
         }
 
         if (_editorPanelStyle is not null)
         {
-            FactoryUiTheme.ConfigurePanelStyle(_editorPanelStyle, FactoryUiTheme.SurfaceOverlay, showFocus && _editorFocused ? EditorFocusColor : Colors.Transparent, borderWidth: 2, cornerRadius: FactoryUiTheme.RadiusNone, contentMargin: 12);
+            FactoryUiTheme.ConfigurePanelStyle(_editorPanelStyle, FactoryUiTheme.SurfaceOverlay, showFocus && _editorOperationFocused ? EditorFocusColor : Colors.Transparent, borderWidth: 2, cornerRadius: FactoryUiTheme.RadiusNone, contentMargin: 12);
         }
     }
 

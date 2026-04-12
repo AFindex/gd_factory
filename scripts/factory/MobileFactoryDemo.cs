@@ -4,6 +4,12 @@ using System.Threading.Tasks;
 
 public partial class MobileFactoryDemo : Node3D
 {
+    private enum MobileFactoryEditorSessionState
+    {
+        Closed,
+        Open
+    }
+
     private const string CommandWorkspaceId = "command";
     private const string EditorWorkspaceId = "editor";
     private const string TestingWorkspaceId = "testing";
@@ -120,8 +126,17 @@ public partial class MobileFactoryDemo : Node3D
     private SinkStructure? _sinkB;
     private MobileFactoryControlMode _controlMode = MobileFactoryControlMode.Player;
     private FacingDirection _selectedDeployFacing = FacingDirection.East;
+    private FacingDirection _selectedWorldFacing = FacingDirection.East;
     private Vector2I _hoveredAnchor;
+    private FactoryStructure? _hoveredWorldStructure;
     private bool _hasHoveredAnchor;
+    private Vector2I _hoveredWorldCell;
+    private Vector2I _lastWorldBuildStrokeCell;
+    private bool _hasHoveredWorldCell;
+    private bool _hasLastWorldBuildStrokeCell;
+    private bool _canPlaceWorldCell;
+    private bool _buildWorldPlacementDragActive;
+    private readonly HashSet<Vector2I> _worldBuildStrokeCells = new();
     private bool _canDeployCurrentAnchor;
     private MobileFactoryDeploymentEvaluation? _currentDeployEvaluation;
     private FactoryStatusTone _worldStatusTone = FactoryStatusTone.Positive;
@@ -142,9 +157,13 @@ public partial class MobileFactoryDemo : Node3D
     private bool _hasCachedInteriorPortMarkers;
     private bool _canPlaceInteriorCell;
     private bool _canDeleteInteriorCell;
+    private bool _buildInteriorPlacementDragActive;
     private bool _deleteInteriorDragActive;
     private Vector2I _deleteInteriorDragStartCell;
     private Vector2I _deleteInteriorDragCurrentCell;
+    private Vector2I _lastInteriorBuildStrokeCell;
+    private bool _hasLastInteriorBuildStrokeCell;
+    private readonly HashSet<Vector2I> _interiorBuildStrokeCells = new();
     private FactoryBlueprintWorkflowMode _blueprintMode;
     private bool _interiorBlueprintSelectionDragActive;
     private bool _hasInteriorBlueprintSelectionRect;
@@ -156,8 +175,11 @@ public partial class MobileFactoryDemo : Node3D
     private FacingDirection _interiorBlueprintRotation = FacingDirection.East;
     private string _interiorPreviewMessage = "按 F 展开内部编辑区，然后把鼠标移入右侧区域开始调整移动工厂内部布局。";
     private bool _editorOpen;
+    private MobileFactoryEditorSessionState _editorSessionState = MobileFactoryEditorSessionState.Closed;
+    private MobileFactoryControlMode _worldControlModeBeforeEditor = MobileFactoryControlMode.Player;
     private bool _hoveringEditorPane;
     private bool _hoveringEditorViewport;
+    private bool _hoveringEditorOperationPanel;
     private Vector2 _mousePosition = Vector2.Zero;
     private Vector2 _editorCameraLocalOffset = Vector2.Zero;
     private string? _selectedPlayerItemInventoryId;
@@ -223,7 +245,18 @@ public partial class MobileFactoryDemo : Node3D
         UpdatePaneFocus();
         HandleWorldControlInput(delta);
         UpdateHoveredAnchor();
+        UpdateHoveredWorldCell();
+        var placedWorldDuringDrag = HandlePlayerWorldBuildDragPlacement();
+        if (placedWorldDuringDrag)
+        {
+            UpdateHoveredWorldCell();
+        }
         UpdateHoveredInteriorCell();
+        var placedInteriorDuringDrag = HandleInteriorBuildDragPlacement();
+        if (placedInteriorDuringDrag)
+        {
+            UpdateHoveredInteriorCell();
+        }
         UpdateWorldPreview();
         UpdateInteriorPreview();
         UpdateWorldStatusMessage(delta);
@@ -364,6 +397,21 @@ public partial class MobileFactoryDemo : Node3D
                 }
             }
 
+            if (_interiorInteractionMode == FactoryInteractionMode.Build && mouseButton.ButtonIndex == MouseButton.Left)
+            {
+                if (mouseButton.Pressed)
+                {
+                    HandleEditorBuildPrimaryPress();
+                }
+                else
+                {
+                    HandleEditorBuildPrimaryRelease();
+                }
+
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
             if (!mouseButton.Pressed)
             {
                 return;
@@ -396,15 +444,38 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        if (CanUseEditorInput())
+        if (_editorOpen && _hoveringEditorOperationPanel)
         {
-            if (_interiorInteractionMode == FactoryInteractionMode.Delete && mouseButton.ButtonIndex == MouseButton.Right && mouseButton.Pressed)
-            {
-                EnterInteriorInteractionMode();
-            }
-
             GetViewport().SetInputAsHandled();
             return;
+        }
+
+        if (CanUseWorldInput()
+            && !IsPointerOverUi()
+            && _controlMode == MobileFactoryControlMode.Player
+            && TryGetActivePlayerWorldPlacementKind(out _))
+        {
+            if (mouseButton.ButtonIndex == MouseButton.Left)
+            {
+                if (mouseButton.Pressed)
+                {
+                    HandlePlayerWorldPrimaryPress();
+                }
+                else
+                {
+                    HandlePlayerWorldPrimaryRelease();
+                }
+
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (mouseButton.ButtonIndex == MouseButton.Right && mouseButton.Pressed)
+            {
+                CancelPlayerWorldPlacement();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
         }
 
         if (CanUseWorldInput() && mouseButton.ButtonIndex == MouseButton.Left && _controlMode == MobileFactoryControlMode.DeployPreview)
@@ -463,6 +534,9 @@ public partial class MobileFactoryDemo : Node3D
         };
         _hud.EditorPaletteSelected += OnEditorPaletteSelected;
         _hud.EditorRotateRequested += OnEditorRotateRequested;
+        _hud.EditModeToggleRequested += ToggleEditorMode;
+        _hud.EditorInteractionModeRequested += EnterInteriorInteractionMode;
+        _hud.EditorDeleteModeRequested += EnterInteriorDeleteMode;
         _hud.FactoryCommandModeToggleRequested += ToggleFactoryCommandMode;
         _hud.ObserverModeToggleRequested += ToggleObserverMode;
         _hud.DeployModeToggleRequested += ToggleDeployPreview;
@@ -1258,8 +1332,12 @@ public partial class MobileFactoryDemo : Node3D
     {
         if (Input.IsActionJustPressed("toggle_mobile_editor"))
         {
-            SetEditorOpenState(!_editorOpen);
-            FocusFactoryForCurrentMode();
+            ToggleEditorMode();
+        }
+
+        if (_editorOpen)
+        {
+            return;
         }
 
         if (!CanUseWorldInput() || _mobileFactory is null)
@@ -1297,6 +1375,21 @@ public partial class MobileFactoryDemo : Node3D
     {
         if (!CanUseWorldInput() || _mobileFactory is null || _grid is null)
         {
+            return;
+        }
+
+        if (_controlMode == MobileFactoryControlMode.Player && TryGetActivePlayerWorldPlacementKind(out _))
+        {
+            if (Input.IsActionJustPressed("deploy_rotate_left"))
+            {
+                RotatePlayerWorldFacing(-1, "Q");
+            }
+
+            if (Input.IsActionJustPressed("deploy_rotate_right"))
+            {
+                RotatePlayerWorldFacing(1, "E");
+            }
+
             return;
         }
 
@@ -1449,8 +1542,9 @@ public partial class MobileFactoryDemo : Node3D
 
     private void UpdatePaneFocus()
     {
-        _hoveringEditorPane = _editorOpen && (_hud?.IsPointerOverEditor(_mousePosition) ?? false);
+        _hoveringEditorOperationPanel = _editorOpen && (_hud?.IsPointerOverEditorOperationPanel(_mousePosition) ?? false);
         _hoveringEditorViewport = _editorOpen && (_hud?.IsPointerOverEditorViewport(_mousePosition) ?? false);
+        _hoveringEditorPane = _hoveringEditorViewport || _hoveringEditorOperationPanel;
         var hoveringUi = IsPointerOverUi();
 
         if (_cameraRig is not null)
@@ -1460,8 +1554,8 @@ public partial class MobileFactoryDemo : Node3D
             _cameraRig.FollowTargetEnabled = _controlMode == MobileFactoryControlMode.Player;
         }
 
-        _hud?.SetPaneFocus(_editorOpen, _hoveringEditorPane);
-        _hud?.SetEditorFocusHint(_hoveringEditorPane);
+        _hud?.SetPaneFocus(_editorOpen, _hoveringEditorViewport, _hoveringEditorOperationPanel);
+        _hud?.SetEditorFocusHint(_hoveringEditorViewport, _hoveringEditorOperationPanel);
     }
 
     private void UpdateHoveredAnchor()
@@ -1494,6 +1588,42 @@ public partial class MobileFactoryDemo : Node3D
         _hasHoveredAnchor = true;
         _currentDeployEvaluation = _mobileFactory.EvaluateDeployment(_grid, _hoveredAnchor, _selectedDeployFacing);
         _canDeployCurrentAnchor = _currentDeployEvaluation.CanDeploy;
+    }
+
+    private void UpdateHoveredWorldCell()
+    {
+        _hasHoveredWorldCell = false;
+        _hoveredWorldStructure = null;
+        _canPlaceWorldCell = false;
+
+        if (_controlMode != MobileFactoryControlMode.Player
+            || _grid is null
+            || _cameraRig is null
+            || !CanUseWorldInput()
+            || IsPointerOverUi())
+        {
+            return;
+        }
+
+        if (!_cameraRig.TryProjectMouseToPlane(_mousePosition, out var worldPosition))
+        {
+            return;
+        }
+
+        var cell = _grid.WorldToCell(worldPosition);
+        _hoveredWorldCell = cell;
+        _hasHoveredWorldCell = _grid.IsInBounds(cell);
+        if (!_hasHoveredWorldCell)
+        {
+            return;
+        }
+
+        _grid.TryGetStructure(cell, out _hoveredWorldStructure);
+        if (TryGetActivePlayerWorldPlacementKind(out var placementKind))
+        {
+            var previewFacing = ResolvePlayerWorldPlacementFacing(placementKind, cell, _buildWorldPlacementDragActive);
+            _canPlaceWorldCell = TryValidatePlayerWorldPlacement(placementKind, cell, previewFacing, out _);
+        }
     }
 
     private void UpdateHoveredInteriorCell()
@@ -1599,29 +1729,30 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        if (_mobileFactory.CanPlaceInterior(_selectedInteriorKind, cell, _selectedInteriorFacing))
+        var previewFacing = ResolveInteriorPlacementFacing(_selectedInteriorKind, cell, _buildInteriorPlacementDragActive);
+        if (TryValidateInteriorPlacement(_selectedInteriorKind, cell, previewFacing, out var placementMessage))
         {
             _canPlaceInteriorCell = true;
             if (MobileFactoryBoundaryAttachmentCatalog.IsAttachmentKind(_selectedInteriorKind)
-                && _mobileFactory.TryGetAttachmentPreview(_selectedInteriorKind, cell, _selectedInteriorFacing, out _, out _, out _, out var attachmentPreviewMessage))
+                && _mobileFactory.TryGetAttachmentPreview(_selectedInteriorKind, cell, previewFacing, out _, out _, out _, out var attachmentPreviewMessage))
             {
                 _interiorPreviewMessage = attachmentPreviewMessage;
             }
             else
             {
-                _interiorPreviewMessage = DescribeInteriorPlacementPreview(_selectedInteriorKind, cell, _selectedInteriorFacing);
+                _interiorPreviewMessage = DescribeInteriorPlacementPreview(_selectedInteriorKind, cell, previewFacing);
             }
             return;
         }
 
         if (MobileFactoryBoundaryAttachmentCatalog.IsAttachmentKind(_selectedInteriorKind)
-            && _mobileFactory.TryGetAttachmentPreview(_selectedInteriorKind, cell, _selectedInteriorFacing, out _, out _, out _, out var invalidAttachmentMessage))
+            && _mobileFactory.TryGetAttachmentPreview(_selectedInteriorKind, cell, previewFacing, out _, out _, out _, out var invalidAttachmentMessage))
         {
             _interiorPreviewMessage = invalidAttachmentMessage;
             return;
         }
 
-        _interiorPreviewMessage = $"内部格 ({cell.X}, {cell.Y}) 已被占用，Delete 可拆除悬停结构，右键可退出建造模式。";
+        _interiorPreviewMessage = placementMessage;
     }
 
     private MobileFactoryDeploymentEvaluation? GetCurrentDeploymentEvaluation()
@@ -1671,6 +1802,40 @@ public partial class MobileFactoryDemo : Node3D
         if (_worldPreviewFacingArrow is not null)
         {
             _worldPreviewFacingArrow.Visible = false;
+        }
+
+        var showPlayerWorldPlacementPreview = _controlMode == MobileFactoryControlMode.Player
+            && _hasHoveredWorldCell
+            && CanUseWorldInput()
+            && !IsPointerOverUi();
+        if (showPlayerWorldPlacementPreview && TryGetActivePlayerWorldPlacementKind(out var playerWorldPreviewKind))
+        {
+            _worldPreviewRoot.Visible = true;
+            EnsureWorldPreviewVisualCapacity(1, 0, 0);
+            var previewFacing = ResolvePlayerWorldPlacementFacing(playerWorldPreviewKind, _hoveredWorldCell, _buildWorldPlacementDragActive);
+            var previewSize = FactoryPlacement.GetPreviewBaseSize(_grid, playerWorldPreviewKind);
+            var previewMesh = _worldPreviewFootprintMeshes[0];
+            previewMesh.Visible = true;
+            previewMesh.Position = FactoryPlacement.GetPreviewCenter(_grid, playerWorldPreviewKind, _hoveredWorldCell, previewFacing) + new Vector3(0.0f, 0.05f, 0.0f);
+            previewMesh.Mesh = new BoxMesh
+            {
+                Size = new Vector3(
+                    previewSize.X - (_grid.CellSize * 0.08f),
+                    0.08f,
+                    previewSize.Y - (_grid.CellSize * 0.08f))
+            };
+            var tint = _canPlaceWorldCell ? new Color(0.35f, 0.95f, 0.55f, 0.45f) : new Color(1.0f, 0.35f, 0.35f, 0.45f);
+            FactoryPreviewOverlaySupport.ApplyPreviewColor(previewMesh, tint);
+            if (_worldPreviewFacingArrow is not null)
+            {
+                FactoryPreviewOverlaySupport.ConfigureDirectionalArrow(
+                    _worldPreviewFacingArrow,
+                    _grid.CellToWorld(_hoveredWorldCell) + new Vector3(0.0f, 0.08f, 0.0f),
+                    previewFacing,
+                    tint.Lightened(0.1f),
+                    1.0f);
+            }
+            return;
         }
 
         _worldPreviewRoot.Visible = _controlMode == MobileFactoryControlMode.DeployPreview && _hasHoveredAnchor && CanUseWorldInput();
@@ -1903,10 +2068,11 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        _interiorPreviewRoot.Position = FactoryPlacement.GetPreviewCenter(_mobileFactory.InteriorSite, _selectedInteriorKind, _hoveredInteriorCell, _selectedInteriorFacing);
+        var previewFacing = ResolveInteriorPlacementFacing(_selectedInteriorKind, _hoveredInteriorCell, _buildInteriorPlacementDragActive);
+        _interiorPreviewRoot.Position = FactoryPlacement.GetPreviewCenter(_mobileFactory.InteriorSite, _selectedInteriorKind, _hoveredInteriorCell, previewFacing);
         _interiorPreviewRoot.Rotation = new Vector3(
             0.0f,
-            _mobileFactory.InteriorSite.WorldRotationRadians + FactoryDirection.ToYRotationRadians(_selectedInteriorFacing),
+            _mobileFactory.InteriorSite.WorldRotationRadians + FactoryDirection.ToYRotationRadians(previewFacing),
             0.0f);
 
         var accent = _definitions.TryGetValue(_selectedInteriorKind, out var selectedDefinition)
@@ -1935,16 +2101,16 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        if (!_mobileFactory.TryGetAttachmentPreview(_selectedInteriorKind, _hoveredInteriorCell, _selectedInteriorFacing, out _, out var boundaryCells, out var exteriorCells, out _))
+        if (!_mobileFactory.TryGetAttachmentPreview(_selectedInteriorKind, _hoveredInteriorCell, previewFacing, out _, out var boundaryCells, out var exteriorCells, out _))
         {
             boundaryCells = MobileFactoryBoundaryAttachmentGeometry.GetBoundaryCells(
                 MobileFactoryBoundaryAttachmentCatalog.Get(_selectedInteriorKind),
                 _hoveredInteriorCell,
-                _selectedInteriorFacing);
+                previewFacing);
             exteriorCells = MobileFactoryBoundaryAttachmentGeometry.GetExteriorStencilCells(
                 MobileFactoryBoundaryAttachmentCatalog.Get(_selectedInteriorKind),
                 _hoveredInteriorCell,
-                _selectedInteriorFacing);
+                previewFacing);
         }
 
         EnsureInteriorAttachmentPreviewMeshCount(_interiorPreviewBoundaryMeshes, boundaryCells.Count, new Vector3(_mobileFactory.InteriorSite.CellSize * 0.72f, 0.05f, _mobileFactory.InteriorSite.CellSize * 0.72f));
@@ -2100,6 +2266,24 @@ public partial class MobileFactoryDemo : Node3D
         {
             _worldPreviewMessage = "移动工厂尚未生成。";
             _worldStatusTone = FactoryStatusTone.Negative;
+            return;
+        }
+
+        if (_controlMode == MobileFactoryControlMode.Player && TryGetActivePlayerWorldPlacementKind(out var worldPlacementKind))
+        {
+            if (!_hasHoveredWorldCell)
+            {
+                _worldPreviewMessage = $"世界建造：当前已就绪 {FactoryPresentation.GetBuildPrototypeDisplayName(worldPlacementKind)}，把鼠标移到地面网格上，左键放置，右键或 Esc 取消，Q/E 旋转。";
+                _worldStatusTone = FactoryStatusTone.Positive;
+                return;
+            }
+
+            var previewFacing = ResolvePlayerWorldPlacementFacing(worldPlacementKind, _hoveredWorldCell, _buildWorldPlacementDragActive);
+            _canPlaceWorldCell = TryValidatePlayerWorldPlacement(worldPlacementKind, _hoveredWorldCell, previewFacing, out var placementIssue);
+            _worldPreviewMessage = _canPlaceWorldCell
+                ? DescribePlayerWorldPlacementPreview(worldPlacementKind, _hoveredWorldCell, previewFacing)
+                : placementIssue;
+            _worldStatusTone = _canPlaceWorldCell ? FactoryStatusTone.Positive : FactoryStatusTone.Negative;
             return;
         }
 
@@ -2405,12 +2589,8 @@ public partial class MobileFactoryDemo : Node3D
         {
             _hud.SelectWorkspace(BlueprintWorkspaceId);
         }
-        else if (_editorOpen && (_interiorInteractionMode == FactoryInteractionMode.Build || _interiorInteractionMode == FactoryInteractionMode.Delete))
-        {
-            _hud.SelectWorkspace(GetHudBuildWorkspaceId());
-        }
 
-        _hud.SetControlMode(_controlMode, _mobileFactory.State, _mobileFactory.TransitFacing, _selectedDeployFacing);
+        _hud.SetControlMode(_controlMode, _mobileFactory.State, _mobileFactory.TransitFacing, _selectedDeployFacing, _editorOpen);
         _hud.SetState(_mobileFactory.State, _mobileFactory.AnchorCell);
         _hud.SetHoverAnchor(_hoveredAnchor, _controlMode == MobileFactoryControlMode.DeployPreview && _hasHoveredAnchor);
         _hud.SetPreviewStatus(_worldStatusTone, _worldPreviewMessage);
@@ -2456,18 +2636,12 @@ public partial class MobileFactoryDemo : Node3D
             _interiorPreviewMessage = exitMessage ?? string.Empty;
         }
 
-        if (workspaceId == BlueprintWorkspaceId || workspaceId == GetHudBuildWorkspaceId() || workspaceId == TestingWorkspaceId || workspaceId == SavesWorkspaceId)
-        {
-            if (!_editorOpen)
-            {
-                SetEditorOpenState(true);
-                FocusFactoryForCurrentMode();
-            }
-        }
-
         if (workspaceId == SavesWorkspaceId)
         {
-            RefreshRuntimeSaveLibrary();
+            if (FactoryPersistencePaths.IsPersistenceEnabled())
+            {
+                RefreshRuntimeSaveLibrary();
+            }
         }
     }
 
@@ -2567,6 +2741,20 @@ public partial class MobileFactoryDemo : Node3D
 
         SetControlMode(MobileFactoryControlMode.Observer);
         ShowWorldEvent("已进入观察模式，现在 WASD 控制相机。", true);
+    }
+
+    private void ToggleEditorMode()
+    {
+        if (_mobileFactory is null)
+        {
+            return;
+        }
+
+        var opening = !_editorOpen;
+        SetEditorOpenState(opening);
+        ShowWorldEvent(opening
+            ? $"已进入编辑模式，保留当前世界模式：{GetControlModeLabel(_worldControlModeBeforeEditor)}。"
+            : $"已退出编辑模式，恢复世界模式：{GetControlModeLabel(_controlMode)}。", true);
     }
 
     private void ToggleFactoryCommandMode()
@@ -2680,6 +2868,19 @@ public partial class MobileFactoryDemo : Node3D
         ShowWorldEvent($"部署朝向已通过 {sourceLabel} 旋转到 {FactoryDirection.ToLabel(_selectedDeployFacing)}。", true);
     }
 
+    private void RotatePlayerWorldFacing(int direction, string sourceLabel)
+    {
+        if (_controlMode != MobileFactoryControlMode.Player || !TryGetActivePlayerWorldPlacementKind(out _))
+        {
+            return;
+        }
+
+        _selectedWorldFacing = direction < 0
+            ? FactoryDirection.RotateCounterClockwise(_selectedWorldFacing)
+            : FactoryDirection.RotateClockwise(_selectedWorldFacing);
+        ShowWorldEvent($"世界放置朝向已通过 {sourceLabel} 旋转到 {FactoryDirection.ToLabel(_selectedWorldFacing)}。", true);
+    }
+
     private void CancelWorldCommand()
     {
         if (_mobileFactory is null)
@@ -2691,6 +2892,13 @@ public partial class MobileFactoryDemo : Node3D
         {
             SetControlMode(MobileFactoryControlMode.Player);
             ShowWorldEvent("已取消部署预览。", true);
+            return;
+        }
+
+        if (_controlMode == MobileFactoryControlMode.Player && TryGetActivePlayerWorldPlacementKind(out _))
+        {
+            CancelPlayerWorldPlacement();
+            ShowWorldEvent("已取消世界放置。", true);
             return;
         }
 
@@ -2740,31 +2948,63 @@ public partial class MobileFactoryDemo : Node3D
         }
     }
 
-    private void PlaceInteriorStructure()
+    private bool TryPlaceCurrentInteriorTarget(bool trackCurrentCellForStroke)
     {
         if (_mobileFactory is null || !_hasHoveredInteriorCell)
         {
-            return;
+            return false;
         }
 
         if (!TryGetActiveInteriorPlacementKind(out var placementKind, out var usesPlayerInventory))
         {
             TraceLog("PlaceInteriorStructure ignored because there is no active placement kind");
-            return;
+            return false;
         }
 
-        var placed = _mobileFactory.PlaceInteriorStructure(placementKind, _hoveredInteriorCell, _selectedInteriorFacing);
-        TraceLog($"PlaceInteriorStructure cell={_hoveredInteriorCell} kind={placementKind} usesPlayerInventory={usesPlayerInventory} placed={placed}");
-        if (placed)
+        if (trackCurrentCellForStroke && _interiorBuildStrokeCells.Contains(_hoveredInteriorCell))
         {
-            _interiorPreviewMessage = $"已在内部格 ({_hoveredInteriorCell.X}, {_hoveredInteriorCell.Y}) 放置{GetInteriorDisplayName(placementKind)}。";
-            if (usesPlayerInventory)
-            {
-                var consumed = TryConsumeSelectedPlayerPlaceable();
-                TraceLog($"PlaceInteriorStructure consumedPlayerPlaceable={consumed}");
-                RefreshInteriorInteractionModeFromBuildSource();
-            }
+            return false;
         }
+
+        var placementFacing = ResolveInteriorPlacementFacing(placementKind, _hoveredInteriorCell, trackCurrentCellForStroke);
+        if (!TryValidateInteriorPlacement(placementKind, _hoveredInteriorCell, placementFacing, out var placementMessage))
+        {
+            _interiorPreviewMessage = placementMessage;
+            return false;
+        }
+
+        var targetCell = _hoveredInteriorCell;
+        var previousStrokeCell = _lastInteriorBuildStrokeCell;
+        var hadPreviousStrokeCell = _hasLastInteriorBuildStrokeCell;
+        var placed = _mobileFactory.PlaceInteriorStructure(placementKind, targetCell, placementFacing);
+        TraceLog($"PlaceInteriorStructure cell={targetCell} kind={placementKind} facing={placementFacing} usesPlayerInventory={usesPlayerInventory} placed={placed}");
+        if (!placed)
+        {
+            return false;
+        }
+
+        _selectedInteriorFacing = placementFacing;
+        if (placementKind == BuildPrototypeKind.Belt && hadPreviousStrokeCell && ReorientInteriorBeltAt(previousStrokeCell, placementFacing))
+        {
+            _simulation?.RebuildTopology();
+        }
+
+        if (trackCurrentCellForStroke)
+        {
+            _interiorBuildStrokeCells.Add(targetCell);
+            _lastInteriorBuildStrokeCell = targetCell;
+            _hasLastInteriorBuildStrokeCell = true;
+        }
+
+        _interiorPreviewMessage = $"已在内部格 ({targetCell.X}, {targetCell.Y}) 放置{GetInteriorDisplayName(placementKind)}。";
+        if (usesPlayerInventory)
+        {
+            var consumed = TryConsumeSelectedPlayerPlaceable();
+            TraceLog($"PlaceInteriorStructure consumedPlayerPlaceable={consumed}");
+            RefreshInteriorInteractionModeFromBuildSource();
+        }
+
+        return true;
     }
 
     private void RemoveInteriorStructure()
@@ -2832,17 +3072,49 @@ public partial class MobileFactoryDemo : Node3D
 
     private bool CanUseWorldInput()
     {
-        return !_editorOpen || !_hoveringEditorPane;
+        return !_editorOpen || (!_hoveringEditorViewport && !_hoveringEditorOperationPanel);
     }
 
     private bool CanUseEditorInput()
     {
-        return _editorOpen && _hoveringEditorPane;
+        return _editorOpen;
     }
 
     private bool CanUseEditorViewportInput()
     {
         return _editorOpen && _hoveringEditorViewport;
+    }
+
+    private void HandlePlayerWorldPrimaryPress()
+    {
+        _buildWorldPlacementDragActive = true;
+        _worldBuildStrokeCells.Clear();
+        TryPlaceCurrentPlayerWorldTarget(trackCurrentCellForStroke: true);
+    }
+
+    private void HandlePlayerWorldPrimaryRelease()
+    {
+        ResetPlayerWorldBuildPlacementStroke();
+    }
+
+    private bool HandlePlayerWorldBuildDragPlacement()
+    {
+        if (!_buildWorldPlacementDragActive)
+        {
+            return false;
+        }
+
+        if (_controlMode != MobileFactoryControlMode.Player
+            || !CanUseWorldInput()
+            || IsPointerOverUi()
+            || !Input.IsMouseButtonPressed(MouseButton.Left)
+            || !TryGetActivePlayerWorldPlacementKind(out _))
+        {
+            ResetPlayerWorldBuildPlacementStroke();
+            return false;
+        }
+
+        return TryPlaceCurrentPlayerWorldTarget(trackCurrentCellForStroke: true);
     }
 
     private void HandlePlayerHotbarPressed(int index)
@@ -3026,8 +3298,22 @@ public partial class MobileFactoryDemo : Node3D
 
     private void SetEditorOpenState(bool isOpen)
     {
+        if (_editorOpen == isOpen)
+        {
+            _hud?.SetEditorOpen(isOpen);
+            return;
+        }
+
+        if (isOpen)
+        {
+            _worldControlModeBeforeEditor = _controlMode;
+        }
+
         _editorOpen = isOpen;
+        _editorSessionState = isOpen ? MobileFactoryEditorSessionState.Open : MobileFactoryEditorSessionState.Closed;
         _hud?.SetEditorOpen(isOpen);
+        ResetPlayerWorldBuildPlacementStroke();
+        ResetInteriorBuildPlacementStroke();
         _mobileFactory?.SetCombatOverlayScale(isOpen
             ? FactoryConstants.NormalCombatOverlayScale
             : FactoryConstants.MobileInteriorCombatOverlayScale);
@@ -3036,6 +3322,12 @@ public partial class MobileFactoryDemo : Node3D
         {
             EnterInteriorInteractionMode();
             _editorCameraLocalOffset = Vector2.Zero;
+            _controlMode = _worldControlModeBeforeEditor;
+            if (_controlMode != MobileFactoryControlMode.DeployPreview)
+            {
+                _currentDeployEvaluation = null;
+            }
+            FocusFactoryForCurrentMode();
             return;
         }
 
@@ -3044,6 +3336,7 @@ public partial class MobileFactoryDemo : Node3D
         {
             _editorCamera.Size = _mobileFactory.GetSuggestedEditorCameraSize();
         }
+        FocusFactoryForCurrentMode();
     }
 
     private void SelectInteriorBuildKind(BuildPrototypeKind? kind)
@@ -3064,6 +3357,7 @@ public partial class MobileFactoryDemo : Node3D
     private void EnterInteriorInteractionMode()
     {
         _interiorInteractionMode = FactoryInteractionMode.Interact;
+        ResetInteriorBuildPlacementStroke();
         _deleteInteriorDragActive = false;
     }
 
@@ -3072,6 +3366,7 @@ public partial class MobileFactoryDemo : Node3D
         CancelInteriorBlueprintWorkflow(clearActiveBlueprint: false);
         _selectedInteriorStructure = null;
         _interiorInteractionMode = FactoryInteractionMode.Delete;
+        ResetInteriorBuildPlacementStroke();
         _deleteInteriorDragActive = false;
     }
 
@@ -3088,13 +3383,50 @@ public partial class MobileFactoryDemo : Node3D
         {
             if (_canPlaceInteriorCell)
             {
-                PlaceInteriorStructure();
+                TryPlaceCurrentInteriorTarget(trackCurrentCellForStroke: false);
             }
 
             return;
         }
 
         _selectedInteriorStructure = _hoveredInteriorStructure;
+    }
+
+    private void HandleEditorBuildPrimaryPress()
+    {
+        if (!_hasHoveredInteriorCell)
+        {
+            return;
+        }
+
+        ClearRetainedInteriorBlueprintSelection();
+        _buildInteriorPlacementDragActive = true;
+        _interiorBuildStrokeCells.Clear();
+        TryPlaceCurrentInteriorTarget(trackCurrentCellForStroke: true);
+    }
+
+    private void HandleEditorBuildPrimaryRelease()
+    {
+        ResetInteriorBuildPlacementStroke();
+    }
+
+    private bool HandleInteriorBuildDragPlacement()
+    {
+        if (!_buildInteriorPlacementDragActive)
+        {
+            return false;
+        }
+
+        if (!_editorOpen
+            || !_hoveringEditorViewport
+            || _interiorInteractionMode != FactoryInteractionMode.Build
+            || !Input.IsMouseButtonPressed(MouseButton.Left))
+        {
+            ResetInteriorBuildPlacementStroke();
+            return false;
+        }
+
+        return TryPlaceCurrentInteriorTarget(trackCurrentCellForStroke: true);
     }
 
     private void HandleEditorSecondaryClick()
@@ -3106,6 +3438,7 @@ public partial class MobileFactoryDemo : Node3D
 
         if (_interiorInteractionMode == FactoryInteractionMode.Build)
         {
+            ResetInteriorBuildPlacementStroke();
             _playerInteriorPlacementArmed = false;
             _playerController?.DisarmHotbarPlacement();
             EnterInteriorInteractionMode();
@@ -3603,6 +3936,20 @@ public partial class MobileFactoryDemo : Node3D
         return FactoryDemoInteractionBridge.TryResolveInventoryEndpoint(_playerController, _selectedInteriorStructure, inventoryId, out endpoint);
     }
 
+    private bool TryGetActivePlayerWorldPlacementKind(out BuildPrototypeKind kind)
+    {
+        if (_controlMode == MobileFactoryControlMode.Player
+            && _playerInteriorPlacementArmed
+            && TryResolveSelectedPlayerPlaceable(out var selectedPlayerKind))
+        {
+            kind = selectedPlayerKind;
+            return true;
+        }
+
+        kind = default;
+        return false;
+    }
+
     private bool TryGetActiveInteriorPlacementKind(out BuildPrototypeKind kind, out bool usesPlayerInventory)
     {
         if (_playerInteriorPlacementArmed && TryResolveSelectedPlayerPlaceable(out var selectedPlayerKind))
@@ -3624,6 +3971,149 @@ public partial class MobileFactoryDemo : Node3D
         return false;
     }
 
+    private bool TryValidateInteriorPlacement(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing, out string message)
+    {
+        message = "移动工厂内部网格不可用。";
+        if (_mobileFactory is null)
+        {
+            return false;
+        }
+
+        if (!_mobileFactory.InteriorSite.IsInBounds(cell))
+        {
+            message = "当前鼠标不在移动工厂内部可编辑网格上。";
+            return false;
+        }
+
+        if (_mobileFactory.CanPlaceInterior(kind, cell, facing))
+        {
+            return true;
+        }
+
+        if (MobileFactoryBoundaryAttachmentCatalog.IsAttachmentKind(kind)
+            && _mobileFactory.TryGetAttachmentPreview(kind, cell, facing, out _, out _, out _, out var attachmentMessage)
+            && !string.IsNullOrWhiteSpace(attachmentMessage))
+        {
+            message = attachmentMessage;
+            return false;
+        }
+
+        message = $"内部格 ({cell.X}, {cell.Y}) 已被占用，Delete 可拆除悬停结构，右键可退出建造模式。";
+        return false;
+    }
+
+    private FacingDirection ResolveInteriorPlacementFacing(BuildPrototypeKind placementKind, Vector2I cell, bool trackCurrentCellForStroke)
+    {
+        if (placementKind != BuildPrototypeKind.Belt)
+        {
+            return _selectedInteriorFacing;
+        }
+
+        if (TryResolveExistingInteriorBeltConnectionFacing(cell, out var autoConnectFacing))
+        {
+            return autoConnectFacing;
+        }
+
+        if (trackCurrentCellForStroke
+            && _hasLastInteriorBuildStrokeCell
+            && TryResolveInteriorBeltDragFacing(_lastInteriorBuildStrokeCell, cell, out var dragFacing))
+        {
+            _selectedInteriorFacing = dragFacing;
+            return dragFacing;
+        }
+
+        return _selectedInteriorFacing;
+    }
+
+    private bool ReorientInteriorBeltAt(Vector2I cell, FacingDirection facing)
+    {
+        if (_mobileFactory is null || !_mobileFactory.TryGetInteriorStructure(cell, out var structure) || structure is not BeltStructure belt)
+        {
+            return false;
+        }
+
+        if (belt.Facing == facing)
+        {
+            return false;
+        }
+
+        belt.Reorient(facing);
+        return true;
+    }
+
+    private static bool TryResolveInteriorBeltDragFacing(Vector2I fromCell, Vector2I toCell, out FacingDirection facing)
+    {
+        var delta = toCell - fromCell;
+        if (Mathf.Abs(delta.X) + Mathf.Abs(delta.Y) != 1)
+        {
+            facing = FacingDirection.East;
+            return false;
+        }
+
+        facing = delta.X > 0
+            ? FacingDirection.East
+            : delta.X < 0
+                ? FacingDirection.West
+                : delta.Y > 0
+                    ? FacingDirection.South
+                    : FacingDirection.North;
+        return true;
+    }
+
+    private bool TryResolveExistingInteriorBeltConnectionFacing(Vector2I cell, out FacingDirection facing)
+    {
+        facing = FacingDirection.East;
+
+        if (_mobileFactory is null)
+        {
+            return false;
+        }
+
+        var resolved = false;
+        foreach (FacingDirection candidateFacing in System.Enum.GetValues(typeof(FacingDirection)))
+        {
+            var inputConnected = false;
+            var inputCells = FactoryTransportTopology.GetBeltInputCells(cell, candidateFacing);
+            for (var index = 0; index < inputCells.Count; index++)
+            {
+                if (!_mobileFactory.TryGetInteriorStructure(inputCells[index], out var inputStructure) || inputStructure is not BeltStructure)
+                {
+                    continue;
+                }
+
+                if (inputStructure.CanOutputTo(cell))
+                {
+                    inputConnected = true;
+                    break;
+                }
+            }
+
+            if (!inputConnected)
+            {
+                continue;
+            }
+
+            var outputCell = FactoryTransportTopology.GetBeltOutputCell(cell, candidateFacing);
+            if (!_mobileFactory.TryGetInteriorStructure(outputCell, out var outputStructure)
+                || outputStructure is not BeltStructure
+                || !outputStructure.CanReceiveFrom(cell))
+            {
+                continue;
+            }
+
+            if (resolved)
+            {
+                facing = FacingDirection.East;
+                return false;
+            }
+
+            facing = candidateFacing;
+            resolved = true;
+        }
+
+        return resolved;
+    }
+
     private void RefreshInteriorInteractionModeFromBuildSource()
     {
         if (_interiorInteractionMode == FactoryInteractionMode.Delete)
@@ -3634,6 +4124,227 @@ public partial class MobileFactoryDemo : Node3D
         _interiorInteractionMode = TryGetActiveInteriorPlacementKind(out _, out _)
             ? FactoryInteractionMode.Build
             : FactoryInteractionMode.Interact;
+    }
+
+    private void ResetInteriorBuildPlacementStroke()
+    {
+        _buildInteriorPlacementDragActive = false;
+        _interiorBuildStrokeCells.Clear();
+        _hasLastInteriorBuildStrokeCell = false;
+    }
+
+    private bool TryPlaceCurrentPlayerWorldTarget(bool trackCurrentCellForStroke)
+    {
+        if (!_hasHoveredWorldCell || !TryGetActivePlayerWorldPlacementKind(out var placementKind))
+        {
+            return false;
+        }
+
+        if (trackCurrentCellForStroke && _worldBuildStrokeCells.Contains(_hoveredWorldCell))
+        {
+            return false;
+        }
+
+        var placementFacing = ResolvePlayerWorldPlacementFacing(placementKind, _hoveredWorldCell, trackCurrentCellForStroke);
+        var canPlaceCurrentCell = TryValidatePlayerWorldPlacement(placementKind, _hoveredWorldCell, placementFacing, out var placementMessage);
+        _canPlaceWorldCell = canPlaceCurrentCell;
+        _worldPreviewMessage = placementMessage;
+        if (!canPlaceCurrentCell)
+        {
+            return false;
+        }
+
+        var targetCell = _hoveredWorldCell;
+        var previousStrokeCell = _lastWorldBuildStrokeCell;
+        var hadPreviousStrokeCell = _hasLastWorldBuildStrokeCell;
+        var placedStructure = PlaceWorldStructure(placementKind, targetCell, placementFacing);
+        if (placedStructure is null)
+        {
+            return false;
+        }
+
+        _selectedWorldFacing = placementFacing;
+        if (placementKind == BuildPrototypeKind.Belt && hadPreviousStrokeCell)
+        {
+            ReorientPlayerWorldBeltAt(previousStrokeCell, placementFacing);
+        }
+
+        if (trackCurrentCellForStroke)
+        {
+            _worldBuildStrokeCells.Add(targetCell);
+            _lastWorldBuildStrokeCell = targetCell;
+            _hasLastWorldBuildStrokeCell = true;
+        }
+
+        _simulation?.RebuildTopology();
+        var consumed = TryConsumeSelectedPlayerPlaceable();
+        TraceLog($"TryPlaceCurrentPlayerWorldTarget consumed player placeable={consumed}");
+        RefreshInteriorInteractionModeFromBuildSource();
+        UpdateHud();
+        return true;
+    }
+
+    private void ResetPlayerWorldBuildPlacementStroke()
+    {
+        _buildWorldPlacementDragActive = false;
+        _worldBuildStrokeCells.Clear();
+        _hasLastWorldBuildStrokeCell = false;
+    }
+
+    private void CancelPlayerWorldPlacement()
+    {
+        ResetPlayerWorldBuildPlacementStroke();
+        _playerInteriorPlacementArmed = false;
+        _playerController?.DisarmHotbarPlacement();
+        RefreshInteriorInteractionModeFromBuildSource();
+        UpdateHud();
+    }
+
+    private FacingDirection ResolvePlayerWorldPlacementFacing(BuildPrototypeKind placementKind, Vector2I cell, bool trackCurrentCellForStroke)
+    {
+        if (placementKind != BuildPrototypeKind.Belt)
+        {
+            return _selectedWorldFacing;
+        }
+
+        if (TryResolveExistingPlayerWorldBeltConnectionFacing(cell, out var autoConnectFacing))
+        {
+            return autoConnectFacing;
+        }
+
+        if (trackCurrentCellForStroke
+            && _hasLastWorldBuildStrokeCell
+            && TryResolvePlayerWorldBeltDragFacing(_lastWorldBuildStrokeCell, cell, out var dragFacing))
+        {
+            _selectedWorldFacing = dragFacing;
+            return dragFacing;
+        }
+
+        return _selectedWorldFacing;
+    }
+
+    private bool ReorientPlayerWorldBeltAt(Vector2I cell, FacingDirection facing)
+    {
+        if (_grid is null || !_grid.TryGetStructure(cell, out var structure) || structure is not BeltStructure belt)
+        {
+            return false;
+        }
+
+        if (belt.Facing == facing)
+        {
+            return false;
+        }
+
+        belt.Reorient(facing);
+        return true;
+    }
+
+    private static bool TryResolvePlayerWorldBeltDragFacing(Vector2I fromCell, Vector2I toCell, out FacingDirection facing)
+    {
+        var delta = toCell - fromCell;
+        if (Mathf.Abs(delta.X) + Mathf.Abs(delta.Y) != 1)
+        {
+            facing = FacingDirection.East;
+            return false;
+        }
+
+        facing = delta.X > 0
+            ? FacingDirection.East
+            : delta.X < 0
+                ? FacingDirection.West
+                : delta.Y > 0
+                    ? FacingDirection.South
+                    : FacingDirection.North;
+        return true;
+    }
+
+    private bool TryResolveExistingPlayerWorldBeltConnectionFacing(Vector2I cell, out FacingDirection facing)
+    {
+        facing = FacingDirection.East;
+
+        if (_grid is null)
+        {
+            return false;
+        }
+
+        var resolved = false;
+        foreach (FacingDirection candidateFacing in System.Enum.GetValues(typeof(FacingDirection)))
+        {
+            var inputConnected = false;
+            var inputCells = FactoryTransportTopology.GetBeltInputCells(cell, candidateFacing);
+            for (var index = 0; index < inputCells.Count; index++)
+            {
+                if (!_grid.TryGetStructure(inputCells[index], out var inputStructure) || inputStructure is not BeltStructure)
+                {
+                    continue;
+                }
+
+                if (inputStructure.CanOutputTo(cell))
+                {
+                    inputConnected = true;
+                    break;
+                }
+            }
+
+            if (!inputConnected)
+            {
+                continue;
+            }
+
+            var outputCell = FactoryTransportTopology.GetBeltOutputCell(cell, candidateFacing);
+            if (!_grid.TryGetStructure(outputCell, out var outputStructure)
+                || outputStructure is not BeltStructure
+                || !outputStructure.CanReceiveFrom(cell))
+            {
+                continue;
+            }
+
+            if (resolved)
+            {
+                facing = FacingDirection.East;
+                return false;
+            }
+
+            facing = candidateFacing;
+            resolved = true;
+        }
+
+        return resolved;
+    }
+
+    private bool TryValidatePlayerWorldPlacement(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing, out string message)
+    {
+        message = "世界网格不可用。";
+        if (_grid is null)
+        {
+            return false;
+        }
+
+        if (!_grid.IsInBounds(cell))
+        {
+            message = "超出可建造范围。";
+            return false;
+        }
+
+        return _grid.CanPlaceStructure(kind, cell, facing, out message);
+    }
+
+    private string DescribePlayerWorldPlacementPreview(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
+    {
+        var displayName = FactoryPresentation.GetBuildPrototypeDisplayName(kind);
+        if (_grid is not null
+            && kind == BuildPrototypeKind.Belt
+            && FactoryTransportTopology.TryGetBeltMidspanMergeTarget(_grid, cell, facing, out var mergeTargetCell))
+        {
+            return $"可在 ({cell.X}, {cell.Y}) 放置{displayName}，朝向 {FactoryDirection.ToLabel(facing)}，并以 T 字方式并入 ({mergeTargetCell.X}, {mergeTargetCell.Y}) 的传送带。";
+        }
+
+        if (kind == BuildPrototypeKind.Merger)
+        {
+            return $"可在 ({cell.X}, {cell.Y}) 放置{displayName}，朝向 {FactoryDirection.ToLabel(facing)}，三入口分别来自后方、左侧和右侧。";
+        }
+
+        return $"可在 ({cell.X}, {cell.Y}) 放置{displayName}，朝向 {FactoryDirection.ToLabel(facing)}";
     }
 
     private static void TraceLog(string message)
@@ -4157,7 +4868,24 @@ public partial class MobileFactoryDemo : Node3D
         {
             _currentDeployEvaluation = null;
         }
+
+        if (controlMode != MobileFactoryControlMode.Player)
+        {
+            ResetPlayerWorldBuildPlacementStroke();
+        }
+
         FocusFactoryForCurrentMode();
+    }
+
+    private static string GetControlModeLabel(MobileFactoryControlMode controlMode)
+    {
+        return controlMode switch
+        {
+            MobileFactoryControlMode.Observer => "观察模式",
+            MobileFactoryControlMode.FactoryCommand => "工厂控制",
+            MobileFactoryControlMode.DeployPreview => "部署预览",
+            _ => "玩家控制"
+        };
     }
 
     private void PullFactoryStatusMessage()
@@ -4179,10 +4907,18 @@ public partial class MobileFactoryDemo : Node3D
     {
         return _controlMode switch
         {
-            MobileFactoryControlMode.Player => "玩家模式：WASD 移动主角，镜头跟随角色；用底部热栏切换建筑，用左上按钮或 C 进入工厂控制。",
-            MobileFactoryControlMode.Observer => "观察模式：WASD/方向键移动相机 | 滚轮缩放 | Tab 返回玩家控制 | F 内部编辑",
-            MobileFactoryControlMode.DeployPreview => "部署预览：左键确认 | Q/E/R 旋转朝向 | G/Esc 取消并返回玩家控制 | F 内部编辑",
-            _ => "工厂控制：W/S 前进后退 | A/D 转向 | C 返回玩家控制 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 内部编辑；编辑器里和 sandbox 一样，X 进删除模式，右键或 Esc 回交互，Delete 拆除悬停建筑"
+            MobileFactoryControlMode.Player => _editorOpen
+                ? "编辑会话开启：保留玩家控制上下文；顶部工作区负责切页，鼠标进世界继续观察，鼠标进视口开始舱内编辑，F 退出编辑。"
+                : "玩家模式：WASD 移动主角，镜头跟随角色；底部热栏可选建筑，左键放置，右键/Esc 取消，Q/E 旋转朝向，F 或主面板按钮进入编辑模式。",
+            MobileFactoryControlMode.Observer => _editorOpen
+                ? "观察模式 + 编辑会话：世界仍可观察，相机只在世界区域接管输入；编辑视口和独立操作面板负责舱内编辑，F 退出编辑。"
+                : "观察模式：WASD/方向键移动相机 | 滚轮缩放 | Tab 返回玩家控制 | F 进入编辑模式",
+            MobileFactoryControlMode.DeployPreview => _editorOpen
+                ? "部署预览 + 编辑会话：世界保留部署上下文，编辑视口优先处理舱内编辑；F 退出编辑，G/Esc 取消部署预览。"
+                : "部署预览：左键确认 | Q/E/R 旋转朝向 | G/Esc 取消并返回玩家控制 | F 进入编辑模式",
+            _ => _editorOpen
+                ? "工厂控制 + 编辑会话：移动工厂世界模式已保留；右侧独立操作面板负责建造、删除、旋转和蓝图快捷动作，F 退出编辑。"
+                : "工厂控制：W/S 前进后退 | A/D 转向 | C 返回玩家控制 | G 部署预览 | Tab 观察模式 | R 切回移动态 | F 进入编辑模式；顶部工作区只负责总览、蓝图、存档和详情切换。"
         };
     }
 

@@ -8,7 +8,10 @@ public partial class MobileFactoryDemo
     private void InitializePersistenceHud()
     {
         _hud?.SetPersistenceStatus(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: true));
-        RefreshRuntimeSaveLibrary();
+        if (FactoryPersistencePaths.IsPersistenceEnabled())
+        {
+            RefreshRuntimeSaveLibrary();
+        }
     }
 
     private void HandleWorldMapSaveRequested()
