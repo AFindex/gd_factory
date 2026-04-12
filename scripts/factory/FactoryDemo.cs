@@ -75,6 +75,8 @@ public partial class FactoryDemo : Node3D
     private FactoryInteractionMode _interactionMode = FactoryInteractionMode.Interact;
     private FactoryStructure? _selectedStructure;
     private FactoryStructure? _hoveredStructure;
+    private FactoryResourceDepositDefinition? _selectedResourceDeposit;
+    private FactoryResourceDepositDefinition? _hoveredResourceDeposit;
     private Vector2I _hoveredCell;
     private Vector2I _cachedPreviewPortCell;
     private Rect2I _cachedPreviewPortVisibleRect;
@@ -99,11 +101,7 @@ public partial class FactoryDemo : Node3D
     private FactoryBlueprintApplyPlan? _blueprintApplyPlan;
     private FacingDirection _blueprintApplyRotation = FacingDirection.East;
     private string _previewMessage = "交互模式：点击建筑查看；按数字键选择建筑后进入建造，或按住 Shift 左键框选蓝图。";
-    private string? _selectedPlayerItemInventoryId;
-    private Vector2I _selectedPlayerItemSlot;
-    private bool _hasSelectedPlayerItemSlot;
-    private bool _playerPlacementArmed;
-    private readonly FactoryPlayerInventorySelectionState _playerSelectionState = new();
+    private readonly FactoryBaselinePlayerPlacementState _playerPlacementState = new();
     private BuildPrototypeKind? _cachedPreviewPortKind;
     private FacingDirection _cachedPreviewPortFacing = FacingDirection.East;
     private int _cachedPreviewPortRevision = -1;
@@ -139,7 +137,7 @@ public partial class FactoryDemo : Node3D
         if (_cameraRig is not null)
         {
             _cameraRig.AllowPanInput = false;
-            _cameraRig.AllowZoomInput = !IsPointerOverUi();
+            _cameraRig.AllowZoomInput = !IsWorldPointerInputBlocked();
         }
 
         UpdateHoveredCell();
@@ -174,16 +172,16 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        if (@event is InputEventMouse && IsInventoryUiInteractionActive())
+        if (@event is InputEventMouse && IsWorldPointerInputBlocked())
         {
-            if (@event is InputEventMouseButton blockedMouseButton)
+            if (IsInventoryUiInteractionActive() && @event is InputEventMouseButton blockedMouseButton)
             {
                 TraceLog($"mouse input blocked by active inventory interaction button={blockedMouseButton.ButtonIndex} pressed={blockedMouseButton.Pressed}");
             }
             return;
         }
 
-        if (IsPointerOverUi())
+        if (IsWorldPointerInputBlocked())
         {
             return;
         }
@@ -500,10 +498,10 @@ public partial class FactoryDemo : Node3D
     {
         CancelBlueprintWorkflow(clearActiveBlueprint: false);
         _selectedBuildKind = kind;
-        _playerPlacementArmed = false;
         if (kind.HasValue)
         {
-            _playerController?.DisarmHotbarPlacement();
+            _playerPlacementState.DisarmPlacement(_playerController);
+            _selectedResourceDeposit = null;
         }
 
         RefreshInteractionModeFromBuildSource();
@@ -513,14 +511,14 @@ public partial class FactoryDemo : Node3D
         if (_interactionMode == FactoryInteractionMode.Build)
         {
             _selectedStructure = null;
+            _selectedResourceDeposit = null;
         }
     }
 
     private void EnterInteractionMode()
     {
         _selectedBuildKind = null;
-        _playerPlacementArmed = false;
-        _playerController?.DisarmHotbarPlacement();
+        _playerPlacementState.DisarmPlacement(_playerController);
         _interactionMode = FactoryInteractionMode.Interact;
         _deleteDragActive = false;
         ResetBuildPlacementStroke();
@@ -530,9 +528,9 @@ public partial class FactoryDemo : Node3D
     {
         CancelBlueprintWorkflow(clearActiveBlueprint: false);
         _selectedBuildKind = null;
-        _playerPlacementArmed = false;
-        _playerController?.DisarmHotbarPlacement();
+        _playerPlacementState.DisarmPlacement(_playerController);
         _selectedStructure = null;
+        _selectedResourceDeposit = null;
         _interactionMode = FactoryInteractionMode.Delete;
         _deleteDragActive = false;
         ResetBuildPlacementStroke();
@@ -552,9 +550,10 @@ public partial class FactoryDemo : Node3D
         _playerController.SelectHotbarIndex(0);
         _cameraRig?.SetFollowTarget(_playerController, snapImmediately: true);
         _cameraRig!.FollowTargetEnabled = true;
-        _selectedPlayerItemInventoryId = FactoryPlayerController.BackpackInventoryId;
-        _selectedPlayerItemSlot = new Vector2I(0, 0);
-        _hasSelectedPlayerItemSlot = true;
+        _playerPlacementState.SetSelectedSlot(
+            FactoryPlayerController.BackpackInventoryId,
+            new Vector2I(0, 0),
+            _playerController.IsHotbarPlacementArmed);
         RefreshInteractionModeFromBuildSource();
     }
 
@@ -608,7 +607,7 @@ public partial class FactoryDemo : Node3D
             return true;
         }
 
-        if (_playerPlacementArmed && TryResolveSelectedPlayerPlaceable(out var selectedPlayerKind))
+        if (_playerPlacementState.PlacementArmed && TryResolveSelectedPlayerPlaceable(out var selectedPlayerKind))
         {
             kind = selectedPlayerKind;
             usesPlayerInventory = true;
@@ -629,14 +628,9 @@ public partial class FactoryDemo : Node3D
 
     private void RefreshInteractionModeFromBuildSource()
     {
-        if (_interactionMode == FactoryInteractionMode.Delete)
-        {
-            return;
-        }
-
-        _interactionMode = TryGetActivePlacementKind(out _, out _)
-            ? FactoryInteractionMode.Build
-            : FactoryInteractionMode.Interact;
+        _interactionMode = FactoryBaselineInteractionRules.ResolvePlacementInteractionMode(
+            _interactionMode,
+            TryGetActivePlacementKind(out _, out _));
     }
 
     private void HandlePlayerHotbarPressed(int index)
@@ -648,11 +642,7 @@ public partial class FactoryDemo : Node3D
 
         CancelBlueprintWorkflow(clearActiveBlueprint: false);
         _selectedBuildKind = null;
-        _playerController.ToggleHotbarIndex(index);
-        _selectedPlayerItemInventoryId = FactoryPlayerController.BackpackInventoryId;
-        _selectedPlayerItemSlot = new Vector2I(index, 0);
-        _hasSelectedPlayerItemSlot = true;
-        _playerPlacementArmed = _playerController.IsHotbarPlacementArmed;
+        _playerPlacementState.HandleHotbarPressed(_playerController, index);
         RefreshInteractionModeFromBuildSource();
     }
 
@@ -749,6 +739,7 @@ public partial class FactoryDemo : Node3D
     {
         _hasHoveredCell = false;
         _hoveredStructure = null;
+        _hoveredResourceDeposit = null;
         _canPlaceCurrentCell = false;
         _canDeleteCurrentCell = false;
         _blueprintApplyPlan = null;
@@ -769,7 +760,7 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        if (IsPointerOverUi())
+        if (IsWorldPointerInputBlocked())
         {
             return;
         }
@@ -789,6 +780,7 @@ public partial class FactoryDemo : Node3D
         }
 
         _grid.TryGetStructure(cell, out _hoveredStructure);
+        FactoryResourceDetailSupport.TryGetDeposit(_grid, cell, out _hoveredResourceDeposit);
         if (_blueprintMode == FactoryBlueprintWorkflowMode.CaptureSelection)
         {
             if (_blueprintSelectionDragActive)
@@ -863,7 +855,9 @@ public partial class FactoryDemo : Node3D
         }
 
         _previewMessage = _hoveredStructure is null
-            ? $"交互模式：空地 ({cell.X}, {cell.Y})，点击可清除当前选中，Shift+左键可开始蓝图框选。"
+            ? _hoveredResourceDeposit is null
+                ? $"交互模式：空地 ({cell.X}, {cell.Y})，点击可清除当前选中，Shift+左键可开始蓝图框选。"
+                : $"交互模式：点击查看 {_hoveredResourceDeposit.DisplayName}，Shift+左键可开始蓝图框选。"
             : $"交互模式：点击选中 {_hoveredStructure.DisplayName} ({cell.X}, {cell.Y})，Shift+左键可开始蓝图框选。";
     }
 
@@ -1254,39 +1248,30 @@ public partial class FactoryDemo : Node3D
             _hud.SelectWorkspace(BuildWorkspaceId);
         }
 
-        _hud.SetMode(_interactionMode);
-
-        if (_selectedBuildKind.HasValue)
-        {
-            var definition = _definitions[_selectedBuildKind.Value];
-            _hud.SetBuildSelection(_selectedBuildKind, definition.Details);
-        }
-        else
-        {
-            _hud.SetBuildSelection(null, null);
-        }
-
-        _hud.SetHoverCell(_hoveredCell, _hasHoveredCell);
         var previewPositive = _interactionMode switch
         {
             FactoryInteractionMode.Build => _canPlaceCurrentCell,
             FactoryInteractionMode.Delete => _canDeleteCurrentCell,
             _ => true
         };
-        _hud.SetPreviewStatus(previewPositive, _previewMessage);
-        _hud.SetRotation(_selectedFacing);
-        _hud.SetSelectionTarget(GetSelectedStructureText());
-
-        if (FactoryDemoInteractionBridge.TryGetInspection(_selectedStructure, out var inspectionTitle, out var inspectionBody))
+        var projection = FactoryBaselineHudProjectionBuilder.Create(
+            _interactionMode,
+            _selectedBuildKind,
+            _selectedBuildKind.HasValue ? _definitions[_selectedBuildKind.Value].Details : null,
+            previewPositive,
+            _previewMessage,
+            _selectedFacing,
+            _selectedStructure,
+            GetSelectedStructureText());
+        if (_selectedStructure is null && _selectedResourceDeposit is not null)
         {
-            _hud.SetInspection(inspectionTitle, inspectionBody);
+            projection.SelectionTargetText = FactoryResourceDetailSupport.GetSelectionTargetText(_selectedResourceDeposit);
+            FactoryResourceDetailSupport.GetInspection(_selectedResourceDeposit, out var depositTitle, out var depositBody);
+            projection.InspectionTitle = depositTitle;
+            projection.InspectionBody = depositBody;
+            projection.StructureDetails = FactoryResourceDetailSupport.BuildDetailModel(_selectedResourceDeposit);
         }
-        else
-        {
-            _hud.SetInspection(null, null);
-        }
-
-        _hud.SetStructureDetails(FactoryDemoInteractionBridge.BuildLinkedDetailModel(_selectedStructure));
+        FactoryBaselineHudApplicator.ApplyToFactoryHud(_hud, projection, _hoveredCell, _hasHoveredCell);
 
         var sinkStats = CollectSinkStats();
         var transportRenderStats = _transportRenderManager?.GetStats() ?? new FactoryTransportRenderStats();
@@ -1319,7 +1304,7 @@ public partial class FactoryDemo : Node3D
         {
             _playerHud.SetContext(
                 _playerController,
-                FactoryDemoInteractionBridge.BuildLinkedDetailModel(_selectedStructure),
+                projection.StructureDetails,
                 ResolveSelectedPlayerItem());
         }
     }
@@ -1396,6 +1381,11 @@ public partial class FactoryDemo : Node3D
 
     private string GetSelectedStructureText()
     {
+        if (_selectedResourceDeposit is not null && _selectedStructure is null)
+        {
+            return FactoryResourceDetailSupport.GetSelectionTargetText(_selectedResourceDeposit);
+        }
+
         if (_selectedStructure is null || !GodotObject.IsInstanceValid(_selectedStructure) || !_selectedStructure.IsInsideTree())
         {
             return "未选中建筑";
@@ -1480,6 +1470,7 @@ public partial class FactoryDemo : Node3D
 
         TraceLog($"HandlePrimaryClick interaction mode select hoveredStructure={_hoveredStructure?.DisplayName ?? "none"}");
         _selectedStructure = _hoveredStructure;
+        _selectedResourceDeposit = _hoveredStructure is null ? _hoveredResourceDeposit : null;
     }
 
     private void HandleSecondaryClick()
@@ -1496,6 +1487,7 @@ public partial class FactoryDemo : Node3D
         }
 
         _selectedStructure = null;
+        _selectedResourceDeposit = null;
     }
 
     private void HandleDeletePrimaryPress(bool shiftPressed)
@@ -1876,21 +1868,17 @@ public partial class FactoryDemo : Node3D
 
     private void HandlePlayerInventorySlotActivated(string inventoryId, Vector2I slot)
     {
-        _selectedPlayerItemInventoryId = inventoryId;
-        _selectedPlayerItemSlot = slot;
-        _hasSelectedPlayerItemSlot = true;
-        _playerSelectionState.InventoryId = inventoryId;
-        _playerSelectionState.Slot = slot;
-        _playerSelectionState.HasSlot = true;
-        FactoryDemoInteractionBridge.ActivatePlayerInventorySlot(_playerController, TryResolveInventoryEndpoint, _playerSelectionState, inventoryId, slot, HandlePlayerHotbarPressed);
-
-        if (inventoryId == FactoryPlayerController.BackpackInventoryId && slot.Y == 0)
+        if (_playerPlacementState.HandleInventorySlotActivated(
+                _playerController,
+                TryResolveInventoryEndpoint,
+                inventoryId,
+                slot,
+                HandlePlayerHotbarPressed))
         {
             return;
         }
 
         _selectedBuildKind = null;
-        _playerPlacementArmed = _playerSelectionState.PlacementArmed;
         RefreshInteractionModeFromBuildSource();
         UpdateHud();
     }
@@ -1906,6 +1894,7 @@ public partial class FactoryDemo : Node3D
     private void HandleDetailWindowClosed()
     {
         _selectedStructure = null;
+        _selectedResourceDeposit = null;
         UpdateHud();
     }
 
@@ -1917,22 +1906,12 @@ public partial class FactoryDemo : Node3D
 
     private bool TryConsumeSelectedPlayerPlaceable()
     {
-        _playerSelectionState.InventoryId = _selectedPlayerItemInventoryId;
-        _playerSelectionState.Slot = _selectedPlayerItemSlot;
-        _playerSelectionState.HasSlot = _hasSelectedPlayerItemSlot;
-        _playerSelectionState.PlacementArmed = _playerPlacementArmed;
-        var consumed = FactoryDemoInteractionBridge.TryConsumeSelectedPlaceable(_playerController, TryResolveInventoryEndpoint, _playerSelectionState);
-        _playerPlacementArmed = _playerSelectionState.PlacementArmed;
-        return consumed;
+        return _playerPlacementState.TryConsumeSelectedPlaceable(_playerController, TryResolveInventoryEndpoint);
     }
 
     private FactoryItem? ResolveSelectedPlayerItem()
     {
-        _playerSelectionState.InventoryId = _selectedPlayerItemInventoryId;
-        _playerSelectionState.Slot = _selectedPlayerItemSlot;
-        _playerSelectionState.HasSlot = _hasSelectedPlayerItemSlot;
-        _playerSelectionState.PlacementArmed = _playerPlacementArmed;
-        return FactoryDemoInteractionBridge.ResolveSelectedPlayerItem(_playerController, TryResolveInventoryEndpoint, _playerSelectionState);
+        return _playerPlacementState.ResolveSelectedPlayerItem(_playerController, TryResolveInventoryEndpoint);
     }
 
     private bool TryResolveInventoryEndpoint(string inventoryId, out FactoryInventoryTransferEndpoint endpoint)
@@ -1952,6 +1931,13 @@ public partial class FactoryDemo : Node3D
     {
         return (_hud?.HasActiveInventoryInteraction ?? false)
             || (_playerHud?.HasActiveInventoryInteraction ?? false);
+    }
+
+    private bool IsWorldPointerInputBlocked()
+    {
+        return FactoryBaselineInteractionRules.BlocksWorldPointerInput(
+            IsPointerOverUi(),
+            IsInventoryUiInteractionActive());
     }
 
     private void CreatePreviewVisuals()

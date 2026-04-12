@@ -222,12 +222,12 @@ public partial class FactoryDemo
 
     private void RestorePlayerSelection(FactoryPlayerRuntimeSnapshot snapshot)
     {
-        _selectedPlayerItemInventoryId = string.IsNullOrWhiteSpace(snapshot.SelectedInventoryId)
-            ? FactoryPlayerController.BackpackInventoryId
-            : snapshot.SelectedInventoryId;
-        _selectedPlayerItemSlot = snapshot.SelectedSlot.ToVector2I();
-        _hasSelectedPlayerItemSlot = true;
-        _playerPlacementArmed = snapshot.IsHotbarPlacementArmed;
+        _playerPlacementState.SetSelectedSlot(
+            string.IsNullOrWhiteSpace(snapshot.SelectedInventoryId)
+                ? FactoryPlayerController.BackpackInventoryId
+                : snapshot.SelectedInventoryId,
+            snapshot.SelectedSlot.ToVector2I(),
+            snapshot.IsHotbarPlacementArmed);
         RefreshInteractionModeFromBuildSource();
     }
 

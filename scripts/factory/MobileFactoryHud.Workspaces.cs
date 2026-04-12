@@ -122,6 +122,10 @@ public partial class MobileFactoryHud
         body.AddChild(workspaceHost);
 
         workspaceHost.AddChild(BuildWorldCommandWorkspace(GetPrimaryWorldWorkspaceId()));
+        if (!UseLargeScenarioWorkspaces)
+        {
+            workspaceHost.AddChild(BuildWorldBuildWorkspace());
+        }
         if (UseLargeScenarioWorkspaces)
         {
             workspaceHost.AddChild(BuildWorldDiagnosticsWorkspace());
@@ -243,11 +247,63 @@ public partial class MobileFactoryHud
         BuildEditorToolbar(sidebar);
 
         _detailWindow = new FactoryStructureDetailWindow();
-        _detailWindow.InventoryMoveRequested += (inventoryId, fromSlot, toSlot, splitStack) => EditorDetailInventoryMoveRequested?.Invoke(inventoryId, fromSlot, toSlot, splitStack);
-        _detailWindow.InventoryTransferRequested += (fromInventoryId, fromSlot, toInventoryId, toSlot, splitStack) => EditorDetailInventoryTransferRequested?.Invoke(fromInventoryId, fromSlot, toInventoryId, toSlot, splitStack);
-        _detailWindow.RecipeSelected += recipeId => EditorDetailRecipeSelected?.Invoke(recipeId);
-        _detailWindow.DetailActionRequested += actionId => EditorDetailActionRequested?.Invoke(actionId);
-        _detailWindow.CloseRequested += () => EditorDetailClosed?.Invoke();
+        _detailWindow.InventoryMoveRequested += (inventoryId, fromSlot, toSlot, splitStack) =>
+        {
+            if (_detailSurfaceContext == DetailSurfaceContext.World)
+            {
+                WorldDetailInventoryMoveRequested?.Invoke(inventoryId, fromSlot, toSlot, splitStack);
+            }
+            else
+            {
+                EditorDetailInventoryMoveRequested?.Invoke(inventoryId, fromSlot, toSlot, splitStack);
+            }
+        };
+        _detailWindow.InventoryTransferRequested += (fromInventoryId, fromSlot, toInventoryId, toSlot, splitStack) =>
+        {
+            if (_detailSurfaceContext == DetailSurfaceContext.World)
+            {
+                WorldDetailInventoryTransferRequested?.Invoke(fromInventoryId, fromSlot, toInventoryId, toSlot, splitStack);
+            }
+            else
+            {
+                EditorDetailInventoryTransferRequested?.Invoke(fromInventoryId, fromSlot, toInventoryId, toSlot, splitStack);
+            }
+        };
+        _detailWindow.RecipeSelected += recipeId =>
+        {
+            if (_detailSurfaceContext == DetailSurfaceContext.World)
+            {
+                WorldDetailRecipeSelected?.Invoke(recipeId);
+            }
+            else
+            {
+                EditorDetailRecipeSelected?.Invoke(recipeId);
+            }
+        };
+        _detailWindow.DetailActionRequested += actionId =>
+        {
+            if (_detailSurfaceContext == DetailSurfaceContext.World)
+            {
+                WorldDetailActionRequested?.Invoke(actionId);
+            }
+            else
+            {
+                EditorDetailActionRequested?.Invoke(actionId);
+            }
+        };
+        _detailWindow.CloseRequested += () =>
+        {
+            if (_detailSurfaceContext == DetailSurfaceContext.World)
+            {
+                WorldDetailClosed?.Invoke();
+            }
+            else
+            {
+                EditorDetailClosed?.Invoke();
+            }
+
+            _detailSurfaceContext = DetailSurfaceContext.None;
+        };
         _overlayRoot?.AddChild(_detailWindow);
     }
 
@@ -266,6 +322,7 @@ public partial class MobileFactoryHud
             : new[]
             {
                 new FactoryWorkspaceDescriptor(CommandWorkspaceId, "指挥"),
+                new FactoryWorkspaceDescriptor(WorldBuildWorkspaceId, "世界建造"),
                 new FactoryWorkspaceDescriptor(EditorWorkspaceId, "内部编辑"),
                 new FactoryWorkspaceDescriptor(TestingWorkspaceId, "验证"),
                 new FactoryWorkspaceDescriptor(BlueprintWorkspaceId, "蓝图"),
@@ -340,15 +397,11 @@ public partial class MobileFactoryHud
         utilityGrid.AddThemeConstantOverride("v_separation", 6);
         body.AddChild(utilityGrid);
         utilityGrid.AddChild(CreateEditorActionButton("编辑模式 (F)", () => EditModeToggleRequested?.Invoke()));
+        if (!UseLargeScenarioWorkspaces)
+        {
+            utilityGrid.AddChild(CreateEditorActionButton("世界建造", () => SetActiveWorkspace(WorldBuildWorkspaceId)));
+        }
         utilityGrid.AddChild(CreateEditorActionButton("工厂详情", () => SetActiveWorkspace(DetailsWorkspaceId)));
-
-        body.AddChild(CreateDivider());
-        body.AddChild(CreateInfoLabel("世界建造", 12, FactoryUiTheme.TextMuted));
-        _worldBuildSelectionLabel = CreateInfoLabel("[WORLD] 当前世界建造：未选择");
-        _worldBuildRotationLabel = CreateInfoLabel("[FACING] 世界朝向：未启用", 11, FactoryUiTheme.TextSubtle);
-        body.AddChild(_worldBuildSelectionLabel);
-        body.AddChild(_worldBuildRotationLabel);
-        BuildWorldBuildToolbar(body);
 
         body.AddChild(CreateDivider());
         _deliveryLabel = CreateInfoLabel(string.Empty);
@@ -359,6 +412,56 @@ public partial class MobileFactoryHud
         body.AddChild(_combatLabel);
         body.AddChild(_focusLabel);
         body.AddChild(_hintLabel);
+        return workspace;
+    }
+
+    private Control BuildWorldBuildWorkspace()
+    {
+        var (workspace, body) = CreateWorkspacePanel(_worldWorkspacePanels, WorldBuildWorkspaceId);
+        body.AddChild(CreateInfoLabel("世界建造", 14, FactoryUiTheme.Text));
+        body.AddChild(CreateInfoLabel(
+            "把世界侧选中、矿区信息和建造分类独立出来，避免和移动/部署控制混在同一页里。",
+            11,
+            FactoryUiTheme.TextSubtle));
+
+        var jumpGrid = new GridContainer();
+        jumpGrid.Columns = 2;
+        jumpGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        jumpGrid.AddThemeConstantOverride("h_separation", 6);
+        jumpGrid.AddThemeConstantOverride("v_separation", 6);
+        body.AddChild(jumpGrid);
+        jumpGrid.AddChild(CreateEditorActionButton("返回指挥页", () => SetActiveWorkspace(CommandWorkspaceId)));
+        jumpGrid.AddChild(CreateEditorActionButton("打开内部编辑", () => SetActiveWorkspace(EditorWorkspaceId)));
+
+        body.AddChild(CreateDivider());
+        body.AddChild(CreateInfoLabel("世界建造状态", 12, FactoryUiTheme.TextMuted));
+        _worldBuildSelectionLabel = CreateInfoLabel("[WORLD] 当前世界建造：未选择");
+        _worldBuildRotationLabel = CreateInfoLabel("[FACING] 世界朝向：未启用", 11, FactoryUiTheme.TextSubtle);
+        _worldSelectionTargetLabel = CreateInfoLabel("[TARGET] 世界选中：未选中建筑", 11, FactoryUiTheme.TextMuted);
+        body.AddChild(_worldBuildSelectionLabel);
+        body.AddChild(_worldBuildRotationLabel);
+        body.AddChild(_worldSelectionTargetLabel);
+
+        _worldInspectionPanel = new PanelContainer();
+        _worldInspectionPanel.MouseFilter = Control.MouseFilterEnum.Ignore;
+        _worldInspectionPanel.Visible = false;
+        _worldInspectionPanel.AddThemeStyleboxOverride("panel", FactoryUiTheme.CreatePanelStyle(FactoryUiTheme.SurfaceOverlay, FactoryUiTheme.BorderSoft, 1, FactoryUiTheme.RadiusNone, 8));
+        body.AddChild(_worldInspectionPanel);
+
+        var worldInspectionBody = new VBoxContainer();
+        worldInspectionBody.MouseFilter = Control.MouseFilterEnum.Ignore;
+        worldInspectionBody.AddThemeConstantOverride("separation", 4);
+        _worldInspectionPanel.AddChild(worldInspectionBody);
+
+        _worldInspectionTitleLabel = CreateInfoLabel(string.Empty, 12, FactoryUiTheme.Text);
+        _worldInspectionBodyLabel = CreateInfoLabel(string.Empty, 11, FactoryUiTheme.TextMuted);
+        worldInspectionBody.AddChild(_worldInspectionTitleLabel);
+        worldInspectionBody.AddChild(_worldInspectionBodyLabel);
+
+        BuildWorldBuildToolbar(body);
+
+        body.AddChild(CreateDivider());
+        body.AddChild(CreateInfoLabel("提示：点击大世界里的建筑可打开详细面板，点击矿区可查看矿物详情；切到内部编辑后，世界选中仍会保留。", 11, FactoryUiTheme.TextSubtle));
         return workspace;
     }
 
@@ -685,11 +788,13 @@ public partial class MobileFactoryHud
             _editorViewport.Size = viewportSize2D;
         }
 
-        var dragLeft = Mathf.Min(_editorViewportPanel.Position.X, _editorPanel.Position.X);
-        var dragTop = Mathf.Min(_editorViewportPanel.Position.Y, _editorPanel.Position.Y);
-        var dragRight = Mathf.Max(_editorViewportPanel.Position.X + _editorViewportPanel.Size.X, _editorPanel.Position.X + _editorPanel.Size.X);
-        var dragBottom = Mathf.Max(_editorViewportPanel.Position.Y + _editorViewportPanel.Size.Y, _editorPanel.Position.Y + _editorPanel.Size.Y);
-        _detailWindow?.SetDragBounds(new Rect2(new Vector2(dragLeft, dragTop), new Vector2(dragRight - dragLeft, dragBottom - dragTop)));
+        var detailBoundsMargin = new Vector2(12.0f, 12.0f);
+        var detailBounds = new Rect2(
+            detailBoundsMargin,
+            new Vector2(
+                Mathf.Max(180.0f, viewportSize.X - detailBoundsMargin.X * 2.0f),
+                Mathf.Max(180.0f, viewportSize.Y - detailBoundsMargin.Y * 2.0f)));
+        _detailWindow?.SetDragBounds(detailBounds);
         RefreshFocusVisuals();
     }
 

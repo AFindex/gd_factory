@@ -4,7 +4,15 @@ using System.Collections.Generic;
 
 public partial class MobileFactoryHud : CanvasLayer
 {
+    private enum DetailSurfaceContext
+    {
+        None,
+        World,
+        Editor
+    }
+
     private const string CommandWorkspaceId = "command";
+    private const string WorldBuildWorkspaceId = "world-build";
     private const string EditorWorkspaceId = "editor";
     private const string TestingWorkspaceId = "testing";
     private const string BlueprintWorkspaceId = "blueprints";
@@ -48,6 +56,10 @@ public partial class MobileFactoryHud : CanvasLayer
     private Label? _diagnosticsHintLabel;
     private Label? _worldBuildSelectionLabel;
     private Label? _worldBuildRotationLabel;
+    private Label? _worldSelectionTargetLabel;
+    private PanelContainer? _worldInspectionPanel;
+    private Label? _worldInspectionTitleLabel;
+    private Label? _worldInspectionBodyLabel;
     private Label? _editorModeLabel;
     private Label? _selectionLabel;
     private Label? _selectionTargetLabel;
@@ -64,6 +76,7 @@ public partial class MobileFactoryHud : CanvasLayer
     private Label? _saveLibraryStatusLabel;
     private VBoxContainer? _saveLibraryList;
     private LineEdit? _saveWorkspaceSlotEdit;
+    private ConfirmationDialog? _overwriteSaveDialog;
     private Label? _testingEditorStateLabel;
     private Label? _testingSelectionTargetLabel;
     private Label? _testingPreviewLabel;
@@ -89,12 +102,15 @@ public partial class MobileFactoryHud : CanvasLayer
     private bool _editorOperationFocused;
     private bool _overviewCollapsed;
     private FactoryInteractionMode _editorInteractionMode = FactoryInteractionMode.Interact;
+    private DetailSurfaceContext _detailSurfaceContext;
+    private Action? _pendingOverwriteSaveAction;
 
     public bool UseLargeScenarioWorkspaces { get; set; }
     public SubViewport EditorViewport => _editorViewport!;
     public bool IsEditorVisible => _editorOpen;
     public string PortStatusText => _portStatusLabel?.Text ?? _testingPortStatusLabel?.Text ?? string.Empty;
     public bool IsDetailVisible => _detailWindow?.IsShowing ?? false;
+    public bool HasActiveInventoryInteraction => _detailWindow?.HasActiveInventoryInteraction ?? false;
     public string DetailTitleText => _detailWindow?.CurrentTitleText ?? string.Empty;
     public string ActiveWorkspaceId => _workspaceChrome?.ActiveWorkspaceId ?? string.Empty;
     public bool IsOverviewCollapsed => _overviewCollapsed;
@@ -139,6 +155,11 @@ public partial class MobileFactoryHud : CanvasLayer
     public event Action<string>? EditorDetailRecipeSelected;
     public event Action<string>? EditorDetailActionRequested;
     public event Action? EditorDetailClosed;
+    public event Action<string, Vector2I, Vector2I, bool>? WorldDetailInventoryMoveRequested;
+    public event Action<string, Vector2I, string, Vector2I, bool>? WorldDetailInventoryTransferRequested;
+    public event Action<string>? WorldDetailRecipeSelected;
+    public event Action<string>? WorldDetailActionRequested;
+    public event Action? WorldDetailClosed;
     public event Action? BlueprintCaptureFullRequested;
     public event Action<string>? BlueprintRuntimeSaveRequested;
     public event Action<string>? BlueprintSourceSaveRequested;
@@ -171,6 +192,21 @@ public partial class MobileFactoryHud : CanvasLayer
         {
             MoveChild(_overlayRoot, GetChildCount() - 1);
         }
+
+        _overwriteSaveDialog = new ConfirmationDialog();
+        _overwriteSaveDialog.Title = "确认覆盖保存";
+        _overwriteSaveDialog.DialogText = "确认要覆盖现有存档吗？";
+        _overwriteSaveDialog.Exclusive = true;
+        _overwriteSaveDialog.GetOkButton().Text = "覆盖保存";
+        _overwriteSaveDialog.Confirmed += () =>
+        {
+            var action = _pendingOverwriteSaveAction;
+            _pendingOverwriteSaveAction = null;
+            action?.Invoke();
+        };
+        _overwriteSaveDialog.Canceled += () => _pendingOverwriteSaveAction = null;
+        AddChild(_overwriteSaveDialog);
+
         SetPersistenceStatus(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: true));
         UpdateLayout();
         GetViewport().SizeChanged += UpdateLayout;
@@ -381,6 +417,27 @@ public partial class MobileFactoryHud : CanvasLayer
         }
     }
 
+    public void SetWorldSelectionTarget(string text)
+    {
+        if (_worldSelectionTargetLabel is not null)
+        {
+            _worldSelectionTargetLabel.Text = $"[TARGET] 世界选中：{text}";
+        }
+    }
+
+    public void SetWorldInspection(string? title, string? body)
+    {
+        if (_worldInspectionPanel is null || _worldInspectionTitleLabel is null || _worldInspectionBodyLabel is null)
+        {
+            return;
+        }
+
+        var isVisible = !string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(body);
+        _worldInspectionPanel.Visible = isVisible;
+        _worldInspectionTitleLabel.Text = title ?? string.Empty;
+        _worldInspectionBodyLabel.Text = body ?? string.Empty;
+    }
+
     public void SetEditorSelection(FactoryInteractionMode interactionMode, BuildPrototypeKind? kind, FacingDirection facing)
     {
         _editorInteractionMode = interactionMode;
@@ -565,13 +622,40 @@ public partial class MobileFactoryHud : CanvasLayer
 
         if (model is null)
         {
-            _detailWindow.HideWindow();
+            if (_detailSurfaceContext == DetailSurfaceContext.Editor)
+            {
+                _detailWindow.HideWindow();
+                _detailSurfaceContext = DetailSurfaceContext.None;
+            }
         }
         else
         {
             var anchorPanel = _editorViewportPanel ?? _editorPanel!;
+            _detailSurfaceContext = DetailSurfaceContext.Editor;
             _detailWindow.ShowDetails(model, anchorPanel.Position + new Vector2(24.0f, 24.0f));
         }
+    }
+
+    public void SetWorldStructureDetails(FactoryStructureDetailModel? model)
+    {
+        if (_detailWindow is null || _infoPanel is null)
+        {
+            return;
+        }
+
+        if (model is null)
+        {
+            if (_detailSurfaceContext == DetailSurfaceContext.World)
+            {
+                _detailWindow.HideWindow();
+                _detailSurfaceContext = DetailSurfaceContext.None;
+            }
+
+            return;
+        }
+
+        _detailSurfaceContext = DetailSurfaceContext.World;
+        _detailWindow.ShowDetails(model, _infoPanel.Position + new Vector2(_infoPanel.Size.X + 18.0f, 18.0f));
     }
 
     public void SetBlueprintState(FactoryBlueprintPanelState state)
@@ -694,6 +778,26 @@ public partial class MobileFactoryHud : CanvasLayer
         }
     }
 
+    private void RequestOverwriteSave(FactoryRuntimeSaveSlotMetadata slot)
+    {
+        if (_overwriteSaveDialog is null || UseLargeScenarioWorkspaces)
+        {
+            return;
+        }
+
+        _pendingOverwriteSaveAction = () =>
+        {
+            if (_saveWorkspaceSlotEdit is not null)
+            {
+                _saveWorkspaceSlotEdit.Text = slot.SlotId;
+            }
+
+            RuntimeSaveRequested?.Invoke(slot.SlotId);
+        };
+        _overwriteSaveDialog.DialogText = $"确认要覆盖保存到 {slot.DisplayName} ({slot.SlotId}) 吗？";
+        _overwriteSaveDialog.PopupCentered(new Vector2I(420, 0));
+    }
+
     private Control CreateSaveLibraryCard(FactoryRuntimeSaveSlotMetadata slot)
     {
         var card = new PanelContainer();
@@ -725,6 +829,21 @@ public partial class MobileFactoryHud : CanvasLayer
         var title = CreateEditorLabel(slot.DisplayName, 12, FactoryUiTheme.Text);
         title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         header.AddChild(title);
+
+        var overwriteButton = new Button
+        {
+            Text = "覆盖保存",
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            CustomMinimumSize = new Vector2(84.0f, 24.0f),
+            Disabled = UseLargeScenarioWorkspaces
+        };
+        overwriteButton.AddThemeFontSizeOverride("font_size", 10);
+        FactoryUiTheme.ApplyButtonTheme(overwriteButton, compact: true);
+        overwriteButton.TooltipText = UseLargeScenarioWorkspaces
+            ? "large scenario 当前不支持运行时进度覆盖保存"
+            : $"覆盖保存到存档 {slot.SlotId}";
+        overwriteButton.Pressed += () => RequestOverwriteSave(slot);
+        header.AddChild(overwriteButton);
 
         var loadButton = new Button
         {

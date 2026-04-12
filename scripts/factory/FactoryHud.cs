@@ -37,11 +37,13 @@ public partial class FactoryHud : CanvasLayer
     private Label? _saveWorkspaceStatusLabel;
     private VBoxContainer? _saveLibraryList;
     private LineEdit? _saveWorkspaceSlotEdit;
+    private ConfirmationDialog? _overwriteSaveDialog;
     private PanelContainer? _inspectionPanel;
     private Label? _inspectionTitleLabel;
     private Label? _inspectionBodyLabel;
     private FactoryStructureDetailWindow? _detailWindow;
     private FactoryBlueprintPanel? _blueprintPanel;
+    private Action? _pendingOverwriteSaveAction;
 
     public event Action<BuildPrototypeKind?>? SelectionChanged;
     public event Action<string, Vector2I, Vector2I, bool>? DetailInventoryMoveRequested;
@@ -146,6 +148,20 @@ public partial class FactoryHud : CanvasLayer
         _detailWindow.RecipeSelected += recipeId => DetailRecipeSelected?.Invoke(recipeId);
         _detailWindow.CloseRequested += () => DetailClosed?.Invoke();
         root.AddChild(_detailWindow);
+
+        _overwriteSaveDialog = new ConfirmationDialog();
+        _overwriteSaveDialog.Title = "确认覆盖保存";
+        _overwriteSaveDialog.DialogText = "确认要覆盖现有存档吗？";
+        _overwriteSaveDialog.Exclusive = true;
+        _overwriteSaveDialog.GetOkButton().Text = "覆盖保存";
+        _overwriteSaveDialog.Confirmed += () =>
+        {
+            var action = _pendingOverwriteSaveAction;
+            _pendingOverwriteSaveAction = null;
+            action?.Invoke();
+        };
+        _overwriteSaveDialog.Canceled += () => _pendingOverwriteSaveAction = null;
+        root.AddChild(_overwriteSaveDialog);
 
         SetMode(FactoryInteractionMode.Interact);
         SetBuildSelection(null, null);
@@ -728,6 +744,26 @@ public partial class FactoryHud : CanvasLayer
         return button;
     }
 
+    private void RequestOverwriteSave(FactoryRuntimeSaveSlotMetadata slot)
+    {
+        if (_overwriteSaveDialog is null)
+        {
+            return;
+        }
+
+        _pendingOverwriteSaveAction = () =>
+        {
+            if (_saveWorkspaceSlotEdit is not null)
+            {
+                _saveWorkspaceSlotEdit.Text = slot.SlotId;
+            }
+
+            RuntimeSaveRequested?.Invoke(slot.SlotId);
+        };
+        _overwriteSaveDialog.DialogText = $"确认要覆盖保存到 {slot.DisplayName} ({slot.SlotId}) 吗？";
+        _overwriteSaveDialog.PopupCentered(new Vector2I(420, 0));
+    }
+
     private Control CreateSaveLibraryCard(FactoryRuntimeSaveSlotMetadata slot)
     {
         var card = new PanelContainer();
@@ -760,6 +796,18 @@ public partial class FactoryHud : CanvasLayer
         title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         title.AddThemeFontSizeOverride("font_size", 13);
         header.AddChild(title);
+
+        var overwriteButton = new Button
+        {
+            Text = "覆盖保存",
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            CustomMinimumSize = new Vector2(84.0f, 26.0f)
+        };
+        overwriteButton.AddThemeFontSizeOverride("font_size", 11);
+        FactoryUiTheme.ApplyButtonTheme(overwriteButton, compact: true);
+        overwriteButton.TooltipText = $"覆盖保存到存档 {slot.SlotId}";
+        overwriteButton.Pressed += () => RequestOverwriteSave(slot);
+        header.AddChild(overwriteButton);
 
         var loadButton = new Button
         {
