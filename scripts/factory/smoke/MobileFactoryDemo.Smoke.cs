@@ -182,16 +182,16 @@ public partial class MobileFactoryDemo
         FactoryStructure? unpackerStructure = null;
         FactoryStructure? packerStructure = null;
         var cabinPresentationVerified =
-            _mobileFactory.TryGetInteriorStructure(new Vector2I(1, 3), out unpackerStructure)
+            _mobileFactory.TryGetInteriorStructure(new Vector2I(2, 2), out unpackerStructure)
             && unpackerStructure is CargoUnpackerStructure
             && CountNamedNodes(unpackerStructure, "UnpackerChamberBaseSkid") > 0
             && CountNamedNodes(unpackerStructure, "UnpackerCradle") > 0
             && CountNamedNodes(unpackerStructure, "ProcessingPayloadAnchor") > 0
-            && _mobileFactory.TryGetInteriorStructure(new Vector2I(5, 3), out var conversionBufferStructure)
+            && _mobileFactory.TryGetInteriorStructure(new Vector2I(4, 3), out var conversionBufferStructure)
             && conversionBufferStructure is TransferBufferStructure
             && CountNamedNodes(conversionBufferStructure, "BufferCradle") > 0
             && CountNamedNodes(conversionBufferStructure, "BufferPayloadAnchor") > 0
-            && _mobileFactory.TryGetInteriorStructure(new Vector2I(6, 3), out packerStructure)
+            && _mobileFactory.TryGetInteriorStructure(new Vector2I(5, 2), out packerStructure)
             && packerStructure is CargoPackerStructure
             && CountNamedNodes(packerStructure, "PackerChamberBaseSkid") > 0
             && CountNamedNodes(packerStructure, "PackerCompressionDeck") > 0
@@ -212,9 +212,9 @@ public partial class MobileFactoryDemo
             && configuredUnpacker.CaptureBlueprintConfiguration().TryGetValue("bundle_template_id", out var unpackerTemplateId)
             && unpackerTemplateId == "bulk-iron-ore-standard"
             && configuredPacker.CaptureBlueprintConfiguration().TryGetValue("bundle_template_id", out var packerTemplateId)
-            && packerTemplateId == "packed-gear-compact";
+            && packerTemplateId == "packed-iron-plate-standard";
         var worldBundleBlockedOnInteriorBelt =
-            _mobileFactory.TryGetInteriorStructure(new Vector2I(3, 3), out var interiorBeltStructure)
+            _mobileFactory.TryGetInteriorStructure(new Vector2I(3, 7), out var interiorBeltStructure)
             && interiorBeltStructure is BeltStructure interiorBelt
             && !interiorBelt.CanAcceptItem(
                 _simulation.CreateItem(
@@ -527,13 +527,13 @@ public partial class MobileFactoryDemo
         var anchorCell = FocusedDepotAnchorCell;
         var edgeAnchor = new Vector2I(7, 7);
         var unpackerSpansMultipleCells =
-            _mobileFactory.TryGetInteriorStructure(new Vector2I(1, 4), out var unpackerFootprintStructure)
+            _mobileFactory.TryGetInteriorStructure(new Vector2I(3, 3), out var unpackerFootprintStructure)
             && unpackerFootprintStructure is CargoUnpackerStructure;
         var packerSpansMultipleCells =
-            _mobileFactory.TryGetInteriorStructure(new Vector2I(6, 4), out var packerFootprintStructure)
+            _mobileFactory.TryGetInteriorStructure(new Vector2I(6, 3), out var packerFootprintStructure)
             && packerFootprintStructure is CargoPackerStructure;
         var inputPortSpansMultipleCells =
-            _mobileFactory.TryGetInteriorStructure(new Vector2I(0, 4), out var inputPortSecondaryStructure)
+            _mobileFactory.TryGetInteriorStructure(new Vector2I(1, 2), out var inputPortSecondaryStructure)
             && inputPortSecondaryStructure is MobileFactoryInputPortStructure;
         var outputPortSpansMultipleCells =
             _mobileFactory.TryGetInteriorStructure(new Vector2I(7, 2), out var outputPortUpperStructure)
@@ -543,14 +543,14 @@ public partial class MobileFactoryDemo
         var standardUnpackerFootprint = new HashSet<Vector2I>(
             FactoryStructureFactory
                 .GetFootprint(BuildPrototypeKind.CargoUnpacker, configuration: null, mapRecipeId: "bulk-iron-ore-standard")
-                .ResolveOccupiedCells(new Vector2I(1, 3), FacingDirection.East));
+                .ResolveOccupiedCells(new Vector2I(2, 2), FacingDirection.East));
         var widePackerFootprint = new HashSet<Vector2I>(
             FactoryStructureFactory
                 .GetFootprint(BuildPrototypeKind.CargoPacker, configuration: null, mapRecipeId: "packed-frontline-sustainment-wide")
                 .ResolveOccupiedCells(new Vector2I(2, 2), FacingDirection.East));
         var sizeTierFootprintsVerified =
-            standardUnpackerFootprint.SetEquals(new[] { new Vector2I(1, 2), new Vector2I(1, 3), new Vector2I(1, 4) })
-            && widePackerFootprint.SetEquals(new[] { new Vector2I(2, 1), new Vector2I(2, 2), new Vector2I(2, 3), new Vector2I(2, 4) });
+            standardUnpackerFootprint.SetEquals(new[] { new Vector2I(2, 2), new Vector2I(3, 2), new Vector2I(2, 3), new Vector2I(3, 3) })
+            && widePackerFootprint.SetEquals(new[] { new Vector2I(2, 2), new Vector2I(3, 2), new Vector2I(2, 3), new Vector2I(3, 3) });
         var resolvesFromSecondaryCell = _mobileFactory.TryGetInteriorStructure(secondaryCell, out var structure) && structure is LargeStorageDepotStructure;
         var blockedAtEdge = !_mobileFactory.CanPlaceInterior(BuildPrototypeKind.LargeStorageDepot, edgeAnchor, FacingDirection.East);
         var removedFromSecondaryCell = _mobileFactory.RemoveInteriorStructure(secondaryCell);

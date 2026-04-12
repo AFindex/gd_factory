@@ -31,11 +31,11 @@ public partial class MobileFactoryDemo : Node3D
     private static readonly Vector2I MiningAnchorB = new(17, 12);
     private static readonly Vector2I BlockedAnchor = new(-1, 1);
     private static readonly Vector2I FocusedTurretCell = new(1, 0);
-    private static readonly Vector2I FocusedSmelterCell = new(2, 3);
-    private static readonly Vector2I FocusedAssemblerCell = new(4, 1);
-    private static readonly Vector2I FocusedAmmoAssemblerCell = new(3, 4);
+    private static readonly Vector2I FocusedSmelterCell = new(4, 2);
+    private static readonly Vector2I FocusedAssemblerCell = new(3, 0);
+    private static readonly Vector2I FocusedAmmoAssemblerCell = new(2, 4);
     private static readonly Vector2I FocusedIronBufferCell = new(0, 5);
-    private static readonly Vector2I FocusedWireBufferCell = new(0, 6);
+    private static readonly Vector2I FocusedWireBufferCell = new(0, 4);
     private static readonly Vector2I FocusedDepotAnchorCell = new(5, 6);
     private static readonly Key[] InteriorPaletteKeys =
     {

@@ -791,6 +791,7 @@ public partial class FactoryDemo
         var worldBulkItem = new FactoryItem(-104, BuildPrototypeKind.MiningDrill, FactoryItemKind.IronOre, FactoryCargoForm.WorldBulk);
         var worldPackedItem = new FactoryItem(-105, BuildPrototypeKind.CargoPacker, FactoryItemKind.IronOre, FactoryCargoForm.WorldPacked);
         var interiorFeedItem = new FactoryItem(-106, BuildPrototypeKind.CargoUnpacker, FactoryItemKind.IronOre, FactoryCargoForm.InteriorFeed);
+        var cabinBoundaryCellSize = MobileFactoryScenarioLibrary.CreateFocusedDemoProfile().InteriorCellSize;
         var copperDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(FactoryItemKind.CopperOre, FactoryConstants.CellSize);
         var ammoDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(FactoryItemKind.AmmoMagazine, FactoryConstants.CellSize);
         var worldBulkProfile = FactoryItemCatalog.ResolveVisualProfile(worldBulkItem);
@@ -800,6 +801,7 @@ public partial class FactoryDemo
         var worldPackedDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(worldPackedItem, FactoryConstants.CellSize);
         var interiorFeedDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(interiorFeedItem, FactoryConstants.CellSize);
         var interiorConversionDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(worldPackedItem, FactoryConstants.CellSize, FactoryTransportVisualContext.InteriorConversion);
+        var boundaryHandoffDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(worldPackedItem, cabinBoundaryCellSize, FactoryTransportVisualContext.BoundaryHandoff);
         var worldBulkOccupiedLength = FactoryTransportVisualFactory.EstimateOccupiedLengthProgress(worldBulkDescriptors, FactoryConstants.CellSize);
         var worldPackedOccupiedLength = FactoryTransportVisualFactory.EstimateOccupiedLengthProgress(worldPackedDescriptors, FactoryConstants.CellSize);
         var interiorFeedOccupiedLength = FactoryTransportVisualFactory.EstimateOccupiedLengthProgress(interiorFeedDescriptors, FactoryConstants.CellSize);
@@ -837,9 +839,16 @@ public partial class FactoryDemo
             && interiorConversionDescriptors.Primary.PresentationStandard == FactoryCargoPresentationStandard.WorldPayload
             && interiorConversionDescriptors.Primary.VisualContext == FactoryTransportVisualContext.InteriorConversion
             && interiorConversionDescriptors.Primary.KeepsWorldScaleInsideCabin
+            && boundaryHandoffDescriptors.Primary.PresentationStandard == FactoryCargoPresentationStandard.WorldPayload
+            && boundaryHandoffDescriptors.Primary.VisualContext == FactoryTransportVisualContext.BoundaryHandoff
+            && boundaryHandoffDescriptors.Primary.KeepsWorldScaleInsideCabin
             && interiorFeedDescriptors.Primary.PresentationStandard == FactoryCargoPresentationStandard.CabinCarrier
             && interiorFeedDescriptors.Primary.VisualContext == FactoryTransportVisualContext.InteriorRail
             && worldPackedDescriptors.Primary.MeshScale.X >= interiorFeedDescriptors.Primary.MeshScale.X * 1.8f;
+        var cabinBoundaryPreservesWorldScale =
+            Mathf.IsEqualApprox(boundaryHandoffDescriptors.Primary.MeshScale.X, worldPackedDescriptors.Primary.MeshScale.X)
+            && Mathf.IsEqualApprox(boundaryHandoffDescriptors.Primary.MeshScale.Y, worldPackedDescriptors.Primary.MeshScale.Y)
+            && Mathf.IsEqualApprox(boundaryHandoffDescriptors.Primary.MeshScale.Z, worldPackedDescriptors.Primary.MeshScale.Z);
         var transportFootprintsResolved =
             worldBulkOccupiedLength >= worldPackedOccupiedLength
             && worldPackedOccupiedLength > interiorFeedOccupiedLength
@@ -869,6 +878,7 @@ public partial class FactoryDemo
             && worldPackedDescriptors.Primary.BatchKey != interiorFeedDescriptors.Primary.BatchKey
             && interiorCarrierResolved
             && cargoContextMetadataResolved
+            && cabinBoundaryPreservesWorldScale
             && transportFootprintsResolved
             && distinctBaselineColors
             && cargoDisplayNamesDiffer

@@ -1573,9 +1573,14 @@ public sealed class MobileFactoryInstance
         if (connectorRoot.GetNodeOrNull<Node3D>("WorldPayloadRoot") is Node3D payloadRoot)
         {
             var targetPosition = payloadRoot.GetMeta("payload_target_position", Vector3.Zero).AsVector3();
+            var revealThreshold = Mathf.Clamp(payloadRoot.GetMeta("payload_reveal_threshold", 0.0f).AsSingle(), 0.0f, 0.98f);
+            var revealProgress = Mathf.Clamp((eased - revealThreshold) / Mathf.Max(0.001f, 1.0f - revealThreshold), 0.0f, 1.0f);
+            var preserveScale = payloadRoot.GetMeta("payload_preserve_scale", false).AsBool();
             payloadRoot.Position = targetPosition * eased;
-            payloadRoot.Scale = Vector3.One * Mathf.Max(0.001f, eased);
-            payloadRoot.Visible = eased > 0.001f;
+            payloadRoot.Scale = preserveScale
+                ? Vector3.One
+                : Vector3.One * Mathf.Max(0.001f, revealProgress);
+            payloadRoot.Visible = revealProgress > 0.001f;
         }
     }
 

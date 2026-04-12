@@ -169,23 +169,24 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
 
     protected override void BuildVisuals()
     {
+        var deckWidth = GetPortDeckWidth();
         var baseColor = AttachmentDefinition.Tint.Darkened(0.2f);
         var accentColor = AttachmentDefinition.Tint;
         var tipColor = AttachmentDefinition.ConnectorColor;
         var deckDepth = GetPortDeckDepth();
 
-        CreateColoredBox("BoundaryBaseSkid", new Vector3(CellSize * 1.28f, 0.12f, deckDepth), baseColor, new Vector3(0.0f, 0.06f, 0.0f));
-        CreateColoredBox("BoundaryDeck", new Vector3(CellSize * 1.16f, 0.08f, deckDepth * 0.90f), baseColor.Lightened(0.06f), new Vector3(0.02f * CellSize, 0.12f, 0.0f));
-        CreateColoredBox("BoundaryHandoffCradle", new Vector3(CellSize * 1.10f, 0.10f, deckDepth * 0.58f), accentColor.Darkened(0.06f), new Vector3(0.08f * CellSize, 0.18f, 0.0f));
-        CreateInteriorTray(this, "BoundaryTransferLane", new Vector3(CellSize * 1.18f, 0.08f, CellSize * 0.34f), accentColor, tipColor.Lightened(0.16f), new Vector3(0.10f * CellSize, 0.20f, 0.0f));
-        CreateColoredBox("BoundaryDeckRailNorth", new Vector3(CellSize * 1.16f, 0.10f, CellSize * 0.08f), tipColor.Lightened(0.12f), new Vector3(0.08f * CellSize, 0.24f, -deckDepth * 0.34f));
-        CreateColoredBox("BoundaryDeckRailSouth", new Vector3(CellSize * 1.16f, 0.10f, CellSize * 0.08f), tipColor.Lightened(0.12f), new Vector3(0.08f * CellSize, 0.24f, deckDepth * 0.34f));
-        CreateColoredBox("BoundaryPortalNorth", new Vector3(CellSize * 0.16f, 0.44f, CellSize * 0.12f), tipColor, new Vector3(CellSize * 0.56f, 0.32f, -deckDepth * 0.22f));
-        CreateColoredBox("BoundaryPortalSouth", new Vector3(CellSize * 0.16f, 0.44f, CellSize * 0.12f), tipColor, new Vector3(CellSize * 0.56f, 0.32f, deckDepth * 0.22f));
-        CreateColoredBox("HullMouth", new Vector3(CellSize * 0.34f, 0.14f, deckDepth * 0.48f), tipColor.Lightened(0.04f), new Vector3(CellSize * 0.66f, 0.24f, 0.0f));
+        CreateColoredBox("BoundaryBaseSkid", new Vector3(deckWidth, 0.12f, deckDepth), baseColor, new Vector3(0.0f, 0.06f, 0.0f));
+        CreateColoredBox("BoundaryDeck", new Vector3(deckWidth * 0.90f, 0.08f, deckDepth * 0.90f), baseColor.Lightened(0.06f), new Vector3(0.02f * CellSize, 0.12f, 0.0f));
+        CreateColoredBox("BoundaryHandoffCradle", new Vector3(deckWidth * 0.82f, 0.10f, deckDepth * 0.58f), accentColor.Darkened(0.06f), new Vector3(0.06f * CellSize, 0.18f, 0.0f));
+        CreateInteriorTray(this, "BoundaryTransferLane", new Vector3(deckWidth * 0.84f, 0.08f, CellSize * 0.34f), accentColor, tipColor.Lightened(0.16f), new Vector3(0.08f * CellSize, 0.20f, 0.0f));
+        CreateColoredBox("BoundaryDeckRailNorth", new Vector3(deckWidth * 0.88f, 0.10f, CellSize * 0.08f), tipColor.Lightened(0.12f), new Vector3(0.06f * CellSize, 0.24f, -deckDepth * 0.34f));
+        CreateColoredBox("BoundaryDeckRailSouth", new Vector3(deckWidth * 0.88f, 0.10f, CellSize * 0.08f), tipColor.Lightened(0.12f), new Vector3(0.06f * CellSize, 0.24f, deckDepth * 0.34f));
+        CreateColoredBox("BoundaryPortalNorth", new Vector3(CellSize * 0.16f, 0.44f, CellSize * 0.12f), tipColor, new Vector3(deckWidth * 0.40f, 0.32f, -deckDepth * 0.22f));
+        CreateColoredBox("BoundaryPortalSouth", new Vector3(CellSize * 0.16f, 0.44f, CellSize * 0.12f), tipColor, new Vector3(deckWidth * 0.40f, 0.32f, deckDepth * 0.22f));
+        CreateColoredBox("HullMouth", new Vector3(deckWidth * 0.28f, 0.14f, deckDepth * 0.48f), tipColor.Lightened(0.04f), new Vector3(deckWidth * 0.48f, 0.24f, 0.0f));
         CreateColoredBox("BoundaryScaleMarker", new Vector3(CellSize * 0.30f, 0.06f, CellSize * 0.30f), tipColor.Lightened(0.18f), new Vector3(-CellSize * 0.40f, 0.14f, 0.0f));
-        CreateInteriorLabelPlate(this, "BoundaryScaleLabel", "重载", tipColor, new Vector3(-CellSize * 0.16f, 0.12f, -deckDepth * 0.38f), 1.18f);
-        CreateInteriorIndicatorLight(this, "Beacon", tipColor.Lightened(0.22f), new Vector3(-CellSize * 0.40f, 0.40f, 0.0f), CellSize * 0.07f);
+        CreateInteriorLabelPlate(this, "BoundaryScaleLabel", "重载", tipColor, new Vector3(-deckWidth * 0.10f, 0.12f, -deckDepth * 0.38f), 1.18f);
+        CreateInteriorIndicatorLight(this, "Beacon", tipColor.Lightened(0.22f), new Vector3(-deckWidth * 0.30f, 0.40f, 0.0f), CellSize * 0.07f);
     }
 
     protected Vector3 EvaluatePortPath(float progress, bool worldToInterior)
@@ -230,8 +231,8 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         payloadRoot.AddChild(new MeshInstance3D
         {
             Name = "PayloadPad",
-            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 1.56f, 0.12f, FactoryConstants.CellSize * 1.22f) },
-            Position = new Vector3(0.0f, 0.06f, 0.0f),
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.94f, 0.10f, FactoryConstants.CellSize * 0.94f) },
+            Position = new Vector3(0.0f, 0.05f, 0.0f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = AttachmentDefinition.Tint.Darkened(0.22f),
@@ -242,8 +243,8 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         payloadRoot.AddChild(new MeshInstance3D
         {
             Name = "PayloadCradle",
-            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 1.18f, 0.10f, FactoryConstants.CellSize * 0.84f) },
-            Position = new Vector3(0.04f * FactoryConstants.CellSize, 0.16f, 0.0f),
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.74f, 0.08f, FactoryConstants.CellSize * 0.62f) },
+            Position = new Vector3(0.02f * FactoryConstants.CellSize, 0.13f, 0.0f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = AttachmentDefinition.Tint,
@@ -254,8 +255,8 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         payloadRoot.AddChild(new MeshInstance3D
         {
             Name = "PayloadGuideNorth",
-            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 1.14f, 0.08f, FactoryConstants.CellSize * 0.08f) },
-            Position = new Vector3(0.04f * FactoryConstants.CellSize, 0.22f, -FactoryConstants.CellSize * 0.40f),
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.72f, 0.06f, FactoryConstants.CellSize * 0.06f) },
+            Position = new Vector3(0.02f * FactoryConstants.CellSize, 0.18f, -FactoryConstants.CellSize * 0.30f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = AttachmentDefinition.Tint.Lightened(0.04f),
@@ -266,8 +267,8 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         payloadRoot.AddChild(new MeshInstance3D
         {
             Name = "PayloadGuideSouth",
-            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 1.14f, 0.08f, FactoryConstants.CellSize * 0.08f) },
-            Position = new Vector3(0.04f * FactoryConstants.CellSize, 0.22f, FactoryConstants.CellSize * 0.40f),
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.72f, 0.06f, FactoryConstants.CellSize * 0.06f) },
+            Position = new Vector3(0.02f * FactoryConstants.CellSize, 0.18f, FactoryConstants.CellSize * 0.30f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = AttachmentDefinition.Tint.Lightened(0.04f),
@@ -278,8 +279,8 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         payloadRoot.AddChild(new MeshInstance3D
         {
             Name = "PayloadPortalNorth",
-            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.16f, 0.40f, FactoryConstants.CellSize * 0.12f) },
-            Position = new Vector3(FactoryConstants.CellSize * 0.72f, 0.28f, -FactoryConstants.CellSize * 0.24f),
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.12f, 0.32f, FactoryConstants.CellSize * 0.10f) },
+            Position = new Vector3(FactoryConstants.CellSize * 0.42f, 0.22f, -FactoryConstants.CellSize * 0.18f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = AttachmentDefinition.ConnectorColor,
@@ -290,8 +291,8 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         payloadRoot.AddChild(new MeshInstance3D
         {
             Name = "PayloadPortalSouth",
-            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.16f, 0.40f, FactoryConstants.CellSize * 0.12f) },
-            Position = new Vector3(FactoryConstants.CellSize * 0.72f, 0.28f, FactoryConstants.CellSize * 0.24f),
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.12f, 0.32f, FactoryConstants.CellSize * 0.10f) },
+            Position = new Vector3(FactoryConstants.CellSize * 0.42f, 0.22f, FactoryConstants.CellSize * 0.18f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = AttachmentDefinition.ConnectorColor,
@@ -302,8 +303,8 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         payloadRoot.AddChild(new MeshInstance3D
         {
             Name = "PayloadIndicator",
-            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.18f, 0.14f, FactoryConstants.CellSize * 0.18f) },
-            Position = new Vector3(-FactoryConstants.CellSize * 0.46f, 0.66f, 0.0f),
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.14f, 0.10f, FactoryConstants.CellSize * 0.14f) },
+            Position = new Vector3(-FactoryConstants.CellSize * 0.30f, 0.42f, 0.0f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = AttachmentDefinition.ConnectorColor.Lightened(0.24f),
@@ -349,6 +350,11 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         return cellCenter - facing * (worldGrid.CellSize * 0.16f) + new Vector3(0.0f, 0.02f, 0.0f);
     }
 
+    protected float GetPortDeckWidth()
+    {
+        return Mathf.Max(CellSize * 1.28f, Footprint.GetPreviewSize(CellSize, Facing).X * 0.90f);
+    }
+
     protected float GetPortDeckDepth()
     {
         return Mathf.Max(CellSize * 1.86f, Footprint.GetPreviewSize(CellSize, Facing).Y * 0.94f);
@@ -366,6 +372,7 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
             || !TrySelectConnectorTransitItem(worldToInterior, out var transitItem, out var transitProgress)
             || transitItem is null)
         {
+            ClearTransitPayloadVisual(transitAnchor);
             transitRoot.Visible = false;
             return;
         }
@@ -504,6 +511,12 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
 
         visual.Visible = true;
     }
+
+    private static void ClearTransitPayloadVisual(Node3D anchor)
+    {
+        anchor.GetNodeOrNull<Node3D>("TransitPayloadVisual")?.QueueFree();
+        anchor.SetMeta("transit_visual_key", string.Empty);
+    }
 }
 
 public partial class MobileFactoryOutputPortStructure : MobileFactoryBoundaryAttachmentStructure
@@ -514,8 +527,9 @@ public partial class MobileFactoryOutputPortStructure : MobileFactoryBoundaryAtt
     protected override void BuildVisuals()
     {
         base.BuildVisuals();
+        var deckWidth = GetPortDeckWidth();
         var deckDepth = GetPortDeckDepth();
-        CreateColoredBox("OutputLatch", new Vector3(CellSize * 0.34f, 0.16f, deckDepth * 0.42f), AttachmentDefinition.ConnectorColor.Lightened(0.10f), new Vector3(CellSize * 0.36f, 0.34f, 0.0f));
+        CreateColoredBox("OutputLatch", new Vector3(deckWidth * 0.24f, 0.16f, deckDepth * 0.42f), AttachmentDefinition.ConnectorColor.Lightened(0.10f), new Vector3(deckWidth * 0.26f, 0.34f, 0.0f));
     }
 
     public override bool CanReceiveFrom(Vector2I sourceCell)
@@ -584,8 +598,9 @@ public partial class MobileFactoryInputPortStructure : MobileFactoryBoundaryAtta
     protected override void BuildVisuals()
     {
         base.BuildVisuals();
+        var deckWidth = GetPortDeckWidth();
         var deckDepth = GetPortDeckDepth();
-        CreateColoredBox("InputReceiver", new Vector3(CellSize * 0.34f, 0.16f, deckDepth * 0.42f), AttachmentDefinition.ConnectorColor.Lightened(0.10f), new Vector3(-CellSize * 0.30f, 0.34f, 0.0f));
+        CreateColoredBox("InputReceiver", new Vector3(deckWidth * 0.24f, 0.16f, deckDepth * 0.42f), AttachmentDefinition.ConnectorColor.Lightened(0.10f), new Vector3(-deckWidth * 0.24f, 0.34f, 0.0f));
     }
 
     public override bool CanReceiveFrom(Vector2I sourceCell)
@@ -595,19 +610,32 @@ public partial class MobileFactoryInputPortStructure : MobileFactoryBoundaryAtta
 
     public override bool CanOutputTo(Vector2I targetCell)
     {
-        return targetCell == Cell - FactoryDirection.ToCellOffset(Facing);
+        return base.CanOutputTo(targetCell);
     }
 
     protected override bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell)
     {
-        targetCell = Cell - FactoryDirection.ToCellOffset(Facing);
+        var outputCells = GetOutputCells();
+        targetCell = outputCells.Count > 0 ? outputCells[0] : Cell - FactoryDirection.ToCellOffset(Facing);
         return IsWorldFlowReady
+            && TransitItemCount == 0
             && FactoryCargoRules.StructureAcceptsItem(Kind, FactorySiteKind.Interior, item);
     }
 
     protected override bool TryDispatchItem(TransitItemState state, SimulationController simulation)
     {
-        return simulation.TrySendItem(this, Cell - FactoryDirection.ToCellOffset(Facing), state.Item);
+        var outputCells = GetOutputCells();
+        for (var index = 0; index < outputCells.Count; index++)
+        {
+            var targetCell = outputCells[index];
+            var sourceDispatchCell = GetTransferOutputCell(targetCell);
+            if (simulation.TrySendItem(this, sourceDispatchCell, targetCell, state.Item))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected override Vector3 EvaluatePathPoint(TransitItemState state, float progress)

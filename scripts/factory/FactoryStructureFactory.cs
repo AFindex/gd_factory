@@ -52,10 +52,17 @@ public static class FactoryStructureFactory
             new Vector2I(1, 2),
             new Vector2I(2, 2)
         });
+    private static readonly FactoryStructureFootprint InputHeavyPortFootprint = new(
+        new[] { Vector2I.Zero, Vector2I.Left, Vector2I.Down, Vector2I.Left + Vector2I.Down },
+        outputOffsetsEast: new[] { Vector2I.Left * 2, (Vector2I.Left * 2) + Vector2I.Down });
     private static readonly FactoryStructureFootprint HeavyPortFootprint = new(
         new[] { Vector2I.Zero, Vector2I.Up },
         inputOffsetEast: Vector2I.Left,
         outputOffsetEast: Vector2I.Right);
+    private static readonly FactoryStructureFootprint HeavyConversionFootprint = new(
+        new[] { Vector2I.Zero, Vector2I.Right, Vector2I.Down, Vector2I.Right + Vector2I.Down },
+        inputOffsetsEast: new[] { Vector2I.Left, Vector2I.Left + Vector2I.Down },
+        outputOffsetsEast: new[] { Vector2I.Right * 2, (Vector2I.Right * 2) + Vector2I.Down });
     private static readonly FactoryStructureFootprint CompactConversionFootprint = new(
         new[] { Vector2I.Zero, Vector2I.Down },
         inputOffsetEast: Vector2I.Left,
@@ -182,11 +189,10 @@ public static class FactoryStructureFactory
     {
         return kind switch
         {
-            BuildPrototypeKind.CargoUnpacker => ResolveConversionFootprint(
-                ResolveBundleTemplateId(configuration, mapRecipeId, DefaultUnpackerTemplateId)),
-            BuildPrototypeKind.CargoPacker => ResolveConversionFootprint(
-                ResolveBundleTemplateId(configuration, mapRecipeId, DefaultPackerTemplateId)),
-            BuildPrototypeKind.InputPort or BuildPrototypeKind.OutputPort => HeavyPortFootprint,
+            BuildPrototypeKind.CargoUnpacker => HeavyConversionFootprint,
+            BuildPrototypeKind.CargoPacker => HeavyConversionFootprint,
+            BuildPrototypeKind.InputPort => InputHeavyPortFootprint,
+            BuildPrototypeKind.OutputPort => HeavyPortFootprint,
             _ => GetDefinition(kind).Footprint
         };
     }

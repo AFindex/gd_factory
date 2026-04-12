@@ -847,10 +847,11 @@ public static class FactoryTransportVisualFactory
 
     private static FactoryTransportRenderDescriptorSet ResolveDescriptorSet(FactoryItemKind itemKind, FactoryTransportVisualProfile profile, float cellSize)
     {
-        var placeholder = CreatePlaceholderDescriptor(itemKind, profile, cellSize);
-        var billboard = CreateBillboardDescriptor(itemKind, profile, cellSize) ?? placeholder;
-        var textured = CreateTexturedDescriptor(itemKind, profile, cellSize) ?? billboard;
-        var model = profile.ModelFactory is not null ? CreateModelDescriptor(itemKind, profile, cellSize) : null;
+        var renderCellSize = ResolveRenderCellSize(profile, cellSize);
+        var placeholder = CreatePlaceholderDescriptor(itemKind, profile, renderCellSize);
+        var billboard = CreateBillboardDescriptor(itemKind, profile, renderCellSize) ?? placeholder;
+        var textured = CreateTexturedDescriptor(itemKind, profile, renderCellSize) ?? billboard;
+        var model = profile.ModelFactory is not null ? CreateModelDescriptor(itemKind, profile, renderCellSize) : null;
         var primary = profile.PreferModelPrimary && model is not null
             ? model
             : profile.AllowBillboardFallback && profile.Texture is not null
@@ -869,6 +870,16 @@ public static class FactoryTransportVisualFactory
             ? billboard
             : placeholder;
         return new FactoryTransportRenderDescriptorSet(primary, mid, far);
+    }
+
+    private static float ResolveRenderCellSize(FactoryTransportVisualProfile profile, float cellSize)
+    {
+        if (!profile.KeepsWorldScaleInsideCabin)
+        {
+            return cellSize;
+        }
+
+        return Mathf.Max(cellSize, FactoryConstants.CellSize);
     }
 
     private static FactoryTransportRenderDescriptor CreatePlaceholderDescriptor(FactoryItemKind itemKind, FactoryTransportVisualProfile profile, float cellSize)
