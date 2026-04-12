@@ -279,8 +279,8 @@ public static class FactoryPresentation
     {
         return cargoForm switch
         {
-            FactoryCargoForm.WorldBulk => "世界散装",
-            FactoryCargoForm.WorldPacked => "世界封装",
+            FactoryCargoForm.WorldBulk => "世界大件散装",
+            FactoryCargoForm.WorldPacked => "世界大件封装",
             FactoryCargoForm.InteriorFeed => "内部供料",
             _ => cargoForm.ToString()
         };

@@ -4,13 +4,17 @@ bounds|0|0|7|7
 
 structure|GunTurret|1|0|East
 seed|1|0|AmmoMagazine|6
-structure|Belt|1|3|East
+structure|CargoUnpacker|1|3|East
 structure|Smelter|2|3|East
 recipe|2|3|iron-smelting
 seed|2|3|IronOre|5
 structure|Belt|3|3|North
+structure|Belt|3|2|North
+structure|Belt|3|1|East
 structure|Assembler|4|1|East
 recipe|4|1|gear
+structure|TransferBuffer|5|3|East
+structure|CargoPacker|6|3|East
 structure|Storage|1|4|East
 seed|1|4|IronPlate|5
 structure|Inserter|2|4|East
@@ -31,4 +35,4 @@ structure|PowerPole|2|1|East
 structure|PowerPole|2|2|East
 structure|InputPort|0|3|West
 structure|OutputPort|7|1|East
-structure|OutputPort|7|4|East
+structure|OutputPort|7|3|East

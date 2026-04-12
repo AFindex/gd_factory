@@ -62,9 +62,9 @@ public partial class MobileFactoryDemo : Node3D
         [BuildPrototypeKind.Splitter] = new BuildPrototypeDefinition(BuildPrototypeKind.Splitter, "分流器", new Color("C4B5FD"), "将后方输入分到左右两路。"),
         [BuildPrototypeKind.Merger] = new BuildPrototypeDefinition(BuildPrototypeKind.Merger, "合并器", new Color("99F6E4"), "把后方、左侧和右侧三路物流汇成前方一路。"),
         [BuildPrototypeKind.Bridge] = new BuildPrototypeDefinition(BuildPrototypeKind.Bridge, "跨桥", new Color("F59E0B"), "让南北和东西两路物流跨越而不互连。"),
-        [BuildPrototypeKind.CargoUnpacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoUnpacker, "解包模块", new Color("38BDF8"), "把世界散装或封装货物拆成舱内供料单元，供后续模块处理。"),
-        [BuildPrototypeKind.CargoPacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoPacker, "封包模块", new Color("F97316"), "把内部供料重新压成世界标准封装货物，便于跨边界输出。"),
-        [BuildPrototypeKind.TransferBuffer] = new BuildPrototypeDefinition(BuildPrototypeKind.TransferBuffer, "中转缓冲槽", new Color("14B8A6"), "位于维护通路边的嵌入缓冲槽，用来整理舱内标准化供料。"),
+        [BuildPrototypeKind.CargoUnpacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoUnpacker, "解包模块", new Color("38BDF8"), "单件解包处理舱。世界大货物会以原尺寸进入舱体，再被拆成可在料轨上流动的小载具。"),
+        [BuildPrototypeKind.CargoPacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoPacker, "封包模块", new Color("F97316"), "单件封包处理舱。舱内小载具在这里重新组合成一个世界标准大货物后再出舱。"),
+        [BuildPrototypeKind.TransferBuffer] = new BuildPrototypeDefinition(BuildPrototypeKind.TransferBuffer, "中转缓冲槽", new Color("14B8A6"), "大件转换节拍缓冲架，用来为解包/封包链路整理待处理或待出舱载荷。"),
         [BuildPrototypeKind.Sink] = new BuildPrototypeDefinition(BuildPrototypeKind.Sink, "回收器", new Color("FDE68A"), "吞掉输入物品并作为内部消费端。"),
         [BuildPrototypeKind.Storage] = new BuildPrototypeDefinition(BuildPrototypeKind.Storage, "仓储", new Color("94A3B8"), "缓存多件物品，可向前输出，也能被机械臂抓取。"),
         [BuildPrototypeKind.LargeStorageDepot] = new BuildPrototypeDefinition(BuildPrototypeKind.LargeStorageDepot, "大型仓储", new Color("64748B"), "占据 2x2 内部格子的仓储缓冲区，用于宽体移动工厂案例。"),
@@ -73,9 +73,9 @@ public partial class MobileFactoryDemo : Node3D
         [BuildPrototypeKind.AmmoAssembler] = new BuildPrototypeDefinition(BuildPrototypeKind.AmmoAssembler, "弹药组装器", new Color("FB923C"), "在内部持续生产弹药，直接喂给炮塔。"),
         [BuildPrototypeKind.GunTurret] = new BuildPrototypeDefinition(BuildPrototypeKind.GunTurret, "机枪炮塔", new Color("CBD5E1"), "会跟随移动工厂整体旋转，对世界中的敌人自动转向并射击。"),
         [BuildPrototypeKind.HeavyGunTurret] = new BuildPrototypeDefinition(BuildPrototypeKind.HeavyGunTurret, "重型炮塔", new Color("E2E8F0"), "占据 2x2 内部格子，消耗高速弹药并发射独立炮弹。"),
-        [BuildPrototypeKind.OutputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.OutputPort, "输出端口", new Color("FB923C"), "将已经封包的舱内货物送往世界网格。"),
-        [BuildPrototypeKind.InputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.InputPort, "输入端口", new Color("60A5FA"), "把世界封装物流导入舱内，再由解包模块转换为维护层可理解的供料。"),
-        [BuildPrototypeKind.MiningInputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.MiningInputPort, "采矿输入端口", new Color("34D399"), "部署后会在工厂外侧展开完整采矿预览；散装原料会先穿过舱壳，再交给解包模块处理。"),
+        [BuildPrototypeKind.OutputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.OutputPort, "输出端口", new Color("FB923C"), "把封包完成的世界大货物交给世界侧重型物流，不直接暴露舱内小载具。"),
+        [BuildPrototypeKind.InputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.InputPort, "输入端口", new Color("60A5FA"), "把世界大货物接入壳体交接区，再由解包模块转换为舱内料轨可承载的小载具。"),
+        [BuildPrototypeKind.MiningInputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.MiningInputPort, "采矿输入端口", new Color("34D399"), "部署后会在工厂外侧展开采矿交接链；散装矿料以世界大件形式进舱，再交给解包模块处理。"),
         [BuildPrototypeKind.Generator] = new BuildPrototypeDefinition(BuildPrototypeKind.Generator, "发电机", new Color("FB923C"), "消耗煤炭发电，为移动工厂内部设备提供基础电力。"),
         [BuildPrototypeKind.PowerPole] = new BuildPrototypeDefinition(BuildPrototypeKind.PowerPole, "电线杆", new Color("FDE68A"), "延伸移动工厂内部的供电覆盖，并可预览连线。"),
         [BuildPrototypeKind.Smelter] = new BuildPrototypeDefinition(BuildPrototypeKind.Smelter, "熔炉", new Color("CBD5E1"), "消耗电力把矿石炼成铁板，便于在内部试配生产链。"),
@@ -932,7 +932,7 @@ public partial class MobileFactoryDemo : Node3D
             }
         }
 
-        if (factory.TryGetInteriorStructure(new Vector2I(7, 4), out var auxPortStructure)
+        if (factory.TryGetInteriorStructure(new Vector2I(7, 3), out var auxPortStructure)
             && auxPortStructure is MobileFactoryOutputPortStructure auxPort)
         {
             for (var index = 0; index < 3; index++)
@@ -4827,7 +4827,20 @@ public partial class MobileFactoryDemo : Node3D
             return $"可在内部格 ({cell.X}, {cell.Y}) 铺设{displayName}，并把供料并入 ({mergeTargetCell.X}, {mergeTargetCell.Y}) 的嵌入物流层。";
         }
 
-        return $"可在内部格 ({cell.X}, {cell.Y}) 放置{displayName}。{FactoryIndustrialStandards.GetInteriorPreviewSummary(kind)}";
+        var summary = FactoryIndustrialStandards.GetInteriorPreviewSummary(kind);
+        var boundaryExpectation = FactoryCargoRules.DescribeBoundaryExpectation(kind);
+        var scaleHint = kind switch
+        {
+            BuildPrototypeKind.CargoUnpacker or BuildPrototypeKind.CargoPacker or BuildPrototypeKind.TransferBuffer
+                => " 该模块体量按世界大货物交接设计，处理中的世界货物不会在舱内预先缩小。",
+            BuildPrototypeKind.Belt or BuildPrototypeKind.Splitter or BuildPrototypeKind.Merger or BuildPrototypeKind.Bridge
+                => " 这类嵌入物流只承载舱内小载具，不承载世界大货物。",
+            _ => string.Empty
+        };
+        var boundaryHint = string.IsNullOrWhiteSpace(boundaryExpectation)
+            ? string.Empty
+            : $" {boundaryExpectation}";
+        return $"可在内部格 ({cell.X}, {cell.Y}) 放置{displayName}。{summary}{boundaryHint}{scaleHint}";
     }
 
     private static IReadOnlyList<BuildPrototypeKind> GetInteriorHotkeyPalette()

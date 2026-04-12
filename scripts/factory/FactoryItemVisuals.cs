@@ -17,6 +17,22 @@ public enum FactoryTransportRenderTier
     Far
 }
 
+public enum FactoryCargoPresentationStandard
+{
+    WorldPayload,
+    CabinCarrier
+}
+
+public enum FactoryTransportVisualContext
+{
+    Default,
+    WorldRoute,
+    BoundaryHandoff,
+    InteriorRail,
+    InteriorConversion,
+    InteriorStaging
+}
+
 public sealed class FactoryTransportRenderDescriptor
 {
     public FactoryTransportRenderDescriptor(
@@ -27,7 +43,10 @@ public sealed class FactoryTransportRenderDescriptor
         Vector2 billboardScale,
         Texture2D? texture = null,
         Func<float, Node3D>? modelFactory = null,
-        bool isBatchable = true)
+        bool isBatchable = true,
+        FactoryCargoPresentationStandard presentationStandard = FactoryCargoPresentationStandard.WorldPayload,
+        FactoryTransportVisualContext visualContext = FactoryTransportVisualContext.Default,
+        bool keepsWorldScaleInsideCabin = false)
     {
         BatchKey = batchKey;
         Mode = mode;
@@ -37,6 +56,9 @@ public sealed class FactoryTransportRenderDescriptor
         Texture = texture;
         ModelFactory = modelFactory;
         IsBatchable = isBatchable;
+        PresentationStandard = presentationStandard;
+        VisualContext = visualContext;
+        KeepsWorldScaleInsideCabin = keepsWorldScaleInsideCabin;
     }
 
     public string BatchKey { get; }
@@ -47,6 +69,9 @@ public sealed class FactoryTransportRenderDescriptor
     public Texture2D? Texture { get; }
     public Func<float, Node3D>? ModelFactory { get; }
     public bool IsBatchable { get; }
+    public FactoryCargoPresentationStandard PresentationStandard { get; }
+    public FactoryTransportVisualContext VisualContext { get; }
+    public bool KeepsWorldScaleInsideCabin { get; }
 }
 
 public sealed class FactoryTransportRenderDescriptorSet
@@ -109,7 +134,10 @@ public sealed class FactoryTransportVisualProfile
         bool allowTexturedMeshFallback = true,
         bool allowBillboardFallback = true,
         string? profileId = null,
-        bool preferModelPrimary = false)
+        bool preferModelPrimary = false,
+        FactoryCargoPresentationStandard presentationStandard = FactoryCargoPresentationStandard.WorldPayload,
+        FactoryTransportVisualContext visualContext = FactoryTransportVisualContext.Default,
+        bool keepsWorldScaleInsideCabin = false)
     {
         Tint = tint;
         PlaceholderScale = placeholderScale ?? new Vector3(0.18f, 0.18f, 0.18f);
@@ -121,6 +149,9 @@ public sealed class FactoryTransportVisualProfile
         AllowBillboardFallback = allowBillboardFallback;
         ProfileId = string.IsNullOrWhiteSpace(profileId) ? "default" : profileId;
         PreferModelPrimary = preferModelPrimary;
+        PresentationStandard = presentationStandard;
+        VisualContext = visualContext;
+        KeepsWorldScaleInsideCabin = keepsWorldScaleInsideCabin;
     }
 
     public Color Tint { get; }
@@ -133,6 +164,9 @@ public sealed class FactoryTransportVisualProfile
     public bool AllowBillboardFallback { get; }
     public string ProfileId { get; }
     public bool PreferModelPrimary { get; }
+    public FactoryCargoPresentationStandard PresentationStandard { get; }
+    public FactoryTransportVisualContext VisualContext { get; }
+    public bool KeepsWorldScaleInsideCabin { get; }
 
     public FactoryTransportRenderDescriptorSet ResolveRenderDescriptors(FactoryItemKind itemKind, float cellSize)
     {
@@ -231,40 +265,69 @@ public static partial class FactoryItemCatalog
         return ResolveVisualProfile(item.ItemKind, item.CargoForm);
     }
 
+    public static FactoryTransportVisualProfile ResolveVisualProfile(FactoryItem item, FactoryTransportVisualContext visualContext)
+    {
+        return ResolveVisualProfile(item.ItemKind, item.CargoForm, visualContext);
+    }
+
     public static FactoryTransportVisualProfile ResolveVisualProfile(FactoryItemKind itemKind, FactoryCargoForm cargoForm)
+    {
+        return ResolveVisualProfile(itemKind, cargoForm, ResolveDefaultVisualContext(cargoForm));
+    }
+
+    public static FactoryTransportVisualProfile ResolveVisualProfile(
+        FactoryItemKind itemKind,
+        FactoryCargoForm cargoForm,
+        FactoryTransportVisualContext visualContext)
     {
         var definition = GetDefinition(itemKind);
         var baseProfile = definition.VisualProfile;
         return cargoForm switch
-        {
+            {
             FactoryCargoForm.WorldBulk => new FactoryTransportVisualProfile(
                 GetAccentColor(itemKind, cargoForm),
-                placeholderScale: baseProfile.PlaceholderScale * new Vector3(1.12f, 1.0f, 1.12f),
-                texturedMeshScale: baseProfile.TexturedMeshScale * new Vector3(1.08f, 1.0f, 1.08f),
-                billboardScale: baseProfile.BillboardScale * 1.08f,
+                placeholderScale: MaxVector3(baseProfile.PlaceholderScale * new Vector3(2.45f, 2.20f, 2.45f), new Vector3(0.48f, 0.42f, 0.48f)),
+                texturedMeshScale: MaxVector3(baseProfile.TexturedMeshScale * new Vector3(2.30f, 2.05f, 2.30f), new Vector3(0.44f, 0.38f, 0.44f)),
+                billboardScale: MaxVector2(baseProfile.BillboardScale * 1.70f, new Vector2(0.54f, 0.54f)),
                 texture: baseProfile.Texture,
                 modelFactory: baseProfile.ModelFactory,
                 allowTexturedMeshFallback: baseProfile.AllowTexturedMeshFallback,
                 allowBillboardFallback: baseProfile.AllowBillboardFallback,
-                profileId: $"world-bulk:{itemKind}"),
-            FactoryCargoForm.InteriorFeed => CreateInteriorFeedProfile(itemKind, baseProfile),
+                profileId: $"world-bulk:{itemKind}:{visualContext}",
+                presentationStandard: FactoryCargoPresentationStandard.WorldPayload,
+                visualContext: visualContext == FactoryTransportVisualContext.Default
+                    ? FactoryTransportVisualContext.WorldRoute
+                    : visualContext,
+                keepsWorldScaleInsideCabin: true),
+            FactoryCargoForm.InteriorFeed => CreateInteriorFeedProfile(itemKind, baseProfile, visualContext),
             _ => new FactoryTransportVisualProfile(
                 GetAccentColor(itemKind, cargoForm),
-                placeholderScale: baseProfile.PlaceholderScale * new Vector3(0.96f, 0.84f, 0.96f),
-                texturedMeshScale: baseProfile.TexturedMeshScale * new Vector3(1.12f, 0.88f, 1.12f),
-                billboardScale: baseProfile.BillboardScale * 0.96f,
+                placeholderScale: MaxVector3(baseProfile.PlaceholderScale * new Vector3(2.12f, 1.92f, 2.12f), new Vector3(0.42f, 0.34f, 0.42f)),
+                texturedMeshScale: MaxVector3(baseProfile.TexturedMeshScale * new Vector3(2.04f, 1.82f, 2.04f), new Vector3(0.40f, 0.32f, 0.40f)),
+                billboardScale: MaxVector2(baseProfile.BillboardScale * 1.56f, new Vector2(0.48f, 0.42f)),
                 texture: baseProfile.Texture,
                 modelFactory: baseProfile.ModelFactory,
                 allowTexturedMeshFallback: baseProfile.AllowTexturedMeshFallback,
                 allowBillboardFallback: baseProfile.AllowBillboardFallback,
-                profileId: $"world-packed:{itemKind}")
+                profileId: $"world-packed:{itemKind}:{visualContext}",
+                presentationStandard: FactoryCargoPresentationStandard.WorldPayload,
+                visualContext: visualContext == FactoryTransportVisualContext.Default
+                    ? FactoryTransportVisualContext.WorldRoute
+                    : visualContext,
+                keepsWorldScaleInsideCabin: true)
         };
     }
 
-    private static FactoryTransportVisualProfile CreateInteriorFeedProfile(FactoryItemKind itemKind, FactoryTransportVisualProfile baseProfile)
+    private static FactoryTransportVisualProfile CreateInteriorFeedProfile(
+        FactoryItemKind itemKind,
+        FactoryTransportVisualProfile baseProfile,
+        FactoryTransportVisualContext visualContext)
     {
         var tint = GetAccentColor(itemKind, FactoryCargoForm.InteriorFeed);
         var carrierLabel = FactoryIndustrialStandards.GetInteriorCarrierLabel(itemKind);
+        var resolvedContext = visualContext == FactoryTransportVisualContext.Default
+            ? FactoryTransportVisualContext.InteriorRail
+            : visualContext;
         return itemKind switch
         {
             FactoryItemKind.Coal or FactoryItemKind.IronOre or FactoryItemKind.CopperOre or FactoryItemKind.StoneOre or FactoryItemKind.SulfurOre or FactoryItemKind.QuartzOre
@@ -277,8 +340,10 @@ public static partial class FactoryItemCatalog
                     modelFactory: cellSize => FactoryTransportModelLibrary.CreateInteriorCanisterModel(cellSize, tint),
                     allowTexturedMeshFallback: true,
                     allowBillboardFallback: true,
-                    profileId: $"interior:{carrierLabel}:{itemKind}",
-                    preferModelPrimary: true),
+                    profileId: $"interior:{carrierLabel}:{itemKind}:{resolvedContext}",
+                    preferModelPrimary: true,
+                    presentationStandard: FactoryCargoPresentationStandard.CabinCarrier,
+                    visualContext: resolvedContext),
             FactoryItemKind.IronPlate or FactoryItemKind.CopperPlate or FactoryItemKind.SteelPlate or FactoryItemKind.StoneBrick or FactoryItemKind.Glass
                 => new FactoryTransportVisualProfile(
                     tint,
@@ -289,8 +354,10 @@ public static partial class FactoryItemCatalog
                     modelFactory: cellSize => FactoryTransportModelLibrary.CreateInteriorTrayModel(cellSize, tint),
                     allowTexturedMeshFallback: true,
                     allowBillboardFallback: true,
-                    profileId: $"interior:{carrierLabel}:{itemKind}",
-                    preferModelPrimary: true),
+                    profileId: $"interior:{carrierLabel}:{itemKind}:{resolvedContext}",
+                    preferModelPrimary: true,
+                    presentationStandard: FactoryCargoPresentationStandard.CabinCarrier,
+                    visualContext: resolvedContext),
             FactoryItemKind.CopperWire or FactoryItemKind.CircuitBoard
                 => new FactoryTransportVisualProfile(
                     tint,
@@ -301,8 +368,10 @@ public static partial class FactoryItemCatalog
                     modelFactory: cellSize => FactoryTransportModelLibrary.CreateInteriorElectronicsCassetteModel(cellSize, tint),
                     allowTexturedMeshFallback: true,
                     allowBillboardFallback: true,
-                    profileId: $"interior:{carrierLabel}:{itemKind}",
-                    preferModelPrimary: true),
+                    profileId: $"interior:{carrierLabel}:{itemKind}:{resolvedContext}",
+                    preferModelPrimary: true,
+                    presentationStandard: FactoryCargoPresentationStandard.CabinCarrier,
+                    visualContext: resolvedContext),
             FactoryItemKind.AmmoMagazine or FactoryItemKind.HighVelocityAmmo
                 => new FactoryTransportVisualProfile(
                     tint,
@@ -313,8 +382,10 @@ public static partial class FactoryItemCatalog
                     modelFactory: cellSize => FactoryTransportModelLibrary.CreateInteriorAmmoCassetteModel(cellSize, tint),
                     allowTexturedMeshFallback: true,
                     allowBillboardFallback: true,
-                    profileId: $"interior:{carrierLabel}:{itemKind}",
-                    preferModelPrimary: true),
+                    profileId: $"interior:{carrierLabel}:{itemKind}:{resolvedContext}",
+                    preferModelPrimary: true,
+                    presentationStandard: FactoryCargoPresentationStandard.CabinCarrier,
+                    visualContext: resolvedContext),
             FactoryItemKind.SulfurCrystal
                 => new FactoryTransportVisualProfile(
                     tint,
@@ -325,8 +396,10 @@ public static partial class FactoryItemCatalog
                     modelFactory: cellSize => FactoryTransportModelLibrary.CreateInteriorCrystalCaseModel(cellSize, tint),
                     allowTexturedMeshFallback: true,
                     allowBillboardFallback: true,
-                    profileId: $"interior:{carrierLabel}:{itemKind}",
-                    preferModelPrimary: true),
+                    profileId: $"interior:{carrierLabel}:{itemKind}:{resolvedContext}",
+                    preferModelPrimary: true,
+                    presentationStandard: FactoryCargoPresentationStandard.CabinCarrier,
+                    visualContext: resolvedContext),
             _ => new FactoryTransportVisualProfile(
                 tint,
                 placeholderScale: new Vector3(0.22f, 0.16f, 0.18f),
@@ -336,9 +409,36 @@ public static partial class FactoryItemCatalog
                 modelFactory: cellSize => FactoryTransportModelLibrary.CreateInteriorUtilityCassetteModel(cellSize, tint),
                 allowTexturedMeshFallback: true,
                 allowBillboardFallback: true,
-                profileId: $"interior:{carrierLabel}:{itemKind}",
-                preferModelPrimary: true)
+                profileId: $"interior:{carrierLabel}:{itemKind}:{resolvedContext}",
+                preferModelPrimary: true,
+                presentationStandard: FactoryCargoPresentationStandard.CabinCarrier,
+                visualContext: resolvedContext)
         };
+    }
+
+    private static FactoryTransportVisualContext ResolveDefaultVisualContext(FactoryCargoForm cargoForm)
+    {
+        return cargoForm switch
+        {
+            FactoryCargoForm.InteriorFeed => FactoryTransportVisualContext.InteriorRail,
+            FactoryCargoForm.WorldBulk or FactoryCargoForm.WorldPacked => FactoryTransportVisualContext.WorldRoute,
+            _ => FactoryTransportVisualContext.Default
+        };
+    }
+
+    private static Vector2 MaxVector2(Vector2 value, Vector2 minimum)
+    {
+        return new Vector2(
+            Mathf.Max(value.X, minimum.X),
+            Mathf.Max(value.Y, minimum.Y));
+    }
+
+    private static Vector3 MaxVector3(Vector3 value, Vector3 minimum)
+    {
+        return new Vector3(
+            Mathf.Max(value.X, minimum.X),
+            Mathf.Max(value.Y, minimum.Y),
+            Mathf.Max(value.Z, minimum.Z));
     }
 
     public static bool TryGetFuelValueSeconds(FactoryItemKind itemKind, out float burnSeconds)
@@ -571,7 +671,12 @@ public static class FactoryTransportVisualFactory
 
     public static Node3D CreateVisual(FactoryItem item, float cellSize)
     {
-        return CreateNodeForDescriptor(ResolveDescriptorSet(item, cellSize).Primary, item.ItemKind, cellSize);
+        return CreateVisual(item, cellSize, FactoryTransportVisualContext.Default);
+    }
+
+    public static Node3D CreateVisual(FactoryItem item, float cellSize, FactoryTransportVisualContext visualContext)
+    {
+        return CreateNodeForDescriptor(ResolveDescriptorSet(item, cellSize, visualContext).Primary, item.ItemKind, cellSize);
     }
 
     public static Node3D CreateVisual(FactoryItemKind itemKind, float cellSize)
@@ -581,7 +686,15 @@ public static class FactoryTransportVisualFactory
 
     public static FactoryTransportRenderDescriptorSet ResolveDescriptorSet(FactoryItem item, float cellSize)
     {
-        var profile = FactoryItemCatalog.ResolveVisualProfile(item);
+        return ResolveDescriptorSet(item, cellSize, FactoryTransportVisualContext.Default);
+    }
+
+    public static FactoryTransportRenderDescriptorSet ResolveDescriptorSet(
+        FactoryItem item,
+        float cellSize,
+        FactoryTransportVisualContext visualContext)
+    {
+        var profile = FactoryItemCatalog.ResolveVisualProfile(item, visualContext);
         return ResolveDescriptorSet(item.ItemKind, profile, cellSize);
     }
 
@@ -715,7 +828,10 @@ public static class FactoryTransportVisualFactory
             FactoryTransportRenderMode.Placeholder,
             profile.Tint,
             profile.PlaceholderScale * cellSize,
-            profile.BillboardScale * cellSize);
+            profile.BillboardScale * cellSize,
+            presentationStandard: profile.PresentationStandard,
+            visualContext: profile.VisualContext,
+            keepsWorldScaleInsideCabin: profile.KeepsWorldScaleInsideCabin);
     }
 
     private static FactoryTransportRenderDescriptor? CreateTexturedDescriptor(FactoryItemKind itemKind, FactoryTransportVisualProfile profile, float cellSize)
@@ -731,7 +847,10 @@ public static class FactoryTransportVisualFactory
             profile.Tint,
             profile.TexturedMeshScale * cellSize,
             profile.BillboardScale * cellSize,
-            texture: profile.Texture);
+            texture: profile.Texture,
+            presentationStandard: profile.PresentationStandard,
+            visualContext: profile.VisualContext,
+            keepsWorldScaleInsideCabin: profile.KeepsWorldScaleInsideCabin);
     }
 
     private static FactoryTransportRenderDescriptor? CreateBillboardDescriptor(FactoryItemKind itemKind, FactoryTransportVisualProfile profile, float cellSize)
@@ -747,7 +866,10 @@ public static class FactoryTransportVisualFactory
             profile.Tint,
             profile.PlaceholderScale * cellSize,
             profile.BillboardScale * cellSize,
-            texture: profile.Texture);
+            texture: profile.Texture,
+            presentationStandard: profile.PresentationStandard,
+            visualContext: profile.VisualContext,
+            keepsWorldScaleInsideCabin: profile.KeepsWorldScaleInsideCabin);
     }
 
     private static FactoryTransportRenderDescriptor CreateModelDescriptor(FactoryItemKind itemKind, FactoryTransportVisualProfile profile, float cellSize)
@@ -760,7 +882,10 @@ public static class FactoryTransportVisualFactory
             profile.BillboardScale * cellSize,
             texture: profile.Texture,
             modelFactory: profile.ModelFactory,
-            isBatchable: false);
+            isBatchable: false,
+            presentationStandard: profile.PresentationStandard,
+            visualContext: profile.VisualContext,
+            keepsWorldScaleInsideCabin: profile.KeepsWorldScaleInsideCabin);
     }
 
     private static string FormatVector2(Vector2 value)

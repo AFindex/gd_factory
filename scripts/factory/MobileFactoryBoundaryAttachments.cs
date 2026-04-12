@@ -181,7 +181,7 @@ public static class MobileFactoryBoundaryAttachmentCatalog
         [BuildPrototypeKind.OutputPort] = new MobileFactoryBoundaryAttachmentDefinition(
             BuildPrototypeKind.OutputPort,
             "输出端口",
-            "把内部物流推出工厂边界并接入世界网格。",
+            "把封包完成的单件世界大货物推出壳体边界，并交接给世界侧重型物流。",
             MobileFactoryAttachmentChannelType.ItemOutput,
             new Color("FB923C"),
             new Color("FED7AA"),
@@ -191,7 +191,7 @@ public static class MobileFactoryBoundaryAttachmentCatalog
         [BuildPrototypeKind.InputPort] = new MobileFactoryBoundaryAttachmentDefinition(
             BuildPrototypeKind.InputPort,
             "输入端口",
-            "从外部世界吸入物流并送入工厂内部。",
+            "从外部世界接收单件大货物，并把它送入舱内转换区而不是直接送上料轨。",
             MobileFactoryAttachmentChannelType.ItemInput,
             new Color("60A5FA"),
             new Color("BFDBFE"),
@@ -201,7 +201,7 @@ public static class MobileFactoryBoundaryAttachmentCatalog
         [BuildPrototypeKind.MiningInputPort] = new MobileFactoryBoundaryAttachmentDefinition(
             BuildPrototypeKind.MiningInputPort,
             "采矿输入端口",
-            "在部署后把世界侧矿区直接接成移动工厂的采矿入口。",
+            "在部署后把世界侧采出的散装大件矿料接到壳体边界，再交给舱内解包链处理。",
             MobileFactoryAttachmentChannelType.ItemInput,
             new Color("34D399"),
             new Color("A7F3D0"),

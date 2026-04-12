@@ -149,12 +149,14 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         var accentColor = AttachmentDefinition.Tint;
         var tipColor = AttachmentDefinition.ConnectorColor;
 
-        CreateInteriorModuleShell(this, "HullAdapter", new Vector3(CellSize * 0.64f, 0.30f, CellSize * 0.68f), baseColor, accentColor.Lightened(0.08f), new Vector3(-CellSize * 0.08f, 0.22f, 0.0f));
-        CreateInteriorTray(this, "BoundaryDeck", new Vector3(CellSize * 0.76f, 0.10f, CellSize * 0.22f), accentColor, tipColor.Lightened(0.18f), new Vector3(0.06f * CellSize, 0.16f, 0.0f));
-        CreateColoredBox("Collar", new Vector3(CellSize * 0.16f, 0.22f, CellSize * 0.46f), accentColor.Lightened(0.04f), new Vector3(CellSize * 0.12f, 0.24f, 0.0f));
-        CreateColoredBox("HullMouth", new Vector3(CellSize * 0.20f, 0.16f, CellSize * 0.24f), tipColor, new Vector3(CellSize * 0.34f, 0.24f, 0.0f));
-        CreateColoredBox("GuideTop", new Vector3(CellSize * 0.30f, 0.05f, CellSize * 0.08f), tipColor.Lightened(0.12f), new Vector3(CellSize * 0.10f, 0.34f, -CellSize * 0.18f));
-        CreateColoredBox("GuideBottom", new Vector3(CellSize * 0.30f, 0.05f, CellSize * 0.08f), tipColor.Lightened(0.12f), new Vector3(CellSize * 0.10f, 0.34f, CellSize * 0.18f));
+        CreateInteriorModuleShell(this, "HullAdapter", new Vector3(CellSize * 0.78f, 0.38f, CellSize * 0.88f), baseColor, accentColor.Lightened(0.08f), new Vector3(-CellSize * 0.10f, 0.26f, 0.0f));
+        CreateColoredBox("BoundaryHandoffCradle", new Vector3(CellSize * 0.86f, 0.12f, CellSize * 0.52f), accentColor.Darkened(0.06f), new Vector3(0.04f * CellSize, 0.16f, 0.0f));
+        CreateInteriorTray(this, "BoundaryDeck", new Vector3(CellSize * 0.82f, 0.12f, CellSize * 0.22f), accentColor, tipColor.Lightened(0.18f), new Vector3(0.08f * CellSize, 0.20f, 0.0f));
+        CreateColoredBox("Collar", new Vector3(CellSize * 0.18f, 0.28f, CellSize * 0.54f), accentColor.Lightened(0.04f), new Vector3(CellSize * 0.14f, 0.28f, 0.0f));
+        CreateColoredBox("HullMouth", new Vector3(CellSize * 0.28f, 0.18f, CellSize * 0.30f), tipColor, new Vector3(CellSize * 0.42f, 0.28f, 0.0f));
+        CreateColoredBox("GuideTop", new Vector3(CellSize * 0.46f, 0.06f, CellSize * 0.10f), tipColor.Lightened(0.12f), new Vector3(CellSize * 0.12f, 0.40f, -CellSize * 0.24f));
+        CreateColoredBox("GuideBottom", new Vector3(CellSize * 0.46f, 0.06f, CellSize * 0.10f), tipColor.Lightened(0.12f), new Vector3(CellSize * 0.12f, 0.40f, CellSize * 0.24f));
+        CreateColoredBox("BoundaryScaleMarker", new Vector3(CellSize * 0.22f, 0.06f, CellSize * 0.22f), tipColor.Lightened(0.18f), new Vector3(-CellSize * 0.28f, 0.14f, 0.0f));
         CreateInteriorIndicatorLight(this, "Beacon", tipColor.Lightened(0.22f), new Vector3(-CellSize * 0.22f, 0.42f, 0.0f), CellSize * 0.07f);
     }
 
@@ -186,7 +188,7 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         payloadRoot.AddChild(new MeshInstance3D
         {
             Name = "PayloadPad",
-            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.92f, 0.16f, FactoryConstants.CellSize * 0.92f) },
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 1.24f, 0.18f, FactoryConstants.CellSize * 1.02f) },
             Position = new Vector3(0.0f, 0.08f, 0.0f),
             MaterialOverride = new StandardMaterial3D
             {
@@ -198,8 +200,8 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         payloadRoot.AddChild(new MeshInstance3D
         {
             Name = "PayloadHousing",
-            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.40f, 0.36f, FactoryConstants.CellSize * 0.68f) },
-            Position = new Vector3(-FactoryConstants.CellSize * 0.16f, 0.26f, 0.0f),
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.62f, 0.42f, FactoryConstants.CellSize * 0.82f) },
+            Position = new Vector3(-FactoryConstants.CellSize * 0.10f, 0.30f, 0.0f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = AttachmentDefinition.Tint,
@@ -210,8 +212,8 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         payloadRoot.AddChild(new MeshInstance3D
         {
             Name = "PayloadCollar",
-            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.18f, 0.18f, FactoryConstants.CellSize * 0.50f) },
-            Position = new Vector3(FactoryConstants.CellSize * 0.10f, 0.22f, 0.0f),
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.22f, 0.20f, FactoryConstants.CellSize * 0.58f) },
+            Position = new Vector3(FactoryConstants.CellSize * 0.18f, 0.24f, 0.0f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = AttachmentDefinition.Tint.Lightened(0.04f),
@@ -222,8 +224,8 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         payloadRoot.AddChild(new MeshInstance3D
         {
             Name = "PayloadMouth",
-            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.22f, 0.18f, FactoryConstants.CellSize * 0.24f) },
-            Position = new Vector3(FactoryConstants.CellSize * 0.42f, 0.26f, 0.0f),
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.30f, 0.20f, FactoryConstants.CellSize * 0.28f) },
+            Position = new Vector3(FactoryConstants.CellSize * 0.54f, 0.28f, 0.0f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = AttachmentDefinition.ConnectorColor,
@@ -234,8 +236,8 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         payloadRoot.AddChild(new MeshInstance3D
         {
             Name = "PayloadGuideNorth",
-            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.44f, 0.06f, FactoryConstants.CellSize * 0.08f) },
-            Position = new Vector3(FactoryConstants.CellSize * 0.10f, 0.34f, -FactoryConstants.CellSize * 0.22f),
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.62f, 0.06f, FactoryConstants.CellSize * 0.08f) },
+            Position = new Vector3(FactoryConstants.CellSize * 0.12f, 0.40f, -FactoryConstants.CellSize * 0.28f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = AttachmentDefinition.ConnectorColor.Lightened(0.12f),
@@ -246,8 +248,8 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         payloadRoot.AddChild(new MeshInstance3D
         {
             Name = "PayloadGuideSouth",
-            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.44f, 0.06f, FactoryConstants.CellSize * 0.08f) },
-            Position = new Vector3(FactoryConstants.CellSize * 0.10f, 0.34f, FactoryConstants.CellSize * 0.22f),
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.62f, 0.06f, FactoryConstants.CellSize * 0.08f) },
+            Position = new Vector3(FactoryConstants.CellSize * 0.12f, 0.40f, FactoryConstants.CellSize * 0.28f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = AttachmentDefinition.ConnectorColor.Lightened(0.12f),
@@ -258,8 +260,8 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         payloadRoot.AddChild(new MeshInstance3D
         {
             Name = "PayloadIndicator",
-            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.12f, 0.12f, FactoryConstants.CellSize * 0.12f) },
-            Position = new Vector3(-FactoryConstants.CellSize * 0.26f, 0.54f, 0.0f),
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.14f, 0.14f, FactoryConstants.CellSize * 0.14f) },
+            Position = new Vector3(-FactoryConstants.CellSize * 0.34f, 0.60f, 0.0f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = AttachmentDefinition.ConnectorColor.Lightened(0.24f),

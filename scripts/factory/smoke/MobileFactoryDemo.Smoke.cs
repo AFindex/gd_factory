@@ -177,6 +177,19 @@ public partial class MobileFactoryDemo
         var placedInteriorSink = _mobileFactory.PlaceInteriorStructure(BuildPrototypeKind.Sink, new Vector2I(3, 0), FacingDirection.East);
         var interiorSinkExists = _mobileFactory.TryGetInteriorStructure(new Vector2I(3, 0), out var sinkStructure) && sinkStructure is SinkStructure;
         var cabinPresentationVerified =
+            _mobileFactory.TryGetInteriorStructure(new Vector2I(1, 3), out var unpackerStructure)
+            && unpackerStructure is CargoUnpackerStructure
+            && CountNamedNodes(unpackerStructure, "UnpackerChamberShell") > 0
+            && CountNamedNodes(unpackerStructure, "ProcessingPayloadAnchor") > 0
+            && _mobileFactory.TryGetInteriorStructure(new Vector2I(5, 3), out var conversionBufferStructure)
+            && conversionBufferStructure is TransferBufferStructure
+            && CountNamedNodes(conversionBufferStructure, "BufferCradle") > 0
+            && CountNamedNodes(conversionBufferStructure, "BufferPayloadAnchor") > 0
+            && _mobileFactory.TryGetInteriorStructure(new Vector2I(6, 3), out var packerStructure)
+            && packerStructure is CargoPackerStructure
+            && CountNamedNodes(packerStructure, "PackerChamberShell") > 0
+            && CountNamedNodes(packerStructure, "DispatchPayloadAnchor") > 0
+            &&
             _mobileFactory.TryGetInteriorStructure(FocusedSmelterCell, out var smelterStructure)
             && smelterStructure is SmelterStructure
             && CountNamedNodes(smelterStructure, "CabinLabelPlate") > 0
@@ -254,12 +267,14 @@ public partial class MobileFactoryDemo
             if (attachment is MobileFactoryOutputPortStructure outputAttachment)
             {
                 boundaryInterfaceVerified |= CountNamedNodes(outputAttachment, "OutputLatch") > 0
-                    && CountNamedNodes(outputAttachment, "HullMouth") > 0;
+                    && CountNamedNodes(outputAttachment, "HullMouth") > 0
+                    && CountNamedNodes(outputAttachment, "BoundaryHandoffCradle") > 0;
             }
             else if (attachment is MobileFactoryInputPortStructure inputAttachment)
             {
                 boundaryInterfaceVerified |= CountNamedNodes(inputAttachment, "InputReceiver") > 0
-                    && CountNamedNodes(inputAttachment, "HullMouth") > 0;
+                    && CountNamedNodes(inputAttachment, "HullMouth") > 0
+                    && CountNamedNodes(inputAttachment, "BoundaryHandoffCradle") > 0;
             }
         }
         var miniatureSyncedDeployed = placedStructure is not null
@@ -722,7 +737,7 @@ public partial class MobileFactoryDemo
                 && miningPort.DeployedStakeCount > 0;
 
             var connectedOutputsBeforeRemoval = CountConnectedAttachments(BuildPrototypeKind.OutputPort);
-            var removedAuxOutput = _mobileFactory.RemoveInteriorStructure(new Vector2I(7, 4));
+            var removedAuxOutput = _mobileFactory.RemoveInteriorStructure(new Vector2I(7, 3));
             await ToSignal(GetTree().CreateTimer(0.4f), SceneTreeTimer.SignalName.Timeout);
             miningPort = GetMiningInputPort();
             miningStayedConnectedAfterOutputRemoval = removedAuxOutput

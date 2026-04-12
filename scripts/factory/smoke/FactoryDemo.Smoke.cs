@@ -702,6 +702,7 @@ public partial class FactoryDemo
         var worldBulkDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(worldBulkItem, FactoryConstants.CellSize);
         var worldPackedDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(worldPackedItem, FactoryConstants.CellSize);
         var interiorFeedDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(interiorFeedItem, FactoryConstants.CellSize);
+        var interiorConversionDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(worldPackedItem, FactoryConstants.CellSize, FactoryTransportVisualContext.InteriorConversion);
 
         var placeholderMesh = FindFirstMesh(placeholderVisual);
         var billboardMesh = FindFirstMesh(billboardVisual);
@@ -722,12 +723,23 @@ public partial class FactoryDemo
             !worldBulkProfile.Tint.IsEqualApprox(worldPackedProfile.Tint)
             && !worldPackedProfile.Tint.IsEqualApprox(interiorFeedProfile.Tint)
             && worldBulkProfile.PlaceholderScale.X > worldPackedProfile.PlaceholderScale.X
-            && worldPackedProfile.PlaceholderScale.X > interiorFeedProfile.PlaceholderScale.X;
+            && worldPackedProfile.PlaceholderScale.X > interiorFeedProfile.PlaceholderScale.X
+            && worldPackedProfile.PlaceholderScale.X >= interiorFeedProfile.PlaceholderScale.X * 1.8f;
         var interiorCarrierResolved =
             interiorFeedDescriptors.Primary.Mode == FactoryTransportRenderMode.ModelNode
             && !interiorFeedDescriptors.Primary.IsBatchable
             && interiorFeedDescriptors.Primary.BatchKey.Contains("interior:", global::System.StringComparison.Ordinal)
             && FactoryPresentation.GetItemDisplayName(interiorFeedItem).Contains("舱内", global::System.StringComparison.Ordinal);
+        var cargoContextMetadataResolved =
+            worldPackedDescriptors.Primary.PresentationStandard == FactoryCargoPresentationStandard.WorldPayload
+            && worldPackedDescriptors.Primary.VisualContext == FactoryTransportVisualContext.WorldRoute
+            && worldPackedDescriptors.Primary.KeepsWorldScaleInsideCabin
+            && interiorConversionDescriptors.Primary.PresentationStandard == FactoryCargoPresentationStandard.WorldPayload
+            && interiorConversionDescriptors.Primary.VisualContext == FactoryTransportVisualContext.InteriorConversion
+            && interiorConversionDescriptors.Primary.KeepsWorldScaleInsideCabin
+            && interiorFeedDescriptors.Primary.PresentationStandard == FactoryCargoPresentationStandard.CabinCarrier
+            && interiorFeedDescriptors.Primary.VisualContext == FactoryTransportVisualContext.InteriorRail
+            && worldPackedDescriptors.Primary.MeshScale.X >= interiorFeedDescriptors.Primary.MeshScale.X * 1.8f;
 
         placeholderVisual.QueueFree();
         billboardVisual.QueueFree();
@@ -748,6 +760,7 @@ public partial class FactoryDemo
             && worldBulkDescriptors.Primary.BatchKey != worldPackedDescriptors.Primary.BatchKey
             && worldPackedDescriptors.Primary.BatchKey != interiorFeedDescriptors.Primary.BatchKey
             && interiorCarrierResolved
+            && cargoContextMetadataResolved
             && distinctBaselineColors
             && cargoDisplayNamesDiffer
             && cargoProfilesDiffer
@@ -883,7 +896,8 @@ public partial class FactoryDemo
             && hotPlumeScale > coolPlumeScale;
         var interiorNamingVerified =
             FactoryIndustrialStandards.GetInteriorPresentationLabel(BuildPrototypeKind.Belt).Contains("供料", global::System.StringComparison.Ordinal)
-            && FactoryIndustrialStandards.GetInteriorCarrierLabel(FactoryItemKind.IronOre).Contains("矿罐", global::System.StringComparison.Ordinal);
+            && FactoryIndustrialStandards.GetInteriorCarrierLabel(FactoryItemKind.IronOre).Contains("矿罐", global::System.StringComparison.Ordinal)
+            && FactoryIndustrialStandards.GetInteriorPreviewSummary(BuildPrototypeKind.CargoUnpacker).Contains("原尺寸", global::System.StringComparison.Ordinal);
 
         authoredController.Root.Free();
         fallbackController.Root.Free();
@@ -920,6 +934,7 @@ public partial class FactoryDemo
 
         return null;
     }
+
 
     private static int CountMeshes(Node node)
     {

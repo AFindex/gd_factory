@@ -265,17 +265,17 @@ public static class FactoryIndustrialStandards
             BuildPrototypeKind.Storage => "在维护通路边暂存舱内标准化载具。",
             BuildPrototypeKind.LargeStorageDepot => "提供可维护的大体积舱段仓储。",
             BuildPrototypeKind.Inserter => "在维护层与嵌入物流层之间移载载具。",
-            BuildPrototypeKind.CargoUnpacker => "把世界标准货包解成舱内标准载具。",
-            BuildPrototypeKind.CargoPacker => "把舱内标准载具重新封成世界货包。",
-            BuildPrototypeKind.TransferBuffer => "在交汇位置临时整理和排队载具。",
+            BuildPrototypeKind.CargoUnpacker => "把单件世界大货物接入处理舱，在舱内原尺寸拆成可上料轨的小载具。",
+            BuildPrototypeKind.CargoPacker => "把舱内小载具在处理舱中重组为单件世界大货物，再送往出舱接口。",
+            BuildPrototypeKind.TransferBuffer => "作为大件交接的暂存位与节拍架，而不是普通小型加工机。",
             BuildPrototypeKind.Generator => "以舱内模块化方式供给动力母线。",
             BuildPrototypeKind.PowerPole => "扩展舱内维护层的供电母线。",
             BuildPrototypeKind.Smelter => "以模块舱方式持续炼制板材。",
             BuildPrototypeKind.Assembler => "以舱段装配面板持续组装中间品。",
             BuildPrototypeKind.AmmoAssembler => "围绕炮塔硬点供给弹药载具。",
-            BuildPrototypeKind.InputPort => "把世界侧物流平稳接入舱内维护层。",
-            BuildPrototypeKind.OutputPort => "把舱内封包货物推送回世界侧。",
-            BuildPrototypeKind.MiningInputPort => "将采矿前端与舱内维护层对接。",
+            BuildPrototypeKind.InputPort => "把单件世界大货物交给舱壳边界的转换入口，而不是直接送上供料轨。",
+            BuildPrototypeKind.OutputPort => "把封包完成的世界大货物推送回世界侧重型物流。",
+            BuildPrototypeKind.MiningInputPort => "将世界侧散装矿料接到壳体边界，再交给解包链处理。",
             BuildPrototypeKind.GunTurret => "作为轻型武器硬点守住舱体边界。",
             BuildPrototypeKind.HeavyGunTurret => "作为重型武器井位守住舱体边界。",
             _ => "作为维护层可进入的标准舱段模块。"
@@ -286,8 +286,8 @@ public static class FactoryIndustrialStandards
     {
         return cargoForm switch
         {
-            FactoryCargoForm.WorldBulk => $"{FactoryItemCatalog.GetDisplayName(itemKind)}（世界散装）",
-            FactoryCargoForm.WorldPacked => $"{FactoryItemCatalog.GetDisplayName(itemKind)}（世界封装）",
+            FactoryCargoForm.WorldBulk => $"{FactoryItemCatalog.GetDisplayName(itemKind)}（世界大件散装）",
+            FactoryCargoForm.WorldPacked => $"{FactoryItemCatalog.GetDisplayName(itemKind)}（世界大件封装）",
             FactoryCargoForm.InteriorFeed => $"{FactoryItemCatalog.GetDisplayName(itemKind)}（{GetInteriorCarrierLabel(itemKind)}）",
             _ => $"{FactoryItemCatalog.GetDisplayName(itemKind)}（{FactoryPresentation.GetCargoFormLabel(cargoForm)}）"
         };
@@ -404,9 +404,9 @@ public static class FactoryCargoRules
     {
         return kind switch
         {
-            BuildPrototypeKind.InputPort => "入舱接口需要世界封装货物，之后需接解包模块转为内部供料。",
-            BuildPrototypeKind.OutputPort => "出舱接口只接受已封包的世界标准货物。",
-            BuildPrototypeKind.MiningInputPort => "采矿接入接口会把世界散装原料导入舱内，后续仍需解包转换。",
+            BuildPrototypeKind.InputPort => "入舱接口只接世界大件货物，并且必须先交给解包舱，不能直接上舱内料轨。",
+            BuildPrototypeKind.OutputPort => "出舱接口只接受已完成封包的世界大件货物。",
+            BuildPrototypeKind.MiningInputPort => "采矿接入接口只负责把世界散装大件矿料送到解包/转换区。",
             _ => string.Empty
         };
     }

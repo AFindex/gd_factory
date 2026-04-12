@@ -63,7 +63,7 @@ public static class MobileFactoryScenarioLibrary
             {
                 CreateAttachmentMount("west-input-main", new Vector2I(0, 3), FacingDirection.West, new Vector2I(-1, 1), BuildPrototypeKind.InputPort, BuildPrototypeKind.MiningInputPort),
                 CreateAttachmentMount("east-output-main", new Vector2I(7, 1), FacingDirection.East, new Vector2I(3, 0), BuildPrototypeKind.OutputPort),
-                CreateAttachmentMount("east-output-aux", new Vector2I(7, 4), FacingDirection.East, new Vector2I(3, 1), BuildPrototypeKind.OutputPort)
+                CreateAttachmentMount("east-output-aux", new Vector2I(7, 3), FacingDirection.East, new Vector2I(3, 1), BuildPrototypeKind.OutputPort)
             });
     }
 
