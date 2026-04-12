@@ -40,7 +40,7 @@ public partial class BridgeStructure : FlowTransportStructure
     protected override bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell)
     {
         targetCell = Cell + (Cell - sourceCell);
-        return true;
+        return FactoryCargoRules.StructureAcceptsItem(Kind, FactoryIndustrialStandards.ResolveSiteKind(Site), item);
     }
 
     protected override int GetTransitLaneKey(Vector2I sourceCell, Vector2I targetCell)

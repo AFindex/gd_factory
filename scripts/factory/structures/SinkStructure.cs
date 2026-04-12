@@ -16,12 +16,14 @@ public partial class SinkStructure : FactoryStructure, IFactoryItemReceiver
 
     public bool CanReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
-        return IsOrthogonallyAdjacent(Cell, sourceCell);
+        return IsOrthogonallyAdjacent(Cell, sourceCell)
+            && FactoryCargoRules.StructureAcceptsItem(Kind, FactoryIndustrialStandards.ResolveSiteKind(Site), item);
     }
 
     public override bool TryAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
-        if (!AcceptsFrom(sourceCell))
+        if (!AcceptsFrom(sourceCell)
+            || !FactoryCargoRules.StructureAcceptsItem(Kind, FactoryIndustrialStandards.ResolveSiteKind(Site), item))
         {
             return false;
         }

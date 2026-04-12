@@ -80,22 +80,28 @@ public partial class SimulationController : Node
         IFactorySite site,
         BuildPrototypeKind sourceKind,
         FactoryItemKind itemKind = FactoryItemKind.GenericCargo,
-        FactoryCargoForm? cargoForm = null)
+        FactoryCargoForm? cargoForm = null,
+        string? bundleTemplateId = null,
+        IReadOnlyDictionary<FactoryItemKind, int>? bundleContents = null)
     {
-        return CreateItem(FactoryIndustrialStandards.ResolveSiteKind(site), sourceKind, itemKind, cargoForm);
+        return CreateItem(FactoryIndustrialStandards.ResolveSiteKind(site), sourceKind, itemKind, cargoForm, bundleTemplateId, bundleContents);
     }
 
     public FactoryItem CreateItem(
         FactorySiteKind siteKind,
         BuildPrototypeKind sourceKind,
         FactoryItemKind itemKind = FactoryItemKind.GenericCargo,
-        FactoryCargoForm? cargoForm = null)
+        FactoryCargoForm? cargoForm = null,
+        string? bundleTemplateId = null,
+        IReadOnlyDictionary<FactoryItemKind, int>? bundleContents = null)
     {
         return new FactoryItem(
             _nextItemId++,
             sourceKind,
             itemKind,
-            FactoryCargoRules.ResolveProducedCargoForm(siteKind, sourceKind, itemKind, cargoForm));
+            FactoryCargoRules.ResolveProducedCargoForm(siteKind, sourceKind, itemKind, cargoForm),
+            bundleTemplateId,
+            bundleContents);
     }
 
     public FactoryItem CreateItemWithId(int id, BuildPrototypeKind sourceKind, FactoryItemKind itemKind = FactoryItemKind.GenericCargo)
@@ -107,10 +113,12 @@ public partial class SimulationController : Node
         int id,
         BuildPrototypeKind sourceKind,
         FactoryItemKind itemKind,
-        FactoryCargoForm cargoForm)
+        FactoryCargoForm cargoForm,
+        string? bundleTemplateId = null,
+        IReadOnlyDictionary<FactoryItemKind, int>? bundleContents = null)
     {
         EnsureNextItemId(id + 1);
-        return new FactoryItem(id, sourceKind, itemKind, cargoForm);
+        return new FactoryItem(id, sourceKind, itemKind, cargoForm, bundleTemplateId, bundleContents);
     }
 
     public void EnsureNextItemId(int nextId)

@@ -331,6 +331,13 @@ public static class FactoryIndustrialStandards
         };
     }
 
+    public static string GetCargoPresentationLabel(FactoryItem item)
+    {
+        return item.CargoForm == FactoryCargoForm.InteriorFeed
+            ? GetCargoPresentationLabel(item.ItemKind, item.CargoForm)
+            : $"{FactoryBundleCatalog.GetDisplayName(item)}（{FactoryBundleCatalog.GetSizeTierLabel(FactoryBundleCatalog.ResolveSizeTier(item))}）";
+    }
+
     public static string GetInteriorCarrierLabel(FactoryItemKind itemKind)
     {
         return itemKind switch
@@ -388,6 +395,16 @@ public static class FactoryIndustrialStandards
 
 public static class FactoryCargoRules
 {
+    public static bool IsHeavyHandoffStructure(BuildPrototypeKind kind)
+    {
+        return kind == BuildPrototypeKind.InputPort
+            || kind == BuildPrototypeKind.OutputPort
+            || kind == BuildPrototypeKind.MiningInputPort
+            || kind == BuildPrototypeKind.CargoUnpacker
+            || kind == BuildPrototypeKind.CargoPacker
+            || kind == BuildPrototypeKind.TransferBuffer;
+    }
+
     public static FactoryCargoForm ResolveProducedCargoForm(
         FactorySiteKind siteKind,
         BuildPrototypeKind sourceKind,
@@ -413,6 +430,13 @@ public static class FactoryCargoRules
 
     public static bool StructureAcceptsItem(BuildPrototypeKind kind, FactorySiteKind siteKind, FactoryItem item)
     {
+        if (siteKind == FactorySiteKind.Interior
+            && item.CargoForm != FactoryCargoForm.InteriorFeed
+            && !IsHeavyHandoffStructure(kind))
+        {
+            return false;
+        }
+
         return kind switch
         {
             BuildPrototypeKind.InputPort => item.CargoForm == FactoryCargoForm.WorldPacked,
@@ -422,6 +446,9 @@ public static class FactoryCargoRules
             BuildPrototypeKind.CargoPacker => siteKind == FactorySiteKind.Interior
                 ? item.CargoForm == FactoryCargoForm.InteriorFeed
                 : item.CargoForm == FactoryCargoForm.WorldBulk,
+            BuildPrototypeKind.TransferBuffer => siteKind == FactorySiteKind.Interior
+                ? true
+                : item.CargoForm != FactoryCargoForm.InteriorFeed,
             BuildPrototypeKind.Smelter => siteKind == FactorySiteKind.Interior
                 ? item.CargoForm == FactoryCargoForm.InteriorFeed
                 : item.CargoForm != FactoryCargoForm.InteriorFeed,
@@ -445,6 +472,8 @@ public static class FactoryCargoRules
             BuildPrototypeKind.InputPort => "入舱接口只接世界大件货物，并且必须先交给解包舱，不能直接上舱内料轨。",
             BuildPrototypeKind.OutputPort => "出舱接口只接受已完成封包的世界大件货物。",
             BuildPrototypeKind.MiningInputPort => "采矿接入接口只负责把世界散装大件矿料送到解包/转换区。",
+            BuildPrototypeKind.CargoUnpacker => "解包舱按世界货包模板的 manifest 拆出多个舱内小包，处理中的大包保持世界尺寸。",
+            BuildPrototypeKind.CargoPacker => "封包舱按目标模板累计舱内小包，清单满足后才生成 1 个世界大包。",
             _ => string.Empty
         };
     }

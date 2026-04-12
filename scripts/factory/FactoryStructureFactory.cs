@@ -49,8 +49,8 @@ public static class FactoryStructureFactory
             new Vector2I(1, 2),
             new Vector2I(2, 2)
         });
-    private static readonly FactoryStructureFootprint SingleItemConversionFootprint = new(
-        new[] { Vector2I.Zero },
+    private static readonly FactoryStructureFootprint CompactConversionFootprint = new(
+        new[] { Vector2I.Zero, Vector2I.Down },
         inputOffsetEast: Vector2I.Left,
         outputOffsetEast: Vector2I.Right);
 
@@ -84,13 +84,13 @@ public static class FactoryStructureFactory
             () => new CargoUnpackerStructure(),
             false,
             true,
-            SingleItemConversionFootprint),
+            CompactConversionFootprint),
         [BuildPrototypeKind.CargoPacker] = new FactoryStructureDefinition(
             BuildPrototypeKind.CargoPacker,
             () => new CargoPackerStructure(),
             true,
             true,
-            SingleItemConversionFootprint),
+            CompactConversionFootprint),
         [BuildPrototypeKind.TransferBuffer] = new FactoryStructureDefinition(
             BuildPrototypeKind.TransferBuffer,
             () => new TransferBufferStructure(),

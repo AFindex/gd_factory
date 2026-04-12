@@ -1,13 +1,12 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 
 public abstract partial class FactoryCargoConverterStructure : FactoryStructure, IFactoryItemProvider, IFactoryItemReceiver
 {
-    private readonly FactoryItemBuffer _inputBuffer = new(1);
-    private readonly FactoryItemBuffer _outputBuffer = new(1);
+    private readonly FactoryItemBuffer _inputBuffer;
+    private readonly FactoryItemBuffer _outputBuffer;
     private double _dispatchCooldown;
-    private double _processProgress;
-    private FactoryItem? _processingItem;
 
     private Node3D? _stagingPayloadVisual;
     private string _stagingPayloadVisualKey = string.Empty;
@@ -16,17 +15,21 @@ public abstract partial class FactoryCargoConverterStructure : FactoryStructure,
     private Node3D? _dispatchPayloadVisual;
     private string _dispatchPayloadVisualKey = string.Empty;
 
-    protected abstract FactoryCargoForm OutputCargoForm { get; }
-    protected virtual float ProcessSeconds => 1.25f;
+    protected FactoryCargoConverterStructure(int inputCapacity = 1, int outputCapacity = 1)
+    {
+        _inputBuffer = new FactoryItemBuffer(Mathf.Max(1, inputCapacity));
+        _outputBuffer = new FactoryItemBuffer(Mathf.Max(1, outputCapacity));
+    }
+
     protected virtual float DispatchCooldownSeconds => 0.20f;
     protected virtual int ChamberCapacity => 1;
-    protected FactoryItem? ProcessingItem => _processingItem;
-    protected float ProcessingRatio => Mathf.Clamp((float)(_processProgress / ProcessSeconds), 0.0f, 1.0f);
-    protected bool HasBufferedOutput => !_outputBuffer.IsEmpty;
-
     protected virtual FactoryTransportVisualContext StagingPayloadContext => FactoryTransportVisualContext.InteriorStaging;
     protected virtual FactoryTransportVisualContext ProcessingPayloadContext => FactoryTransportVisualContext.InteriorConversion;
     protected virtual FactoryTransportVisualContext DispatchPayloadContext => FactoryTransportVisualContext.InteriorRail;
+    protected int InputCount => _inputBuffer.Count;
+    protected int OutputCount => _outputBuffer.Count;
+    protected bool IsOutputFull => _outputBuffer.IsFull;
+    protected bool HasBufferedOutput => !_outputBuffer.IsEmpty;
 
     public override bool CanReceiveFrom(Vector2I sourceCell)
     {
@@ -77,28 +80,9 @@ public abstract partial class FactoryCargoConverterStructure : FactoryStructure,
 
     public override void SimulationStep(SimulationController simulation, double stepSeconds)
     {
-        _dispatchCooldown = Mathf.Max(0.0, (float)(_dispatchCooldown - stepSeconds));
+        _dispatchCooldown = Mathf.Max(0.0f, (float)(_dispatchCooldown - stepSeconds));
         TryDispatchBufferedOutput(simulation);
-
-        if (_processingItem is not null)
-        {
-            _processProgress += stepSeconds;
-            if (_processProgress >= ProcessSeconds && !_outputBuffer.IsFull)
-            {
-                var output = simulation.CreateItem(Site, Kind, _processingItem.ItemKind, OutputCargoForm);
-                _outputBuffer.TryEnqueue(output);
-                _processingItem = null;
-                _processProgress = 0.0;
-            }
-
-            return;
-        }
-
-        if (_inputBuffer.TryDequeue(out var input) && input is not null)
-        {
-            _processingItem = input;
-            _processProgress = 0.0;
-        }
+        AdvanceConverter(simulation, stepSeconds);
     }
 
     public override void UpdateVisuals(float tickAlpha)
@@ -122,20 +106,7 @@ public abstract partial class FactoryCargoConverterStructure : FactoryStructure,
             GetDisplayedDispatchItem(),
             DispatchPayloadContext);
 
-        var processingAnchor = GetNodeOrNull<Node3D>("ProcessingPayloadAnchor");
-        if (processingAnchor is not null)
-        {
-            var bob = Mathf.Sin((float)(Time.GetTicksMsec() * 0.006)) * CellSize * 0.015f;
-            processingAnchor.Position = processingAnchor.GetMeta("base_position", processingAnchor.Position).AsVector3()
-                + new Vector3(0.0f, bob + (ProcessingRatio * CellSize * 0.02f), 0.0f);
-        }
-
-        var dispatchAnchor = GetNodeOrNull<Node3D>("DispatchPayloadAnchor");
-        if (dispatchAnchor is not null)
-        {
-            var pulse = 1.0f + (HasBufferedOutput ? Mathf.Sin((float)(Time.GetTicksMsec() * 0.008)) * 0.04f : 0.0f);
-            dispatchAnchor.Scale = new Vector3(pulse, pulse, pulse);
-        }
+        ApplyMechanicsVisuals();
     }
 
     public override IEnumerable<string> GetInspectionLines()
@@ -145,26 +116,36 @@ public abstract partial class FactoryCargoConverterStructure : FactoryStructure,
             yield return line;
         }
 
-        yield return $"输入舱位：{_inputBuffer.Count}/{ChamberCapacity}";
-        yield return $"输出舱位：{_outputBuffer.Count}/{ChamberCapacity}";
-        yield return _processingItem is null
-            ? "状态：待装载单件世界货物"
-            : $"状态：单件转换中 {ProcessingRatio * 100.0f:0}%";
+        yield return $"输入舱位：{InputCount}/{ChamberCapacity}";
+        yield return $"输出舱位：{OutputCount}/{ChamberCapacity}";
+        foreach (var line in DescribeConversionState())
+        {
+            yield return line;
+        }
+    }
+
+    protected virtual IEnumerable<string> DescribeConversionState()
+    {
+        yield return "状态：待机";
+    }
+
+    protected virtual void ApplyMechanicsVisuals()
+    {
     }
 
     protected virtual FactoryItem? GetDisplayedStagingItem()
     {
-        return _processingItem is null && _inputBuffer.TryPeek(out var item) ? item : null;
+        return TryPeekInput(out var item) ? item : null;
     }
 
     protected virtual FactoryItem? GetDisplayedProcessingItem()
     {
-        return _processingItem;
+        return null;
     }
 
     protected virtual FactoryItem? GetDisplayedDispatchItem()
     {
-        return _outputBuffer.TryPeek(out var item) ? item : null;
+        return TryPeekOutput(out var item) ? item : null;
     }
 
     protected virtual bool CanAcceptConversionInput(FactoryItem item, Vector2I sourceCell)
@@ -172,6 +153,28 @@ public abstract partial class FactoryCargoConverterStructure : FactoryStructure,
         return CanReceiveFrom(sourceCell)
             && !_inputBuffer.IsFull
             && FactoryCargoRules.StructureAcceptsItem(Kind, FactoryIndustrialStandards.ResolveSiteKind(Site), item);
+    }
+
+    protected abstract void AdvanceConverter(SimulationController simulation, double stepSeconds);
+
+    protected bool TryPeekInput(out FactoryItem? item)
+    {
+        return _inputBuffer.TryPeek(out item);
+    }
+
+    protected bool TryTakeInput(out FactoryItem? item)
+    {
+        return _inputBuffer.TryDequeue(out item);
+    }
+
+    protected bool TryPeekOutput(out FactoryItem? item)
+    {
+        return _outputBuffer.TryPeek(out item);
+    }
+
+    protected bool TryBufferOutput(FactoryItem item)
+    {
+        return _outputBuffer.TryEnqueue(item);
     }
 
     protected virtual void TryDispatchBufferedOutput(SimulationController simulation)
@@ -210,13 +213,9 @@ public abstract partial class FactoryCargoConverterStructure : FactoryStructure,
         var anchor = GetNodeOrNull<Node3D>(anchorName);
         if (anchor is null)
         {
-            if (payloadVisual is not null)
-            {
-                payloadVisual.QueueFree();
-                payloadVisual = null;
-                payloadVisualKey = string.Empty;
-            }
-
+            payloadVisual?.QueueFree();
+            payloadVisual = null;
+            payloadVisualKey = string.Empty;
             return;
         }
 
@@ -230,8 +229,8 @@ public abstract partial class FactoryCargoConverterStructure : FactoryStructure,
             return;
         }
 
-        var visualKey = $"{item.ItemKind}:{item.CargoForm}:{visualContext}";
-        if (payloadVisual is null || !string.Equals(payloadVisualKey, visualKey, System.StringComparison.Ordinal))
+        var visualKey = $"{item.ItemKind}:{item.CargoForm}:{item.BundleTemplateId}:{visualContext}";
+        if (payloadVisual is null || !string.Equals(payloadVisualKey, visualKey, StringComparison.Ordinal))
         {
             payloadVisual?.QueueFree();
             payloadVisual = FactoryTransportVisualFactory.CreateVisual(item, CellSize, visualContext);
@@ -247,73 +246,387 @@ public abstract partial class FactoryCargoConverterStructure : FactoryStructure,
 
 public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
 {
+    private const float EmitSeconds = 0.42f;
+
+    private FactoryItem? _processingBundle;
+    private Queue<FactoryItemKind> _pendingManifest = new();
+    private double _emitProgress;
+    private string _preferredTemplateId = "bulk-iron-ore-standard";
+
+    public CargoUnpackerStructure() : base(inputCapacity: 1, outputCapacity: 1)
+    {
+    }
+
     public override BuildPrototypeKind Kind => BuildPrototypeKind.CargoUnpacker;
-    public override string Description => "单件解包处理舱。一次接收一个世界大件，并在舱内拆成可上料轨的小型标准载具。";
-    protected override FactoryCargoForm OutputCargoForm => FactoryCargoForm.InteriorFeed;
+    public override string Description => "单件解包处理舱。一次接收 1 个世界大包，并按 manifest 节拍持续吐出多个舱内小包。";
+
     protected override FactoryTransportVisualContext DispatchPayloadContext => FactoryTransportVisualContext.InteriorRail;
+    protected override int ChamberCapacity => 1;
+
+    public override IReadOnlyDictionary<string, string> CaptureBlueprintConfiguration()
+    {
+        return string.IsNullOrWhiteSpace(_preferredTemplateId)
+            ? new Dictionary<string, string>()
+            : new Dictionary<string, string> { ["bundle_template_id"] = _preferredTemplateId };
+    }
+
+    public override bool ApplyBlueprintConfiguration(IReadOnlyDictionary<string, string> configuration)
+    {
+        if (configuration.TryGetValue("bundle_template_id", out var templateId) && FactoryBundleCatalog.TryGet(templateId, out _))
+        {
+            _preferredTemplateId = templateId;
+        }
+
+        return true;
+    }
+
+    public override string? CaptureMapRecipeId()
+    {
+        return string.IsNullOrWhiteSpace(_preferredTemplateId) ? null : _preferredTemplateId;
+    }
+
+    public override bool TryApplyMapRecipe(string recipeId)
+    {
+        if (!FactoryBundleCatalog.TryGet(recipeId, out _))
+        {
+            return false;
+        }
+
+        _preferredTemplateId = recipeId;
+        return true;
+    }
+
+    protected override FactoryItem? GetDisplayedProcessingItem()
+    {
+        return _processingBundle;
+    }
+
+    protected override IEnumerable<string> DescribeConversionState()
+    {
+        if (_processingBundle is null)
+        {
+            yield return $"待机模板：{FactoryBundleCatalog.DescribeTemplate(FactoryBundleCatalog.Get(_preferredTemplateId))}";
+            yield break;
+        }
+
+        yield return $"处理模板：{FactoryBundleCatalog.GetDisplayName(_processingBundle)}";
+        yield return $"剩余解包：{_pendingManifest.Count} 件舱内小包";
+    }
+
+    protected override void AdvanceConverter(SimulationController simulation, double stepSeconds)
+    {
+        if (_processingBundle is null)
+        {
+            if (TryTakeInput(out var input) && input is not null)
+            {
+                _processingBundle = input;
+                _preferredTemplateId = string.IsNullOrWhiteSpace(input.BundleTemplateId) ? _preferredTemplateId : input.BundleTemplateId;
+                _pendingManifest = FactoryBundleCatalog.ExpandManifest(input);
+                _emitProgress = 0.0;
+            }
+
+            return;
+        }
+
+        if (IsOutputFull)
+        {
+            return;
+        }
+
+        _emitProgress += stepSeconds;
+        if (_emitProgress < EmitSeconds || _pendingManifest.Count <= 0)
+        {
+            return;
+        }
+
+        _emitProgress = 0.0;
+        var nextItemKind = _pendingManifest.Dequeue();
+        TryBufferOutput(simulation.CreateItem(Site, Kind, nextItemKind, FactoryCargoForm.InteriorFeed));
+
+        if (_pendingManifest.Count == 0)
+        {
+            _processingBundle = null;
+        }
+    }
+
+    protected override void ApplyMechanicsVisuals()
+    {
+        var clampNorth = GetNodeOrNull<MeshInstance3D>("UnpackerClampNorth");
+        var clampSouth = GetNodeOrNull<MeshInstance3D>("UnpackerClampSouth");
+        var carriage = GetNodeOrNull<Node3D>("ProcessingPayloadAnchor");
+        if (clampNorth is not null)
+        {
+            clampNorth.Position = new Vector3(0.0f, 0.60f, -CellSize * 0.26f - Mathf.Sin((float)(Time.GetTicksMsec() * 0.005)) * CellSize * 0.05f);
+        }
+
+        if (clampSouth is not null)
+        {
+            clampSouth.Position = new Vector3(0.0f, 0.60f, CellSize * 0.26f + Mathf.Sin((float)(Time.GetTicksMsec() * 0.005)) * CellSize * 0.05f);
+        }
+
+        if (carriage is not null)
+        {
+            var basePosition = carriage.GetMeta("base_position", carriage.Position).AsVector3();
+            var slide = _processingBundle is null ? 0.0f : Mathf.Sin((float)(Time.GetTicksMsec() * 0.004)) * CellSize * 0.06f;
+            carriage.Position = basePosition + new Vector3(slide, 0.0f, 0.0f);
+        }
+    }
 
     protected override void BuildVisuals()
     {
         if (SiteKind == FactorySiteKind.Interior)
         {
-            CreateBox("UnpackerBaseSkid", new Vector3(CellSize * 1.86f, 0.16f, CellSize * 1.26f), new Color("082F49"), new Vector3(0.0f, 0.08f, 0.0f));
-            CreateInteriorModuleShell(this, "UnpackerChamber", new Vector3(CellSize * 1.68f, 0.64f, CellSize * 1.08f), new Color("164E63"), new Color("7DD3FC"), new Vector3(0.0f, 0.38f, 0.0f));
-            CreateBox("UnpackerMouthFrame", new Vector3(CellSize * 0.28f, 0.40f, CellSize * 0.86f), new Color("BAE6FD"), new Vector3(-CellSize * 0.58f, 0.34f, 0.0f));
-            CreateBox("UnpackerCradle", new Vector3(CellSize * 0.92f, 0.14f, CellSize * 0.72f), new Color("0EA5E9"), new Vector3(0.0f, 0.18f, 0.0f));
-            CreateInteriorTray(this, "UnpackerOutfeed", new Vector3(CellSize * 0.54f, 0.10f, CellSize * 0.18f), new Color("0369A1"), new Color("DBEAFE"), new Vector3(CellSize * 0.62f, 0.16f, 0.0f));
-            CreateBox("UnpackerClampTop", new Vector3(CellSize * 0.68f, 0.06f, CellSize * 0.10f), new Color("E0F2FE"), new Vector3(0.0f, 0.58f, -CellSize * 0.34f));
-            CreateBox("UnpackerClampBottom", new Vector3(CellSize * 0.68f, 0.06f, CellSize * 0.10f), new Color("E0F2FE"), new Vector3(0.0f, 0.58f, CellSize * 0.34f));
-            CreateInteriorIndicatorLight(this, "UnpackerLamp", new Color("7DD3FC"), new Vector3(-CellSize * 0.72f, 0.56f, 0.0f), CellSize * 0.10f);
-            CreatePayloadAnchor("StagingPayloadAnchor", new Vector3(-CellSize * 0.60f, 0.26f, 0.0f));
-            CreatePayloadAnchor("ProcessingPayloadAnchor", new Vector3(0.0f, 0.30f, 0.0f));
-            CreatePayloadAnchor("DispatchPayloadAnchor", new Vector3(CellSize * 0.66f, 0.26f, 0.0f));
+            var deckDepth = Mathf.Max(CellSize * 1.34f, Footprint.GetPreviewSize(CellSize, Facing).Y * 0.96f);
+            CreateBox("UnpackerBaseSkid", new Vector3(CellSize * 1.18f, 0.16f, deckDepth), new Color("081626"), new Vector3(0.0f, 0.08f, 0.0f));
+            CreateInteriorModuleShell(this, "UnpackerChamber", new Vector3(CellSize * 0.94f, 0.82f, deckDepth * 0.82f), new Color("12324A"), new Color("7DD3FC"), new Vector3(0.0f, 0.42f, 0.0f));
+            CreateBox("UnpackerMouthFrame", new Vector3(CellSize * 0.18f, 0.46f, deckDepth * 0.72f), new Color("C7EAFE"), new Vector3(-CellSize * 0.40f, 0.34f, 0.0f));
+            CreateBox("UnpackerCradle", new Vector3(CellSize * 0.74f, 0.14f, deckDepth * 0.48f), new Color("0EA5E9"), new Vector3(0.0f, 0.18f, 0.0f));
+            CreateInteriorTray(this, "UnpackerOutfeed", new Vector3(CellSize * 0.36f, 0.10f, CellSize * 0.18f), new Color("0B5A88"), new Color("DBEAFE"), new Vector3(CellSize * 0.42f, 0.16f, 0.0f));
+            CreateBox("UnpackerClampNorth", new Vector3(CellSize * 0.58f, 0.06f, CellSize * 0.10f), new Color("E0F2FE"), new Vector3(0.0f, 0.60f, -CellSize * 0.26f));
+            CreateBox("UnpackerClampSouth", new Vector3(CellSize * 0.58f, 0.06f, CellSize * 0.10f), new Color("E0F2FE"), new Vector3(0.0f, 0.60f, CellSize * 0.26f));
+            CreateInteriorIndicatorLight(this, "UnpackerLamp", new Color("7DD3FC"), new Vector3(-CellSize * 0.42f, 0.64f, 0.0f), CellSize * 0.09f);
+            CreatePayloadAnchor("StagingPayloadAnchor", new Vector3(-CellSize * 0.42f, 0.28f, 0.0f));
+            CreatePayloadAnchor("ProcessingPayloadAnchor", new Vector3(0.0f, 0.34f, 0.0f));
+            CreatePayloadAnchor("DispatchPayloadAnchor", new Vector3(CellSize * 0.46f, 0.26f, 0.0f));
             return;
         }
 
-        CreateBox("Deck", new Vector3(CellSize * 1.8f, 0.16f, CellSize * 1.2f), new Color("164E63"), new Vector3(0.0f, 0.08f, 0.0f));
-        CreateBox("Chamber", new Vector3(CellSize * 1.1f, 0.48f, CellSize * 0.78f), new Color("38BDF8"), new Vector3(-CellSize * 0.18f, 0.32f, 0.0f));
-        CreateBox("FeedRail", new Vector3(CellSize * 1.9f, 0.08f, CellSize * 0.18f), new Color("BAE6FD"), new Vector3(0.0f, 0.22f, 0.0f));
-        CreateBox("ServicePanel", new Vector3(CellSize * 0.34f, 0.28f, CellSize * 0.54f), new Color("E0F2FE"), new Vector3(CellSize * 0.58f, 0.34f, 0.0f));
+        CreateBox("Deck", new Vector3(CellSize * 1.2f, 0.16f, CellSize * 1.2f), new Color("164E63"), new Vector3(0.0f, 0.08f, 0.0f));
+        CreateBox("Chamber", new Vector3(CellSize * 0.86f, 0.58f, CellSize * 0.86f), new Color("38BDF8"), new Vector3(0.0f, 0.30f, 0.0f));
+        CreateBox("FeedRail", new Vector3(CellSize * 1.24f, 0.08f, CellSize * 0.18f), new Color("BAE6FD"), new Vector3(0.0f, 0.22f, 0.0f));
     }
 }
 
 public partial class CargoPackerStructure : FactoryCargoConverterStructure
 {
+    private readonly Dictionary<FactoryItemKind, int> _packedCounts = new();
+
+    private FactoryItem? _processingBundle;
+    private double _processProgress;
+    private string _configuredTemplateId = "packed-gear-compact";
+    private string _lockedTemplateId = string.Empty;
+
+    public CargoPackerStructure() : base(inputCapacity: 1, outputCapacity: 1)
+    {
+    }
+
     public override BuildPrototypeKind Kind => BuildPrototypeKind.CargoPacker;
-    public override string Description => "单件封包处理舱。把舱内小型载具重新组合成一个可出舱的世界标准大件货物。";
-    protected override FactoryCargoForm OutputCargoForm => FactoryCargoForm.WorldPacked;
+    public override string Description => "单件封包处理舱。围绕目标模板累计舱内小包，清单满足后才压装成 1 个世界大包。";
+
     protected override FactoryTransportVisualContext StagingPayloadContext => FactoryTransportVisualContext.InteriorRail;
     protected override FactoryTransportVisualContext DispatchPayloadContext => FactoryTransportVisualContext.InteriorStaging;
+    protected override int ChamberCapacity => 12;
+
+    public override IReadOnlyDictionary<string, string> CaptureBlueprintConfiguration()
+    {
+        return string.IsNullOrWhiteSpace(_configuredTemplateId)
+            ? new Dictionary<string, string>()
+            : new Dictionary<string, string> { ["bundle_template_id"] = _configuredTemplateId };
+    }
+
+    public override bool ApplyBlueprintConfiguration(IReadOnlyDictionary<string, string> configuration)
+    {
+        if (configuration.TryGetValue("bundle_template_id", out var templateId) && FactoryBundleCatalog.TryGet(templateId, out _))
+        {
+            _configuredTemplateId = templateId;
+        }
+
+        return true;
+    }
+
+    public override string? CaptureMapRecipeId()
+    {
+        return string.IsNullOrWhiteSpace(_configuredTemplateId) ? null : _configuredTemplateId;
+    }
+
+    public override bool TryApplyMapRecipe(string recipeId)
+    {
+        if (!FactoryBundleCatalog.TryGet(recipeId, out _))
+        {
+            return false;
+        }
+
+        _configuredTemplateId = recipeId;
+        return true;
+    }
+
+    protected override bool CanAcceptConversionInput(FactoryItem item, Vector2I sourceCell)
+    {
+        if (!base.CanAcceptConversionInput(item, sourceCell) || _processingBundle is not null)
+        {
+            return false;
+        }
+
+        if (!TryResolveCandidateTemplate(item, out var template) || template is null)
+        {
+            return false;
+        }
+
+        var projected = BuildProjectedCounts(item.ItemKind);
+        return FactoryBundleCatalog.CanAcceptIntoTemplate(template, item.ItemKind, projected, out _);
+    }
 
     protected override FactoryItem? GetDisplayedProcessingItem()
     {
-        return ProcessingItem is null
-            ? null
-            : ProcessingItem.WithCargoForm(Kind, FactoryCargoForm.WorldPacked);
+        return _processingBundle;
+    }
+
+    protected override IEnumerable<string> DescribeConversionState()
+    {
+        var templateId = ResolveTemplateIdForInspection();
+        var template = FactoryBundleCatalog.Get(templateId);
+        var packedUnits = CountPackedUnits();
+        yield return $"目标模板：{FactoryBundleCatalog.DescribeTemplate(template)}";
+        yield return $"累计装箱：{packedUnits}/{template.TotalUnits}";
+        if (_processingBundle is not null)
+        {
+            yield return $"压装进度：{Mathf.Clamp((float)(_processProgress / 1.4f), 0.0f, 1.0f) * 100.0f:0}%";
+        }
+    }
+
+    protected override void AdvanceConverter(SimulationController simulation, double stepSeconds)
+    {
+        if (_processingBundle is not null)
+        {
+            if (IsOutputFull)
+            {
+                return;
+            }
+
+            _processProgress += stepSeconds;
+            if (_processProgress < 1.4f)
+            {
+                return;
+            }
+
+            TryBufferOutput(_processingBundle);
+            _processingBundle = null;
+            _processProgress = 0.0;
+            _packedCounts.Clear();
+            _lockedTemplateId = string.Empty;
+            return;
+        }
+
+        if (TryTakeInput(out var input) && input is not null)
+        {
+            if (!TryResolveCandidateTemplate(input, out var template) || template is null)
+            {
+                return;
+            }
+
+            _lockedTemplateId = template.Id;
+            _packedCounts[input.ItemKind] = _packedCounts.TryGetValue(input.ItemKind, out var existing) ? existing + 1 : 1;
+            if (FactoryBundleCatalog.IsSatisfied(template, _packedCounts, out _))
+            {
+                _processingBundle = simulation.CreateItem(
+                    Site,
+                    Kind,
+                    template.WorldItemKind,
+                    FactoryCargoForm.WorldPacked,
+                    template.Id,
+                    _packedCounts);
+                _processProgress = 0.0;
+            }
+        }
+    }
+
+    protected override void ApplyMechanicsVisuals()
+    {
+        var ram = GetNodeOrNull<MeshInstance3D>("PackerCompressionRam");
+        var clamp = GetNodeOrNull<MeshInstance3D>("PackerClampFrame");
+        var anchor = GetNodeOrNull<Node3D>("ProcessingPayloadAnchor");
+        var ratio = Mathf.Clamp((float)(_processProgress / 1.4f), 0.0f, 1.0f);
+        if (ram is not null)
+        {
+            ram.Position = new Vector3(0.0f, 0.60f - ratio * CellSize * 0.22f, 0.0f);
+        }
+
+        if (clamp is not null)
+        {
+            clamp.Scale = new Vector3(1.0f, 1.0f, 1.0f + ratio * 0.12f);
+        }
+
+        if (anchor is not null)
+        {
+            var basePosition = anchor.GetMeta("base_position", anchor.Position).AsVector3();
+            anchor.Position = basePosition + new Vector3(Mathf.Sin((float)(Time.GetTicksMsec() * 0.006)) * CellSize * 0.03f, 0.0f, 0.0f);
+        }
     }
 
     protected override void BuildVisuals()
     {
         if (SiteKind == FactorySiteKind.Interior)
         {
-            CreateBox("PackerBaseSkid", new Vector3(CellSize * 1.86f, 0.16f, CellSize * 1.26f), new Color("431407"), new Vector3(0.0f, 0.08f, 0.0f));
-            CreateInteriorModuleShell(this, "PackerChamber", new Vector3(CellSize * 1.68f, 0.64f, CellSize * 1.08f), new Color("7C2D12"), new Color("FDBA74"), new Vector3(0.0f, 0.38f, 0.0f));
-            CreateInteriorTray(this, "PackerInfeed", new Vector3(CellSize * 0.54f, 0.10f, CellSize * 0.18f), new Color("EA580C"), new Color("FED7AA"), new Vector3(-CellSize * 0.62f, 0.16f, 0.0f));
-            CreateBox("PackerCompressionDeck", new Vector3(CellSize * 0.92f, 0.14f, CellSize * 0.72f), new Color("C2410C"), new Vector3(0.0f, 0.18f, 0.0f));
-            CreateBox("PackerExportCradle", new Vector3(CellSize * 0.86f, 0.12f, CellSize * 0.66f), new Color("FB923C"), new Vector3(CellSize * 0.56f, 0.18f, 0.0f));
-            CreateBox("PackerClampTop", new Vector3(CellSize * 0.74f, 0.06f, CellSize * 0.10f), new Color("FED7AA"), new Vector3(0.0f, 0.58f, -CellSize * 0.34f));
-            CreateBox("PackerClampBottom", new Vector3(CellSize * 0.74f, 0.06f, CellSize * 0.10f), new Color("FED7AA"), new Vector3(0.0f, 0.58f, CellSize * 0.34f));
-            CreateInteriorIndicatorLight(this, "PackerLamp", new Color("FB923C"), new Vector3(CellSize * 0.72f, 0.56f, 0.0f), CellSize * 0.10f);
-            CreatePayloadAnchor("StagingPayloadAnchor", new Vector3(-CellSize * 0.64f, 0.24f, 0.0f));
-            CreatePayloadAnchor("ProcessingPayloadAnchor", new Vector3(0.0f, 0.30f, 0.0f));
-            CreatePayloadAnchor("DispatchPayloadAnchor", new Vector3(CellSize * 0.58f, 0.24f, 0.0f));
+            var deckDepth = Mathf.Max(CellSize * 1.34f, Footprint.GetPreviewSize(CellSize, Facing).Y * 0.96f);
+            CreateBox("PackerBaseSkid", new Vector3(CellSize * 1.18f, 0.16f, deckDepth), new Color("37140A"), new Vector3(0.0f, 0.08f, 0.0f));
+            CreateInteriorModuleShell(this, "PackerChamber", new Vector3(CellSize * 0.94f, 0.82f, deckDepth * 0.82f), new Color("6A240B"), new Color("FDBA74"), new Vector3(0.0f, 0.42f, 0.0f));
+            CreateInteriorTray(this, "PackerInfeed", new Vector3(CellSize * 0.38f, 0.10f, CellSize * 0.18f), new Color("B94A13"), new Color("FED7AA"), new Vector3(-CellSize * 0.40f, 0.16f, 0.0f));
+            CreateBox("PackerCompressionDeck", new Vector3(CellSize * 0.74f, 0.14f, deckDepth * 0.48f), new Color("C2410C"), new Vector3(0.0f, 0.18f, 0.0f));
+            CreateBox("PackerClampFrame", new Vector3(CellSize * 0.68f, 0.42f, deckDepth * 0.44f), new Color("FED7AA"), new Vector3(0.0f, 0.42f, 0.0f));
+            CreateBox("PackerCompressionRam", new Vector3(CellSize * 0.58f, 0.10f, deckDepth * 0.38f), new Color("FFE4C2"), new Vector3(0.0f, 0.60f, 0.0f));
+            CreateBox("PackerExportCradle", new Vector3(CellSize * 0.52f, 0.12f, deckDepth * 0.42f), new Color("FB923C"), new Vector3(CellSize * 0.38f, 0.18f, 0.0f));
+            CreateInteriorIndicatorLight(this, "PackerLamp", new Color("FB923C"), new Vector3(CellSize * 0.42f, 0.64f, 0.0f), CellSize * 0.09f);
+            CreatePayloadAnchor("StagingPayloadAnchor", new Vector3(-CellSize * 0.42f, 0.24f, 0.0f));
+            CreatePayloadAnchor("ProcessingPayloadAnchor", new Vector3(0.0f, 0.34f, 0.0f));
+            CreatePayloadAnchor("DispatchPayloadAnchor", new Vector3(CellSize * 0.42f, 0.24f, 0.0f));
             return;
         }
 
-        CreateBox("Deck", new Vector3(CellSize * 1.8f, 0.16f, CellSize * 1.2f), new Color("7C2D12"), new Vector3(0.0f, 0.08f, 0.0f));
-        CreateBox("Compressor", new Vector3(CellSize * 1.0f, 0.46f, CellSize * 0.84f), new Color("F97316"), new Vector3(-CellSize * 0.10f, 0.32f, 0.0f));
-        CreateBox("Clamp", new Vector3(CellSize * 0.28f, 0.34f, CellSize * 0.72f), new Color("FDBA74"), new Vector3(CellSize * 0.56f, 0.30f, 0.0f));
-        CreateBox("FeedRail", new Vector3(CellSize * 1.9f, 0.08f, CellSize * 0.18f), new Color("FED7AA"), new Vector3(0.0f, 0.22f, 0.0f));
+        CreateBox("Deck", new Vector3(CellSize * 1.2f, 0.16f, CellSize * 1.2f), new Color("7C2D12"), new Vector3(0.0f, 0.08f, 0.0f));
+        CreateBox("Compressor", new Vector3(CellSize * 0.86f, 0.58f, CellSize * 0.86f), new Color("F97316"), new Vector3(0.0f, 0.30f, 0.0f));
+    }
+
+    private bool TryResolveCandidateTemplate(FactoryItem item, out FactoryBundleTemplate? template)
+    {
+        if (!string.IsNullOrWhiteSpace(_configuredTemplateId) && FactoryBundleCatalog.TryGet(_configuredTemplateId, out template))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_lockedTemplateId) && FactoryBundleCatalog.TryGet(_lockedTemplateId, out template))
+        {
+            return true;
+        }
+
+        return FactoryBundleCatalog.TryResolveAutoPackTemplate(item, out template);
+    }
+
+    private Dictionary<FactoryItemKind, int> BuildProjectedCounts(FactoryItemKind incomingItemKind)
+    {
+        var projected = new Dictionary<FactoryItemKind, int>(_packedCounts);
+        if (TryPeekInput(out var queued) && queued is not null)
+        {
+            projected[queued.ItemKind] = projected.TryGetValue(queued.ItemKind, out var queuedCount) ? queuedCount + 1 : 1;
+        }
+
+        projected[incomingItemKind] = projected.TryGetValue(incomingItemKind, out var existing) ? existing + 1 : 1;
+        return projected;
+    }
+
+    private string ResolveTemplateIdForInspection()
+    {
+        if (!string.IsNullOrWhiteSpace(_configuredTemplateId))
+        {
+            return _configuredTemplateId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_lockedTemplateId))
+        {
+            return _lockedTemplateId;
+        }
+
+        return "packed-gear-compact";
+    }
+
+    private int CountPackedUnits()
+    {
+        var total = 0;
+        foreach (var pair in _packedCounts)
+        {
+            total += pair.Value;
+        }
+
+        return total;
     }
 }
 
@@ -325,7 +638,7 @@ public partial class TransferBufferStructure : FactoryStructure, IFactoryItemPro
     private string _bufferedPayloadVisualKey = string.Empty;
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.TransferBuffer;
-    public override string Description => "大件转换节拍缓冲架。围绕解包/封包舱整理待处理或待出舱的载荷，不作为普通小型加工机使用。";
+    public override string Description => "重载/节拍缓冲架。既能暂存世界大包，也能作为封包前的小包汇流位。";
 
     public override bool CanReceiveFrom(Vector2I sourceCell)
     {
@@ -371,7 +684,7 @@ public partial class TransferBufferStructure : FactoryStructure, IFactoryItemPro
 
     public override void SimulationStep(SimulationController simulation, double stepSeconds)
     {
-        _dispatchCooldown = Mathf.Max(0.0, (float)(_dispatchCooldown - stepSeconds));
+        _dispatchCooldown = Mathf.Max(0.0f, (float)(_dispatchCooldown - stepSeconds));
         if (_dispatchCooldown > 0.0 || !_buffer.TryPeek(out var item) || item is null)
         {
             return;
@@ -406,8 +719,8 @@ public partial class TransferBufferStructure : FactoryStructure, IFactoryItemPro
         var visualContext = item.CargoForm == FactoryCargoForm.InteriorFeed
             ? FactoryTransportVisualContext.InteriorRail
             : FactoryTransportVisualContext.InteriorStaging;
-        var visualKey = $"{item.ItemKind}:{item.CargoForm}:{visualContext}";
-        if (_bufferedPayloadVisual is null || !string.Equals(_bufferedPayloadVisualKey, visualKey, System.StringComparison.Ordinal))
+        var visualKey = $"{item.ItemKind}:{item.CargoForm}:{item.BundleTemplateId}:{visualContext}";
+        if (_bufferedPayloadVisual is null || !string.Equals(_bufferedPayloadVisualKey, visualKey, StringComparison.Ordinal))
         {
             _bufferedPayloadVisual?.QueueFree();
             _bufferedPayloadVisual = FactoryTransportVisualFactory.CreateVisual(item, CellSize, visualContext);
@@ -435,26 +748,23 @@ public partial class TransferBufferStructure : FactoryStructure, IFactoryItemPro
     {
         if (SiteKind == FactorySiteKind.Interior)
         {
-            CreateBox("BufferDeck", new Vector3(CellSize * 1.36f, 0.12f, CellSize * 1.08f), new Color("042F2E"), new Vector3(0.0f, 0.06f, 0.0f));
-            CreateBox("BufferCradle", new Vector3(CellSize * 0.96f, 0.12f, CellSize * 0.72f), new Color("0F766E"), new Vector3(0.0f, 0.18f, 0.0f));
-            CreateBox("BufferGuideNorth", new Vector3(CellSize * 0.82f, 0.08f, CellSize * 0.06f), new Color("99F6E4"), new Vector3(0.0f, 0.26f, -CellSize * 0.30f));
-            CreateBox("BufferGuideSouth", new Vector3(CellSize * 0.82f, 0.08f, CellSize * 0.06f), new Color("99F6E4"), new Vector3(0.0f, 0.26f, CellSize * 0.30f));
-            CreateBox("BufferRackBack", new Vector3(CellSize * 0.12f, 0.44f, CellSize * 0.74f), new Color("134E4A"), new Vector3(-CellSize * 0.42f, 0.34f, 0.0f));
+            CreateBox("BufferDeck", new Vector3(CellSize * 1.24f, 0.12f, CellSize * 0.98f), new Color("062827"), new Vector3(0.0f, 0.06f, 0.0f));
+            CreateBox("BufferCradle", new Vector3(CellSize * 0.92f, 0.14f, CellSize * 0.68f), new Color("0F766E"), new Vector3(0.0f, 0.18f, 0.0f));
+            CreateBox("BufferGuideNorth", new Vector3(CellSize * 0.82f, 0.08f, CellSize * 0.06f), new Color("99F6E4"), new Vector3(0.0f, 0.28f, -CellSize * 0.30f));
+            CreateBox("BufferGuideSouth", new Vector3(CellSize * 0.82f, 0.08f, CellSize * 0.06f), new Color("99F6E4"), new Vector3(0.0f, 0.28f, CellSize * 0.30f));
+            CreateBox("BufferRackBack", new Vector3(CellSize * 0.12f, 0.52f, CellSize * 0.74f), new Color("134E4A"), new Vector3(-CellSize * 0.42f, 0.34f, 0.0f));
             CreateInteriorTray(this, "BufferOutfeed", new Vector3(CellSize * 0.44f, 0.08f, CellSize * 0.16f), new Color("115E59"), new Color("CCFBF1"), new Vector3(CellSize * 0.44f, 0.14f, 0.0f));
-            CreateInteriorIndicatorLight(this, "BufferLamp", new Color("5EEAD4"), new Vector3(-CellSize * 0.50f, 0.46f, 0.0f), CellSize * 0.08f);
-            var anchor = new Node3D
+            CreateInteriorIndicatorLight(this, "BufferLamp", new Color("5EEAD4"), new Vector3(-CellSize * 0.50f, 0.50f, 0.0f), CellSize * 0.08f);
+            AddChild(new Node3D
             {
                 Name = "BufferPayloadAnchor",
-                Position = new Vector3(0.0f, 0.24f, 0.0f)
-            };
-            AddChild(anchor);
+                Position = new Vector3(0.0f, 0.26f, 0.0f)
+            });
             return;
         }
 
         CreateBox("Trench", new Vector3(CellSize * 0.84f, 0.12f, CellSize * 0.84f), new Color("0F766E"), new Vector3(0.0f, 0.06f, 0.0f));
         CreateBox("Tray", new Vector3(CellSize * 0.56f, 0.14f, CellSize * 0.56f), new Color("14B8A6"), new Vector3(0.0f, 0.18f, 0.0f));
-        CreateBox("PanelNorth", new Vector3(CellSize * 0.64f, 0.10f, CellSize * 0.10f), new Color("99F6E4"), new Vector3(0.0f, 0.26f, -CellSize * 0.24f));
-        CreateBox("PanelSouth", new Vector3(CellSize * 0.64f, 0.10f, CellSize * 0.10f), new Color("99F6E4"), new Vector3(0.0f, 0.26f, CellSize * 0.24f));
     }
 
     private bool CanAcceptBufferedItem(FactoryItem item, Vector2I sourceCell)

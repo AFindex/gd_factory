@@ -1,4 +1,5 @@
 using Godot;
+using System.Collections.Generic;
 
 public enum BuildPrototypeKind
 {
@@ -158,21 +159,46 @@ public sealed class FactoryItem
         int id,
         BuildPrototypeKind sourceKind,
         FactoryItemKind itemKind = FactoryItemKind.GenericCargo,
-        FactoryCargoForm cargoForm = FactoryCargoForm.WorldPacked)
+        FactoryCargoForm cargoForm = FactoryCargoForm.WorldPacked,
+        string? bundleTemplateId = null,
+        IReadOnlyDictionary<FactoryItemKind, int>? bundleContents = null)
     {
         Id = id;
         SourceKind = sourceKind;
         ItemKind = itemKind;
         CargoForm = cargoForm;
+        BundleTemplateId = FactoryBundleCatalog.ResolveTemplateId(itemKind, cargoForm, bundleTemplateId);
+        _bundleContents = FactoryBundleCatalog.CloneContents(bundleContents);
     }
+
+    private readonly IReadOnlyDictionary<FactoryItemKind, int> _bundleContents;
 
     public int Id { get; }
     public BuildPrototypeKind SourceKind { get; }
     public FactoryItemKind ItemKind { get; }
     public FactoryCargoForm CargoForm { get; }
+    public string BundleTemplateId { get; }
+    public IReadOnlyDictionary<FactoryItemKind, int> BundleContents => _bundleContents;
+    public bool HasBundleContents => _bundleContents.Count > 0;
+
     public FactoryItem WithCargoForm(BuildPrototypeKind sourceKind, FactoryCargoForm cargoForm)
     {
-        return new FactoryItem(Id, sourceKind, ItemKind, cargoForm);
+        return new FactoryItem(
+            Id,
+            sourceKind,
+            ItemKind,
+            cargoForm,
+            cargoForm == FactoryCargoForm.InteriorFeed ? null : BundleTemplateId,
+            cargoForm == FactoryCargoForm.InteriorFeed ? null : _bundleContents);
+    }
+
+    public FactoryItem WithBundleTemplate(
+        BuildPrototypeKind sourceKind,
+        FactoryCargoForm cargoForm,
+        string? bundleTemplateId,
+        IReadOnlyDictionary<FactoryItemKind, int>? bundleContents = null)
+    {
+        return new FactoryItem(Id, sourceKind, ItemKind, cargoForm, bundleTemplateId, bundleContents);
     }
 }
 
@@ -302,7 +328,9 @@ public static class FactoryPresentation
     {
         return item.ItemKind == FactoryItemKind.BuildingKit
             ? GetBuildPrototypeDisplayName(item.SourceKind)
-            : FactoryItemCatalog.GetDisplayName(item.ItemKind, item.CargoForm);
+            : item.CargoForm == FactoryCargoForm.InteriorFeed
+                ? FactoryItemCatalog.GetDisplayName(item.ItemKind, item.CargoForm)
+                : FactoryBundleCatalog.GetDisplayName(item);
     }
 
     public static Color GetItemAccentColor(FactoryItemKind itemKind)

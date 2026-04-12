@@ -30,7 +30,9 @@ public partial class LargeStorageDepotStructure : FactoryStructure, IFactoryItem
 
     public bool CanReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
-        return IsAdjacentToFootprint(sourceCell) && _inventory.CanAcceptItem(item);
+        return IsAdjacentToFootprint(sourceCell)
+            && FactoryCargoRules.StructureAcceptsItem(Kind, FactoryIndustrialStandards.ResolveSiteKind(Site), item)
+            && _inventory.CanAcceptItem(item);
     }
 
     public override bool CanAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)

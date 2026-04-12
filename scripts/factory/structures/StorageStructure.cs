@@ -31,7 +31,9 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
 
     public bool CanReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
-        return IsOrthogonallyAdjacent(Cell, sourceCell) && _inventory.CanAcceptItem(item);
+        return IsOrthogonallyAdjacent(Cell, sourceCell)
+            && FactoryCargoRules.StructureAcceptsItem(Kind, FactoryIndustrialStandards.ResolveSiteKind(Site), item)
+            && _inventory.CanAcceptItem(item);
     }
 
     public override bool CanAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)

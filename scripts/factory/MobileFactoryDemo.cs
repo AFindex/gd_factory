@@ -33,9 +33,9 @@ public partial class MobileFactoryDemo : Node3D
     private static readonly Vector2I FocusedTurretCell = new(1, 0);
     private static readonly Vector2I FocusedSmelterCell = new(2, 3);
     private static readonly Vector2I FocusedAssemblerCell = new(4, 1);
-    private static readonly Vector2I FocusedAmmoAssemblerCell = new(4, 4);
-    private static readonly Vector2I FocusedIronBufferCell = new(1, 4);
-    private static readonly Vector2I FocusedWireBufferCell = new(1, 5);
+    private static readonly Vector2I FocusedAmmoAssemblerCell = new(3, 4);
+    private static readonly Vector2I FocusedIronBufferCell = new(0, 5);
+    private static readonly Vector2I FocusedWireBufferCell = new(0, 6);
     private static readonly Vector2I FocusedDepotAnchorCell = new(5, 6);
     private static readonly Key[] InteriorPaletteKeys =
     {
@@ -63,9 +63,9 @@ public partial class MobileFactoryDemo : Node3D
         [BuildPrototypeKind.Splitter] = new BuildPrototypeDefinition(BuildPrototypeKind.Splitter, "分流器", new Color("C4B5FD"), "将后方输入分到左右两路。"),
         [BuildPrototypeKind.Merger] = new BuildPrototypeDefinition(BuildPrototypeKind.Merger, "合并器", new Color("99F6E4"), "把后方、左侧和右侧三路物流汇成前方一路。"),
         [BuildPrototypeKind.Bridge] = new BuildPrototypeDefinition(BuildPrototypeKind.Bridge, "跨桥", new Color("F59E0B"), "让南北和东西两路物流跨越而不互连。"),
-        [BuildPrototypeKind.CargoUnpacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoUnpacker, "解包模块", new Color("38BDF8"), "单件解包处理舱。世界大货物会以原尺寸进入舱体，再被拆成可在料轨上流动的小载具。"),
-        [BuildPrototypeKind.CargoPacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoPacker, "封包模块", new Color("F97316"), "单件封包处理舱。舱内小载具在这里重新组合成一个世界标准大货物后再出舱。"),
-        [BuildPrototypeKind.TransferBuffer] = new BuildPrototypeDefinition(BuildPrototypeKind.TransferBuffer, "中转缓冲槽", new Color("14B8A6"), "大件转换节拍缓冲架，用来为解包/封包链路整理待处理或待出舱载荷。"),
+        [BuildPrototypeKind.CargoUnpacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoUnpacker, "解包模块", new Color("38BDF8"), "模板驱动的解包处理舱。世界大货物会以原尺寸进入舱体，并按 manifest 节拍拆成多个舱内小包。"),
+        [BuildPrototypeKind.CargoPacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoPacker, "封包模块", new Color("F97316"), "模板驱动的封包处理舱。只有累计到目标模板要求后，才会压装成 1 个世界标准大货物。"),
+        [BuildPrototypeKind.TransferBuffer] = new BuildPrototypeDefinition(BuildPrototypeKind.TransferBuffer, "中转缓冲槽", new Color("14B8A6"), "重载/节拍缓冲架。既可暂存世界大包，也可作为封包前的小包汇流位。"),
         [BuildPrototypeKind.DebugOreSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugOreSource, "原矿调试舱", new Color("4ADE80"), "无成本轮转煤炭与多种矿物原料，便于直接调试舱内供料链。"),
         [BuildPrototypeKind.DebugPartSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugPartSource, "部件调试舱", new Color("22D3EE"), "无成本轮转板材和中间件，便于快速调试舱内加工链与缓存。"),
         [BuildPrototypeKind.DebugCombatSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugCombatSource, "战备调试舱", new Color("FB7185"), "无成本轮转弹药与维护补给，便于快速调试炮塔和支援链。"),
@@ -1061,14 +1061,20 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        if (factory.TryGetInteriorStructure(new Vector2I(7, 1), out var mainPortStructure)
-            && mainPortStructure is MobileFactoryOutputPortStructure mainPort)
+        if (factory.TryGetInteriorStructure(new Vector2I(0, 3), out var inputPortStructure)
+            && inputPortStructure is MobileFactoryInputPortStructure inputPort
+            && inputPort.IsConnectedToWorld)
         {
-            for (var index = 0; index < 3; index++)
+            for (var index = 0; index < 2; index++)
             {
-                mainPort.TryReceiveProvidedItem(
-                    _simulation.CreateItem(BuildPrototypeKind.Assembler, FactoryItemKind.Gear),
-                    mainPort.Cell - FactoryDirection.ToCellOffset(mainPort.Facing),
+                inputPort.TryReceiveProvidedItem(
+                    _simulation.CreateItem(
+                        FactorySiteKind.World,
+                        BuildPrototypeKind.MiningDrill,
+                        FactoryItemKind.IronOre,
+                        FactoryCargoForm.WorldBulk,
+                        "bulk-iron-ore-standard"),
+                    inputPort.WorldAdjacentCell,
                     _simulation);
             }
         }

@@ -262,12 +262,18 @@ public static partial class FactoryItemCatalog
 
     public static FactoryTransportVisualProfile ResolveVisualProfile(FactoryItem item)
     {
-        return ResolveVisualProfile(item.ItemKind, item.CargoForm);
+        return ResolveVisualProfile(item, ResolveDefaultVisualContext(item.CargoForm));
     }
 
     public static FactoryTransportVisualProfile ResolveVisualProfile(FactoryItem item, FactoryTransportVisualContext visualContext)
     {
-        return ResolveVisualProfile(item.ItemKind, item.CargoForm, visualContext);
+        if (item.CargoForm == FactoryCargoForm.InteriorFeed)
+        {
+            return ResolveVisualProfile(item.ItemKind, item.CargoForm, visualContext);
+        }
+
+        var definition = GetDefinition(item.ItemKind);
+        return CreateWorldBundleProfile(item, definition.VisualProfile, visualContext);
     }
 
     public static FactoryTransportVisualProfile ResolveVisualProfile(FactoryItemKind itemKind, FactoryCargoForm cargoForm)
@@ -284,38 +290,54 @@ public static partial class FactoryItemCatalog
         var baseProfile = definition.VisualProfile;
         return cargoForm switch
             {
-            FactoryCargoForm.WorldBulk => new FactoryTransportVisualProfile(
-                GetAccentColor(itemKind, cargoForm),
-                placeholderScale: MaxVector3(baseProfile.PlaceholderScale * new Vector3(2.45f, 2.20f, 2.45f), new Vector3(0.48f, 0.42f, 0.48f)),
-                texturedMeshScale: MaxVector3(baseProfile.TexturedMeshScale * new Vector3(2.30f, 2.05f, 2.30f), new Vector3(0.44f, 0.38f, 0.44f)),
-                billboardScale: MaxVector2(baseProfile.BillboardScale * 1.70f, new Vector2(0.54f, 0.54f)),
-                texture: baseProfile.Texture,
-                modelFactory: baseProfile.ModelFactory,
-                allowTexturedMeshFallback: baseProfile.AllowTexturedMeshFallback,
-                allowBillboardFallback: baseProfile.AllowBillboardFallback,
-                profileId: $"world-bulk:{itemKind}:{visualContext}",
-                presentationStandard: FactoryCargoPresentationStandard.WorldPayload,
-                visualContext: visualContext == FactoryTransportVisualContext.Default
-                    ? FactoryTransportVisualContext.WorldRoute
-                    : visualContext,
-                keepsWorldScaleInsideCabin: true),
+            FactoryCargoForm.WorldBulk => CreateWorldBundleProfile(
+                new FactoryItem(-1, BuildPrototypeKind.Storage, itemKind, cargoForm),
+                baseProfile,
+                visualContext),
             FactoryCargoForm.InteriorFeed => CreateInteriorFeedProfile(itemKind, baseProfile, visualContext),
-            _ => new FactoryTransportVisualProfile(
-                GetAccentColor(itemKind, cargoForm),
-                placeholderScale: MaxVector3(baseProfile.PlaceholderScale * new Vector3(2.12f, 1.92f, 2.12f), new Vector3(0.42f, 0.34f, 0.42f)),
-                texturedMeshScale: MaxVector3(baseProfile.TexturedMeshScale * new Vector3(2.04f, 1.82f, 2.04f), new Vector3(0.40f, 0.32f, 0.40f)),
-                billboardScale: MaxVector2(baseProfile.BillboardScale * 1.56f, new Vector2(0.48f, 0.42f)),
-                texture: baseProfile.Texture,
-                modelFactory: baseProfile.ModelFactory,
-                allowTexturedMeshFallback: baseProfile.AllowTexturedMeshFallback,
-                allowBillboardFallback: baseProfile.AllowBillboardFallback,
-                profileId: $"world-packed:{itemKind}:{visualContext}",
-                presentationStandard: FactoryCargoPresentationStandard.WorldPayload,
-                visualContext: visualContext == FactoryTransportVisualContext.Default
-                    ? FactoryTransportVisualContext.WorldRoute
-                    : visualContext,
-                keepsWorldScaleInsideCabin: true)
+            _ => CreateWorldBundleProfile(
+                new FactoryItem(-1, BuildPrototypeKind.Storage, itemKind, cargoForm),
+                baseProfile,
+                visualContext)
         };
+    }
+
+    private static FactoryTransportVisualProfile CreateWorldBundleProfile(
+        FactoryItem item,
+        FactoryTransportVisualProfile baseProfile,
+        FactoryTransportVisualContext visualContext)
+    {
+        var tier = FactoryBundleCatalog.ResolveSizeTier(item);
+        var resolvedContext = visualContext == FactoryTransportVisualContext.Default
+            ? FactoryTransportVisualContext.WorldRoute
+            : visualContext;
+        var sizeMultiplier = tier switch
+        {
+            FactoryBundleSizeTier.Compact => new Vector3(1.86f, 1.54f, 1.86f),
+            FactoryBundleSizeTier.Wide => new Vector3(2.78f, 1.88f, 2.38f),
+            _ => new Vector3(2.28f, 1.72f, 2.10f)
+        };
+        var minimumScale = tier switch
+        {
+            FactoryBundleSizeTier.Compact => new Vector3(0.34f, 0.26f, 0.34f),
+            FactoryBundleSizeTier.Wide => new Vector3(0.60f, 0.42f, 0.52f),
+            _ => new Vector3(0.46f, 0.34f, 0.42f)
+        };
+
+        return new FactoryTransportVisualProfile(
+            GetAccentColor(item.ItemKind, item.CargoForm),
+            placeholderScale: MaxVector3(baseProfile.PlaceholderScale * sizeMultiplier, minimumScale),
+            texturedMeshScale: MaxVector3(baseProfile.TexturedMeshScale * sizeMultiplier, minimumScale),
+            billboardScale: MaxVector2(baseProfile.BillboardScale * 1.12f, new Vector2(0.42f, 0.36f)),
+            texture: baseProfile.Texture,
+            modelFactory: null,
+            allowTexturedMeshFallback: true,
+            allowBillboardFallback: false,
+            profileId: $"world-bundle:{item.BundleTemplateId}:{item.ItemKind}:{resolvedContext}:{tier}",
+            preferModelPrimary: false,
+            presentationStandard: FactoryCargoPresentationStandard.WorldPayload,
+            visualContext: resolvedContext,
+            keepsWorldScaleInsideCabin: true);
     }
 
     private static FactoryTransportVisualProfile CreateInteriorFeedProfile(
@@ -702,6 +724,34 @@ public static class FactoryTransportVisualFactory
     {
         var definition = FactoryItemCatalog.GetDefinition(itemKind);
         return ResolveDescriptorSet(itemKind, definition.VisualProfile, cellSize);
+    }
+
+    public static float EstimateOccupiedLengthProgress(FactoryTransportRenderDescriptorSet descriptors, float cellSize)
+    {
+        return EstimateOccupiedLengthProgress(descriptors.Primary, cellSize);
+    }
+
+    public static float EstimateOccupiedLengthProgress(FactoryTransportRenderDescriptor descriptor, float cellSize)
+    {
+        if (cellSize <= 0.001f)
+        {
+            return 0.18f;
+        }
+
+        var footprintWorldUnits = descriptor.Mode switch
+        {
+            FactoryTransportRenderMode.Billboard => Mathf.Max(descriptor.BillboardScale.X, descriptor.BillboardScale.Y * 0.58f),
+            _ => Mathf.Max(descriptor.MeshScale.X, descriptor.MeshScale.Z)
+        };
+
+        if (descriptor.PresentationStandard == FactoryCargoPresentationStandard.WorldPayload)
+        {
+            footprintWorldUnits = Mathf.Max(footprintWorldUnits + (cellSize * 0.08f), cellSize * 0.44f);
+            return Mathf.Clamp(footprintWorldUnits / cellSize, 0.24f, 0.92f);
+        }
+
+        footprintWorldUnits = Mathf.Max(footprintWorldUnits, cellSize * 0.14f);
+        return Mathf.Clamp(footprintWorldUnits / cellSize, 0.14f, 0.52f);
     }
 
     public static Mesh GetSharedMesh(FactoryTransportRenderDescriptor descriptor)

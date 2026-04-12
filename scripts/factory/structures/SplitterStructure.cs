@@ -40,6 +40,11 @@ public partial class SplitterStructure : FlowTransportStructure
         var leftCell = GetLeftOutputCell();
         var rightCell = GetRightOutputCell();
         var preferLeft = _sendLeftNext;
+        if (!FactoryCargoRules.StructureAcceptsItem(Kind, FactoryIndustrialStandards.ResolveSiteKind(Site), item))
+        {
+            targetCell = preferLeft ? leftCell : rightCell;
+            return false;
+        }
 
         if (CanConnectTo(leftCell) && CanConnectTo(rightCell))
         {

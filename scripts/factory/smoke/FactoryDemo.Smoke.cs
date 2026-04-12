@@ -786,8 +786,8 @@ public partial class FactoryDemo
     private bool RunItemVisualProfileSmoke()
     {
         var placeholderVisual = FactoryTransportVisualFactory.CreateVisual(new FactoryItem(-101, BuildPrototypeKind.MiningDrill, FactoryItemKind.IronOre), FactoryConstants.CellSize);
-        var billboardVisual = FactoryTransportVisualFactory.CreateVisual(new FactoryItem(-102, BuildPrototypeKind.Assembler, FactoryItemKind.CopperWire), FactoryConstants.CellSize);
-        var ammoVisual = FactoryTransportVisualFactory.CreateVisual(new FactoryItem(-103, BuildPrototypeKind.Assembler, FactoryItemKind.AmmoMagazine), FactoryConstants.CellSize);
+        var billboardVisual = FactoryTransportVisualFactory.CreateVisual(FactoryItemKind.CopperOre, FactoryConstants.CellSize);
+        var ammoVisual = FactoryTransportVisualFactory.CreateVisual(FactoryItemKind.AmmoMagazine, FactoryConstants.CellSize);
         var worldBulkItem = new FactoryItem(-104, BuildPrototypeKind.MiningDrill, FactoryItemKind.IronOre, FactoryCargoForm.WorldBulk);
         var worldPackedItem = new FactoryItem(-105, BuildPrototypeKind.CargoPacker, FactoryItemKind.IronOre, FactoryCargoForm.WorldPacked);
         var interiorFeedItem = new FactoryItem(-106, BuildPrototypeKind.CargoUnpacker, FactoryItemKind.IronOre, FactoryCargoForm.InteriorFeed);
@@ -800,6 +800,9 @@ public partial class FactoryDemo
         var worldPackedDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(worldPackedItem, FactoryConstants.CellSize);
         var interiorFeedDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(interiorFeedItem, FactoryConstants.CellSize);
         var interiorConversionDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(worldPackedItem, FactoryConstants.CellSize, FactoryTransportVisualContext.InteriorConversion);
+        var worldBulkOccupiedLength = FactoryTransportVisualFactory.EstimateOccupiedLengthProgress(worldBulkDescriptors, FactoryConstants.CellSize);
+        var worldPackedOccupiedLength = FactoryTransportVisualFactory.EstimateOccupiedLengthProgress(worldPackedDescriptors, FactoryConstants.CellSize);
+        var interiorFeedOccupiedLength = FactoryTransportVisualFactory.EstimateOccupiedLengthProgress(interiorFeedDescriptors, FactoryConstants.CellSize);
 
         var placeholderMesh = FindFirstMesh(placeholderVisual);
         var billboardMesh = FindFirstMesh(billboardVisual);
@@ -837,12 +840,18 @@ public partial class FactoryDemo
             && interiorFeedDescriptors.Primary.PresentationStandard == FactoryCargoPresentationStandard.CabinCarrier
             && interiorFeedDescriptors.Primary.VisualContext == FactoryTransportVisualContext.InteriorRail
             && worldPackedDescriptors.Primary.MeshScale.X >= interiorFeedDescriptors.Primary.MeshScale.X * 1.8f;
+        var transportFootprintsResolved =
+            worldBulkOccupiedLength >= worldPackedOccupiedLength
+            && worldPackedOccupiedLength > interiorFeedOccupiedLength
+            && worldPackedOccupiedLength >= ItemSpacingThresholdForWorldCargo()
+            && interiorFeedOccupiedLength >= 0.14f;
 
         placeholderVisual.QueueFree();
         billboardVisual.QueueFree();
         ammoVisual.QueueFree();
 
         return placeholderMesh?.Mesh is BoxMesh
+            && placeholderMesh.CastShadow == GeometryInstance3D.ShadowCastingSetting.Off
             && billboardMesh?.Mesh is QuadMesh
             && billboardMesh.MaterialOverride is StandardMaterial3D billboardMaterial
             && billboardMaterial.BillboardMode == BaseMaterial3D.BillboardModeEnum.Enabled
@@ -854,14 +863,22 @@ public partial class FactoryDemo
             && ammoDescriptors.Primary.Mode == FactoryTransportRenderMode.Billboard
             && ammoDescriptors.Primary.IsBatchable
             && ammoDescriptors.ResolveBatchableForTier(FactoryTransportRenderTier.Near).Mode == FactoryTransportRenderMode.Billboard
+            && worldBulkDescriptors.Primary.Mode == FactoryTransportRenderMode.TexturedBox
+            && worldPackedDescriptors.Primary.Mode == FactoryTransportRenderMode.TexturedBox
             && worldBulkDescriptors.Primary.BatchKey != worldPackedDescriptors.Primary.BatchKey
             && worldPackedDescriptors.Primary.BatchKey != interiorFeedDescriptors.Primary.BatchKey
             && interiorCarrierResolved
             && cargoContextMetadataResolved
+            && transportFootprintsResolved
             && distinctBaselineColors
             && cargoDisplayNamesDiffer
             && cargoProfilesDiffer
             && iconsPresent;
+    }
+
+    private static float ItemSpacingThresholdForWorldCargo()
+    {
+        return 0.42f;
     }
 
     private async Task<(bool TelemetryVerified, bool CullingVerified)> RunTransportRenderSmoke()

@@ -131,7 +131,7 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
     protected override bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell)
     {
         targetCell = GetOutputCell();
-        return true;
+        return FactoryCargoRules.StructureAcceptsItem(Kind, FactoryIndustrialStandards.ResolveSiteKind(Site), item);
     }
 
     private void RebuildTrackVisuals()

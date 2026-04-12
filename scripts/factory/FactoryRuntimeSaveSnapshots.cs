@@ -52,22 +52,52 @@ public sealed class FactoryRuntimeItemSnapshot
     public BuildPrototypeKind SourceKind { get; set; }
     public FactoryItemKind ItemKind { get; set; }
     public FactoryCargoForm CargoForm { get; set; }
+    public string BundleTemplateId { get; set; } = string.Empty;
+    public List<FactoryRuntimeBundleContentSnapshot> BundleContents { get; set; } = new();
 
     public FactoryItem ToItem(SimulationController simulation)
     {
-        return simulation.CreateItemWithId(Id, SourceKind, ItemKind, CargoForm);
+        var contents = new Dictionary<FactoryItemKind, int>();
+        for (var index = 0; index < BundleContents.Count; index++)
+        {
+            var entry = BundleContents[index];
+            if (entry.Count > 0)
+            {
+                contents[entry.ItemKind] = entry.Count;
+            }
+        }
+
+        return simulation.CreateItemWithId(Id, SourceKind, ItemKind, CargoForm, BundleTemplateId, contents);
     }
 
     public static FactoryRuntimeItemSnapshot FromItem(FactoryItem item)
     {
+        var bundleContents = new List<FactoryRuntimeBundleContentSnapshot>(item.BundleContents.Count);
+        foreach (var pair in item.BundleContents)
+        {
+            bundleContents.Add(new FactoryRuntimeBundleContentSnapshot
+            {
+                ItemKind = pair.Key,
+                Count = pair.Value
+            });
+        }
+
         return new FactoryRuntimeItemSnapshot
         {
             Id = item.Id,
             SourceKind = item.SourceKind,
             ItemKind = item.ItemKind,
-            CargoForm = item.CargoForm
+            CargoForm = item.CargoForm,
+            BundleTemplateId = item.BundleTemplateId,
+            BundleContents = bundleContents
         };
     }
+}
+
+public sealed class FactoryRuntimeBundleContentSnapshot
+{
+    public FactoryItemKind ItemKind { get; set; }
+    public int Count { get; set; }
 }
 
 public sealed class FactoryRuntimeInventoryStackSnapshot

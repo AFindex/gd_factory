@@ -28,6 +28,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         public int LaneKey { get; set; }
         public float Position { get; set; }
         public float PreviousPosition { get; set; }
+        public float OccupiedLengthProgress { get; set; }
     }
 
     private readonly List<TransitItemState> _items = new();
@@ -54,20 +55,22 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
             return false;
         }
 
+        var renderDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(item, CellSize);
         var laneKey = GetTransitLaneKey(sourceCell, targetCell);
         var tailIndex = FindLastItemIndexInLane(laneKey);
-        if (tailIndex >= 0 && _items[tailIndex].Position < ItemSpacing)
+        var occupiedLengthProgress = ResolveOccupiedLengthProgress(renderDescriptors);
+        if (!HasSpawnClearance(tailIndex, occupiedLengthProgress))
         {
             return false;
         }
 
-        var renderDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(item, CellSize);
         var legacyVisual = GetTransportRenderManager() is null ? CreateTransitVisual(item) : null;
         var state = new TransitItemState(item, renderDescriptors, sourceCell, targetCell, legacyVisual)
         {
             LaneKey = laneKey,
             Position = 0.0f,
-            PreviousPosition = 0.0f
+            PreviousPosition = 0.0f,
+            OccupiedLengthProgress = occupiedLengthProgress
         };
         if (state.LegacyVisual is not null)
         {
@@ -93,7 +96,8 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
 
         var laneKey = GetTransitLaneKey(sourceCell, targetCell);
         var tailIndex = FindLastItemIndexInLane(laneKey);
-        return tailIndex < 0 || _items[tailIndex].Position >= ItemSpacing;
+        var occupiedLengthProgress = ResolveOccupiedLengthProgress(FactoryTransportVisualFactory.ResolveDescriptorSet(item, CellSize));
+        return HasSpawnClearance(tailIndex, occupiedLengthProgress);
     }
 
     public bool TryPeekProvidedItem(Vector2I requesterCell, SimulationController simulation, out FactoryItem? item)
@@ -150,7 +154,8 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
 
         var laneKey = GetTransitLaneKey(sourceCell, targetCell);
         var tailIndex = FindLastItemIndexInLane(laneKey);
-        return tailIndex < 0 || _items[tailIndex].Position >= ItemSpacing;
+        var occupiedLengthProgress = ResolveOccupiedLengthProgress(FactoryTransportVisualFactory.ResolveDescriptorSet(item, CellSize));
+        return HasSpawnClearance(tailIndex, occupiedLengthProgress);
     }
 
     public bool TryReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
@@ -166,19 +171,21 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         }
 
         var laneKey = GetTransitLaneKey(sourceCell, targetCell);
+        var renderDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(item, CellSize);
         var tailIndex = FindLastItemIndexInLane(laneKey);
-        if (tailIndex >= 0 && _items[tailIndex].Position < ItemSpacing)
+        var occupiedLengthProgress = ResolveOccupiedLengthProgress(renderDescriptors);
+        if (!HasSpawnClearance(tailIndex, occupiedLengthProgress))
         {
             return false;
         }
 
-        var renderDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(item, CellSize);
         var legacyVisual = GetTransportRenderManager() is null ? CreateTransitVisual(item) : null;
         var state = new TransitItemState(item, renderDescriptors, sourceCell, targetCell, legacyVisual)
         {
             LaneKey = laneKey,
             Position = 0.0f,
-            PreviousPosition = 0.0f
+            PreviousPosition = 0.0f,
+            OccupiedLengthProgress = occupiedLengthProgress
         };
         if (state.LegacyVisual is not null)
         {
@@ -230,7 +237,9 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
             }
             else
             {
-                desired = Mathf.Min(desired, _items[previousLaneIndex].Position - ItemSpacing);
+                desired = Mathf.Min(
+                    desired,
+                    _items[previousLaneIndex].Position - ResolvePairSpacing(_items[previousLaneIndex], itemState));
             }
 
             itemState.Position = Mathf.Clamp(desired, 0.0f, 1.0f);
@@ -420,7 +429,8 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
             {
                 LaneKey = transit.LaneKey,
                 Position = Mathf.Clamp(transit.Position, 0.0f, 1.0f),
-                PreviousPosition = Mathf.Clamp(transit.PreviousPosition, 0.0f, 1.0f)
+                PreviousPosition = Mathf.Clamp(transit.PreviousPosition, 0.0f, 1.0f),
+                OccupiedLengthProgress = ResolveOccupiedLengthProgress(renderDescriptors)
             };
 
             if (state.LegacyVisual is not null)
@@ -456,6 +466,31 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         }
 
         return -1;
+    }
+
+    private float ResolveOccupiedLengthProgress(FactoryTransportRenderDescriptorSet renderDescriptors)
+    {
+        return FactoryTransportVisualFactory.EstimateOccupiedLengthProgress(renderDescriptors, CellSize);
+    }
+
+    private bool HasSpawnClearance(int tailIndex, float incomingOccupiedLengthProgress)
+    {
+        return tailIndex < 0
+            || _items[tailIndex].Position >= ResolveRequiredSpacing(_items[tailIndex].OccupiedLengthProgress, incomingOccupiedLengthProgress);
+    }
+
+    private float ResolvePairSpacing(TransitItemState leadingState, TransitItemState trailingState)
+    {
+        return ResolveRequiredSpacing(leadingState.OccupiedLengthProgress, trailingState.OccupiedLengthProgress);
+    }
+
+    private static float ResolveRequiredSpacing(float leadingOccupiedLengthProgress, float trailingOccupiedLengthProgress)
+    {
+        var dominantLength = Mathf.Max(leadingOccupiedLengthProgress, trailingOccupiedLengthProgress);
+        return Mathf.Clamp(
+            dominantLength + 0.06f,
+            0.08f,
+            0.98f);
     }
 
     private bool TryFindProvidedStateIndex(Vector2I requesterCell, out int stateIndex)
