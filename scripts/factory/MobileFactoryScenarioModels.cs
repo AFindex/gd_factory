@@ -3,16 +3,18 @@ using System.Collections.Generic;
 
 public readonly struct FactoryPlacementSpec
 {
-    public FactoryPlacementSpec(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
+    public FactoryPlacementSpec(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing, string? recipeId = null)
     {
         Kind = kind;
         Cell = cell;
         Facing = facing;
+        RecipeId = recipeId;
     }
 
     public BuildPrototypeKind Kind { get; }
     public Vector2I Cell { get; }
     public FacingDirection Facing { get; }
+    public string? RecipeId { get; }
 }
 
 public sealed class MobileFactoryInteriorPreset

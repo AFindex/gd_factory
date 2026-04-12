@@ -184,7 +184,8 @@ public partial class MobileFactoryDemo
         var cabinPresentationVerified =
             _mobileFactory.TryGetInteriorStructure(new Vector2I(1, 3), out unpackerStructure)
             && unpackerStructure is CargoUnpackerStructure
-            && CountNamedNodes(unpackerStructure, "UnpackerChamberShell") > 0
+            && CountNamedNodes(unpackerStructure, "UnpackerChamberBaseSkid") > 0
+            && CountNamedNodes(unpackerStructure, "UnpackerCradle") > 0
             && CountNamedNodes(unpackerStructure, "ProcessingPayloadAnchor") > 0
             && _mobileFactory.TryGetInteriorStructure(new Vector2I(5, 3), out var conversionBufferStructure)
             && conversionBufferStructure is TransferBufferStructure
@@ -192,7 +193,8 @@ public partial class MobileFactoryDemo
             && CountNamedNodes(conversionBufferStructure, "BufferPayloadAnchor") > 0
             && _mobileFactory.TryGetInteriorStructure(new Vector2I(6, 3), out packerStructure)
             && packerStructure is CargoPackerStructure
-            && CountNamedNodes(packerStructure, "PackerChamberShell") > 0
+            && CountNamedNodes(packerStructure, "PackerChamberBaseSkid") > 0
+            && CountNamedNodes(packerStructure, "PackerCompressionDeck") > 0
             && CountNamedNodes(packerStructure, "DispatchPayloadAnchor") > 0
             &&
             _mobileFactory.TryGetInteriorStructure(FocusedSmelterCell, out var smelterStructure)
@@ -293,15 +295,21 @@ public partial class MobileFactoryDemo
             {
                 boundaryInterfaceVerified |= CountNamedNodes(outputAttachment, "OutputLatch") > 0
                     && CountNamedNodes(outputAttachment, "HullMouth") > 0
-                    && CountNamedNodes(outputAttachment, "BoundaryHandoffCradle") > 0;
+                    && CountNamedNodes(outputAttachment, "BoundaryHandoffCradle") > 0
+                    && CountNamedNodes(outputAttachment, "BoundaryDeckRailNorth") > 0;
             }
             else if (attachment is MobileFactoryInputPortStructure inputAttachment)
             {
                 boundaryInterfaceVerified |= CountNamedNodes(inputAttachment, "InputReceiver") > 0
                     && CountNamedNodes(inputAttachment, "HullMouth") > 0
-                    && CountNamedNodes(inputAttachment, "BoundaryHandoffCradle") > 0;
+                    && CountNamedNodes(inputAttachment, "BoundaryHandoffCradle") > 0
+                    && CountNamedNodes(inputAttachment, "BoundaryDeckRailNorth") > 0;
             }
         }
+        var boundaryConnectorFlowVerified = _structureRoot is not null
+            && CountNamedNodes(_structureRoot, "ConnectorTrackDeck") > 0
+            && CountNamedNodes(_structureRoot, "ConnectorTrackRailNorth") > 0
+            && CountNamedNodes(_structureRoot, "TransitPayloadAnchor") > 0;
         var miniatureSyncedDeployed = placedStructure is not null
             && placedStructure.GlobalPosition.DistanceTo(_mobileFactory.InteriorSite.CellToWorld(new Vector2I(2, 0))) < 0.05f;
         PrimeFocusedOutputPorts(_mobileFactory);
@@ -341,9 +349,9 @@ public partial class MobileFactoryDemo
         await ToSignal(GetTree().CreateTimer(10.0f), SceneTreeTimer.SignalName.Timeout);
         var secondDelivered = GetScenarioDeliveryTotal() - secondDeliveredBaseline;
 
-        if (!startsInPlayerMode || !playerHudReady || !playerMoved || !cameraFollowedPlayer || !debugWorldSupportVerified || !playerWorldPlacementWorked || !commandActive || !cameraLockedInCommand || !returnedToPlayerFromCommand || !observerActive || !returnedToPlayerFromObserver || !deployPreviewEntered || !returnedToPlayerFromDeploy || !editRestoresPlayerMode || !editRestoresFactoryMode || !editRestoresObserverMode || !editRestoresDeployMode || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !workspaceNavigationVerified || !operationPanelHover || !editorViewportHover || !worldHover || !detailWindowInTransit || !worldDetailInTransit || !blueprintWorkflowInTransit || !multiCellInteriorVerified || !debugInteriorSupportVerified || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !cabinPresentationVerified || !bundleTemplateChainConfigured || !worldBundleBlockedOnInteriorBelt || !placedSplitterPresentationVerified || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !mapFormatVerified || !bundleTemplateRulesVerified || !contextualRotateWorks || !previewArrowTracksFacing || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !boundaryInterfaceVerified || !miniatureSyncedDeployed || !inputDeliveredWhileDeployed || firstDelivered <= 0 || !turretTrackedThreats || !mobileCombatActive || !recalled || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0)
+        if (!startsInPlayerMode || !playerHudReady || !playerMoved || !cameraFollowedPlayer || !debugWorldSupportVerified || !playerWorldPlacementWorked || !commandActive || !cameraLockedInCommand || !returnedToPlayerFromCommand || !observerActive || !returnedToPlayerFromObserver || !deployPreviewEntered || !returnedToPlayerFromDeploy || !editRestoresPlayerMode || !editRestoresFactoryMode || !editRestoresObserverMode || !editRestoresDeployMode || !interiorRunsInTransit || !movedInTransit || !openedInTransit || !workspaceNavigationVerified || !operationPanelHover || !editorViewportHover || !worldHover || !detailWindowInTransit || !worldDetailInTransit || !blueprintWorkflowInTransit || !multiCellInteriorVerified || !debugInteriorSupportVerified || !placedInterior || !interiorPlacedExists || !placedInteriorSink || !interiorSinkExists || !cabinPresentationVerified || !bundleTemplateChainConfigured || !worldBundleBlockedOnInteriorBelt || !placedSplitterPresentationVerified || !miniatureSyncedInTransit || !inputBlockedInTransit || !blockedDeploy || !edgeBlockedDeploy || !facingAwareCells || !mapFormatVerified || !bundleTemplateRulesVerified || !contextualRotateWorks || !previewArrowTracksFacing || !firstDeploy || !moveRejectedWhileDeployed || !openedWhileDeployed || !portConnected || !portOverlayConnected || !boundaryInterfaceVerified || !boundaryConnectorFlowVerified || !miniatureSyncedDeployed || !inputDeliveredWhileDeployed || firstDelivered <= 0 || !turretTrackedThreats || !mobileCombatActive || !recalled || !stayedInPlaceAfterReturn || !reservationsReleased || !secondDeploy || secondDelivered <= 0)
         {
-            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsPlayer={startsInPlayerMode} playerHudReady={playerHudReady} playerMoved={playerMoved} cameraFollowedPlayer={cameraFollowedPlayer} debugWorldSupport={debugWorldSupportVerified} playerWorldPlacementWorked={playerWorldPlacementWorked} commandActive={commandActive} cameraLocked={cameraLockedInCommand} returnedPlayerFromCommand={returnedToPlayerFromCommand} observerActive={observerActive} observerCamera={observerCameraActive} returnedPlayerFromObserver={returnedToPlayerFromObserver} deployPreviewEntered={deployPreviewEntered} returnedPlayerFromDeploy={returnedToPlayerFromDeploy} editRestoresPlayer={editRestoresPlayerMode} editRestoresFactory={editRestoresFactoryMode} editRestoresObserver={editRestoresObserverMode} editRestoresDeploy={editRestoresDeployMode} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} workspaceNavigation={workspaceNavigationVerified} operationHover={operationPanelHover} viewportHover={editorViewportHover} worldHover={worldHover} detailWindow={detailWindowInTransit} worldDetail={worldDetailInTransit} blueprintWorkflow={blueprintWorkflowInTransit} multiCellInterior={multiCellInteriorVerified} debugInteriorSupport={debugInteriorSupportVerified} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} cabinPresentation={cabinPresentationVerified} bundleTemplateChain={bundleTemplateChainConfigured} worldBundleBlockedOnInteriorBelt={worldBundleBlockedOnInteriorBelt} bundleTemplateRules={bundleTemplateRulesVerified} splitterPresentation={placedSplitterPresentationVerified} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} mapFormat={mapFormatVerified} contextualRotateWorks={contextualRotateWorks} previewArrowTracksFacing={previewArrowTracksFacing} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} boundaryInterface={boundaryInterfaceVerified} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered}");
+            GD.PushError($"MOBILE_FACTORY_SMOKE_FAILED startsPlayer={startsInPlayerMode} playerHudReady={playerHudReady} playerMoved={playerMoved} cameraFollowedPlayer={cameraFollowedPlayer} debugWorldSupport={debugWorldSupportVerified} playerWorldPlacementWorked={playerWorldPlacementWorked} commandActive={commandActive} cameraLocked={cameraLockedInCommand} returnedPlayerFromCommand={returnedToPlayerFromCommand} observerActive={observerActive} observerCamera={observerCameraActive} returnedPlayerFromObserver={returnedToPlayerFromObserver} deployPreviewEntered={deployPreviewEntered} returnedPlayerFromDeploy={returnedToPlayerFromDeploy} editRestoresPlayer={editRestoresPlayerMode} editRestoresFactory={editRestoresFactoryMode} editRestoresObserver={editRestoresObserverMode} editRestoresDeploy={editRestoresDeployMode} interiorTransit={interiorRunsInTransit} movedInTransit={movedInTransit} openedTransit={openedInTransit} workspaceNavigation={workspaceNavigationVerified} operationHover={operationPanelHover} viewportHover={editorViewportHover} worldHover={worldHover} detailWindow={detailWindowInTransit} worldDetail={worldDetailInTransit} blueprintWorkflow={blueprintWorkflowInTransit} multiCellInterior={multiCellInteriorVerified} debugInteriorSupport={debugInteriorSupportVerified} placedInterior={placedInterior} interiorPlacedExists={interiorPlacedExists} placedSink={placedInteriorSink} sinkExists={interiorSinkExists} cabinPresentation={cabinPresentationVerified} bundleTemplateChain={bundleTemplateChainConfigured} worldBundleBlockedOnInteriorBelt={worldBundleBlockedOnInteriorBelt} bundleTemplateRules={bundleTemplateRulesVerified} splitterPresentation={placedSplitterPresentationVerified} miniatureTransit={miniatureSyncedInTransit} inputBlockedInTransit={inputBlockedInTransit} blocked={blockedDeploy} edgeBlocked={edgeBlockedDeploy} facingAware={facingAwareCells} mapFormat={mapFormatVerified} contextualRotateWorks={contextualRotateWorks} previewArrowTracksFacing={previewArrowTracksFacing} firstDeploy={firstDeploy} moveRejected={moveRejectedWhileDeployed} openedDeployed={openedWhileDeployed} portConnected={portConnected} portOverlay={portOverlayConnected} boundaryInterface={boundaryInterfaceVerified} boundaryConnectorFlow={boundaryConnectorFlowVerified} miniatureDeployed={miniatureSyncedDeployed} firstDelivered={firstDelivered} inputAttachmentTransit={inputAttachmentTransit} inputDeliveredWhileDeployed={inputDeliveredWhileDeployed} turretShots={(escortTurret?.ShotsFired ?? -1)} mobileCombatActive={mobileCombatActive} recalled={recalled} blockedOutputActive={blockedOutputActive} stayedInPlaceAfterReturn={stayedInPlaceAfterReturn} released={reservationsReleased} secondDeploy={secondDeploy} secondDelivered={secondDelivered}");
             GetTree().Quit(1);
             return;
         }
@@ -524,6 +532,25 @@ public partial class MobileFactoryDemo
         var packerSpansMultipleCells =
             _mobileFactory.TryGetInteriorStructure(new Vector2I(6, 4), out var packerFootprintStructure)
             && packerFootprintStructure is CargoPackerStructure;
+        var inputPortSpansMultipleCells =
+            _mobileFactory.TryGetInteriorStructure(new Vector2I(0, 4), out var inputPortSecondaryStructure)
+            && inputPortSecondaryStructure is MobileFactoryInputPortStructure;
+        var outputPortSpansMultipleCells =
+            _mobileFactory.TryGetInteriorStructure(new Vector2I(7, 2), out var outputPortUpperStructure)
+            && outputPortUpperStructure is MobileFactoryOutputPortStructure
+            && _mobileFactory.TryGetInteriorStructure(new Vector2I(7, 0), out var outputPortLowerStructure)
+            && outputPortLowerStructure is MobileFactoryOutputPortStructure;
+        var standardUnpackerFootprint = new HashSet<Vector2I>(
+            FactoryStructureFactory
+                .GetFootprint(BuildPrototypeKind.CargoUnpacker, configuration: null, mapRecipeId: "bulk-iron-ore-standard")
+                .ResolveOccupiedCells(new Vector2I(1, 3), FacingDirection.East));
+        var widePackerFootprint = new HashSet<Vector2I>(
+            FactoryStructureFactory
+                .GetFootprint(BuildPrototypeKind.CargoPacker, configuration: null, mapRecipeId: "packed-frontline-sustainment-wide")
+                .ResolveOccupiedCells(new Vector2I(2, 2), FacingDirection.East));
+        var sizeTierFootprintsVerified =
+            standardUnpackerFootprint.SetEquals(new[] { new Vector2I(1, 2), new Vector2I(1, 3), new Vector2I(1, 4) })
+            && widePackerFootprint.SetEquals(new[] { new Vector2I(2, 1), new Vector2I(2, 2), new Vector2I(2, 3), new Vector2I(2, 4) });
         var resolvesFromSecondaryCell = _mobileFactory.TryGetInteriorStructure(secondaryCell, out var structure) && structure is LargeStorageDepotStructure;
         var blockedAtEdge = !_mobileFactory.CanPlaceInterior(BuildPrototypeKind.LargeStorageDepot, edgeAnchor, FacingDirection.East);
         var removedFromSecondaryCell = _mobileFactory.RemoveInteriorStructure(secondaryCell);
@@ -536,6 +563,9 @@ public partial class MobileFactoryDemo
         var replaced = _mobileFactory.PlaceInteriorStructure(BuildPrototypeKind.LargeStorageDepot, anchorCell, FacingDirection.East);
         return unpackerSpansMultipleCells
             && packerSpansMultipleCells
+            && inputPortSpansMultipleCells
+            && outputPortSpansMultipleCells
+            && sizeTierFootprintsVerified
             && resolvesFromSecondaryCell
             && blockedAtEdge
             && removedFromSecondaryCell

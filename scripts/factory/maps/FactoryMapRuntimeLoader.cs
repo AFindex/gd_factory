@@ -131,7 +131,7 @@ public static class FactoryMapRuntimeLoader
             }
             else
             {
-                placements.Add(new FactoryPlacementSpec(entry.Kind, entry.Cell, entry.Facing));
+                placements.Add(new FactoryPlacementSpec(entry.Kind, entry.Cell, entry.Facing, entry.RecipeId));
             }
         }
 

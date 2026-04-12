@@ -185,8 +185,8 @@ public static class MobileFactoryBoundaryAttachmentCatalog
             MobileFactoryAttachmentChannelType.ItemOutput,
             new Color("FB923C"),
             new Color("FED7AA"),
-            new[] { Vector2I.Zero },
-            new[] { Vector2I.Right },
+            new[] { Vector2I.Zero, Vector2I.Up },
+            new[] { Vector2I.Right, Vector2I.Right + Vector2I.Up },
             new[] { new Vector2I(2, 0) }),
         [BuildPrototypeKind.InputPort] = new MobileFactoryBoundaryAttachmentDefinition(
             BuildPrototypeKind.InputPort,
@@ -195,8 +195,8 @@ public static class MobileFactoryBoundaryAttachmentCatalog
             MobileFactoryAttachmentChannelType.ItemInput,
             new Color("60A5FA"),
             new Color("BFDBFE"),
-            new[] { Vector2I.Zero },
-            new[] { Vector2I.Right },
+            new[] { Vector2I.Zero, Vector2I.Up },
+            new[] { Vector2I.Right, Vector2I.Right + Vector2I.Up },
             new[] { new Vector2I(2, 0) }),
         [BuildPrototypeKind.MiningInputPort] = new MobileFactoryBoundaryAttachmentDefinition(
             BuildPrototypeKind.MiningInputPort,

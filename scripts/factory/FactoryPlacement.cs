@@ -19,7 +19,17 @@ public static class FactoryPlacement
 {
     public static IReadOnlyList<Vector2I> ResolveFootprintCells(BuildPrototypeKind kind, Vector2I anchorCell, FacingDirection facing)
     {
-        var footprint = FactoryStructureFactory.GetFootprint(kind);
+        return ResolveFootprintCells(kind, anchorCell, facing, configuration: null, mapRecipeId: null);
+    }
+
+    public static IReadOnlyList<Vector2I> ResolveFootprintCells(
+        BuildPrototypeKind kind,
+        Vector2I anchorCell,
+        FacingDirection facing,
+        IReadOnlyDictionary<string, string>? configuration,
+        string? mapRecipeId = null)
+    {
+        var footprint = FactoryStructureFactory.GetFootprint(kind, configuration, mapRecipeId);
         var cells = new List<Vector2I>();
         foreach (var cell in footprint.ResolveOccupiedCells(anchorCell, facing))
         {

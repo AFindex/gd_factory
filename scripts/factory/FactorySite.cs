@@ -24,18 +24,28 @@ public sealed class GridReservation
 
 public readonly struct FactoryStructurePlacement
 {
-    public FactoryStructurePlacement(IFactorySite site, Vector2I cell, FacingDirection facing, FactoryStructureFootprint? footprint = null)
+    public FactoryStructurePlacement(
+        IFactorySite site,
+        Vector2I cell,
+        FacingDirection facing,
+        FactoryStructureFootprint? footprint = null,
+        IReadOnlyDictionary<string, string>? configuration = null,
+        string? mapRecipeId = null)
     {
         Site = site;
         Cell = cell;
         Facing = facing;
-        Footprint = footprint ?? FactoryStructureFootprint.SingleCell;
+        Footprint = footprint;
+        Configuration = configuration;
+        MapRecipeId = mapRecipeId;
     }
 
     public IFactorySite Site { get; }
     public Vector2I Cell { get; }
     public FacingDirection Facing { get; }
-    public FactoryStructureFootprint Footprint { get; }
+    public FactoryStructureFootprint? Footprint { get; }
+    public IReadOnlyDictionary<string, string>? Configuration { get; }
+    public string? MapRecipeId { get; }
 }
 
 public interface IFactorySite

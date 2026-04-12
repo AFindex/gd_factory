@@ -27,6 +27,9 @@ public sealed class FactoryStructureDefinition
 
 public static class FactoryStructureFactory
 {
+    private const string DefaultUnpackerTemplateId = "bulk-iron-ore-standard";
+    private const string DefaultPackerTemplateId = "packed-gear-compact";
+
     private static readonly FactoryStructureFootprint MultiPortProcessingFootprint = new(
         new[]
         {
@@ -49,8 +52,20 @@ public static class FactoryStructureFactory
             new Vector2I(1, 2),
             new Vector2I(2, 2)
         });
+    private static readonly FactoryStructureFootprint HeavyPortFootprint = new(
+        new[] { Vector2I.Zero, Vector2I.Up },
+        inputOffsetEast: Vector2I.Left,
+        outputOffsetEast: Vector2I.Right);
     private static readonly FactoryStructureFootprint CompactConversionFootprint = new(
         new[] { Vector2I.Zero, Vector2I.Down },
+        inputOffsetEast: Vector2I.Left,
+        outputOffsetEast: Vector2I.Right);
+    private static readonly FactoryStructureFootprint StandardConversionFootprint = new(
+        new[] { Vector2I.Up, Vector2I.Zero, Vector2I.Down },
+        inputOffsetEast: Vector2I.Left,
+        outputOffsetEast: Vector2I.Right);
+    private static readonly FactoryStructureFootprint WideConversionFootprint = new(
+        new[] { Vector2I.Up, Vector2I.Zero, Vector2I.Down, Vector2I.Down * 2 },
         inputOffsetEast: Vector2I.Left,
         outputOffsetEast: Vector2I.Right);
 
@@ -130,8 +145,10 @@ public static class FactoryStructureFactory
             throw new InvalidOperationException(FactoryIndustrialStandards.GetPlacementCompatibilityError(kind, siteKind));
         }
 
+        var resolvedFootprint = placement.Footprint
+            ?? GetFootprint(kind, placement.Configuration, placement.MapRecipeId);
         var structure = definition.Creator();
-        structure.Configure(placement.Site, placement.Cell, placement.Facing, footprint: definition.Footprint);
+        structure.Configure(placement.Site, placement.Cell, placement.Facing, footprint: resolvedFootprint);
         return structure;
     }
 
@@ -155,6 +172,57 @@ public static class FactoryStructureFactory
 
     public static FactoryStructureFootprint GetFootprint(BuildPrototypeKind kind)
     {
-        return GetDefinition(kind).Footprint;
+        return GetFootprint(kind, configuration: null, mapRecipeId: null);
+    }
+
+    public static FactoryStructureFootprint GetFootprint(
+        BuildPrototypeKind kind,
+        IReadOnlyDictionary<string, string>? configuration,
+        string? mapRecipeId = null)
+    {
+        return kind switch
+        {
+            BuildPrototypeKind.CargoUnpacker => ResolveConversionFootprint(
+                ResolveBundleTemplateId(configuration, mapRecipeId, DefaultUnpackerTemplateId)),
+            BuildPrototypeKind.CargoPacker => ResolveConversionFootprint(
+                ResolveBundleTemplateId(configuration, mapRecipeId, DefaultPackerTemplateId)),
+            BuildPrototypeKind.InputPort or BuildPrototypeKind.OutputPort => HeavyPortFootprint,
+            _ => GetDefinition(kind).Footprint
+        };
+    }
+
+    private static string ResolveBundleTemplateId(
+        IReadOnlyDictionary<string, string>? configuration,
+        string? mapRecipeId,
+        string fallbackTemplateId)
+    {
+        if (configuration is not null
+            && configuration.TryGetValue("bundle_template_id", out var configuredTemplateId)
+            && FactoryBundleCatalog.TryGet(configuredTemplateId, out _))
+        {
+            return configuredTemplateId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(mapRecipeId) && FactoryBundleCatalog.TryGet(mapRecipeId, out _))
+        {
+            return mapRecipeId;
+        }
+
+        return fallbackTemplateId;
+    }
+
+    private static FactoryStructureFootprint ResolveConversionFootprint(string templateId)
+    {
+        if (!FactoryBundleCatalog.TryGet(templateId, out var template) || template is null)
+        {
+            return CompactConversionFootprint;
+        }
+
+        return template.SizeTier switch
+        {
+            FactoryBundleSizeTier.Wide => WideConversionFootprint,
+            FactoryBundleSizeTier.Standard => StandardConversionFootprint,
+            _ => CompactConversionFootprint
+        };
     }
 }

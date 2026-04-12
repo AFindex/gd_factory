@@ -594,7 +594,12 @@ public static class FactoryMapValidator
                 throw new InvalidDataException($"Duplicate structure anchor at ({structure.Cell.X}, {structure.Cell.Y}).");
             }
 
-            var footprintCells = FactoryPlacement.ResolveFootprintCells(structure.Kind, structure.Cell, structure.Facing);
+            var footprintCells = FactoryPlacement.ResolveFootprintCells(
+                structure.Kind,
+                structure.Cell,
+                structure.Facing,
+                configuration: null,
+                mapRecipeId: structure.RecipeId);
             var matchedDeposit = false;
             for (var cellIndex = 0; cellIndex < footprintCells.Count; cellIndex++)
             {

@@ -422,6 +422,15 @@ public sealed class MobileFactoryInstance
 
     public bool CanPlaceInterior(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
     {
+        return CanPlaceInterior(kind, cell, facing, configuration: null);
+    }
+
+    public bool CanPlaceInterior(
+        BuildPrototypeKind kind,
+        Vector2I cell,
+        FacingDirection facing,
+        IReadOnlyDictionary<string, string>? configuration)
+    {
         var siteKind = FactoryIndustrialStandards.ResolveSiteKind(InteriorSite);
         if (!FactoryIndustrialStandards.IsStructureAllowed(kind, siteKind))
         {
@@ -433,7 +442,7 @@ public sealed class MobileFactoryInstance
             return CanPlaceAttachment(kind, cell, facing);
         }
 
-        var occupiedCells = FactoryPlacement.ResolveFootprintCells(kind, cell, facing);
+        var occupiedCells = FactoryPlacement.ResolveFootprintCells(kind, cell, facing, configuration);
         return InteriorSite.CanPlaceCells(occupiedCells);
     }
 
@@ -467,7 +476,7 @@ public sealed class MobileFactoryInstance
         }
 
         var definition = MobileFactoryBoundaryAttachmentCatalog.Get(kind);
-        interiorCells = MobileFactoryBoundaryAttachmentGeometry.GetInteriorCells(definition, cell, facing);
+        interiorCells = new List<Vector2I>(FactoryPlacement.ResolveFootprintCells(kind, cell, facing));
         boundaryCells = MobileFactoryBoundaryAttachmentGeometry.GetBoundaryCells(definition, cell, facing);
         exteriorCells = MobileFactoryBoundaryAttachmentGeometry.GetExteriorStencilCells(definition, cell, facing);
 
@@ -489,12 +498,23 @@ public sealed class MobileFactoryInstance
 
     public bool PlaceInteriorStructure(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
     {
-        if (!CanPlaceInterior(kind, cell, facing))
+        return PlaceInteriorStructure(kind, cell, facing, configuration: null);
+    }
+
+    public bool PlaceInteriorStructure(
+        BuildPrototypeKind kind,
+        Vector2I cell,
+        FacingDirection facing,
+        IReadOnlyDictionary<string, string>? configuration)
+    {
+        if (!CanPlaceInterior(kind, cell, facing, configuration))
         {
             return false;
         }
 
-        var structure = FactoryStructureFactory.Create(kind, new FactoryStructurePlacement(InteriorSite, cell, facing));
+        var structure = FactoryStructureFactory.Create(
+            kind,
+            new FactoryStructurePlacement(InteriorSite, cell, facing, configuration: configuration));
         RegisterInteriorStructure(structure);
         if (structure is MobileFactoryBoundaryAttachmentStructure attachment)
         {
@@ -716,7 +736,7 @@ public sealed class MobileFactoryInstance
 
             var structure = FactoryStructureFactory.Create(
                 entry.Kind,
-                new FactoryStructurePlacement(InteriorSite, entry.Cell, entry.Facing));
+                new FactoryStructurePlacement(InteriorSite, entry.Cell, entry.Facing, mapRecipeId: entry.RecipeId));
             RegisterInteriorStructure(structure);
             if (structure is MobileFactoryBoundaryAttachmentStructure attachment)
             {
@@ -738,7 +758,7 @@ public sealed class MobileFactoryInstance
 
             RegisterInteriorStructure(FactoryStructureFactory.Create(
                 placement.Kind,
-                new FactoryStructurePlacement(InteriorSite, placement.Cell, placement.Facing)));
+                new FactoryStructurePlacement(InteriorSite, placement.Cell, placement.Facing, mapRecipeId: placement.RecipeId)));
         }
 
         foreach (var attachmentPlacement in preset.AttachmentPlacements)
@@ -1198,6 +1218,45 @@ public sealed class MobileFactoryInstance
         };
         root.AddChild(connector);
 
+        if (projection.Attachment.Kind is BuildPrototypeKind.InputPort or BuildPrototypeKind.OutputPort)
+        {
+            root.AddChild(new MeshInstance3D
+            {
+                Name = "ConnectorTrackDeck",
+                Mesh = new BoxMesh { Size = new Vector3(0.74f, 0.04f, 0.001f) },
+                Position = new Vector3(0.0f, 0.06f, 0.0005f),
+                MaterialOverride = new StandardMaterial3D
+                {
+                    AlbedoColor = projection.Attachment.AttachmentDefinition.Tint.Darkened(0.26f),
+                    Roughness = 0.78f
+                }
+            });
+
+            root.AddChild(new MeshInstance3D
+            {
+                Name = "ConnectorTrackRailNorth",
+                Mesh = new BoxMesh { Size = new Vector3(0.08f, 0.10f, 0.001f) },
+                Position = new Vector3(-0.28f, 0.11f, 0.0005f),
+                MaterialOverride = new StandardMaterial3D
+                {
+                    AlbedoColor = projection.Attachment.AttachmentDefinition.ConnectorColor.Lightened(0.08f),
+                    Roughness = 0.68f
+                }
+            });
+
+            root.AddChild(new MeshInstance3D
+            {
+                Name = "ConnectorTrackRailSouth",
+                Mesh = new BoxMesh { Size = new Vector3(0.08f, 0.10f, 0.001f) },
+                Position = new Vector3(0.28f, 0.11f, 0.0005f),
+                MaterialOverride = new StandardMaterial3D
+                {
+                    AlbedoColor = projection.Attachment.AttachmentDefinition.ConnectorColor.Lightened(0.08f),
+                    Roughness = 0.68f
+                }
+            });
+        }
+
         var endpoint = new MeshInstance3D
         {
             Name = "ConnectorEndpoint",
@@ -1458,6 +1517,32 @@ public sealed class MobileFactoryInstance
             stem.Visible = eased > 0.001f;
         }
 
+        var trackLength = Mathf.Max(0.001f, currentLength + (mouthExtension * 0.26f));
+        var trackCenter = trackLength * 0.5f;
+        var trackDeck = connectorRoot.GetNodeOrNull<MeshInstance3D>("ConnectorTrackDeck");
+        if (trackDeck is not null)
+        {
+            trackDeck.Mesh = new BoxMesh { Size = new Vector3(0.74f, 0.04f, trackLength) };
+            trackDeck.Position = new Vector3(0.0f, 0.06f, trackCenter);
+            trackDeck.Visible = eased > 0.001f;
+        }
+
+        var trackRailNorth = connectorRoot.GetNodeOrNull<MeshInstance3D>("ConnectorTrackRailNorth");
+        if (trackRailNorth is not null)
+        {
+            trackRailNorth.Mesh = new BoxMesh { Size = new Vector3(0.08f, 0.10f, trackLength) };
+            trackRailNorth.Position = new Vector3(-0.28f, 0.11f, trackCenter);
+            trackRailNorth.Visible = eased > 0.001f;
+        }
+
+        var trackRailSouth = connectorRoot.GetNodeOrNull<MeshInstance3D>("ConnectorTrackRailSouth");
+        if (trackRailSouth is not null)
+        {
+            trackRailSouth.Mesh = new BoxMesh { Size = new Vector3(0.08f, 0.10f, trackLength) };
+            trackRailSouth.Position = new Vector3(0.28f, 0.11f, trackCenter);
+            trackRailSouth.Visible = eased > 0.001f;
+        }
+
         var endpoint = connectorRoot.GetNodeOrNull<MeshInstance3D>("ConnectorEndpoint");
         if (endpoint is not null)
         {
@@ -1501,8 +1586,7 @@ public sealed class MobileFactoryInstance
             return false;
         }
 
-        var definition = MobileFactoryBoundaryAttachmentCatalog.Get(kind);
-        var interiorCells = MobileFactoryBoundaryAttachmentGeometry.GetInteriorCells(definition, cell, facing);
+        var interiorCells = FactoryPlacement.ResolveFootprintCells(kind, cell, facing);
         for (var i = 0; i < interiorCells.Count; i++)
         {
             if (!InteriorSite.IsInBounds(interiorCells[i]) || !InteriorSite.CanPlace(interiorCells[i]))

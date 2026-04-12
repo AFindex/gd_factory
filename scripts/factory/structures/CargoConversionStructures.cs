@@ -203,6 +203,52 @@ public abstract partial class FactoryCargoConverterStructure : FactoryStructure,
         return anchor;
     }
 
+    protected void CreateOpenHeavyChamber(
+        string prefix,
+        Vector3 baseSize,
+        float frameHeight,
+        float chamberDepth,
+        Color frameColor,
+        Color accentColor)
+    {
+        CreateBox($"{prefix}BaseSkid", baseSize, frameColor.Darkened(0.24f), new Vector3(0.0f, baseSize.Y * 0.5f, 0.0f));
+        CreateBox(
+            $"{prefix}DeckPlate",
+            new Vector3(baseSize.X * 0.72f, Mathf.Max(CellSize * 0.04f, baseSize.Y * 0.42f), chamberDepth * 0.38f),
+            frameColor.Lightened(0.08f),
+            new Vector3(0.0f, baseSize.Y + 0.02f, 0.0f));
+        CreateBox(
+            $"{prefix}FrameWest",
+            new Vector3(CellSize * 0.10f, frameHeight, chamberDepth * 0.78f),
+            frameColor,
+            new Vector3(-CellSize * 0.34f, frameHeight * 0.5f, 0.0f));
+        CreateBox(
+            $"{prefix}FrameEast",
+            new Vector3(CellSize * 0.10f, frameHeight, chamberDepth * 0.78f),
+            frameColor,
+            new Vector3(CellSize * 0.34f, frameHeight * 0.5f, 0.0f));
+        CreateBox(
+            $"{prefix}ClampRailNorth",
+            new Vector3(CellSize * 0.62f, CellSize * 0.04f, CellSize * 0.08f),
+            accentColor.Lightened(0.06f),
+            new Vector3(0.0f, frameHeight * 0.78f, -chamberDepth * 0.28f));
+        CreateBox(
+            $"{prefix}ClampRailSouth",
+            new Vector3(CellSize * 0.62f, CellSize * 0.04f, CellSize * 0.08f),
+            accentColor.Lightened(0.06f),
+            new Vector3(0.0f, frameHeight * 0.78f, chamberDepth * 0.28f));
+        CreateBox(
+            $"{prefix}RearBrace",
+            new Vector3(CellSize * 0.72f, CellSize * 0.06f, CellSize * 0.08f),
+            accentColor,
+            new Vector3(0.0f, frameHeight * 0.58f, -chamberDepth * 0.36f));
+        CreateBox(
+            $"{prefix}FrontBrace",
+            new Vector3(CellSize * 0.72f, CellSize * 0.05f, CellSize * 0.06f),
+            accentColor.Darkened(0.06f),
+            new Vector3(0.0f, frameHeight * 0.28f, chamberDepth * 0.34f));
+    }
+
     private void SyncPayloadVisual(
         string anchorName,
         ref Node3D? payloadVisual,
@@ -305,11 +351,14 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
     {
         if (_processingBundle is null)
         {
-            yield return $"待机模板：{FactoryBundleCatalog.DescribeTemplate(FactoryBundleCatalog.Get(_preferredTemplateId))}";
+            var template = FactoryBundleCatalog.Get(_preferredTemplateId);
+            yield return $"待机模板：{FactoryBundleCatalog.DescribeTemplate(template)}";
+            yield return $"处理规格：{FactoryBundleCatalog.GetSizeTierLabel(template.SizeTier)}";
             yield break;
         }
 
         yield return $"处理模板：{FactoryBundleCatalog.GetDisplayName(_processingBundle)}";
+        yield return $"处理规格：{FactoryBundleCatalog.GetSizeTierLabel(FactoryBundleCatalog.ResolveSizeTier(_processingBundle))}";
         yield return $"剩余解包：{_pendingManifest.Count} 件舱内小包";
     }
 
@@ -376,18 +425,26 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
     {
         if (SiteKind == FactorySiteKind.Interior)
         {
-            var deckDepth = Mathf.Max(CellSize * 1.34f, Footprint.GetPreviewSize(CellSize, Facing).Y * 0.96f);
-            CreateBox("UnpackerBaseSkid", new Vector3(CellSize * 1.18f, 0.16f, deckDepth), new Color("081626"), new Vector3(0.0f, 0.08f, 0.0f));
-            CreateInteriorModuleShell(this, "UnpackerChamber", new Vector3(CellSize * 0.94f, 0.82f, deckDepth * 0.82f), new Color("12324A"), new Color("7DD3FC"), new Vector3(0.0f, 0.42f, 0.0f));
-            CreateBox("UnpackerMouthFrame", new Vector3(CellSize * 0.18f, 0.46f, deckDepth * 0.72f), new Color("C7EAFE"), new Vector3(-CellSize * 0.40f, 0.34f, 0.0f));
-            CreateBox("UnpackerCradle", new Vector3(CellSize * 0.74f, 0.14f, deckDepth * 0.48f), new Color("0EA5E9"), new Vector3(0.0f, 0.18f, 0.0f));
-            CreateInteriorTray(this, "UnpackerOutfeed", new Vector3(CellSize * 0.36f, 0.10f, CellSize * 0.18f), new Color("0B5A88"), new Color("DBEAFE"), new Vector3(CellSize * 0.42f, 0.16f, 0.0f));
+            var deckDepth = Mathf.Max(CellSize * 1.58f, Footprint.GetPreviewSize(CellSize, Facing).Y * 0.94f);
+            CreateOpenHeavyChamber(
+                "UnpackerChamber",
+                new Vector3(CellSize * 1.22f, 0.14f, deckDepth),
+                frameHeight: 0.86f,
+                chamberDepth: deckDepth,
+                frameColor: new Color("12324A"),
+                accentColor: new Color("7DD3FC"));
+            CreateBox("UnpackerMouthFrame", new Vector3(CellSize * 0.18f, 0.48f, deckDepth * 0.72f), new Color("C7EAFE"), new Vector3(-CellSize * 0.44f, 0.30f, 0.0f));
+            CreateBox("UnpackerCradle", new Vector3(CellSize * 0.82f, 0.12f, deckDepth * 0.52f), new Color("0EA5E9"), new Vector3(0.0f, 0.18f, 0.0f));
+            CreateBox("UnpackerGuideNorth", new Vector3(CellSize * 0.78f, 0.06f, CellSize * 0.06f), new Color("DBEAFE"), new Vector3(0.0f, 0.26f, -deckDepth * 0.22f));
+            CreateBox("UnpackerGuideSouth", new Vector3(CellSize * 0.78f, 0.06f, CellSize * 0.06f), new Color("DBEAFE"), new Vector3(0.0f, 0.26f, deckDepth * 0.22f));
+            CreateInteriorTray(this, "UnpackerOutfeed", new Vector3(CellSize * 0.46f, 0.10f, CellSize * 0.22f), new Color("0B5A88"), new Color("DBEAFE"), new Vector3(CellSize * 0.48f, 0.16f, 0.0f));
             CreateBox("UnpackerClampNorth", new Vector3(CellSize * 0.58f, 0.06f, CellSize * 0.10f), new Color("E0F2FE"), new Vector3(0.0f, 0.60f, -CellSize * 0.26f));
             CreateBox("UnpackerClampSouth", new Vector3(CellSize * 0.58f, 0.06f, CellSize * 0.10f), new Color("E0F2FE"), new Vector3(0.0f, 0.60f, CellSize * 0.26f));
             CreateInteriorIndicatorLight(this, "UnpackerLamp", new Color("7DD3FC"), new Vector3(-CellSize * 0.42f, 0.64f, 0.0f), CellSize * 0.09f);
-            CreatePayloadAnchor("StagingPayloadAnchor", new Vector3(-CellSize * 0.42f, 0.28f, 0.0f));
-            CreatePayloadAnchor("ProcessingPayloadAnchor", new Vector3(0.0f, 0.34f, 0.0f));
-            CreatePayloadAnchor("DispatchPayloadAnchor", new Vector3(CellSize * 0.46f, 0.26f, 0.0f));
+            CreateInteriorLabelPlate(this, "UnpackerTier", "重载", new Color("7DD3FC"), new Vector3(-CellSize * 0.12f, 0.16f, -deckDepth * 0.32f), 1.1f);
+            CreatePayloadAnchor("StagingPayloadAnchor", new Vector3(-CellSize * 0.46f, 0.24f, 0.0f));
+            CreatePayloadAnchor("ProcessingPayloadAnchor", new Vector3(0.0f, 0.28f, 0.0f));
+            CreatePayloadAnchor("DispatchPayloadAnchor", new Vector3(CellSize * 0.52f, 0.24f, 0.0f));
             return;
         }
 
@@ -477,6 +534,7 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
         var template = FactoryBundleCatalog.Get(templateId);
         var packedUnits = CountPackedUnits();
         yield return $"目标模板：{FactoryBundleCatalog.DescribeTemplate(template)}";
+        yield return $"处理规格：{FactoryBundleCatalog.GetSizeTierLabel(template.SizeTier)}";
         yield return $"累计装箱：{packedUnits}/{template.TotalUnits}";
         if (_processingBundle is not null)
         {
@@ -533,17 +591,23 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
     protected override void ApplyMechanicsVisuals()
     {
         var ram = GetNodeOrNull<MeshInstance3D>("PackerCompressionRam");
-        var clamp = GetNodeOrNull<MeshInstance3D>("PackerClampFrame");
+        var clampNorth = GetNodeOrNull<MeshInstance3D>("PackerClampNorth");
+        var clampSouth = GetNodeOrNull<MeshInstance3D>("PackerClampSouth");
         var anchor = GetNodeOrNull<Node3D>("ProcessingPayloadAnchor");
         var ratio = Mathf.Clamp((float)(_processProgress / 1.4f), 0.0f, 1.0f);
         if (ram is not null)
         {
-            ram.Position = new Vector3(0.0f, 0.60f - ratio * CellSize * 0.22f, 0.0f);
+            ram.Position = new Vector3(0.0f, 0.70f - ratio * CellSize * 0.20f, 0.0f);
         }
 
-        if (clamp is not null)
+        if (clampNorth is not null)
         {
-            clamp.Scale = new Vector3(1.0f, 1.0f, 1.0f + ratio * 0.12f);
+            clampNorth.Position = new Vector3(0.0f, 0.42f, (-CellSize * 0.30f) + ratio * CellSize * 0.08f);
+        }
+
+        if (clampSouth is not null)
+        {
+            clampSouth.Position = new Vector3(0.0f, 0.42f, (CellSize * 0.30f) - ratio * CellSize * 0.08f);
         }
 
         if (anchor is not null)
@@ -557,18 +621,29 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
     {
         if (SiteKind == FactorySiteKind.Interior)
         {
-            var deckDepth = Mathf.Max(CellSize * 1.34f, Footprint.GetPreviewSize(CellSize, Facing).Y * 0.96f);
-            CreateBox("PackerBaseSkid", new Vector3(CellSize * 1.18f, 0.16f, deckDepth), new Color("37140A"), new Vector3(0.0f, 0.08f, 0.0f));
-            CreateInteriorModuleShell(this, "PackerChamber", new Vector3(CellSize * 0.94f, 0.82f, deckDepth * 0.82f), new Color("6A240B"), new Color("FDBA74"), new Vector3(0.0f, 0.42f, 0.0f));
-            CreateInteriorTray(this, "PackerInfeed", new Vector3(CellSize * 0.38f, 0.10f, CellSize * 0.18f), new Color("B94A13"), new Color("FED7AA"), new Vector3(-CellSize * 0.40f, 0.16f, 0.0f));
-            CreateBox("PackerCompressionDeck", new Vector3(CellSize * 0.74f, 0.14f, deckDepth * 0.48f), new Color("C2410C"), new Vector3(0.0f, 0.18f, 0.0f));
-            CreateBox("PackerClampFrame", new Vector3(CellSize * 0.68f, 0.42f, deckDepth * 0.44f), new Color("FED7AA"), new Vector3(0.0f, 0.42f, 0.0f));
-            CreateBox("PackerCompressionRam", new Vector3(CellSize * 0.58f, 0.10f, deckDepth * 0.38f), new Color("FFE4C2"), new Vector3(0.0f, 0.60f, 0.0f));
-            CreateBox("PackerExportCradle", new Vector3(CellSize * 0.52f, 0.12f, deckDepth * 0.42f), new Color("FB923C"), new Vector3(CellSize * 0.38f, 0.18f, 0.0f));
+            var deckDepth = Mathf.Max(CellSize * 1.52f, Footprint.GetPreviewSize(CellSize, Facing).Y * 0.94f);
+            CreateOpenHeavyChamber(
+                "PackerChamber",
+                new Vector3(CellSize * 1.22f, 0.14f, deckDepth),
+                frameHeight: 0.84f,
+                chamberDepth: deckDepth,
+                frameColor: new Color("6A240B"),
+                accentColor: new Color("FDBA74"));
+            CreateInteriorTray(this, "PackerInfeed", new Vector3(CellSize * 0.44f, 0.10f, CellSize * 0.20f), new Color("B94A13"), new Color("FED7AA"), new Vector3(-CellSize * 0.46f, 0.16f, 0.0f));
+            CreateBox("PackerCompressionDeck", new Vector3(CellSize * 0.82f, 0.12f, deckDepth * 0.54f), new Color("C2410C"), new Vector3(0.0f, 0.18f, 0.0f));
+            CreateBox("PackerClampNorth", new Vector3(CellSize * 0.78f, 0.08f, CellSize * 0.08f), new Color("FED7AA"), new Vector3(0.0f, 0.42f, -CellSize * 0.30f));
+            CreateBox("PackerClampSouth", new Vector3(CellSize * 0.78f, 0.08f, CellSize * 0.08f), new Color("FED7AA"), new Vector3(0.0f, 0.42f, CellSize * 0.30f));
+            CreateBox("PackerRamColumnWest", new Vector3(CellSize * 0.08f, 0.54f, CellSize * 0.10f), new Color("FCD7AA"), new Vector3(-CellSize * 0.18f, 0.44f, 0.0f));
+            CreateBox("PackerRamColumnEast", new Vector3(CellSize * 0.08f, 0.54f, CellSize * 0.10f), new Color("FCD7AA"), new Vector3(CellSize * 0.18f, 0.44f, 0.0f));
+            CreateBox("PackerCompressionRam", new Vector3(CellSize * 0.22f, 0.14f, CellSize * 0.22f), new Color("FFE4C2"), new Vector3(0.0f, 0.70f, 0.0f));
+            CreateBox("PackerExportCradle", new Vector3(CellSize * 0.60f, 0.12f, deckDepth * 0.40f), new Color("FB923C"), new Vector3(CellSize * 0.44f, 0.18f, 0.0f));
+            CreateBox("PackerGuideNorth", new Vector3(CellSize * 0.78f, 0.06f, CellSize * 0.06f), new Color("FED7AA"), new Vector3(0.0f, 0.26f, -deckDepth * 0.22f));
+            CreateBox("PackerGuideSouth", new Vector3(CellSize * 0.78f, 0.06f, CellSize * 0.06f), new Color("FED7AA"), new Vector3(0.0f, 0.26f, deckDepth * 0.22f));
             CreateInteriorIndicatorLight(this, "PackerLamp", new Color("FB923C"), new Vector3(CellSize * 0.42f, 0.64f, 0.0f), CellSize * 0.09f);
-            CreatePayloadAnchor("StagingPayloadAnchor", new Vector3(-CellSize * 0.42f, 0.24f, 0.0f));
-            CreatePayloadAnchor("ProcessingPayloadAnchor", new Vector3(0.0f, 0.34f, 0.0f));
-            CreatePayloadAnchor("DispatchPayloadAnchor", new Vector3(CellSize * 0.42f, 0.24f, 0.0f));
+            CreateInteriorLabelPlate(this, "PackerTier", "压装", new Color("FB923C"), new Vector3(CellSize * 0.12f, 0.16f, -deckDepth * 0.32f), 1.1f);
+            CreatePayloadAnchor("StagingPayloadAnchor", new Vector3(-CellSize * 0.46f, 0.22f, 0.0f));
+            CreatePayloadAnchor("ProcessingPayloadAnchor", new Vector3(0.0f, 0.28f, 0.0f));
+            CreatePayloadAnchor("DispatchPayloadAnchor", new Vector3(CellSize * 0.46f, 0.24f, 0.0f));
             return;
         }
 
