@@ -470,20 +470,6 @@ public partial class FactoryHud : CanvasLayer
         body.AddChild(CreateValueLabel("默认交互模式下可选中建筑，显式选择原型后才进入建造模式。", FactoryUiTheme.TextSubtle));
 
         body.AddChild(CreateDivider());
-        _modeLabel = CreateValueLabel(string.Empty);
-        _selectedLabel = CreateValueLabel(string.Empty);
-        _selectionTargetLabel = CreateValueLabel(string.Empty);
-        _rotationLabel = CreateValueLabel(string.Empty);
-        _hoverLabel = CreateValueLabel(string.Empty);
-        _previewLabel = CreateValueLabel(string.Empty);
-        body.AddChild(_modeLabel);
-        body.AddChild(_selectedLabel);
-        body.AddChild(_selectionTargetLabel);
-        body.AddChild(_rotationLabel);
-        body.AddChild(_hoverLabel);
-        body.AddChild(_previewLabel);
-
-        body.AddChild(CreateDivider());
         body.AddChild(CreateSectionLabel("建造面板", 12, FactoryUiTheme.Text));
         body.AddChild(CreateValueLabel("按功能拆成页签；多格建筑会保留在各自所属功能分类中。", FactoryUiTheme.TextSubtle));
         BuildSelectionCategories(body);

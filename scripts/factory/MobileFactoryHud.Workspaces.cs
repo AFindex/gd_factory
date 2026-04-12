@@ -103,17 +103,6 @@ public partial class MobileFactoryHud
         AddChild(_overviewCollapseButton);
         RefreshOverviewCollapseButton();
 
-        body.AddChild(CreateDivider());
-        _modeLabel = CreateInfoLabel(string.Empty);
-        _stateLabel = CreateInfoLabel(string.Empty);
-        _hoverLabel = CreateInfoLabel(string.Empty);
-        _previewLabel = CreateInfoLabel(string.Empty);
-        body.AddChild(_modeLabel);
-        body.AddChild(_stateLabel);
-        body.AddChild(_hoverLabel);
-        body.AddChild(_previewLabel);
-
-        body.AddChild(CreateDivider());
         var workspaceHost = new Control();
         workspaceHost.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         workspaceHost.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
@@ -407,11 +396,9 @@ public partial class MobileFactoryHud
         _deliveryLabel = CreateInfoLabel(string.Empty);
         _combatLabel = CreateInfoLabel(string.Empty, 12, FactoryUiTheme.TextSubtle);
         _focusLabel = CreateInfoLabel(string.Empty);
-        _hintLabel = CreateInfoLabel(string.Empty, 11, FactoryUiTheme.TextSubtle);
         body.AddChild(_deliveryLabel);
         body.AddChild(_combatLabel);
         body.AddChild(_focusLabel);
-        body.AddChild(_hintLabel);
         return workspace;
     }
 
@@ -460,8 +447,6 @@ public partial class MobileFactoryHud
 
         BuildWorldBuildToolbar(body);
 
-        body.AddChild(CreateDivider());
-        body.AddChild(CreateInfoLabel("提示：点击大世界里的建筑可打开详细面板，点击矿区可查看矿物详情；切到内部编辑后，世界选中仍会保留。", 11, FactoryUiTheme.TextSubtle));
         return workspace;
     }
 
@@ -474,11 +459,9 @@ public partial class MobileFactoryHud
         _diagnosticsDeliveryLabel = CreateInfoLabel(string.Empty);
         _diagnosticsCombatLabel = CreateInfoLabel(string.Empty, 12, FactoryUiTheme.TextSubtle);
         _diagnosticsFocusLabel = CreateInfoLabel(string.Empty);
-        _diagnosticsHintLabel = CreateInfoLabel(string.Empty, 11, FactoryUiTheme.TextSubtle);
         body.AddChild(_diagnosticsDeliveryLabel);
         body.AddChild(_diagnosticsCombatLabel);
         body.AddChild(_diagnosticsFocusLabel);
-        body.AddChild(_diagnosticsHintLabel);
         return workspace;
     }
 
@@ -602,13 +585,11 @@ public partial class MobileFactoryHud
         _testingSelectionTargetLabel = CreateEditorLabel("[TARGET] 验证目标：未选中建筑", 11, FactoryUiTheme.TextMuted);
         _testingPreviewLabel = CreateEditorLabel("[BLOCK] 验证提示：等待状态更新。", 11, FactoryUiTheme.TextMuted);
         _testingPortStatusLabel = CreateEditorLabel("[PORT] 等待端口状态更新。", 11, FactoryUiTheme.TextSubtle);
-        _testingHintLabel = CreateEditorLabel("等待操作提示更新。", 11, FactoryUiTheme.TextSubtle);
         _testingPersistenceLabel = CreateEditorLabel(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: true), 11, FactoryUiTheme.TextSubtle);
         body.AddChild(_testingEditorStateLabel);
         body.AddChild(_testingSelectionTargetLabel);
         body.AddChild(_testingPreviewLabel);
         body.AddChild(_testingPortStatusLabel);
-        body.AddChild(_testingHintLabel);
         body.AddChild(_testingPersistenceLabel);
 
         body.AddChild(CreateDivider());

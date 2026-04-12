@@ -134,18 +134,11 @@ public partial class FactoryBlueprintPanel : PanelContainer
         _scrollContainer.AddChild(body);
         _body = body;
 
-        _modeLabel = CreateValueLabel("[MODE] 蓝图待命", FactoryUiTheme.TextMuted);
-        body.AddChild(_modeLabel);
         _activeLabel = CreateValueLabel("[ACTIVE] 当前蓝图：未选择", FactoryUiTheme.Text);
 
         _captureFullButton = CreateActionButton("保存当前布局");
         _captureFullButton.Pressed += () => CaptureFullRequested?.Invoke();
         body.AddChild(_captureFullButton);
-
-        _captureSummaryLabel = CreateValueLabel("未捕获待保存蓝图。", FactoryUiTheme.TextMuted);
-        body.AddChild(_captureSummaryLabel);
-
-        body.AddChild(CreateValueLabel("在场景中按 Shift+左键框选后，可在这里命名并选择保存位置。", FactoryUiTheme.TextSubtle));
 
         var saveNameRow = new HBoxContainer();
         saveNameRow.SizeFlagsHorizontal = SizeFlags.ExpandFill;
@@ -224,9 +217,6 @@ public partial class FactoryBlueprintPanel : PanelContainer
         _cancelButton = CreateActionButton("取消");
         _cancelButton.Pressed += () => CancelRequested?.Invoke();
         actionGrid.AddChild(_cancelButton);
-
-        _issueLabel = CreateValueLabel("[HINT] 选择蓝图后可以进入预览和应用。", FactoryUiTheme.TextSubtle);
-        body.AddChild(_issueLabel);
 
         RefreshSelectionActions();
         UpdatePresentationMode();
