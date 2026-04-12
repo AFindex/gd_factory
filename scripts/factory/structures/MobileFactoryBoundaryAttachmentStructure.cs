@@ -2,6 +2,30 @@ using Godot;
 using System;
 using System.Collections.Generic;
 
+public enum MobileFactoryHeavyHandoffPhase
+{
+    Idle,
+    WaitingWorldCargo,
+    ReceivingFromWorld,
+    BufferedOuter,
+    BridgingInward,
+    BufferedInner,
+    WaitingForUnpacker,
+    WaitingForPacker,
+    BridgingOutward,
+    WaitingWorldPickup,
+    ReleasingToWorld
+}
+
+public enum MobileFactoryHeavyPortTransferMode
+{
+    None,
+    WorldToOuterBuffer,
+    OuterToInnerBuffer,
+    InnerToOuterBuffer,
+    OuterToWorld
+}
+
 public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTransportStructure
 {
     private GridManager? _worldSite;
@@ -22,6 +46,7 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
     public Vector2I WorldPortCell => _projection?.WorldPortCell ?? Vector2I.Zero;
     public Vector2I WorldAdjacentCell => _projection?.WorldAdjacentCell ?? Vector2I.Zero;
     public FacingDirection WorldFacing => _projection?.WorldFacing ?? Facing;
+    public virtual int StagedCargoCount => TransitItemCount;
     public virtual string ConnectionStateLabel => IsConnectedToWorld ? (IsWorldFlowReady ? "已连接" : "展开中") : TransitItemCount > 0 ? "阻塞" : "未连接";
     public virtual float WorldVisualAnimationDurationSeconds => 0.26f;
 
@@ -323,6 +348,26 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
             Position = new Vector3(0.0f, 0.34f, 0.0f)
         });
         root.AddChild(transitPayloadRoot);
+
+        var outerBufferPayloadRoot = new Node3D
+        {
+            Name = "OuterBufferPayloadRoot",
+            Visible = false
+        };
+        outerBufferPayloadRoot.AddChild(new Node3D
+        {
+            Name = "OuterBufferPayloadAnchor",
+            Position = new Vector3(0.0f, 0.34f, 0.0f)
+        });
+        if (payloadRoot.GetNodeOrNull<Node3D>("PayloadBufferAnchor") is null)
+        {
+            payloadRoot.AddChild(new Node3D
+            {
+                Name = "PayloadBufferAnchor",
+                Position = new Vector3(0.0f, 0.0f, 0.0f)
+            });
+        }
+        payloadRoot.AddChild(outerBufferPayloadRoot);
     }
 
     protected void ConfigureStandardPortWorldPayload(Node3D root, GridManager worldGrid, MobileFactoryAttachmentProjection projection)
@@ -358,6 +403,34 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
     protected float GetPortDeckDepth()
     {
         return Mathf.Max(CellSize * 1.86f, Footprint.GetPreviewSize(CellSize, Facing).Y * 0.94f);
+    }
+
+    protected TransitItemState? GetActiveTransitState()
+    {
+        return TransitItems.Count > 0 ? TransitItems[0] : null;
+    }
+
+    protected bool HasActiveTransitState()
+    {
+        return TransitItems.Count > 0;
+    }
+
+    protected TransitItemState SpawnTransitState(
+        FactoryItem item,
+        Vector2I sourceCell,
+        Vector2I targetCell,
+        FactoryTransportVisualContext visualContext = FactoryTransportVisualContext.BoundaryHandoff)
+    {
+        var renderDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(item, CellSize, visualContext);
+        var state = new TransitItemState(item, renderDescriptors, sourceCell, targetCell)
+        {
+            LaneKey = 0,
+            Position = 0.0f,
+            PreviousPosition = 0.0f,
+            OccupiedLengthProgress = FactoryTransportVisualFactory.EstimateOccupiedLengthProgress(renderDescriptors, CellSize)
+        };
+        TransitItems.Add(state);
+        return state;
     }
 
     protected void ApplyStandardPortConnectorTransit(Node3D root, float deploymentProgress, bool worldToInterior)
@@ -495,7 +568,7 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         return found;
     }
 
-    private static void SyncTransitPayloadVisual(Node3D anchor, FactoryItem item)
+    protected static void SyncTransitPayloadVisual(Node3D anchor, FactoryItem item)
     {
         var visualKey = $"{item.ItemKind}:{item.CargoForm}:{item.BundleTemplateId}:{FactoryTransportVisualContext.BoundaryHandoff}";
         var currentKey = anchor.GetMeta("transit_visual_key", string.Empty).AsString();
@@ -512,17 +585,428 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         visual.Visible = true;
     }
 
-    private static void ClearTransitPayloadVisual(Node3D anchor)
+    protected static void ClearTransitPayloadVisual(Node3D anchor)
     {
         anchor.GetNodeOrNull<Node3D>("TransitPayloadVisual")?.QueueFree();
         anchor.SetMeta("transit_visual_key", string.Empty);
     }
 }
 
-public partial class MobileFactoryOutputPortStructure : MobileFactoryBoundaryAttachmentStructure
+public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBoundaryAttachmentStructure
+{
+    private FactoryItem? _outerBufferedItem;
+    private FactoryItem? _innerBufferedItem;
+    private MobileFactoryHeavyPortTransferMode _transferMode;
+    private MobileFactoryHeavyHandoffPhase _handoffPhase = MobileFactoryHeavyHandoffPhase.Idle;
+    private float _handoffPhaseProgress;
+
+    protected abstract bool IsInboundHandoff { get; }
+
+    public override int StagedCargoCount => (_outerBufferedItem is null ? 0 : 1)
+        + (_innerBufferedItem is null ? 0 : 1)
+        + (HasActiveTransitState() ? 1 : 0);
+    public FactoryItem? OuterBufferedItem => _outerBufferedItem;
+    public FactoryItem? InnerBufferedItem => _innerBufferedItem;
+    public MobileFactoryHeavyPortTransferMode TransferMode => _transferMode;
+    public MobileFactoryHeavyHandoffPhase HandoffPhase => _handoffPhase;
+    public float HandoffPhaseProgress => _handoffPhaseProgress;
+    public bool HasBridgeTransfer => HasActiveTransitState();
+    public float BridgeTransferProgress => GetActiveTransitState()?.Position ?? 0.0f;
+    public override string ConnectionStateLabel => !IsConnectedToWorld
+        ? (StagedCargoCount > 0 ? "离线滞留" : "未连接")
+        : !IsWorldFlowReady
+            ? "展开中"
+            : $"已连接 / {DescribePhase(_handoffPhase)}";
+
+    public override IEnumerable<string> GetInspectionLines()
+    {
+        foreach (var line in base.GetInspectionLines())
+        {
+            yield return line;
+        }
+
+        yield return $"重载阶段：{DescribePhase(_handoffPhase)}";
+        yield return $"外缓存：{DescribeBufferedItem(_outerBufferedItem)}";
+        yield return $"桥接位：{DescribeBridgeState()}";
+        yield return $"内缓存：{DescribeBufferedItem(_innerBufferedItem)}";
+    }
+
+    public override void SimulationStep(SimulationController simulation, double stepSeconds)
+    {
+        base.SimulationStep(simulation, stepSeconds);
+        AdvanceHeavyHandoff(simulation);
+        RefreshHandoffPhase(simulation);
+    }
+
+    public override void UpdateVisuals(float tickAlpha)
+    {
+        SyncBufferedPayloadVisual("InnerBufferPayloadAnchor", _innerBufferedItem);
+        SyncBridgePayloadVisual();
+        UpdateBeaconPulse();
+    }
+
+    public override void BuildWorldPayload(Node3D root, GridManager worldGrid, MobileFactoryAttachmentProjection projection)
+    {
+        BuildStandardPortWorldPayload(root);
+    }
+
+    public override void ConfigureWorldPayload(Node3D root, GridManager worldGrid, MobileFactoryAttachmentProjection projection)
+    {
+        ConfigureStandardPortWorldPayload(root, worldGrid, projection);
+    }
+
+    public override Vector3 GetWorldConnectorEndWorld(GridManager worldGrid, MobileFactoryAttachmentProjection projection)
+    {
+        return GetStandardPortConnectorEndWorld(worldGrid, projection);
+    }
+
+    public override void ApplyWorldPayloadVisualProgress(Node3D root, float progress)
+    {
+        base.ApplyWorldPayloadVisualProgress(root, progress);
+
+        if (root.GetNodeOrNull<Node3D>("OuterBufferPayloadRoot") is Node3D outerBufferRoot
+            && outerBufferRoot.GetNodeOrNull<Node3D>("OuterBufferPayloadAnchor") is Node3D outerBufferAnchor)
+        {
+            if (_outerBufferedItem is null || progress < 0.92f)
+            {
+                ClearTransitPayloadVisual(outerBufferAnchor);
+                outerBufferRoot.Visible = false;
+            }
+            else
+            {
+                SyncTransitPayloadVisual(outerBufferAnchor, _outerBufferedItem);
+                outerBufferRoot.Visible = true;
+            }
+        }
+
+        if (root.GetNodeOrNull<Node3D>("ConnectorTransitPayloadRoot") is not Node3D transitRoot
+            || transitRoot.GetNodeOrNull<Node3D>("TransitPayloadAnchor") is not Node3D transitAnchor
+            || progress < 0.92f
+            || !TryResolveWorldTransitPose(root, out var worldTransitItem, out var worldTransitPosition))
+        {
+            if (root.GetNodeOrNull<Node3D>("ConnectorTransitPayloadRoot") is Node3D staleTransitRoot
+                && staleTransitRoot.GetNodeOrNull<Node3D>("TransitPayloadAnchor") is Node3D staleTransitAnchor)
+            {
+                ClearTransitPayloadVisual(staleTransitAnchor);
+                staleTransitRoot.Visible = false;
+            }
+
+            return;
+        }
+
+        SyncTransitPayloadVisual(transitAnchor, worldTransitItem);
+        transitAnchor.Position = worldTransitPosition;
+        transitRoot.Visible = true;
+    }
+
+    protected void BuildHeavyPortAnchors(Color accentColor)
+    {
+        var deckWidth = GetPortDeckWidth();
+        var deckDepth = GetPortDeckDepth();
+        CreateColoredBox("BridgeGuideWest", new Vector3(CellSize * 0.08f, 0.18f, deckDepth * 0.48f), accentColor.Darkened(0.18f), new Vector3(CellSize * 0.18f, 0.20f, -deckDepth * 0.18f));
+        CreateColoredBox("BridgeGuideEast", new Vector3(CellSize * 0.08f, 0.18f, deckDepth * 0.48f), accentColor.Darkened(0.18f), new Vector3(-CellSize * 0.04f, 0.20f, deckDepth * 0.18f));
+        CreateColoredBox("InnerBufferDeck", new Vector3(CellSize * 0.72f, 0.08f, deckDepth * 0.32f), accentColor.Darkened(0.08f), new Vector3(-CellSize * 0.74f, 0.18f, 0.0f));
+        CreateColoredBox("ConverterHandoffPad", new Vector3(CellSize * 0.22f, 0.10f, CellSize * 0.42f), accentColor.Lightened(0.08f), new Vector3(-deckWidth * 0.46f, 0.22f, 0.0f));
+        AddChild(new Node3D
+        {
+            Name = "BridgePayloadAnchor",
+            Position = new Vector3(0.0f, ItemHeight + 0.02f, 0.0f)
+        });
+        AddChild(new Node3D
+        {
+            Name = "InnerBufferPayloadAnchor",
+            Position = new Vector3(-CellSize * 0.74f, ItemHeight + 0.01f, 0.0f)
+        });
+        AddChild(new Node3D
+        {
+            Name = "ConverterHandoffAnchor",
+            Position = new Vector3(-deckWidth * 0.46f, ItemHeight + 0.04f, 0.0f)
+        });
+    }
+
+    protected void SetInnerBufferedItem(FactoryItem? item)
+    {
+        _innerBufferedItem = item;
+    }
+
+    protected void SetOuterBufferedItem(FactoryItem? item)
+    {
+        _outerBufferedItem = item;
+    }
+
+    protected FactoryItem? TakeInnerBufferedItem()
+    {
+        var item = _innerBufferedItem;
+        _innerBufferedItem = null;
+        return item;
+    }
+
+    protected FactoryItem? TakeOuterBufferedItem()
+    {
+        var item = _outerBufferedItem;
+        _outerBufferedItem = null;
+        return item;
+    }
+
+    protected bool BeginTransfer(MobileFactoryHeavyPortTransferMode mode, FactoryItem item, Vector2I sourceCell, Vector2I targetCell)
+    {
+        if (HasActiveTransitState())
+        {
+            return false;
+        }
+
+        SpawnTransitState(item, sourceCell, targetCell);
+        _transferMode = mode;
+        return true;
+    }
+
+    protected override void OnTransitItemAccepted(TransitItemState state)
+    {
+        if (IsInboundHandoff && state.SourceCell == WorldAdjacentCell)
+        {
+            _transferMode = MobileFactoryHeavyPortTransferMode.WorldToOuterBuffer;
+        }
+    }
+
+    protected override bool TryDispatchItem(TransitItemState state, SimulationController simulation)
+    {
+        switch (_transferMode)
+        {
+            case MobileFactoryHeavyPortTransferMode.WorldToOuterBuffer:
+                if (_outerBufferedItem is not null)
+                {
+                    return false;
+                }
+
+                _outerBufferedItem = state.Item;
+                _transferMode = MobileFactoryHeavyPortTransferMode.None;
+                return true;
+            case MobileFactoryHeavyPortTransferMode.OuterToInnerBuffer:
+                if (_innerBufferedItem is not null)
+                {
+                    return false;
+                }
+
+                _innerBufferedItem = state.Item;
+                _transferMode = MobileFactoryHeavyPortTransferMode.None;
+                return true;
+            case MobileFactoryHeavyPortTransferMode.InnerToOuterBuffer:
+                if (_outerBufferedItem is not null)
+                {
+                    return false;
+                }
+
+                _outerBufferedItem = state.Item;
+                _transferMode = MobileFactoryHeavyPortTransferMode.None;
+                return true;
+            case MobileFactoryHeavyPortTransferMode.OuterToWorld:
+                if (!TryDispatchOuterToWorld(state.Item, simulation))
+                {
+                    return false;
+                }
+
+                _transferMode = MobileFactoryHeavyPortTransferMode.None;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    protected void SetHandoffPhase(MobileFactoryHeavyHandoffPhase phase, float progress = 0.0f)
+    {
+        _handoffPhase = phase;
+        _handoffPhaseProgress = Mathf.Clamp(progress, 0.0f, 1.0f);
+    }
+
+    protected bool TryResolveActiveTransitItem(out FactoryItem? item, out float progress)
+    {
+        var state = GetActiveTransitState();
+        if (state is null)
+        {
+            item = null;
+            progress = 0.0f;
+            return false;
+        }
+
+        item = state.Item;
+        progress = state.Position;
+        return true;
+    }
+
+    protected virtual bool TryDispatchOuterToWorld(FactoryItem item, SimulationController simulation)
+    {
+        return false;
+    }
+
+    protected abstract void AdvanceHeavyHandoff(SimulationController simulation);
+    protected abstract void RefreshHandoffPhase(SimulationController simulation);
+
+    private void SyncBufferedPayloadVisual(string anchorName, FactoryItem? item)
+    {
+        if (GetNodeOrNull<Node3D>(anchorName) is not Node3D anchor)
+        {
+            return;
+        }
+
+        if (item is null)
+        {
+            ClearTransitPayloadVisual(anchor);
+            anchor.Visible = false;
+            return;
+        }
+
+        SyncTransitPayloadVisual(anchor, item);
+        anchor.Visible = true;
+    }
+
+    private void SyncBridgePayloadVisual()
+    {
+        if (GetNodeOrNull<Node3D>("BridgePayloadAnchor") is not Node3D anchor
+            || !TryResolveInteriorTransitPose(out var bridgeItem, out var bridgePosition))
+        {
+            if (GetNodeOrNull<Node3D>("BridgePayloadAnchor") is Node3D staleAnchor)
+            {
+                ClearTransitPayloadVisual(staleAnchor);
+                staleAnchor.Visible = false;
+            }
+
+            return;
+        }
+
+        SyncTransitPayloadVisual(anchor, bridgeItem);
+        anchor.Position = bridgePosition;
+        anchor.Visible = true;
+    }
+
+    private bool TryResolveInteriorTransitPose(out FactoryItem item, out Vector3 localPosition)
+    {
+        item = default!;
+        localPosition = Vector3.Zero;
+        if (!TryResolveActiveTransitItem(out var activeItem, out var progress) || activeItem is null)
+        {
+            return false;
+        }
+
+        switch (_transferMode)
+        {
+            case MobileFactoryHeavyPortTransferMode.OuterToInnerBuffer:
+                if (progress < 0.32f)
+                {
+                    return false;
+                }
+
+                item = activeItem;
+                localPosition = EvaluatePortPath(progress, worldToInterior: true);
+                return true;
+            case MobileFactoryHeavyPortTransferMode.InnerToOuterBuffer:
+                if (progress > 0.68f)
+                {
+                    return false;
+                }
+
+                item = activeItem;
+                localPosition = EvaluatePortPath(progress, worldToInterior: false);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private bool TryResolveWorldTransitPose(Node3D root, out FactoryItem item, out Vector3 localPosition)
+    {
+        item = default!;
+        localPosition = Vector3.Zero;
+        if (!TryResolveActiveTransitItem(out var activeItem, out var progress) || activeItem is null)
+        {
+            return false;
+        }
+
+        var fullLength = root.GetMeta("full_length", 0.0f).AsSingle();
+        var mouthExtension = root.GetMeta("mouth_extension", 0.14f).AsSingle();
+        var outerZ = fullLength;
+        var routeZ = fullLength + mouthExtension + (CellSize * 0.34f);
+        var mouthZ = Mathf.Max(0.14f, fullLength * 0.16f);
+
+        switch (_transferMode)
+        {
+            case MobileFactoryHeavyPortTransferMode.WorldToOuterBuffer:
+                item = activeItem;
+                localPosition = new Vector3(0.0f, 0.36f, Mathf.Lerp(routeZ, outerZ, progress));
+                return true;
+            case MobileFactoryHeavyPortTransferMode.OuterToInnerBuffer:
+                if (progress > 0.42f)
+                {
+                    return false;
+                }
+
+                item = activeItem;
+                localPosition = new Vector3(0.0f, 0.36f, Mathf.Lerp(outerZ, mouthZ, progress / 0.42f));
+                return true;
+            case MobileFactoryHeavyPortTransferMode.InnerToOuterBuffer:
+                if (progress < 0.42f)
+                {
+                    return false;
+                }
+
+                item = activeItem;
+                localPosition = new Vector3(0.0f, 0.36f, Mathf.Lerp(mouthZ, outerZ, (progress - 0.42f) / 0.58f));
+                return true;
+            case MobileFactoryHeavyPortTransferMode.OuterToWorld:
+                item = activeItem;
+                localPosition = new Vector3(0.0f, 0.36f, Mathf.Lerp(outerZ, routeZ, progress));
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void UpdateBeaconPulse()
+    {
+        if (GetNodeOrNull<MeshInstance3D>("Beacon") is not MeshInstance3D beacon)
+        {
+            return;
+        }
+
+        var pulse = 0.88f + Mathf.Sin((float)(Time.GetTicksMsec() * 0.008f)) * 0.12f;
+        beacon.Scale = new Vector3(pulse, pulse, pulse);
+    }
+
+    private string DescribeBridgeState()
+    {
+        return TryResolveActiveTransitItem(out var item, out var progress) && item is not null
+            ? $"{DescribePhase(_handoffPhase)} {progress * 100.0f:0}%"
+            : "空";
+    }
+
+    private static string DescribeBufferedItem(FactoryItem? item)
+    {
+        return item is null ? "空" : FactoryPresentation.GetItemDisplayName(item);
+    }
+
+    protected static string DescribePhase(MobileFactoryHeavyHandoffPhase phase)
+    {
+        return phase switch
+        {
+            MobileFactoryHeavyHandoffPhase.WaitingWorldCargo => "等待世界来货",
+            MobileFactoryHeavyHandoffPhase.ReceivingFromWorld => "接收世界大包",
+            MobileFactoryHeavyHandoffPhase.BufferedOuter => "世界侧缓存",
+            MobileFactoryHeavyHandoffPhase.BridgingInward => "向舱内桥接",
+            MobileFactoryHeavyHandoffPhase.BufferedInner => "舱内缓存",
+            MobileFactoryHeavyHandoffPhase.WaitingForUnpacker => "等待解包舱",
+            MobileFactoryHeavyHandoffPhase.WaitingForPacker => "等待封包产出",
+            MobileFactoryHeavyHandoffPhase.BridgingOutward => "向世界桥接",
+            MobileFactoryHeavyHandoffPhase.WaitingWorldPickup => "等待世界接货",
+            MobileFactoryHeavyHandoffPhase.ReleasingToWorld => "释放到世界",
+            _ => "待机"
+        };
+    }
+}
+
+public partial class MobileFactoryOutputPortStructure : MobileFactoryHeavyPortStructure
 {
     public override BuildPrototypeKind Kind => BuildPrototypeKind.OutputPort;
     public override MobileFactoryBoundaryAttachmentDefinition AttachmentDefinition => MobileFactoryBoundaryAttachmentCatalog.Get(BuildPrototypeKind.OutputPort);
+    protected override bool IsInboundHandoff => false;
 
     protected override void BuildVisuals()
     {
@@ -530,11 +1014,12 @@ public partial class MobileFactoryOutputPortStructure : MobileFactoryBoundaryAtt
         var deckWidth = GetPortDeckWidth();
         var deckDepth = GetPortDeckDepth();
         CreateColoredBox("OutputLatch", new Vector3(deckWidth * 0.24f, 0.16f, deckDepth * 0.42f), AttachmentDefinition.ConnectorColor.Lightened(0.10f), new Vector3(deckWidth * 0.26f, 0.34f, 0.0f));
+        BuildHeavyPortAnchors(AttachmentDefinition.ConnectorColor);
     }
 
     public override bool CanReceiveFrom(Vector2I sourceCell)
     {
-        return IsWorldFlowReady && sourceCell == Cell - FactoryDirection.ToCellOffset(Facing);
+        return false;
     }
 
     public override bool CanOutputTo(Vector2I targetCell)
@@ -544,11 +1029,11 @@ public partial class MobileFactoryOutputPortStructure : MobileFactoryBoundaryAtt
 
     protected override bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell)
     {
-        targetCell = Cell + FactoryDirection.ToCellOffset(Facing);
-        return FactoryCargoRules.StructureAcceptsItem(Kind, FactorySiteKind.Interior, item);
+        targetCell = WorldAdjacentCell;
+        return false;
     }
 
-    protected override bool TryDispatchItem(TransitItemState state, SimulationController simulation)
+    protected override bool TryDispatchOuterToWorld(FactoryItem item, SimulationController simulation)
     {
         if (!IsConnectedToWorld || BoundWorldSite is null)
         {
@@ -560,7 +1045,7 @@ public partial class MobileFactoryOutputPortStructure : MobileFactoryBoundaryAtt
             return false;
         }
 
-        return simulation.TrySendItemToSite(this, WorldPortCell, BoundWorldSite, WorldAdjacentCell, state.Item);
+        return simulation.TrySendItemToSite(this, WorldPortCell, BoundWorldSite, WorldAdjacentCell, item);
     }
 
     protected override Vector3 EvaluatePathPoint(TransitItemState state, float progress)
@@ -568,32 +1053,101 @@ public partial class MobileFactoryOutputPortStructure : MobileFactoryBoundaryAtt
         return EvaluatePortPath(progress, worldToInterior: false);
     }
 
-    public override void BuildWorldPayload(Node3D root, GridManager worldGrid, MobileFactoryAttachmentProjection projection)
+    public bool CanAcceptPackedBundle(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
-        BuildStandardPortWorldPayload(root);
+        return IsWorldFlowReady
+            && FactoryCargoRules.StructureAcceptsItem(Kind, FactorySiteKind.Interior, item)
+            && InnerBufferedItem is null;
     }
 
-    public override void ConfigureWorldPayload(Node3D root, GridManager worldGrid, MobileFactoryAttachmentProjection projection)
+    public bool TryAcceptPackedBundle(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
-        ConfigureStandardPortWorldPayload(root, worldGrid, projection);
+        if (!CanAcceptPackedBundle(item, sourceCell, simulation))
+        {
+            return false;
+        }
+
+        SetInnerBufferedItem(item);
+        return true;
     }
 
-    public override Vector3 GetWorldConnectorEndWorld(GridManager worldGrid, MobileFactoryAttachmentProjection projection)
+    protected override void AdvanceHeavyHandoff(SimulationController simulation)
     {
-        return GetStandardPortConnectorEndWorld(worldGrid, projection);
+        if (!IsWorldFlowReady)
+        {
+            return;
+        }
+
+        if (InnerBufferedItem is not null
+            && OuterBufferedItem is null
+            && !HasBridgeTransfer)
+        {
+            var buffered = TakeInnerBufferedItem();
+            if (buffered is not null)
+            {
+                BeginTransfer(MobileFactoryHeavyPortTransferMode.InnerToOuterBuffer, buffered, Cell, WorldPortCell);
+            }
+        }
+
+        if (OuterBufferedItem is not null
+            && !HasBridgeTransfer
+            && CanReleaseToWorld(OuterBufferedItem, simulation))
+        {
+            var buffered = TakeOuterBufferedItem();
+            if (buffered is not null)
+            {
+                BeginTransfer(MobileFactoryHeavyPortTransferMode.OuterToWorld, buffered, WorldPortCell, WorldAdjacentCell);
+            }
+        }
     }
 
-    public override void ApplyWorldPayloadVisualProgress(Node3D root, float progress)
+    protected override void RefreshHandoffPhase(SimulationController simulation)
     {
-        base.ApplyWorldPayloadVisualProgress(root, progress);
-        ApplyStandardPortConnectorTransit(root, progress, worldToInterior: false);
+        if (!IsConnectedToWorld)
+        {
+            SetHandoffPhase(MobileFactoryHeavyHandoffPhase.Idle);
+            return;
+        }
+
+        switch (TransferMode)
+        {
+            case MobileFactoryHeavyPortTransferMode.InnerToOuterBuffer:
+                SetHandoffPhase(MobileFactoryHeavyHandoffPhase.BridgingOutward, BridgeTransferProgress);
+                return;
+            case MobileFactoryHeavyPortTransferMode.OuterToWorld:
+                SetHandoffPhase(MobileFactoryHeavyHandoffPhase.ReleasingToWorld, BridgeTransferProgress);
+                return;
+        }
+
+        if (OuterBufferedItem is not null)
+        {
+            SetHandoffPhase(MobileFactoryHeavyHandoffPhase.WaitingWorldPickup);
+        }
+        else if (InnerBufferedItem is not null)
+        {
+            SetHandoffPhase(MobileFactoryHeavyHandoffPhase.BufferedInner);
+        }
+        else
+        {
+            SetHandoffPhase(MobileFactoryHeavyHandoffPhase.WaitingForPacker);
+        }
+    }
+
+    private bool CanReleaseToWorld(FactoryItem item, SimulationController simulation)
+    {
+        return IsConnectedToWorld
+            && BoundWorldSite is not null
+            && BoundWorldSite.TryGetStructure(WorldAdjacentCell, out var target)
+            && target is not null
+            && target.CanAcceptItem(item, WorldPortCell, simulation);
     }
 }
 
-public partial class MobileFactoryInputPortStructure : MobileFactoryBoundaryAttachmentStructure
+public partial class MobileFactoryInputPortStructure : MobileFactoryHeavyPortStructure
 {
     public override BuildPrototypeKind Kind => BuildPrototypeKind.InputPort;
     public override MobileFactoryBoundaryAttachmentDefinition AttachmentDefinition => MobileFactoryBoundaryAttachmentCatalog.Get(BuildPrototypeKind.InputPort);
+    protected override bool IsInboundHandoff => true;
 
     protected override void BuildVisuals()
     {
@@ -601,6 +1155,7 @@ public partial class MobileFactoryInputPortStructure : MobileFactoryBoundaryAtta
         var deckWidth = GetPortDeckWidth();
         var deckDepth = GetPortDeckDepth();
         CreateColoredBox("InputReceiver", new Vector3(deckWidth * 0.24f, 0.16f, deckDepth * 0.42f), AttachmentDefinition.ConnectorColor.Lightened(0.10f), new Vector3(-deckWidth * 0.24f, 0.34f, 0.0f));
+        BuildHeavyPortAnchors(AttachmentDefinition.ConnectorColor);
     }
 
     public override bool CanReceiveFrom(Vector2I sourceCell)
@@ -610,26 +1165,96 @@ public partial class MobileFactoryInputPortStructure : MobileFactoryBoundaryAtta
 
     public override bool CanOutputTo(Vector2I targetCell)
     {
-        return base.CanOutputTo(targetCell);
+        return false;
     }
 
     protected override bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell)
     {
-        var outputCells = GetOutputCells();
-        targetCell = outputCells.Count > 0 ? outputCells[0] : Cell - FactoryDirection.ToCellOffset(Facing);
+        targetCell = WorldPortCell;
         return IsWorldFlowReady
-            && TransitItemCount == 0
+            && !HasBridgeTransfer
+            && OuterBufferedItem is null
             && FactoryCargoRules.StructureAcceptsItem(Kind, FactorySiteKind.Interior, item);
     }
 
-    protected override bool TryDispatchItem(TransitItemState state, SimulationController simulation)
+    protected override void AdvanceHeavyHandoff(SimulationController simulation)
     {
+        if (InnerBufferedItem is not null && TryHandOffToUnpacker(simulation))
+        {
+            SetInnerBufferedItem(null);
+        }
+
+        if (IsWorldFlowReady
+            && OuterBufferedItem is not null
+            && InnerBufferedItem is null
+            && !HasBridgeTransfer)
+        {
+            var buffered = TakeOuterBufferedItem();
+            if (buffered is not null)
+            {
+                BeginTransfer(MobileFactoryHeavyPortTransferMode.OuterToInnerBuffer, buffered, WorldPortCell, Cell);
+            }
+        }
+    }
+
+    protected override Vector3 EvaluatePathPoint(TransitItemState state, float progress)
+    {
+        return EvaluatePortPath(progress, worldToInterior: true);
+    }
+
+    protected override void RefreshHandoffPhase(SimulationController simulation)
+    {
+        if (!IsConnectedToWorld)
+        {
+            SetHandoffPhase(MobileFactoryHeavyHandoffPhase.Idle);
+            return;
+        }
+
+        switch (TransferMode)
+        {
+            case MobileFactoryHeavyPortTransferMode.WorldToOuterBuffer:
+                SetHandoffPhase(MobileFactoryHeavyHandoffPhase.ReceivingFromWorld, BridgeTransferProgress);
+                return;
+            case MobileFactoryHeavyPortTransferMode.OuterToInnerBuffer:
+                SetHandoffPhase(MobileFactoryHeavyHandoffPhase.BridgingInward, BridgeTransferProgress);
+                return;
+        }
+
+        if (InnerBufferedItem is not null)
+        {
+            SetHandoffPhase(
+                CanConnectedUnpackerAccept(InnerBufferedItem, simulation)
+                    ? MobileFactoryHeavyHandoffPhase.BufferedInner
+                    : MobileFactoryHeavyHandoffPhase.WaitingForUnpacker);
+        }
+        else if (OuterBufferedItem is not null)
+        {
+            SetHandoffPhase(MobileFactoryHeavyHandoffPhase.BufferedOuter);
+        }
+        else
+        {
+            SetHandoffPhase(MobileFactoryHeavyHandoffPhase.WaitingWorldCargo);
+        }
+    }
+
+    private bool TryHandOffToUnpacker(SimulationController simulation)
+    {
+        if (InnerBufferedItem is null)
+        {
+            return false;
+        }
+
         var outputCells = GetOutputCells();
         for (var index = 0; index < outputCells.Count; index++)
         {
             var targetCell = outputCells[index];
+            if (!Site.TryGetStructure(targetCell, out var structure) || structure is not CargoUnpackerStructure unpacker)
+            {
+                continue;
+            }
+
             var sourceDispatchCell = GetTransferOutputCell(targetCell);
-            if (simulation.TrySendItem(this, sourceDispatchCell, targetCell, state.Item))
+            if (unpacker.TryAcceptHeavyBundle(InnerBufferedItem, sourceDispatchCell, simulation))
             {
                 return true;
             }
@@ -638,30 +1263,25 @@ public partial class MobileFactoryInputPortStructure : MobileFactoryBoundaryAtta
         return false;
     }
 
-    protected override Vector3 EvaluatePathPoint(TransitItemState state, float progress)
+    private bool CanConnectedUnpackerAccept(FactoryItem item, SimulationController simulation)
     {
-        return EvaluatePortPath(progress, worldToInterior: true);
-    }
+        var outputCells = GetOutputCells();
+        for (var index = 0; index < outputCells.Count; index++)
+        {
+            var targetCell = outputCells[index];
+            if (!Site.TryGetStructure(targetCell, out var structure) || structure is not CargoUnpackerStructure unpacker)
+            {
+                continue;
+            }
 
-    public override void BuildWorldPayload(Node3D root, GridManager worldGrid, MobileFactoryAttachmentProjection projection)
-    {
-        BuildStandardPortWorldPayload(root);
-    }
+            var sourceDispatchCell = GetTransferOutputCell(targetCell);
+            if (unpacker.CanAcceptHeavyBundle(item, sourceDispatchCell, simulation))
+            {
+                return true;
+            }
+        }
 
-    public override void ConfigureWorldPayload(Node3D root, GridManager worldGrid, MobileFactoryAttachmentProjection projection)
-    {
-        ConfigureStandardPortWorldPayload(root, worldGrid, projection);
-    }
-
-    public override Vector3 GetWorldConnectorEndWorld(GridManager worldGrid, MobileFactoryAttachmentProjection projection)
-    {
-        return GetStandardPortConnectorEndWorld(worldGrid, projection);
-    }
-
-    public override void ApplyWorldPayloadVisualProgress(Node3D root, float progress)
-    {
-        base.ApplyWorldPayloadVisualProgress(root, progress);
-        ApplyStandardPortConnectorTransit(root, progress, worldToInterior: true);
+        return false;
     }
 }
 

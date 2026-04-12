@@ -1082,10 +1082,15 @@ public partial class MobileFactoryDemo : Node3D
         if (factory.TryGetInteriorStructure(new Vector2I(7, 3), out var auxPortStructure)
             && auxPortStructure is MobileFactoryOutputPortStructure auxPort)
         {
-            for (var index = 0; index < 3; index++)
+            for (var index = 0; index < 2; index++)
             {
-                auxPort.TryReceiveProvidedItem(
-                    _simulation.CreateItem(BuildPrototypeKind.AmmoAssembler, FactoryItemKind.AmmoMagazine),
+                auxPort.TryAcceptPackedBundle(
+                    _simulation.CreateItem(
+                        FactorySiteKind.World,
+                        BuildPrototypeKind.CargoPacker,
+                        FactoryItemKind.IronPlate,
+                        FactoryCargoForm.WorldPacked,
+                        "packed-iron-plate-standard"),
                     auxPort.Cell - FactoryDirection.ToCellOffset(auxPort.Facing),
                     _simulation);
             }
@@ -1116,11 +1121,15 @@ public partial class MobileFactoryDemo : Node3D
         for (var index = 0; index < outputPorts.Count; index++)
         {
             var outputPort = outputPorts[index];
-            var item = index % 2 == 0
-                ? _simulation.CreateItem(BuildPrototypeKind.Assembler, FactoryItemKind.Gear)
-                : _simulation.CreateItem(BuildPrototypeKind.AmmoAssembler, FactoryItemKind.AmmoMagazine);
-            outputPort.TryReceiveProvidedItem(
-                item,
+            var itemKind = index % 2 == 0 ? FactoryItemKind.Gear : FactoryItemKind.IronPlate;
+            var templateId = index % 2 == 0 ? "packed-gear-compact" : "packed-iron-plate-standard";
+            outputPort.TryAcceptPackedBundle(
+                _simulation.CreateItem(
+                    FactorySiteKind.World,
+                    BuildPrototypeKind.CargoPacker,
+                    itemKind,
+                    FactoryCargoForm.WorldPacked,
+                    templateId),
                 outputPort.Cell - FactoryDirection.ToCellOffset(outputPort.Facing),
                 _simulation);
         }

@@ -654,7 +654,7 @@ public sealed class MobileFactoryInstance
                 continue;
             }
 
-            total += _attachments[i].TransitItemCount;
+            total += _attachments[i].StagedCargoCount;
         }
 
         return total;

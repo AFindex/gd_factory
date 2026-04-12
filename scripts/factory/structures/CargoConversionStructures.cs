@@ -33,12 +33,30 @@ public abstract partial class FactoryCargoConverterStructure : FactoryStructure,
 
     public override bool CanReceiveFrom(Vector2I sourceCell)
     {
-        return sourceCell == GetInputCell();
+        var inputCells = GetInputCells();
+        for (var index = 0; index < inputCells.Count; index++)
+        {
+            if (inputCells[index] == sourceCell)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public override bool CanOutputTo(Vector2I targetCell)
     {
-        return targetCell == GetOutputCell();
+        var outputCells = GetOutputCells();
+        for (var index = 0; index < outputCells.Count; index++)
+        {
+            if (outputCells[index] == targetCell)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public bool TryPeekProvidedItem(Vector2I requesterCell, SimulationController simulation, out FactoryItem? item)
@@ -167,9 +185,19 @@ public abstract partial class FactoryCargoConverterStructure : FactoryStructure,
         return _inputBuffer.TryDequeue(out item);
     }
 
+    protected bool TryBufferInput(FactoryItem item)
+    {
+        return _inputBuffer.TryEnqueue(item);
+    }
+
     protected bool TryPeekOutput(out FactoryItem? item)
     {
         return _outputBuffer.TryPeek(out item);
+    }
+
+    protected bool TryTakeOutput(out FactoryItem? item)
+    {
+        return _outputBuffer.TryDequeue(out item);
     }
 
     protected bool TryBufferOutput(FactoryItem item)
@@ -189,6 +217,15 @@ public abstract partial class FactoryCargoConverterStructure : FactoryStructure,
         {
             var targetCell = outputCells[index];
             var sourceCell = GetTransferOutputCell(targetCell);
+            if (Site.TryGetStructure(targetCell, out var targetStructure)
+                && targetStructure is MobileFactoryOutputPortStructure outputPort
+                && outputPort.TryAcceptPackedBundle(item, sourceCell, simulation))
+            {
+                _outputBuffer.TryDequeue(out _);
+                _dispatchCooldown = DispatchCooldownSeconds;
+                break;
+            }
+
             if (!simulation.TrySendItem(this, sourceCell, targetCell, item))
             {
                 continue;
@@ -304,11 +341,16 @@ public abstract partial class FactoryCargoConverterStructure : FactoryStructure,
 
 public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
 {
+    private const float ChamberProcessSeconds = 0.82f;
+    private const float ChamberReleaseSeconds = 0.28f;
     private const float EmitSeconds = 0.42f;
 
     private FactoryItem? _processingBundle;
     private Queue<FactoryItemKind> _pendingManifest = new();
+    private double _processProgress;
+    private double _releaseProgress;
     private double _emitProgress;
+    private bool _isEmittingManifest;
     private string _preferredTemplateId = "bulk-iron-ore-standard";
 
     public CargoUnpackerStructure() : base(inputCapacity: 1, outputCapacity: 1)
@@ -317,6 +359,9 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.CargoUnpacker;
     public override string Description => "单件解包处理舱。一次接收 1 个世界大包，并按 manifest 节拍持续吐出多个舱内小包。";
+    public bool HasProcessingBundle => _processingBundle is not null;
+    public bool IsEmittingManifest => _isEmittingManifest;
+    public int PendingManifestCount => _pendingManifest.Count;
 
     protected override FactoryTransportVisualContext DispatchPayloadContext => FactoryTransportVisualContext.InteriorRail;
     protected override int ChamberCapacity => 1;
@@ -359,6 +404,19 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
         return _processingBundle;
     }
 
+    public bool CanAcceptHeavyBundle(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
+    {
+        return !_isEmittingManifest
+            && _processingBundle is null
+            && InputCount == 0
+            && CanAcceptConversionInput(item, sourceCell);
+    }
+
+    public bool TryAcceptHeavyBundle(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
+    {
+        return CanAcceptHeavyBundle(item, sourceCell, simulation) && TryBufferInput(item);
+    }
+
     protected override IEnumerable<string> DescribeConversionState()
     {
         if (_processingBundle is null)
@@ -366,30 +424,60 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
             var template = FactoryBundleCatalog.Get(_preferredTemplateId);
             yield return $"待机模板：{FactoryBundleCatalog.DescribeTemplate(template)}";
             yield return $"处理规格：{FactoryBundleCatalog.GetSizeTierLabel(template.SizeTier)}";
+            if (_isEmittingManifest)
+            {
+                yield return $"舱内吐料：{_pendingManifest.Count} 件待释放";
+            }
             yield break;
         }
 
         yield return $"处理模板：{FactoryBundleCatalog.GetDisplayName(_processingBundle)}";
         yield return $"处理规格：{FactoryBundleCatalog.GetSizeTierLabel(FactoryBundleCatalog.ResolveSizeTier(_processingBundle))}";
-        yield return $"剩余解包：{_pendingManifest.Count} 件舱内小包";
+        var processRatio = Mathf.Clamp((float)(_processProgress / ChamberProcessSeconds), 0.0f, 1.0f);
+        var releaseRatio = Mathf.Clamp((float)(_releaseProgress / ChamberReleaseSeconds), 0.0f, 1.0f);
+        yield return $"处理进度：{processRatio * 100.0f:0}%";
+        yield return $"解包退场：{releaseRatio * 100.0f:0}%";
+        yield return $"待吐清单：{_pendingManifest.Count} 件舱内小包";
     }
 
     protected override void AdvanceConverter(SimulationController simulation, double stepSeconds)
     {
-        if (_processingBundle is null)
+        if (_processingBundle is null && !_isEmittingManifest)
         {
             if (TryTakeInput(out var input) && input is not null)
             {
                 _processingBundle = input;
                 _preferredTemplateId = string.IsNullOrWhiteSpace(input.BundleTemplateId) ? _preferredTemplateId : input.BundleTemplateId;
                 _pendingManifest = FactoryBundleCatalog.ExpandManifest(input);
+                _processProgress = 0.0;
+                _releaseProgress = 0.0;
                 _emitProgress = 0.0;
             }
 
             return;
         }
 
-        if (IsOutputFull)
+        if (_processingBundle is not null)
+        {
+            _processProgress += stepSeconds;
+            if (_processProgress < ChamberProcessSeconds)
+            {
+                return;
+            }
+
+            _releaseProgress += stepSeconds;
+            if (_releaseProgress < ChamberReleaseSeconds)
+            {
+                return;
+            }
+
+            _processingBundle = null;
+            _isEmittingManifest = true;
+            _emitProgress = 0.0;
+            return;
+        }
+
+        if (!_isEmittingManifest || IsOutputFull)
         {
             return;
         }
@@ -406,7 +494,7 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
 
         if (_pendingManifest.Count == 0)
         {
-            _processingBundle = null;
+            _isEmittingManifest = false;
         }
     }
 
@@ -430,6 +518,16 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
             var basePosition = carriage.GetMeta("base_position", carriage.Position).AsVector3();
             var slide = _processingBundle is null ? 0.0f : Mathf.Sin((float)(Time.GetTicksMsec() * 0.004)) * CellSize * 0.06f;
             carriage.Position = basePosition + new Vector3(slide, 0.0f, 0.0f);
+        }
+
+        if (GetNodeOrNull<Node3D>("ProcessingPayloadAnchor/ProcessingPayloadAnchor_Visual") is Node3D processingVisual)
+        {
+            var releaseRatio = _processingBundle is null
+                ? 0.0f
+                : Mathf.Clamp((float)(_releaseProgress / ChamberReleaseSeconds), 0.0f, 1.0f);
+            var scale = Mathf.Lerp(1.0f, 0.18f, releaseRatio);
+            processingVisual.Scale = Vector3.One * Mathf.Max(0.12f, scale);
+            processingVisual.Visible = releaseRatio < 0.98f;
         }
     }
 
@@ -470,10 +568,12 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
 
 public partial class CargoPackerStructure : FactoryCargoConverterStructure
 {
+    private const float CompletedBundleHoldSeconds = 0.24f;
     private readonly Dictionary<FactoryItemKind, int> _packedCounts = new();
 
     private FactoryItem? _processingBundle;
     private double _processProgress;
+    private double _completedBundleHold;
     private string _configuredTemplateId = "packed-gear-compact";
     private string _lockedTemplateId = string.Empty;
 
@@ -483,6 +583,8 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.CargoPacker;
     public override string Description => "单件封包处理舱。围绕目标模板累计舱内小包，清单满足后才压装成 1 个世界大包。";
+    public bool HasProcessingBundle => _processingBundle is not null;
+    public bool HasPackedBundleBuffered => HasBufferedOutput;
 
     protected override FactoryTransportVisualContext StagingPayloadContext => FactoryTransportVisualContext.InteriorRail;
     protected override FactoryTransportVisualContext DispatchPayloadContext => FactoryTransportVisualContext.InteriorStaging;
@@ -523,7 +625,7 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
 
     protected override bool CanAcceptConversionInput(FactoryItem item, Vector2I sourceCell)
     {
-        if (!base.CanAcceptConversionInput(item, sourceCell) || _processingBundle is not null)
+        if (!base.CanAcceptConversionInput(item, sourceCell) || _processingBundle is not null || HasBufferedOutput)
         {
             return false;
         }
@@ -553,6 +655,15 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
         if (_processingBundle is not null)
         {
             yield return $"压装进度：{Mathf.Clamp((float)(_processProgress / 1.4f), 0.0f, 1.0f) * 100.0f:0}%";
+            if (_processProgress >= 1.4f)
+            {
+                var readyRatio = 1.0f - Mathf.Clamp((float)(_completedBundleHold / CompletedBundleHoldSeconds), 0.0f, 1.0f);
+                yield return $"出舱准备：{readyRatio * 100.0f:0}%";
+            }
+        }
+        else if (HasBufferedOutput)
+        {
+            yield return "出舱状态：等待输出端口接货";
         }
     }
 
@@ -571,11 +682,28 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
                 return;
             }
 
+            if (_completedBundleHold > 0.0f)
+            {
+                _completedBundleHold = Mathf.Max(0.0f, (float)(_completedBundleHold - stepSeconds));
+                return;
+            }
+
+            if (IsOutputFull)
+            {
+                return;
+            }
+
             TryBufferOutput(_processingBundle);
             _processingBundle = null;
             _processProgress = 0.0;
+            _completedBundleHold = 0.0;
             _packedCounts.Clear();
             _lockedTemplateId = string.Empty;
+            return;
+        }
+
+        if (HasBufferedOutput)
+        {
             return;
         }
 
@@ -598,6 +726,7 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
                     template.Id,
                     _packedCounts);
                 _processProgress = 0.0;
+                _completedBundleHold = CompletedBundleHoldSeconds;
             }
         }
     }

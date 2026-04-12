@@ -509,6 +509,12 @@ public partial class SimulationController : Node
         var total = 0;
         for (var i = 0; i < _structures.Count; i++)
         {
+            if (_structures[i] is MobileFactoryBoundaryAttachmentStructure attachment)
+            {
+                total += attachment.StagedCargoCount;
+                continue;
+            }
+
             if (_structures[i] is FlowTransportStructure transport)
             {
                 total += transport.TransitItemCount;

@@ -307,8 +307,8 @@ public static class FactoryIndustrialStandards
             BuildPrototypeKind.Smelter => "以模块舱方式持续炼制板材。",
             BuildPrototypeKind.Assembler => "以舱段装配面板持续组装中间品。",
             BuildPrototypeKind.AmmoAssembler => "围绕炮塔硬点供给弹药载具。",
-            BuildPrototypeKind.InputPort => "把单件世界大货物交给舱壳边界的转换入口，而不是直接送上供料轨。",
-            BuildPrototypeKind.OutputPort => "把封包完成的世界大货物推送回世界侧重型物流。",
+            BuildPrototypeKind.InputPort => "以外缓存、桥接位和内缓存接住世界大货物，并等待解包舱接手，而不是直接送上供料轨。",
+            BuildPrototypeKind.OutputPort => "以舱内缓存、桥接位和世界侧缓存把完成封包的大货物顺滑送回世界重型物流。",
             BuildPrototypeKind.MiningInputPort => "将世界侧散装矿料接到壳体边界，再交给解包链处理。",
             BuildPrototypeKind.DebugOreSource => "无成本轮转输出矿物与基础原料，用于快速验证供料链。",
             BuildPrototypeKind.DebugPartSource => "无成本轮转输出板材与中间件，用于快速验证加工和缓存。",
@@ -439,7 +439,7 @@ public static class FactoryCargoRules
 
         return kind switch
         {
-            BuildPrototypeKind.InputPort => item.CargoForm == FactoryCargoForm.WorldPacked,
+            BuildPrototypeKind.InputPort => item.CargoForm == FactoryCargoForm.WorldPacked || item.CargoForm == FactoryCargoForm.WorldBulk,
             BuildPrototypeKind.MiningInputPort => item.CargoForm == FactoryCargoForm.WorldBulk,
             BuildPrototypeKind.OutputPort => item.CargoForm == FactoryCargoForm.WorldPacked,
             BuildPrototypeKind.CargoUnpacker => item.CargoForm == FactoryCargoForm.WorldBulk || item.CargoForm == FactoryCargoForm.WorldPacked,
