@@ -20,6 +20,13 @@ public partial class BridgeStructure : FlowTransportStructure
         return Mathf.Abs(delta.X) + Mathf.Abs(delta.Y) == 1;
     }
 
+    public override void RefreshPlacement()
+    {
+        Position = Site.CellToWorld(Cell);
+        Rotation = new Vector3(0.0f, Site.WorldRotationRadians, 0.0f);
+        Visible = Site.IsVisible;
+    }
+
     protected override void BuildVisuals()
     {
         if (SiteKind == FactorySiteKind.Interior)
@@ -47,5 +54,17 @@ public partial class BridgeStructure : FlowTransportStructure
     {
         var inputDelta = sourceCell - Cell;
         return Mathf.Abs(inputDelta.X) > 0 ? 0 : 1;
+    }
+
+    protected override Vector3 EvaluatePathPoint(TransitItemState state, float progress)
+    {
+        var edgeDistance = CellSize * 0.5f;
+        var input = ToDirectionVector(state.SourceCell - Cell) * edgeDistance;
+        var output = ToDirectionVector(state.TargetCell - Cell) * edgeDistance;
+        var laneHeight = GetTransitLaneKey(state.SourceCell, state.TargetCell) == 0
+            ? ItemHeight + 0.06f
+            : ItemHeight - 0.08f;
+        var point = input.Lerp(output, progress);
+        return new Vector3(point.X, laneHeight, point.Y);
     }
 }

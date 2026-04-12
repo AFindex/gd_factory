@@ -41,17 +41,26 @@ public partial class MergerStructure : FlowTransportStructure
         return FactoryCargoRules.StructureAcceptsItem(Kind, FactoryIndustrialStandards.ResolveSiteKind(Site), item);
     }
 
+    protected override float GetTransitVisualYawCompensation(TransitItemState state)
+    {
+        return -FactoryDirection.ToYRotationRadians(Facing);
+    }
+
     protected override Vector3 EvaluatePathPoint(TransitItemState state, float progress)
     {
         var edgeDistance = CellSize * 0.5f;
         var input = ToDirectionVector(state.SourceCell - Cell).Rotated(FactoryDirection.ToYRotationRadians(Facing)) * edgeDistance;
         var output = ToDirectionVector(state.TargetCell - Cell).Rotated(FactoryDirection.ToYRotationRadians(Facing)) * edgeDistance;
-        var oneMinus = 1.0f - progress;
-        var point2D =
-            oneMinus * oneMinus * input +
-            2.0f * oneMinus * progress * Vector2.Zero +
-            progress * progress * output;
+        var midpointRatio = 0.42f;
+        if (progress <= midpointRatio)
+        {
+            var entryProgress = progress / midpointRatio;
+            var point = input.Lerp(Vector2.Zero, entryProgress);
+            return new Vector3(point.X, ItemHeight, point.Y);
+        }
 
-        return new Vector3(point2D.X, ItemHeight, point2D.Y);
+        var exitProgress = (progress - midpointRatio) / (1.0f - midpointRatio);
+        var exitPoint = Vector2.Zero.Lerp(output, exitProgress);
+        return new Vector3(exitPoint.X, ItemHeight, exitPoint.Y);
     }
 }

@@ -74,7 +74,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         };
         if (state.LegacyVisual is not null)
         {
-            state.LegacyVisual.Position = EvaluatePathPoint(state, 0.0f);
+            UpdateLegacyVisualTransform(state, EvaluatePathPoint(state, 0.0f));
         }
 
         _items.Add(state);
@@ -189,7 +189,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         };
         if (state.LegacyVisual is not null)
         {
-            state.LegacyVisual.Position = EvaluatePathPoint(state, 0.0f);
+            UpdateLegacyVisualTransform(state, EvaluatePathPoint(state, 0.0f));
         }
 
         _items.Add(state);
@@ -269,7 +269,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
                 itemState.LegacyVisual = CreateTransitVisual(itemState.Item);
             }
 
-            itemState.LegacyVisual.Position = localPoint;
+            UpdateLegacyVisualTransform(itemState, localPoint);
         }
     }
 
@@ -335,6 +335,11 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
     {
     }
 
+    protected virtual float GetTransitVisualYawCompensation(TransitItemState state)
+    {
+        return 0.0f;
+    }
+
     protected virtual bool CanProvideTo(Vector2I requesterCell)
     {
         return CanOutputTo(requesterCell);
@@ -395,6 +400,17 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         state.LegacyVisual = null;
     }
 
+    private void UpdateLegacyVisualTransform(TransitItemState state, Vector3 localPoint)
+    {
+        if (state.LegacyVisual is null)
+        {
+            return;
+        }
+
+        state.LegacyVisual.Position = localPoint;
+        state.LegacyVisual.Rotation = new Vector3(0.0f, GetTransitVisualYawCompensation(state), 0.0f);
+    }
+
     private void RefreshTransitLanes()
     {
         for (var i = 0; i < _items.Count; i++)
@@ -435,7 +451,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
 
             if (state.LegacyVisual is not null)
             {
-                state.LegacyVisual.Position = EvaluatePathPoint(state, state.Position);
+                UpdateLegacyVisualTransform(state, EvaluatePathPoint(state, state.Position));
             }
 
             _items.Add(state);
@@ -486,9 +502,8 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
 
     private static float ResolveRequiredSpacing(float leadingOccupiedLengthProgress, float trailingOccupiedLengthProgress)
     {
-        var dominantLength = Mathf.Max(leadingOccupiedLengthProgress, trailingOccupiedLengthProgress);
         return Mathf.Clamp(
-            dominantLength + 0.06f,
+            ((leadingOccupiedLengthProgress + trailingOccupiedLengthProgress) * 0.5f) + 0.04f,
             0.08f,
             0.98f);
     }
