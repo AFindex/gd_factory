@@ -38,12 +38,10 @@ public partial class MobileFactoryDemo
                 ? FactoryMapPersistence.SaveWorldMapToSource(sourcePath, _grid)
                 : FactoryMapPersistence.SaveWorldMap(sourcePath, _grid);
             var status = saveToSource
-                ? $"世界地图已保存到当前源：{result.GlobalPath}"
-                : $"世界地图运行时副本已导出：{result.GlobalPath}";
-            _worldPreviewMessage = saveToSource
-                ? $"已保存世界地图到当前源：{result.ResourcePath}"
-                : $"已导出世界地图副本：{result.ResourcePath}";
-            _hud?.SetPersistenceStatus($"{status}\n世界地图源：{sourcePath}\n内部地图目录：{FactoryPersistencePaths.GetInteriorMapDirectoryGlobalPath()}\n蓝图目录：{FactoryPersistencePaths.GetBlueprintDirectoryGlobalPath()}");
+                ? "世界地图已保存到当前源。"
+                : "世界地图运行时副本已导出。";
+            _worldPreviewMessage = status;
+            _hud?.SetPersistenceStatus(status);
             ShowWorldEvent(status, true);
         }
         catch (Exception ex)
@@ -97,12 +95,10 @@ public partial class MobileFactoryDemo
                     _mobileFactory.InteriorSite,
                     _mobileFactory.Profile.Id);
             var status = saveToSource
-                ? $"内部地图已保存到当前源：{result.GlobalPath}"
-                : $"内部地图运行时副本已导出：{result.GlobalPath}";
-            _interiorPreviewMessage = saveToSource
-                ? $"已保存内部地图到当前源：{result.ResourcePath}"
-                : $"已导出内部地图副本：{result.ResourcePath}";
-            _hud?.SetPersistenceStatus($"世界地图目录：{FactoryPersistencePaths.GetWorldMapDirectoryGlobalPath()}\n{status}\n内部地图源：{sourcePath}\n蓝图目录：{FactoryPersistencePaths.GetBlueprintDirectoryGlobalPath()}");
+                ? "内部地图已保存到当前源。"
+                : "内部地图运行时副本已导出。";
+            _interiorPreviewMessage = status;
+            _hud?.SetPersistenceStatus(status);
             ShowWorldEvent(status, true);
         }
         catch (Exception ex)
@@ -135,11 +131,11 @@ public partial class MobileFactoryDemo
         try
         {
             var document = BuildRuntimeSnapshotDocument(slotId);
-            var result = FactoryRuntimeSavePersistence.Save(document);
-            var status = $"进度存档已保存：{result.GlobalPath}";
-            _worldPreviewMessage = $"已保存进度：{result.ResourcePath}";
+            FactoryRuntimeSavePersistence.Save(document);
+            var status = $"进度存档已保存：{slotId}";
+            _worldPreviewMessage = status;
             _interiorPreviewMessage = _worldPreviewMessage;
-            _hud?.SetPersistenceStatus($"{status}\n{FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: true)}");
+            _hud?.SetPersistenceStatus(status);
             ShowWorldEvent(status, true);
         }
         catch (Exception ex)
@@ -243,7 +239,7 @@ public partial class MobileFactoryDemo
             var status = $"进度存档已读取：{slotId}";
             _worldPreviewMessage = status;
             _interiorPreviewMessage = status;
-            _hud?.SetPersistenceStatus($"{status}\n{FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: true)}");
+            _hud?.SetPersistenceStatus(status);
             ShowWorldEvent(status, true);
         }
         catch (Exception ex)
@@ -315,10 +311,9 @@ public partial class MobileFactoryDemo
             return;
         }
 
-        var blueprintPath = FactoryBlueprintPersistence.ResolveRecordGlobalPath(savedRecord, target);
         var targetLabel = target == FactoryBlueprintPersistenceTarget.Source ? "工程内" : "运行时";
-        _interiorPreviewMessage = $"已保存蓝图到{targetLabel}：{savedRecord.DisplayName}\n{blueprintPath}";
-        _hud.SetPersistenceStatus($"蓝图已保存到{targetLabel}：{blueprintPath}\n运行时蓝图目录：{FactoryPersistencePaths.GetBlueprintDirectoryGlobalPath()}\n工程蓝图目录：{FactoryPersistencePaths.GetBlueprintSourceDirectoryGlobalPath()}");
+        _interiorPreviewMessage = $"已保存蓝图到{targetLabel}：{savedRecord.DisplayName}";
+        _hud.SetPersistenceStatus($"蓝图已保存到{targetLabel}：{savedRecord.DisplayName}");
     }
 
     private void TearDownRuntimeSession()

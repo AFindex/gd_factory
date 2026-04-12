@@ -342,6 +342,15 @@ public partial class MobileFactoryHud
         utilityGrid.AddChild(CreateEditorActionButton("编辑模式 (F)", () => EditModeToggleRequested?.Invoke()));
         utilityGrid.AddChild(CreateEditorActionButton("工厂详情", () => SetActiveWorkspace(DetailsWorkspaceId)));
 
+        body.AddChild(CreateDivider());
+        body.AddChild(CreateInfoLabel("世界建造", 12, FactoryUiTheme.TextMuted));
+        _worldBuildSelectionLabel = CreateInfoLabel("[WORLD] 当前世界建造：未选择");
+        _worldBuildRotationLabel = CreateInfoLabel("[FACING] 世界朝向：未启用", 11, FactoryUiTheme.TextSubtle);
+        body.AddChild(_worldBuildSelectionLabel);
+        body.AddChild(_worldBuildRotationLabel);
+        BuildWorldBuildToolbar(body);
+
+        body.AddChild(CreateDivider());
         _deliveryLabel = CreateInfoLabel(string.Empty);
         _combatLabel = CreateInfoLabel(string.Empty, 12, FactoryUiTheme.TextSubtle);
         _focusLabel = CreateInfoLabel(string.Empty);
@@ -424,7 +433,7 @@ public partial class MobileFactoryHud
         workspace.AddChild(body);
 
         body.AddChild(CreateEditorLabel("蓝图工作区", 14, FactoryUiTheme.Text));
-        body.AddChild(CreateEditorLabel("从顶部菜单进入蓝图面板，保存内部布局或应用共享蓝图。", 11, FactoryUiTheme.TextSubtle));
+        body.AddChild(CreateEditorLabel("从顶部菜单进入蓝图面板，保存布局或应用共享蓝图。", 11, FactoryUiTheme.TextSubtle));
         body.AddChild(CreateEditorLabel(FactoryPersistencePaths.BuildBlueprintPersistenceHint(), 11, FactoryUiTheme.TextSubtle));
 
         var blueprintMargin = new MarginContainer();
@@ -509,7 +518,7 @@ public partial class MobileFactoryHud
     {
         var (workspace, body) = CreateWorkspacePanel(_editorWorkspacePanels, SavesWorkspaceId);
         body.AddChild(CreateEditorLabel("存档工作区", 14, FactoryUiTheme.Text));
-        body.AddChild(CreateEditorLabel("列出当前运行时存档，并显示每个站点的当前地图路径、工程路径和运行时路径，方便排查快照来源。", 11, FactoryUiTheme.TextSubtle));
+        body.AddChild(CreateEditorLabel("列出当前运行时存档，便于快速保存、读取和核对快照状态。", 11, FactoryUiTheme.TextSubtle));
 
         body.AddChild(CreateDivider());
         body.AddChild(CreateEditorLabel("快速存读", 12, FactoryUiTheme.TextMuted));
@@ -747,6 +756,60 @@ public partial class MobileFactoryHud
         FactoryUiTheme.ApplyButtonTheme(rotateRight, compact: true);
         rotateRight.Pressed += () => EditorRotateRequested?.Invoke(1);
         rotateRow.AddChild(rotateRight);
+    }
+
+    private void BuildWorldBuildToolbar(Container parent)
+    {
+        var catalog = FactoryIndustrialStandards.GetBuildCatalog(FactorySiteKind.World);
+        var tabs = new TabContainer();
+        tabs.MouseFilter = Control.MouseFilterEnum.Ignore;
+        tabs.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        tabs.AddThemeFontSizeOverride("font_size", CompactTabFontSize);
+        tabs.AddThemeConstantOverride("side_margin", 2);
+        FactoryUiTheme.ApplyTabContainerTheme(tabs);
+        parent.AddChild(tabs);
+
+        for (var categoryIndex = 0; categoryIndex < catalog.Categories.Count; categoryIndex++)
+        {
+            var category = catalog.Categories[categoryIndex];
+            var section = new VBoxContainer();
+            section.Name = category.Title;
+            section.MouseFilter = Control.MouseFilterEnum.Ignore;
+            section.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            section.AddThemeConstantOverride("separation", 4);
+            tabs.AddChild(section);
+
+            var buttonGrid = new GridContainer();
+            buttonGrid.Columns = 2;
+            buttonGrid.MouseFilter = Control.MouseFilterEnum.Ignore;
+            buttonGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            buttonGrid.AddThemeConstantOverride("h_separation", 6);
+            buttonGrid.AddThemeConstantOverride("v_separation", 6);
+            section.AddChild(buttonGrid);
+
+            for (var kindIndex = 0; kindIndex < category.Kinds.Count; kindIndex++)
+            {
+                CreateWorldBuildSelectionButton(buttonGrid, category.Kinds[kindIndex]);
+            }
+        }
+    }
+
+    private void CreateWorldBuildSelectionButton(Container parent, BuildPrototypeKind kind)
+    {
+        var localKind = kind;
+        var button = new Button
+        {
+            Text = FactoryIndustrialStandards.GetBuildPaletteLabel(kind, FactorySiteKind.World),
+            ToggleMode = true,
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            CustomMinimumSize = new Vector2(0.0f, 30.0f)
+        };
+        button.AddThemeFontSizeOverride("font_size", 11);
+        FactoryUiTheme.ApplyButtonTheme(button, compact: true);
+        button.Toggled += pressed => WorldBuildSelectionChanged?.Invoke(pressed ? localKind : null);
+        parent.AddChild(button);
+        _worldBuildButtons[kind] = button;
     }
 
     private Button CreateEditorActionButton(string text, Action pressed)

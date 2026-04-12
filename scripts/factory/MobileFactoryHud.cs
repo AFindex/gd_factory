@@ -20,6 +20,7 @@ public partial class MobileFactoryHud : CanvasLayer
     private static readonly Color WorldFocusColor = FactoryUiTheme.Border;
 
     private readonly Dictionary<BuildPrototypeKind, Button> _paletteButtons = new();
+    private readonly Dictionary<BuildPrototypeKind, Button> _worldBuildButtons = new();
     private readonly Dictionary<string, Control> _worldWorkspacePanels = new();
     private readonly Dictionary<string, Control> _editorWorkspacePanels = new();
 
@@ -45,6 +46,8 @@ public partial class MobileFactoryHud : CanvasLayer
     private Label? _diagnosticsDeliveryLabel;
     private Label? _hintLabel;
     private Label? _diagnosticsHintLabel;
+    private Label? _worldBuildSelectionLabel;
+    private Label? _worldBuildRotationLabel;
     private Label? _editorModeLabel;
     private Label? _selectionLabel;
     private Label? _selectionTargetLabel;
@@ -122,6 +125,7 @@ public partial class MobileFactoryHud : CanvasLayer
         && _topChromePanel?.GetParent() == _overviewHeaderChromeHost;
 
     public event Action<BuildPrototypeKind>? EditorPaletteSelected;
+    public event Action<BuildPrototypeKind?>? WorldBuildSelectionChanged;
     public event Action<int>? EditorRotateRequested;
     public event Action? EditModeToggleRequested;
     public event Action? EditorBuildModeRequested;
@@ -351,6 +355,29 @@ public partial class MobileFactoryHud : CanvasLayer
         if (_diagnosticsDeliveryLabel is not null)
         {
             _diagnosticsDeliveryLabel.Text = $"演示回收站：A 线路累计 {sinkA} | B 线路累计 {sinkB}";
+        }
+    }
+
+    public void SetWorldBuildSelection(BuildPrototypeKind? kind, FacingDirection facing, string? details)
+    {
+        foreach (var pair in _worldBuildButtons)
+        {
+            pair.Value.ButtonPressed = kind.HasValue && pair.Key == kind.Value;
+        }
+
+        if (_worldBuildSelectionLabel is not null)
+        {
+            _worldBuildSelectionLabel.Text = kind.HasValue
+                ? $"[WORLD] 当前世界建造：{FactoryIndustrialStandards.GetSiteAwarePrototypeLabel(kind.Value, FactorySiteKind.World)}"
+                : "[WORLD] 当前世界建造：未选择";
+            _worldBuildSelectionLabel.TooltipText = details ?? string.Empty;
+        }
+
+        if (_worldBuildRotationLabel is not null)
+        {
+            _worldBuildRotationLabel.Text = kind.HasValue
+                ? $"[FACING] 世界朝向：{FactoryDirection.ToLabel(facing)}"
+                : "[FACING] 世界朝向：未启用";
         }
     }
 
@@ -730,9 +757,6 @@ public partial class MobileFactoryHud : CanvasLayer
 
         var maps = CreateEditorLabel(FactoryRuntimeSavePersistence.BuildSlotCompactSummary(slot), 10, FactoryUiTheme.TextMuted);
         body.AddChild(maps);
-
-        var file = CreateEditorLabel(slot.ResourcePath, 10, FactoryUiTheme.TextFaint);
-        body.AddChild(file);
 
         return card;
     }

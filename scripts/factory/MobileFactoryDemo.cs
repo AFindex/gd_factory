@@ -96,6 +96,8 @@ public partial class MobileFactoryDemo : Node3D
     private Node3D? _structureRoot;
     private Node3D? _enemyRoot;
     private Node3D? _worldPreviewRoot;
+    private Node3D? _worldBlueprintPreviewRoot;
+    private Node3D? _worldBlueprintGhostPreviewRoot;
     private Node3D? _interiorPreviewRoot;
     private Node3D? _interiorPortHintRoot;
     private Node3D? _interiorBlueprintPreviewRoot;
@@ -107,6 +109,8 @@ public partial class MobileFactoryDemo : Node3D
     private readonly List<Node3D> _worldPreviewPortMeshes = new();
     private readonly List<MeshInstance3D> _worldPreviewMiningMeshes = new();
     private readonly List<MeshInstance3D> _worldPreviewMiningLinkMeshes = new();
+    private readonly List<MeshInstance3D> _worldBlueprintPreviewMeshes = new();
+    private readonly List<FactoryStructure> _worldBlueprintPreviewGhosts = new();
     private Node3D? _worldPreviewFacingArrow;
     private MeshInstance3D? _interiorPreviewCell;
     private Node3D? _interiorPreviewArrow;
@@ -118,6 +122,7 @@ public partial class MobileFactoryDemo : Node3D
     private readonly List<MeshInstance3D> _interiorBlueprintPreviewMeshes = new();
     private readonly List<FactoryStructure> _interiorBlueprintPreviewGhosts = new();
     private readonly List<MeshInstance3D> _interiorPowerLinkDashes = new();
+    private FactoryBlueprintSiteAdapter? _worldBlueprintSite;
     private FactoryBlueprintSiteAdapter? _interiorBlueprintSite;
 
     private MobileFactoryInstance? _mobileFactory;
@@ -131,6 +136,8 @@ public partial class MobileFactoryDemo : Node3D
     private MobileFactoryControlMode _controlMode = MobileFactoryControlMode.Player;
     private FacingDirection _selectedDeployFacing = FacingDirection.East;
     private FacingDirection _selectedWorldFacing = FacingDirection.East;
+    private FactoryInteractionMode _worldInteractionMode = FactoryInteractionMode.Interact;
+    private FactoryStructure? _selectedWorldStructure;
     private Vector2I _hoveredAnchor;
     private FactoryStructure? _hoveredWorldStructure;
     private bool _hasHoveredAnchor;
@@ -139,8 +146,15 @@ public partial class MobileFactoryDemo : Node3D
     private bool _hasHoveredWorldCell;
     private bool _hasLastWorldBuildStrokeCell;
     private bool _canPlaceWorldCell;
+    private bool _canDeleteWorldCell;
     private bool _buildWorldPlacementDragActive;
+    private bool _deleteWorldDragActive;
+    private Vector2I _deleteWorldDragStartCell;
+    private Vector2I _deleteWorldDragCurrentCell;
     private readonly HashSet<Vector2I> _worldBuildStrokeCells = new();
+    private BuildPrototypeKind? _selectedWorldBuildKind;
+    private FactoryBlueprintApplyPlan? _worldBlueprintPlan;
+    private FacingDirection _worldBlueprintRotation = FacingDirection.East;
     private bool _canDeployCurrentAnchor;
     private MobileFactoryDeploymentEvaluation? _currentDeployEvaluation;
     private FactoryStatusTone _worldStatusTone = FactoryStatusTone.Positive;
@@ -177,6 +191,7 @@ public partial class MobileFactoryDemo : Node3D
     private FactoryBlueprintRecord? _pendingBlueprintCapture;
     private FactoryBlueprintApplyPlan? _interiorBlueprintPlan;
     private FacingDirection _interiorBlueprintRotation = FacingDirection.East;
+    private FactoryBlueprintSiteKind _activeBlueprintSiteKind = FactoryBlueprintSiteKind.MobileInterior;
     private string _interiorPreviewMessage = "按 F 展开内部编辑区，然后把鼠标移入右侧区域开始调整移动工厂内部布局。";
     private bool _editorOpen;
     private MobileFactoryEditorSessionState _editorSessionState = MobileFactoryEditorSessionState.Closed;
@@ -272,6 +287,11 @@ public partial class MobileFactoryDemo : Node3D
         UpdateHud();
         UpdateCursorShape();
 
+        if (_worldInteractionMode == FactoryInteractionMode.Delete && _deleteWorldDragActive && _hasHoveredWorldCell)
+        {
+            _deleteWorldDragCurrentCell = _hoveredWorldCell;
+        }
+
         if (_editorOpen && _interiorInteractionMode == FactoryInteractionMode.Delete && _deleteInteriorDragActive && _hasHoveredInteriorCell)
         {
             _deleteInteriorDragCurrentCell = _hoveredInteriorCell;
@@ -304,6 +324,12 @@ public partial class MobileFactoryDemo : Node3D
         if (@event is InputEventKey keyEvent && keyEvent.Pressed && !keyEvent.Echo)
         {
             if (HandleEditorKeyInput(keyEvent))
+            {
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (HandleWorldKeyInput(keyEvent))
             {
                 GetViewport().SetInputAsHandled();
                 return;
@@ -456,27 +482,98 @@ public partial class MobileFactoryDemo : Node3D
 
         if (CanUseWorldInput()
             && !IsPointerOverUi()
-            && _controlMode == MobileFactoryControlMode.Player
-            && TryGetActivePlayerWorldPlacementKind(out _))
+            && IsWorldBlueprintApplyActive())
         {
+            if (!mouseButton.Pressed)
+            {
+                return;
+            }
+
             if (mouseButton.ButtonIndex == MouseButton.Left)
             {
-                if (mouseButton.Pressed)
-                {
-                    HandlePlayerWorldPrimaryPress();
-                }
-                else
-                {
-                    HandlePlayerWorldPrimaryRelease();
-                }
-
+                ConfirmWorldBlueprintApply();
                 GetViewport().SetInputAsHandled();
                 return;
             }
 
-            if (mouseButton.ButtonIndex == MouseButton.Right && mouseButton.Pressed)
+            if (mouseButton.ButtonIndex == MouseButton.Right)
             {
-                CancelPlayerWorldPlacement();
+                CancelBlueprintWorkflow();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+        }
+
+        if (CanUseWorldInput()
+            && !IsPointerOverUi()
+            && _controlMode == MobileFactoryControlMode.Player)
+        {
+            if (_worldInteractionMode == FactoryInteractionMode.Delete)
+            {
+                if (mouseButton.ButtonIndex == MouseButton.Right && mouseButton.Pressed)
+                {
+                    EnterWorldInteractionMode();
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+
+                if (mouseButton.ButtonIndex == MouseButton.Left)
+                {
+                    if (mouseButton.Pressed)
+                    {
+                        HandleWorldDeletePrimaryPress(mouseButton.ShiftPressed);
+                    }
+                    else
+                    {
+                        HandleWorldDeletePrimaryRelease();
+                    }
+
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+            }
+
+            if (_worldInteractionMode == FactoryInteractionMode.Build
+                && TryGetActivePlayerWorldPlacementKind(out _))
+            {
+                if (mouseButton.ButtonIndex == MouseButton.Left)
+                {
+                    if (mouseButton.Pressed)
+                    {
+                        HandlePlayerWorldPrimaryPress();
+                    }
+                    else
+                    {
+                        HandlePlayerWorldPrimaryRelease();
+                    }
+
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+
+                if (mouseButton.ButtonIndex == MouseButton.Right && mouseButton.Pressed)
+                {
+                    CancelPlayerWorldPlacement();
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+            }
+
+            if (!mouseButton.Pressed)
+            {
+                return;
+            }
+
+            if (mouseButton.ButtonIndex == MouseButton.Left)
+            {
+                HandleWorldPrimaryClick();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (mouseButton.ButtonIndex == MouseButton.Right)
+            {
+                HandleWorldSecondaryClick();
                 GetViewport().SetInputAsHandled();
                 return;
             }
@@ -501,6 +598,8 @@ public partial class MobileFactoryDemo : Node3D
                 new FactoryDemoRootSpec("structure", "MobileDemoStructures"),
                 new FactoryDemoRootSpec("enemy", "MobileEnemyRoot"),
                 new FactoryDemoRootSpec("world-preview", "WorldPreviewRoot"),
+                new FactoryDemoRootSpec("world-blueprint-preview", "WorldBlueprintPreviewRoot", false),
+                new FactoryDemoRootSpec("world-blueprint-ghost-preview", "WorldBlueprintGhostPreviewRoot", false),
                 new FactoryDemoRootSpec("interior-preview", "InteriorPreviewRoot", false),
                 new FactoryDemoRootSpec("interior-port-hints", "InteriorPortHintRoot", false),
                 new FactoryDemoRootSpec("interior-power-links", "InteriorPowerLinkOverlayRoot", false),
@@ -518,6 +617,8 @@ public partial class MobileFactoryDemo : Node3D
         _structureRoot = scaffold.GetRoot("structure");
         _enemyRoot = scaffold.GetRoot("enemy");
         _worldPreviewRoot = scaffold.GetRoot("world-preview");
+        _worldBlueprintPreviewRoot = scaffold.GetRoot("world-blueprint-preview");
+        _worldBlueprintGhostPreviewRoot = scaffold.GetRoot("world-blueprint-ghost-preview");
         CreateWorldPreviewVisuals(4, 1);
 
         _interiorPreviewRoot = scaffold.GetRoot("interior-preview");
@@ -536,6 +637,7 @@ public partial class MobileFactoryDemo : Node3D
         {
             UseLargeScenarioWorkspaces = UseLargeTestScenario
         };
+        _hud.WorldBuildSelectionChanged += SelectWorldBuildKind;
         _hud.EditorPaletteSelected += OnEditorPaletteSelected;
         _hud.EditorRotateRequested += OnEditorRotateRequested;
         _hud.EditModeToggleRequested += ToggleEditorMode;
@@ -560,11 +662,11 @@ public partial class MobileFactoryDemo : Node3D
         _hud.RuntimeSaveRequested += HandleRuntimeSaveRequested;
         _hud.RuntimeLoadRequested += HandleRuntimeLoadRequested;
         _hud.RuntimeSaveLibraryRefreshRequested += RefreshRuntimeSaveLibrary;
-        _hud.BlueprintSelected += HandleInteriorBlueprintSelected;
-        _hud.BlueprintApplyRequested += EnterInteriorBlueprintApplyMode;
-        _hud.BlueprintConfirmRequested += ConfirmInteriorBlueprintApply;
+        _hud.BlueprintSelected += HandleBlueprintSelected;
+        _hud.BlueprintApplyRequested += EnterActiveBlueprintApplyMode;
+        _hud.BlueprintConfirmRequested += ConfirmActiveBlueprintApply;
         _hud.BlueprintDeleteRequested += HandleInteriorBlueprintDeleteRequested;
-        _hud.BlueprintCancelRequested += CancelInteriorBlueprintWorkflow;
+        _hud.BlueprintCancelRequested += CancelActiveBlueprintWorkflow;
         _hud.WorkspaceSelected += HandleHudWorkspaceSelected;
         AddChild(_hud);
         InitializePersistenceHud();
@@ -591,6 +693,8 @@ public partial class MobileFactoryDemo : Node3D
             SeedMobileWorldResourceDeposits();
             RebuildMobileResourceOverlayVisuals();
         }
+
+        _worldBlueprintSite = CreateWorldBlueprintSiteAdapter();
 
         _hud!.EditorViewport.World3D = GetWorld3D();
         _editorCamera = new Camera3D
@@ -735,6 +839,29 @@ public partial class MobileFactoryDemo : Node3D
         _grid.PlaceStructure(structure);
         _simulation.RegisterStructure(structure);
         return structure;
+    }
+
+    private void RemoveWorldStructure(Vector2I cell)
+    {
+        if (_grid is null || _simulation is null || !_grid.TryGetStructure(cell, out var structure) || structure is null)
+        {
+            return;
+        }
+
+        if (_hoveredWorldStructure == structure)
+        {
+            _hoveredWorldStructure = null;
+        }
+
+        if (_selectedWorldStructure == structure)
+        {
+            _selectedWorldStructure = null;
+        }
+
+        _simulation.UnregisterStructure(structure);
+        structure.Site.RemoveStructure(structure);
+        structure.QueueFree();
+        _simulation.RebuildTopology();
     }
 
     private void CreateLargeScenarioWorld()
@@ -1383,6 +1510,21 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
+        if (IsWorldBlueprintApplyActive())
+        {
+            if (Input.IsActionJustPressed("deploy_rotate_left"))
+            {
+                RotateWorldBlueprintPreview(-1);
+            }
+
+            if (Input.IsActionJustPressed("deploy_rotate_right"))
+            {
+                RotateWorldBlueprintPreview(1);
+            }
+
+            return;
+        }
+
         if (_controlMode == MobileFactoryControlMode.Player && TryGetActivePlayerWorldPlacementKind(out _))
         {
             if (Input.IsActionJustPressed("deploy_rotate_left"))
@@ -1545,6 +1687,57 @@ public partial class MobileFactoryDemo : Node3D
         return false;
     }
 
+    private bool HandleWorldKeyInput(InputEventKey keyEvent)
+    {
+        if (_editorOpen
+            || !CanUseWorldInput()
+            || _mobileFactory is null
+            || _controlMode != MobileFactoryControlMode.Player
+            || IsWorldBlueprintApplyActive())
+        {
+            return false;
+        }
+
+        if (keyEvent.Keycode == Key.X)
+        {
+            if (_worldInteractionMode == FactoryInteractionMode.Delete)
+            {
+                EnterWorldInteractionMode();
+            }
+            else
+            {
+                EnterWorldDeleteMode();
+            }
+
+            return true;
+        }
+
+        if (keyEvent.Keycode == Key.Delete
+            && (_worldInteractionMode == FactoryInteractionMode.Build || _worldInteractionMode == FactoryInteractionMode.Delete)
+            && _hoveredWorldStructure is not null)
+        {
+            RemoveWorldStructure(_hoveredWorldStructure.Cell);
+            return true;
+        }
+
+        if (keyEvent.Keycode == Key.Escape)
+        {
+            if (_worldInteractionMode == FactoryInteractionMode.Delete)
+            {
+                EnterWorldInteractionMode();
+                return true;
+            }
+
+            if (_worldInteractionMode == FactoryInteractionMode.Build)
+            {
+                CancelPlayerWorldPlacement();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private void UpdatePaneFocus()
     {
         _hoveringEditorOperationPanel = _editorOpen && (_hud?.IsPointerOverEditorOperationPanel(_mousePosition) ?? false);
@@ -1600,6 +1793,8 @@ public partial class MobileFactoryDemo : Node3D
         _hasHoveredWorldCell = false;
         _hoveredWorldStructure = null;
         _canPlaceWorldCell = false;
+        _canDeleteWorldCell = false;
+        _worldBlueprintPlan = null;
 
         if (_controlMode != MobileFactoryControlMode.Player
             || _grid is null
@@ -1624,6 +1819,13 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         _grid.TryGetStructure(cell, out _hoveredWorldStructure);
+        _canDeleteWorldCell = _hoveredWorldStructure is not null;
+        if (IsWorldBlueprintApplyActive())
+        {
+            UpdateWorldBlueprintPlan();
+            return;
+        }
+
         if (TryGetActivePlayerWorldPlacementKind(out var placementKind))
         {
             var previewFacing = ResolvePlayerWorldPlacementFacing(placementKind, cell, _buildWorldPlacementDragActive);
@@ -1784,6 +1986,13 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
+        UpdateWorldBlueprintPreview();
+        if (IsWorldBlueprintApplyActive())
+        {
+            _worldPreviewRoot.Visible = false;
+            return;
+        }
+
         foreach (var mesh in _worldPreviewFootprintMeshes)
         {
             mesh.Visible = false;
@@ -1841,6 +2050,98 @@ public partial class MobileFactoryDemo : Node3D
                     1.0f);
             }
             return;
+        }
+
+        var showWorldDeletePreview = _controlMode == MobileFactoryControlMode.Player
+            && _worldInteractionMode == FactoryInteractionMode.Delete
+            && _hasHoveredWorldCell
+            && CanUseWorldInput()
+            && !IsPointerOverUi();
+        if (showWorldDeletePreview)
+        {
+            _worldPreviewRoot.Visible = true;
+            if (_deleteWorldDragActive)
+            {
+                var rect = GetDeleteRect(_deleteWorldDragStartCell, _deleteWorldDragCurrentCell);
+                var cellCount = rect.Size.X * rect.Size.Y;
+                EnsureWorldPreviewVisualCapacity(cellCount, 0, 0);
+                var meshIndex = 0;
+                for (var y = rect.Position.Y; y < rect.End.Y; y++)
+                {
+                    for (var x = rect.Position.X; x < rect.End.X; x++)
+                    {
+                        var previewMesh = _worldPreviewFootprintMeshes[meshIndex++];
+                        previewMesh.Visible = true;
+                        previewMesh.Position = _grid.CellToWorld(new Vector2I(x, y)) + new Vector3(0.0f, 0.05f, 0.0f);
+                        FactoryPreviewOverlaySupport.ApplyPreviewColor(
+                            previewMesh,
+                            new Color(1.0f, 0.42f, 0.32f, _canDeleteWorldCell ? 0.40f : 0.22f));
+                    }
+                }
+            }
+            else
+            {
+                var targetStructure = _hoveredWorldStructure;
+                if (targetStructure is not null)
+                {
+                    var occupiedCells = new List<Vector2I>();
+                    foreach (var occupiedCell in targetStructure.GetOccupiedCells())
+                    {
+                        occupiedCells.Add(occupiedCell);
+                    }
+
+                    EnsureWorldPreviewVisualCapacity(Mathf.Max(occupiedCells.Count, 1), 0, 0);
+                    for (var cellIndex = 0; cellIndex < occupiedCells.Count; cellIndex++)
+                    {
+                        var previewMesh = _worldPreviewFootprintMeshes[cellIndex];
+                        previewMesh.Visible = true;
+                        previewMesh.Position = _grid.CellToWorld(occupiedCells[cellIndex]) + new Vector3(0.0f, 0.05f, 0.0f);
+                        FactoryPreviewOverlaySupport.ApplyPreviewColor(previewMesh, new Color(1.0f, 0.35f, 0.35f, 0.45f));
+                    }
+                }
+                else
+                {
+                    EnsureWorldPreviewVisualCapacity(1, 0, 0);
+                    var previewMesh = _worldPreviewFootprintMeshes[0];
+                    previewMesh.Visible = true;
+                    previewMesh.Position = _grid.CellToWorld(_hoveredWorldCell) + new Vector3(0.0f, 0.05f, 0.0f);
+                    FactoryPreviewOverlaySupport.ApplyPreviewColor(previewMesh, new Color(0.96f, 0.58f, 0.24f, 0.20f));
+                }
+            }
+
+            return;
+        }
+
+        var showWorldSelectionPreview = _controlMode == MobileFactoryControlMode.Player
+            && _worldInteractionMode == FactoryInteractionMode.Interact
+            && CanUseWorldInput()
+            && !IsPointerOverUi();
+        var selectionTarget = _selectedWorldStructure is not null
+            && GodotObject.IsInstanceValid(_selectedWorldStructure)
+            && _selectedWorldStructure.IsInsideTree()
+            ? _selectedWorldStructure
+            : _hoveredWorldStructure;
+        if (showWorldSelectionPreview && selectionTarget is not null)
+        {
+            var occupiedCells = new List<Vector2I>();
+            foreach (var occupiedCell in selectionTarget.GetOccupiedCells())
+            {
+                occupiedCells.Add(occupiedCell);
+            }
+
+            if (occupiedCells.Count > 0)
+            {
+                _worldPreviewRoot.Visible = true;
+                EnsureWorldPreviewVisualCapacity(occupiedCells.Count, 0, 0);
+                for (var cellIndex = 0; cellIndex < occupiedCells.Count; cellIndex++)
+                {
+                    var previewMesh = _worldPreviewFootprintMeshes[cellIndex];
+                    previewMesh.Visible = true;
+                    previewMesh.Position = _grid.CellToWorld(occupiedCells[cellIndex]) + new Vector3(0.0f, 0.05f, 0.0f);
+                    FactoryPreviewOverlaySupport.ApplyPreviewColor(previewMesh, new Color(0.35f, 0.75f, 1.0f, 0.28f));
+                }
+                return;
+            }
         }
 
         _worldPreviewRoot.Visible = _controlMode == MobileFactoryControlMode.DeployPreview && _hasHoveredAnchor && CanUseWorldInput();
@@ -1972,6 +2273,88 @@ public partial class MobileFactoryDemo : Node3D
                 GetPreviewFacingArrowPosition(_hoveredAnchor, _selectedDeployFacing),
                 _selectedDeployFacing,
                 GetWorldPortPreviewColor(MobileFactoryAttachmentChannelType.ItemOutput, deployState).Lightened(0.08f));
+        }
+    }
+
+    private void UpdateWorldBlueprintPreview()
+    {
+        if (_grid is null || _worldBlueprintPreviewRoot is null)
+        {
+            return;
+        }
+
+        foreach (var mesh in _worldBlueprintPreviewMeshes)
+        {
+            mesh.Visible = false;
+        }
+
+        foreach (var ghost in _worldBlueprintPreviewGhosts)
+        {
+            ghost.Visible = false;
+        }
+
+        var plan = IsWorldBlueprintApplyActive() ? _worldBlueprintPlan : null;
+        _worldBlueprintPreviewRoot.Visible = plan is not null;
+        if (_worldBlueprintGhostPreviewRoot is not null)
+        {
+            _worldBlueprintGhostPreviewRoot.Visible = _worldBlueprintPreviewRoot.Visible;
+        }
+
+        if (!_worldBlueprintPreviewRoot.Visible || plan is null)
+        {
+            if (_worldBlueprintGhostPreviewRoot is not null)
+            {
+                _worldBlueprintGhostPreviewRoot.Visible = false;
+            }
+
+            return;
+        }
+
+        EnsureWorldBlueprintPreviewCapacity(plan.Entries.Count);
+        var showGhostPreview = SupportsGhostBlueprintPreview();
+        if (_worldBlueprintGhostPreviewRoot is not null)
+        {
+            _worldBlueprintGhostPreviewRoot.Visible = showGhostPreview;
+        }
+
+        for (var index = 0; index < plan.Entries.Count; index++)
+        {
+            var entry = plan.Entries[index];
+            var mesh = _worldBlueprintPreviewMeshes[index];
+            var footprint = FactoryStructureFactory.GetFootprint(entry.SourceEntry.Kind);
+            var previewSize = footprint.GetPreviewSize(_grid.CellSize, FacingDirection.East);
+            mesh.Visible = true;
+            mesh.Position = FactoryPlacement.GetPreviewCenter(_grid, entry.SourceEntry.Kind, entry.TargetCell, entry.TargetFacing) + new Vector3(0.0f, 0.06f, 0.0f);
+            mesh.Rotation = new Vector3(0.0f, _grid.WorldRotationRadians + FactoryDirection.ToYRotationRadians(entry.TargetFacing), 0.0f);
+            mesh.Mesh = new BoxMesh
+            {
+                Size = new Vector3(
+                    Mathf.Max(_grid.CellSize * 0.92f, previewSize.X - (_grid.CellSize * 0.08f)),
+                    0.10f,
+                    Mathf.Max(_grid.CellSize * 0.92f, previewSize.Y - (_grid.CellSize * 0.08f)))
+            };
+            FactoryPreviewOverlaySupport.ApplyPreviewColor(mesh, entry.IsValid
+                ? new Color(0.35f, 0.95f, 0.55f, 0.42f)
+                : new Color(1.0f, 0.35f, 0.35f, 0.42f));
+
+            if (showGhostPreview)
+            {
+                var ghost = EnsureWorldBlueprintGhostPreview(entry, index);
+                ghost.Visible = true;
+                if (ghost.Site != _grid || ghost.Cell != entry.TargetCell || ghost.Facing != entry.TargetFacing)
+                {
+                    ghost.Configure(_grid, entry.TargetCell, entry.TargetFacing);
+                }
+
+                ghost.GlobalPosition = FactoryPlacement.GetPreviewCenter(_grid, entry.SourceEntry.Kind, entry.TargetCell, entry.TargetFacing);
+                ghost.GlobalRotation = new Vector3(
+                    0.0f,
+                    _grid.WorldRotationRadians + FactoryDirection.ToYRotationRadians(entry.TargetFacing),
+                    0.0f);
+                ghost.ApplyGhostVisual(entry.IsValid
+                    ? new Color(0.54f, 0.84f, 1.0f, 0.58f)
+                    : new Color(1.0f, 0.52f, 0.52f, 0.54f));
+            }
         }
     }
 
@@ -2274,6 +2657,39 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
+        if (IsWorldBlueprintApplyActive())
+        {
+            UpdateWorldBlueprintPlan();
+            return;
+        }
+
+        if (_controlMode == MobileFactoryControlMode.Player && _worldInteractionMode == FactoryInteractionMode.Delete)
+        {
+            if (!_hasHoveredWorldCell)
+            {
+                _worldPreviewMessage = "删除模式：把鼠标移到世界建筑上，左键删除，Shift+左键拖拽可框选删除，X/Esc/右键返回交互。";
+                _worldStatusTone = FactoryStatusTone.Warning;
+                return;
+            }
+
+            if (_deleteWorldDragActive)
+            {
+                var rect = GetDeleteRect(_deleteWorldDragStartCell, _deleteWorldDragCurrentCell);
+                var deletionCount = CountWorldStructuresInDeleteRect(_deleteWorldDragStartCell, _deleteWorldDragCurrentCell);
+                _canDeleteWorldCell = deletionCount > 0;
+                _worldPreviewMessage = $"删除模式：框选 [{rect.Position.X},{rect.Position.Y}] - [{rect.End.X - 1},{rect.End.Y - 1}]，将删除 {deletionCount} 个建筑。";
+                _worldStatusTone = deletionCount > 0 ? FactoryStatusTone.Warning : FactoryStatusTone.Negative;
+                return;
+            }
+
+            _canDeleteWorldCell = _hoveredWorldStructure is not null;
+            _worldPreviewMessage = _hoveredWorldStructure is null
+                ? $"删除模式：格子 ({_hoveredWorldCell.X}, {_hoveredWorldCell.Y}) 为空，按 X/Esc/右键返回交互。"
+                : $"删除模式：左键删除 {_hoveredWorldStructure.DisplayName}，Shift+左键拖拽可框选删除。";
+            _worldStatusTone = _canDeleteWorldCell ? FactoryStatusTone.Warning : FactoryStatusTone.Negative;
+            return;
+        }
+
         if (_controlMode == MobileFactoryControlMode.Player && TryGetActivePlayerWorldPlacementKind(out var worldPlacementKind))
         {
             if (!_hasHoveredWorldCell)
@@ -2289,6 +2705,30 @@ public partial class MobileFactoryDemo : Node3D
                 ? DescribePlayerWorldPlacementPreview(worldPlacementKind, _hoveredWorldCell, previewFacing)
                 : placementIssue;
             _worldStatusTone = _canPlaceWorldCell ? FactoryStatusTone.Positive : FactoryStatusTone.Negative;
+            return;
+        }
+
+        if (_controlMode == MobileFactoryControlMode.Player && _worldInteractionMode == FactoryInteractionMode.Interact)
+        {
+            if (_selectedWorldStructure is not null
+                && (!GodotObject.IsInstanceValid(_selectedWorldStructure) || !_selectedWorldStructure.IsInsideTree()))
+            {
+                _selectedWorldStructure = null;
+            }
+
+            if (!_hasHoveredWorldCell)
+            {
+                _worldPreviewMessage = _selectedWorldStructure is null
+                    ? "交互模式：点击世界建筑选中，按 X 进入删除模式，左侧建造分类或热栏可切到建造。"
+                    : $"交互模式：当前选中 {_selectedWorldStructure.DisplayName}，移动鼠标可切换悬停目标，按 X 进入删除模式。";
+                _worldStatusTone = FactoryStatusTone.Positive;
+                return;
+            }
+
+            _worldPreviewMessage = _hoveredWorldStructure is null
+                ? $"交互模式：空地 ({_hoveredWorldCell.X}, {_hoveredWorldCell.Y})，点击可清除当前选中，按 X 进入删除模式。"
+                : $"交互模式：点击选中 {_hoveredWorldStructure.DisplayName} ({_hoveredWorldCell.X}, {_hoveredWorldCell.Y})，按 X 进入删除模式。";
+            _worldStatusTone = FactoryStatusTone.Positive;
             return;
         }
 
@@ -2600,6 +3040,17 @@ public partial class MobileFactoryDemo : Node3D
         _hud.SetState(_mobileFactory.State, _mobileFactory.AnchorCell);
         _hud.SetHoverAnchor(_hoveredAnchor, _controlMode == MobileFactoryControlMode.DeployPreview && _hasHoveredAnchor);
         _hud.SetPreviewStatus(_worldStatusTone, _worldPreviewMessage);
+        if (TryGetActiveWorldPlacementKind(out var worldKind, out var usesPlayerInventory))
+        {
+            var worldDetails = usesPlayerInventory
+                ? "当前来自玩家热栏放置。"
+                : "当前来自总览工作区的直接世界建造。";
+            _hud.SetWorldBuildSelection(worldKind, _selectedWorldFacing, worldDetails);
+        }
+        else
+        {
+            _hud.SetWorldBuildSelection(null, _selectedWorldFacing, null);
+        }
         _hud.SetDeliveryStats(GetPrimaryDeliveryTotal(), GetSecondaryDeliveryTotal());
         _hud.SetEditorSelection(_interiorInteractionMode, _selectedInteriorKind, _selectedInteriorFacing);
         _hud.SetEditorSelectionTarget(GetSelectedInteriorStructureText());
@@ -2626,7 +3077,7 @@ public partial class MobileFactoryDemo : Node3D
         _hud.SetEditorState(_editorOpen, _mobileFactory.State, CountEditableInteriorStructures(), _interiorInteractionMode);
         _hud.SetHintText(GetHintText());
         _hud.SetFactoryDetails(BuildFactoryDetailText());
-        _hud.SetBlueprintState(BuildInteriorBlueprintPanelState());
+        _hud.SetBlueprintState(BuildBlueprintPanelState());
         _playerHud?.SetContext(_playerController, FactoryDemoInteractionBridge.BuildLinkedDetailModel(_selectedInteriorStructure), ResolveSelectedPlayerItem());
     }
 
@@ -2635,11 +3086,18 @@ public partial class MobileFactoryDemo : Node3D
         if (FactoryBlueprintWorkflowBridge.HandleBlueprintWorkspaceExit(
                 workspaceId,
                 BlueprintWorkspaceId,
-                HasActiveInteriorBlueprintWorkspaceState(),
-                () => CancelInteriorBlueprintWorkflow(clearActiveBlueprint: true),
+                HasActiveBlueprintWorkspaceState(),
+                () => CancelBlueprintWorkflow(clearActiveBlueprint: true),
                 out var exitMessage))
         {
-            _interiorPreviewMessage = exitMessage ?? string.Empty;
+            if (UsesWorldBlueprintContext())
+            {
+                _worldPreviewMessage = exitMessage ?? string.Empty;
+            }
+            else
+            {
+                _interiorPreviewMessage = exitMessage ?? string.Empty;
+            }
         }
 
         if (workspaceId == SavesWorkspaceId)
@@ -2651,11 +3109,12 @@ public partial class MobileFactoryDemo : Node3D
         }
     }
 
-    private bool HasActiveInteriorBlueprintWorkspaceState()
+    private bool HasActiveBlueprintWorkspaceState()
     {
         return _blueprintMode != FactoryBlueprintWorkflowMode.None
             || _pendingBlueprintCapture is not null
             || _interiorBlueprintPlan is not null
+            || _worldBlueprintPlan is not null
             || _hasInteriorBlueprintSelectionRect
             || FactoryBlueprintLibrary.GetActive() is not null;
     }
@@ -2691,6 +3150,44 @@ public partial class MobileFactoryDemo : Node3D
     private string GetHudBuildWorkspaceId()
     {
         return UseLargeTestScenario ? BuildTestWorkspaceId : EditorWorkspaceId;
+    }
+
+    private FactoryBlueprintPanelState BuildBlueprintPanelState()
+    {
+        if (!_editorOpen)
+        {
+            return BuildWorldBlueprintPanelState();
+        }
+
+        return BuildInteriorBlueprintPanelState();
+    }
+
+    private FactoryBlueprintPanelState BuildWorldBlueprintPanelState()
+    {
+        var activeBlueprint = FactoryBlueprintLibrary.GetActive();
+        var activeText = FactoryBlueprintWorkflowBridge.BuildActiveBlueprintText();
+        var modeText = IsWorldBlueprintApplyActive()
+            ? $"蓝图模式：世界应用预览（旋转 {FactoryDirection.ToLabel(_worldBlueprintRotation)}）"
+            : "蓝图模式：世界待命";
+        var issueText = IsWorldBlueprintApplyActive() && _worldBlueprintPlan is not null
+            ? $"当前旋转：{FactoryDirection.ToLabel(_worldBlueprintRotation)} | 占地 {_worldBlueprintPlan.FootprintSize.X}x{_worldBlueprintPlan.FootprintSize.Y}\n{_worldBlueprintPlan.GetIssueSummary()}"
+            : "选中世界蓝图后可进入预览，并直接在地面网格上应用。";
+
+        return new FactoryBlueprintPanelState
+        {
+            IsVisible = true,
+            ModeText = modeText,
+            ActiveBlueprintText = activeText,
+            CaptureSummaryText = "当前蓝图页用于世界蓝图浏览与应用；内部布局保存仍在编辑模式下进行。",
+            IssueText = issueText,
+            SuggestedName = string.Empty,
+            PendingCaptureId = null,
+            ActiveBlueprintId = activeBlueprint?.Id,
+            AllowFullCapture = false,
+            CanSaveCapture = false,
+            CanConfirmApply = IsWorldBlueprintApplyActive() && _worldBlueprintPlan?.IsValid == true,
+            Blueprints = FactoryBlueprintLibrary.GetAll()
+        };
     }
 
     private FactoryBlueprintPanelState BuildInteriorBlueprintPanelState()
@@ -2898,6 +3395,13 @@ public partial class MobileFactoryDemo : Node3D
         {
             SetControlMode(MobileFactoryControlMode.Player);
             ShowWorldEvent("已取消部署预览。", true);
+            return;
+        }
+
+        if (IsWorldBlueprintApplyActive())
+        {
+            CancelBlueprintWorkflow(clearActiveBlueprint: false);
+            ShowWorldEvent("已取消世界蓝图预览。", true);
             return;
         }
 
@@ -3135,12 +3639,14 @@ public partial class MobileFactoryDemo : Node3D
         _selectedPlayerItemSlot = new Vector2I(index, 0);
         _hasSelectedPlayerItemSlot = true;
         _playerInteriorPlacementArmed = _playerController.IsHotbarPlacementArmed;
+        _selectedWorldBuildKind = null;
         if (_playerInteriorPlacementArmed && TryResolveSelectedPlayerPlaceable(out var placementKind))
         {
             _selectedInteriorKind = placementKind;
         }
 
         TraceLog($"HandlePlayerHotbarPressed index={index} armed={_playerInteriorPlacementArmed} item={ResolveSelectedPlayerItem()?.ItemKind.ToString() ?? "none"}");
+        RefreshWorldInteractionModeFromBuildSource();
         RefreshInteriorInteractionModeFromBuildSource();
         UpdateHud();
     }
@@ -3197,10 +3703,12 @@ public partial class MobileFactoryDemo : Node3D
 
         _playerController?.DisarmHotbarPlacement();
         _playerInteriorPlacementArmed = _playerSelectionState.PlacementArmed;
+        _selectedWorldBuildKind = null;
         if (_playerInteriorPlacementArmed && TryResolveSelectedPlayerPlaceable(out var placementKind))
         {
             _selectedInteriorKind = placementKind;
         }
+        RefreshWorldInteractionModeFromBuildSource();
         RefreshInteriorInteractionModeFromBuildSource();
         UpdateHud();
     }
@@ -3237,6 +3745,144 @@ public partial class MobileFactoryDemo : Node3D
         SelectInteriorBuildKind(_selectedInteriorKind == kind && _interiorInteractionMode == FactoryInteractionMode.Build
             ? null
             : kind);
+    }
+
+    private void SelectWorldBuildKind(BuildPrototypeKind? kind)
+    {
+        if (_selectedWorldBuildKind == kind)
+        {
+            UpdateHud();
+            return;
+        }
+
+        if (IsWorldBlueprintApplyActive())
+        {
+            CancelBlueprintWorkflow(clearActiveBlueprint: false);
+        }
+
+        _selectedWorldBuildKind = kind;
+        _playerInteriorPlacementArmed = false;
+        _playerController?.DisarmHotbarPlacement();
+        ResetPlayerWorldBuildPlacementStroke();
+        _selectedWorldStructure = null;
+        RefreshWorldInteractionModeFromBuildSource();
+
+        if (kind.HasValue)
+        {
+            SetControlMode(MobileFactoryControlMode.Player);
+            ShowWorldEvent($"已切换为世界直接建造：{FactoryPresentation.GetBuildPrototypeDisplayName(kind.Value)}。", true);
+        }
+        else
+        {
+            ShowWorldEvent("已退出世界直接建造。", true);
+        }
+
+        UpdateHud();
+    }
+
+    private void EnterWorldInteractionMode()
+    {
+        _worldInteractionMode = FactoryInteractionMode.Interact;
+        ResetPlayerWorldBuildPlacementStroke();
+        _deleteWorldDragActive = false;
+        _canDeleteWorldCell = false;
+    }
+
+    private void EnterWorldDeleteMode()
+    {
+        CancelBlueprintWorkflow(clearActiveBlueprint: false);
+        _selectedWorldBuildKind = null;
+        _playerInteriorPlacementArmed = false;
+        _playerController?.DisarmHotbarPlacement();
+        _selectedWorldStructure = null;
+        _worldInteractionMode = FactoryInteractionMode.Delete;
+        ResetPlayerWorldBuildPlacementStroke();
+        _deleteWorldDragActive = false;
+        _canDeleteWorldCell = _hoveredWorldStructure is not null;
+        UpdateHud();
+    }
+
+    private void HandleWorldPrimaryClick()
+    {
+        if (!_hasHoveredWorldCell)
+        {
+            return;
+        }
+
+        _selectedWorldStructure = _hoveredWorldStructure;
+    }
+
+    private void HandleWorldSecondaryClick()
+    {
+        _selectedWorldStructure = null;
+    }
+
+    private void HandleWorldDeletePrimaryPress(bool shiftPressed)
+    {
+        if (!_hasHoveredWorldCell)
+        {
+            return;
+        }
+
+        if (shiftPressed)
+        {
+            _deleteWorldDragActive = true;
+            _deleteWorldDragStartCell = _hoveredWorldCell;
+            _deleteWorldDragCurrentCell = _hoveredWorldCell;
+            return;
+        }
+
+        DeleteHoveredWorldStructure();
+    }
+
+    private void HandleWorldDeletePrimaryRelease()
+    {
+        if (!_deleteWorldDragActive)
+        {
+            return;
+        }
+
+        _deleteWorldDragActive = false;
+        DeleteWorldStructuresInRect(_deleteWorldDragStartCell, _deleteWorldDragCurrentCell);
+    }
+
+    private void DeleteHoveredWorldStructure()
+    {
+        if (_hoveredWorldStructure is not null)
+        {
+            RemoveWorldStructure(_hoveredWorldStructure.Cell);
+        }
+    }
+
+    private int CountWorldStructuresInDeleteRect(Vector2I start, Vector2I end)
+    {
+        if (_grid is null)
+        {
+            return 0;
+        }
+
+        return FactorySelectionRectSupport.CountUniqueStructuresInRect(
+            start,
+            end,
+            cell => _grid.TryGetStructure(cell, out var structure) ? structure : null);
+    }
+
+    private void DeleteWorldStructuresInRect(Vector2I start, Vector2I end)
+    {
+        if (_grid is null)
+        {
+            return;
+        }
+
+        var cellsToDelete = FactorySelectionRectSupport.CollectUniqueStructureAnchorCells(
+            start,
+            end,
+            cell => _grid.TryGetStructure(cell, out var structure) ? structure : null);
+
+        for (var index = 0; index < cellsToDelete.Count; index++)
+        {
+            RemoveWorldStructure(cellsToDelete[index]);
+        }
     }
 
     private void OnEditorRotateRequested(int direction)
@@ -3552,6 +4198,65 @@ public partial class MobileFactoryDemo : Node3D
             : _interiorBlueprintPlan.GetIssueSummary();
     }
 
+    private void UpdateWorldBlueprintPlan()
+    {
+        if (_worldBlueprintSite is null)
+        {
+            _worldPreviewMessage = "蓝图预览不可用：缺少世界站点。";
+            _worldBlueprintPlan = null;
+            _worldStatusTone = FactoryStatusTone.Negative;
+            return;
+        }
+
+        var activeBlueprint = FactoryBlueprintLibrary.GetActive();
+        if (activeBlueprint is null)
+        {
+            _worldPreviewMessage = "请先从蓝图库中选择一个世界蓝图。";
+            _worldBlueprintPlan = null;
+            _worldStatusTone = FactoryStatusTone.Warning;
+            return;
+        }
+
+        var anchor = _hasHoveredWorldCell
+            ? _hoveredWorldCell
+            : _worldBlueprintSite.GetDefaultApplyAnchor(activeBlueprint);
+        _worldBlueprintPlan = FactoryBlueprintPlanner.CreatePlan(activeBlueprint, _worldBlueprintSite, anchor, _worldBlueprintRotation);
+        _worldPreviewMessage = _worldBlueprintPlan.IsValid
+            ? $"蓝图 {activeBlueprint.DisplayName} 可应用到世界锚点 ({anchor.X}, {anchor.Y})，旋转 {FactoryDirection.ToLabel(_worldBlueprintRotation)}。"
+            : _worldBlueprintPlan.GetIssueSummary();
+        _worldStatusTone = _worldBlueprintPlan.IsValid ? FactoryStatusTone.Positive : FactoryStatusTone.Negative;
+    }
+
+    private void EnsureWorldBlueprintPreviewCapacity(int count)
+    {
+        FactoryPreviewPoolSupport.EnsureMeshCapacity(
+            _worldBlueprintPreviewRoot,
+            _worldBlueprintPreviewMeshes,
+            count,
+            index => new MeshInstance3D
+            {
+                Name = $"WorldBlueprintPreview_{index}",
+                Visible = false,
+                Mesh = new BoxMesh
+                {
+                    Size = new Vector3(FactoryConstants.CellSize * 0.84f, 0.10f, FactoryConstants.CellSize * 0.84f)
+                }
+            });
+    }
+
+    private FactoryStructure EnsureWorldBlueprintGhostPreview(FactoryBlueprintPlanEntry entry, int index)
+    {
+        return FactoryPreviewPoolSupport.EnsureGhostPreview(
+            _worldBlueprintGhostPreviewRoot,
+            _worldBlueprintPreviewGhosts,
+            index,
+            entry.SourceEntry.Kind,
+            kind => FactoryStructureFactory.CreateGhostPreview(
+                kind,
+                new FactoryStructurePlacement(_grid!, entry.TargetCell, entry.TargetFacing)),
+            "WorldBlueprintGhostPreview");
+    }
+
     private void EnsureInteriorBlueprintPreviewCapacity(int count)
     {
         FactoryPreviewPoolSupport.EnsureMeshCapacity(
@@ -3634,6 +4339,29 @@ public partial class MobileFactoryDemo : Node3D
             });
     }
 
+    private FactoryBlueprintSiteAdapter CreateWorldBlueprintSiteAdapter()
+    {
+        return new FactoryBlueprintSiteAdapter(
+            FactoryBlueprintSiteKind.WorldGrid,
+            _grid!.SiteId,
+            "移动工厂世界区域",
+            _grid.MinCell,
+            _grid.MaxCell,
+            () => _grid.GetStructures(),
+            ValidateWorldBlueprintPlacement,
+            (kind, cell, facing) => PlaceWorldStructure(kind, cell, facing),
+            cell =>
+            {
+                if (_grid.TryGetStructure(cell, out var structure) && structure is not null)
+                {
+                    RemoveWorldStructure(cell);
+                    return true;
+                }
+
+                return false;
+            });
+    }
+
     private string? ValidateInteriorBlueprintPlacement(FactoryBlueprintStructureEntry entry, Vector2I targetCell, FacingDirection targetFacing)
     {
         if (_mobileFactory is null)
@@ -3657,6 +4385,31 @@ public partial class MobileFactoryDemo : Node3D
             return MobileFactoryBoundaryAttachmentCatalog.IsAttachmentKind(entry.Kind)
                 ? "该蓝图需要的边界 attachment 挂点在当前内部不可用。"
                 : "目标占地已被占用或越界。";
+        }
+
+        return null;
+    }
+
+    private string? ValidateWorldBlueprintPlacement(FactoryBlueprintStructureEntry entry, Vector2I targetCell, FacingDirection targetFacing)
+    {
+        if (_grid is null)
+        {
+            return "世界网格不可用。";
+        }
+
+        if (!FactoryIndustrialStandards.IsStructureAllowed(entry.Kind, FactorySiteKind.World))
+        {
+            return FactoryIndustrialStandards.GetPlacementCompatibilityError(entry.Kind, FactorySiteKind.World);
+        }
+
+        if (!_grid.IsInBounds(targetCell))
+        {
+            return "目标格超出世界建造范围。";
+        }
+
+        if (!TryValidatePlayerWorldPlacement(entry.Kind, targetCell, targetFacing, out var placementIssue))
+        {
+            return placementIssue;
         }
 
         return null;
@@ -3783,9 +4536,20 @@ public partial class MobileFactoryDemo : Node3D
         ShowBlueprintPersistenceStatus(savedRecord, target);
     }
 
-    private void HandleInteriorBlueprintSelected(string blueprintId)
+    private void HandleBlueprintSelected(string blueprintId)
     {
-        FactoryBlueprintWorkflowBridge.SelectBlueprint(blueprintId, _blueprintMode, UpdateInteriorBlueprintPlan);
+        FactoryBlueprintWorkflowBridge.SelectBlueprint(blueprintId, _blueprintMode, UpdateActiveBlueprintPlan);
+    }
+
+    private void EnterActiveBlueprintApplyMode()
+    {
+        if (_editorOpen)
+        {
+            EnterInteriorBlueprintApplyMode();
+            return;
+        }
+
+        EnterWorldBlueprintApplyMode();
     }
 
     private void EnterInteriorBlueprintApplyMode()
@@ -3796,11 +4560,38 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         EnterInteriorInteractionMode();
+        _activeBlueprintSiteKind = FactoryBlueprintSiteKind.MobileInterior;
         _pendingBlueprintCapture = null;
         _hasInteriorBlueprintSelectionRect = false;
         _blueprintMode = FactoryBlueprintWorkflowMode.ApplyPreview;
         _interiorBlueprintRotation = FacingDirection.East;
         UpdateInteriorBlueprintPlan();
+    }
+
+    private void EnterWorldBlueprintApplyMode()
+    {
+        if (FactoryBlueprintLibrary.GetActive() is null)
+        {
+            return;
+        }
+
+        SetControlMode(MobileFactoryControlMode.Player);
+        _activeBlueprintSiteKind = FactoryBlueprintSiteKind.WorldGrid;
+        _blueprintMode = FactoryBlueprintWorkflowMode.ApplyPreview;
+        _worldBlueprintRotation = FacingDirection.East;
+        _worldBlueprintPlan = null;
+        UpdateWorldBlueprintPlan();
+    }
+
+    private void ConfirmActiveBlueprintApply()
+    {
+        if (IsWorldBlueprintApplyActive())
+        {
+            ConfirmWorldBlueprintApply();
+            return;
+        }
+
+        ConfirmInteriorBlueprintApply();
     }
 
     private void ConfirmInteriorBlueprintApply()
@@ -3820,24 +4611,55 @@ public partial class MobileFactoryDemo : Node3D
         _interiorPreviewMessage = $"已应用蓝图：{_interiorBlueprintPlan.Blueprint.DisplayName}（旋转 {FactoryDirection.ToLabel(_interiorBlueprintPlan.Rotation)}）";
     }
 
+    private void ConfirmWorldBlueprintApply()
+    {
+        if (_worldBlueprintSite is null || _worldBlueprintPlan is null)
+        {
+            return;
+        }
+
+        if (!FactoryBlueprintPlanner.CommitPlan(_worldBlueprintPlan, _worldBlueprintSite))
+        {
+            _worldPreviewMessage = "世界蓝图应用失败，请检查预览中的阻塞原因。";
+            _worldStatusTone = FactoryStatusTone.Negative;
+            return;
+        }
+
+        _simulation?.RebuildTopology();
+        _worldPreviewMessage = $"已应用蓝图：{_worldBlueprintPlan.Blueprint.DisplayName}（旋转 {FactoryDirection.ToLabel(_worldBlueprintPlan.Rotation)}）";
+        _worldStatusTone = FactoryStatusTone.Positive;
+    }
+
     private void HandleInteriorBlueprintDeleteRequested(string blueprintId)
     {
-        FactoryBlueprintWorkflowBridge.DeleteBlueprint(blueprintId, () => _interiorBlueprintPlan = null);
+        FactoryBlueprintWorkflowBridge.DeleteBlueprint(blueprintId, () =>
+        {
+            _interiorBlueprintPlan = null;
+            _worldBlueprintPlan = null;
+        });
     }
 
-    private void CancelInteriorBlueprintWorkflow()
+    private void CancelActiveBlueprintWorkflow()
     {
-        CancelInteriorBlueprintWorkflow(clearActiveBlueprint: false);
+        CancelBlueprintWorkflow(clearActiveBlueprint: false);
     }
 
-    private void CancelInteriorBlueprintWorkflow(bool clearActiveBlueprint)
+    private void CancelBlueprintWorkflow()
+    {
+        CancelBlueprintWorkflow(clearActiveBlueprint: false);
+    }
+
+    private void CancelBlueprintWorkflow(bool clearActiveBlueprint)
     {
         _blueprintMode = FactoryBlueprintWorkflowMode.None;
+        _activeBlueprintSiteKind = _editorOpen ? FactoryBlueprintSiteKind.MobileInterior : FactoryBlueprintSiteKind.WorldGrid;
         _interiorBlueprintSelectionDragActive = false;
         _hasInteriorBlueprintSelectionRect = false;
         _pendingBlueprintCapture = null;
         _interiorBlueprintPlan = null;
+        _worldBlueprintPlan = null;
         _interiorBlueprintRotation = FacingDirection.East;
+        _worldBlueprintRotation = FacingDirection.East;
 
         if (clearActiveBlueprint)
         {
@@ -3858,6 +4680,51 @@ public partial class MobileFactoryDemo : Node3D
         UpdateInteriorBlueprintPlan();
     }
 
+    private void RotateWorldBlueprintPreview(int direction)
+    {
+        if (!IsWorldBlueprintApplyActive())
+        {
+            return;
+        }
+
+        _worldBlueprintRotation = direction < 0
+            ? FactoryDirection.RotateCounterClockwise(_worldBlueprintRotation)
+            : FactoryDirection.RotateClockwise(_worldBlueprintRotation);
+        UpdateWorldBlueprintPlan();
+    }
+
+    private void UpdateActiveBlueprintPlan()
+    {
+        if (IsWorldBlueprintApplyActive())
+        {
+            UpdateWorldBlueprintPlan();
+            return;
+        }
+
+        UpdateInteriorBlueprintPlan();
+    }
+
+    private bool IsWorldBlueprintApplyActive()
+    {
+        return _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview
+            && _activeBlueprintSiteKind == FactoryBlueprintSiteKind.WorldGrid;
+    }
+
+    private bool UsesWorldBlueprintContext()
+    {
+        return !_editorOpen || IsWorldBlueprintApplyActive();
+    }
+
+    private void CancelInteriorBlueprintWorkflow()
+    {
+        CancelBlueprintWorkflow(clearActiveBlueprint: false);
+    }
+
+    private void CancelInteriorBlueprintWorkflow(bool clearActiveBlueprint)
+    {
+        CancelBlueprintWorkflow(clearActiveBlueprint);
+    }
+
     private static bool IsBlueprintSelectionModifierHeld()
     {
         return Input.IsKeyPressed(Key.Shift);
@@ -3872,6 +4739,15 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         if (_editorOpen && _hoveringEditorViewport && _interiorInteractionMode == FactoryInteractionMode.Delete)
+        {
+            Input.SetDefaultCursorShape(Input.CursorShape.Cross);
+            return;
+        }
+
+        if (_controlMode == MobileFactoryControlMode.Player
+            && _worldInteractionMode == FactoryInteractionMode.Delete
+            && CanUseWorldInput()
+            && !IsPointerOverUi())
         {
             Input.SetDefaultCursorShape(Input.CursorShape.Cross);
             return;
@@ -3949,15 +4825,41 @@ public partial class MobileFactoryDemo : Node3D
 
     private bool TryGetActivePlayerWorldPlacementKind(out BuildPrototypeKind kind)
     {
+        return TryGetActiveWorldPlacementKind(out kind, out _);
+    }
+
+    private bool TryGetActiveWorldPlacementKind(out BuildPrototypeKind kind, out bool usesPlayerInventory)
+    {
+        if (_worldInteractionMode != FactoryInteractionMode.Build)
+        {
+            kind = default;
+            usesPlayerInventory = false;
+            return false;
+        }
+
+        return TryResolveWorldBuildSource(out kind, out usesPlayerInventory);
+    }
+
+    private bool TryResolveWorldBuildSource(out BuildPrototypeKind kind, out bool usesPlayerInventory)
+    {
+        if (_controlMode == MobileFactoryControlMode.Player && _selectedWorldBuildKind.HasValue)
+        {
+            kind = _selectedWorldBuildKind.Value;
+            usesPlayerInventory = false;
+            return true;
+        }
+
         if (_controlMode == MobileFactoryControlMode.Player
             && _playerInteriorPlacementArmed
             && TryResolveSelectedPlayerPlaceable(out var selectedPlayerKind))
         {
             kind = selectedPlayerKind;
+            usesPlayerInventory = true;
             return true;
         }
 
         kind = default;
+        usesPlayerInventory = false;
         return false;
     }
 
@@ -4137,6 +5039,18 @@ public partial class MobileFactoryDemo : Node3D
             : FactoryInteractionMode.Interact;
     }
 
+    private void RefreshWorldInteractionModeFromBuildSource()
+    {
+        if (_worldInteractionMode == FactoryInteractionMode.Delete)
+        {
+            return;
+        }
+
+        _worldInteractionMode = TryResolveWorldBuildSource(out _, out _)
+            ? FactoryInteractionMode.Build
+            : FactoryInteractionMode.Interact;
+    }
+
     private void ResetInteriorBuildPlacementStroke()
     {
         _buildInteriorPlacementDragActive = false;
@@ -4146,7 +5060,7 @@ public partial class MobileFactoryDemo : Node3D
 
     private bool TryPlaceCurrentPlayerWorldTarget(bool trackCurrentCellForStroke)
     {
-        if (!_hasHoveredWorldCell || !TryGetActivePlayerWorldPlacementKind(out var placementKind))
+        if (!_hasHoveredWorldCell || !TryGetActiveWorldPlacementKind(out var placementKind, out var usesPlayerInventory))
         {
             return false;
         }
@@ -4188,8 +5102,13 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         _simulation?.RebuildTopology();
-        var consumed = TryConsumeSelectedPlayerPlaceable();
-        TraceLog($"TryPlaceCurrentPlayerWorldTarget consumed player placeable={consumed}");
+        if (usesPlayerInventory)
+        {
+            var consumed = TryConsumeSelectedPlayerPlaceable();
+            TraceLog($"TryPlaceCurrentPlayerWorldTarget consumed player placeable={consumed}");
+        }
+
+        RefreshWorldInteractionModeFromBuildSource();
         RefreshInteriorInteractionModeFromBuildSource();
         UpdateHud();
         return true;
@@ -4205,8 +5124,10 @@ public partial class MobileFactoryDemo : Node3D
     private void CancelPlayerWorldPlacement()
     {
         ResetPlayerWorldBuildPlacementStroke();
+        _selectedWorldBuildKind = null;
         _playerInteriorPlacementArmed = false;
         _playerController?.DisarmHotbarPlacement();
+        RefreshWorldInteractionModeFromBuildSource();
         RefreshInteriorInteractionModeFromBuildSource();
         UpdateHud();
     }
@@ -4896,6 +5817,14 @@ public partial class MobileFactoryDemo : Node3D
         if (controlMode != MobileFactoryControlMode.Player)
         {
             ResetPlayerWorldBuildPlacementStroke();
+            if (_worldInteractionMode == FactoryInteractionMode.Delete)
+            {
+                _worldInteractionMode = FactoryInteractionMode.Interact;
+            }
+        }
+        else
+        {
+            RefreshWorldInteractionModeFromBuildSource();
         }
 
         FocusFactoryForCurrentMode();
@@ -4933,7 +5862,13 @@ public partial class MobileFactoryDemo : Node3D
         {
             MobileFactoryControlMode.Player => _editorOpen
                 ? "编辑会话开启：保留玩家控制上下文；顶部工作区负责切页，鼠标进世界继续观察，鼠标进视口开始舱内编辑，F 退出编辑。"
-                : "玩家模式：WASD 移动主角，镜头跟随角色；底部热栏可选建筑，左键放置，右键/Esc 取消，Q/E 旋转朝向，F 或主面板按钮进入编辑模式。",
+                : IsWorldBlueprintApplyActive()
+                    ? "世界蓝图预览：移动鼠标选择地面锚点，Q/E 旋转，左键确认应用，右键或 Esc 取消。"
+                    : _worldInteractionMode == FactoryInteractionMode.Delete
+                        ? "玩家模式：世界删除已就绪，左键删除，Shift+左键拖拽框选，Delete 删除悬停建筑，右键/Esc/X 返回交互。"
+                    : TryGetActivePlayerWorldPlacementKind(out _)
+                        ? "玩家模式：世界放置已就绪，左键放置，Delete 可拆悬停建筑，右键/Esc 取消，Q/E 旋转朝向，F 可进入编辑模式。"
+                        : "玩家模式：WASD 移动主角，点击世界建筑可选中，X 进入删除模式；底部热栏或左侧世界建造面板可直接放置，F 或主面板按钮进入编辑模式。",
             MobileFactoryControlMode.Observer => _editorOpen
                 ? "观察模式 + 编辑会话：世界仍可观察，相机只在世界区域接管输入；编辑视口和独立操作面板负责舱内编辑，F 退出编辑。"
                 : "观察模式：WASD/方向键移动相机 | 滚轮缩放 | Tab 返回玩家控制 | F 进入编辑模式",

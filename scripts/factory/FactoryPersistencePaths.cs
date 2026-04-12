@@ -73,7 +73,7 @@ public static class FactoryPersistencePaths
             return "当前运行处于 smoke/validate 模式，蓝图持久化已禁用。";
         }
 
-        return $"蓝图可保存到运行时目录 {GetBlueprintDirectoryGlobalPath()}，也可保存到工程目录 {GetBlueprintSourceDirectoryGlobalPath()}。";
+        return "蓝图可保存到运行时或工程内版本，便于调试与回写。";
     }
 
     public static string BuildPersistenceSummary(bool includeInteriorMap)
@@ -84,8 +84,8 @@ public static class FactoryPersistencePaths
         }
 
         return includeInteriorMap
-            ? $"世界地图目录：{GetWorldMapDirectoryGlobalPath()}\n内部地图目录：{GetInteriorMapDirectoryGlobalPath()}\n蓝图目录：{GetBlueprintDirectoryGlobalPath()}\n进度存档目录：{GetRuntimeSaveDirectoryGlobalPath()}"
-            : $"世界地图目录：{GetWorldMapDirectoryGlobalPath()}\n蓝图目录：{GetBlueprintDirectoryGlobalPath()}\n进度存档目录：{GetRuntimeSaveDirectoryGlobalPath()}";
+            ? "世界地图、内部地图、蓝图和进度存档功能已启用。"
+            : "世界地图、蓝图和进度存档功能已启用。";
     }
 
     public static string BuildRuntimeMapSavePath(string sourcePath, FactoryMapKind kind)

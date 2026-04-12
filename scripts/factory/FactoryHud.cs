@@ -636,7 +636,7 @@ public partial class FactoryHud : CanvasLayer
     {
         var (workspace, body) = CreateWorkspacePanel(SavesWorkspaceId);
         body.AddChild(CreateSectionLabel("存档工作区", 14, FactoryUiTheme.Text));
-        body.AddChild(CreateValueLabel("这里会列出当前运行时进度存档，并补充站点对应的当前地图路径、工程路径和运行时路径，方便调试实际快照来源。", FactoryUiTheme.TextSubtle));
+        body.AddChild(CreateValueLabel("这里会列出当前运行时进度存档，便于快速保存、读取和核对快照状态。", FactoryUiTheme.TextSubtle));
 
         body.AddChild(CreateDivider());
         body.AddChild(CreateSectionLabel("快速存读", 12, FactoryUiTheme.Text));
@@ -790,10 +790,6 @@ public partial class FactoryHud : CanvasLayer
         var maps = CreateValueLabel(FactoryRuntimeSavePersistence.BuildSlotCompactSummary(slot), FactoryUiTheme.TextMuted);
         maps.AddThemeFontSizeOverride("font_size", 11);
         body.AddChild(maps);
-
-        var file = CreateValueLabel(slot.ResourcePath, FactoryUiTheme.TextFaint);
-        file.AddThemeFontSizeOverride("font_size", 10);
-        body.AddChild(file);
 
         return card;
     }
