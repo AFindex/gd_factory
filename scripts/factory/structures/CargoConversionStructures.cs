@@ -360,6 +360,7 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
     private const float ChamberProcessSeconds = 0.82f;
     private const float ChamberReleaseSeconds = 0.28f;
     private const float EmitSeconds = 0.42f;
+    private static readonly bool EnableHeavyBundlePresentation = false;
 
     private FactoryItem? _processingBundle;
     private Queue<FactoryItemKind> _pendingManifest = new();
@@ -418,11 +419,22 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
 
     protected override FactoryItem? GetDisplayedProcessingItem()
     {
-        return _processingBundle;
+        return EnableHeavyBundlePresentation ? _processingBundle : null;
+    }
+
+    protected override FactoryItem? GetDisplayedStagingItem()
+    {
+        return EnableHeavyBundlePresentation ? base.GetDisplayedStagingItem() : null;
     }
 
     protected override bool TryResolveHeavyCargoPresentationState(out MobileFactoryHeavyCargoPresentationState state)
     {
+        if (!EnableHeavyBundlePresentation)
+        {
+            state = default;
+            return false;
+        }
+
         if (TryPeekInput(out var stagedBundle) && stagedBundle is not null)
         {
             state = new MobileFactoryHeavyCargoPresentationState(
