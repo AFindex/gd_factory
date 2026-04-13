@@ -361,27 +361,46 @@ public abstract partial class FactoryCargoConverterStructure : FactoryStructure,
 
 public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
 {
+    private enum UnpackerOperationStage
+    {
+        Idle,
+        Intake,
+        Processing,
+        Emitting,
+        Release
+    }
+
     private const float IntakeStageSeconds = 0.34f;
     private const float ChamberProcessSeconds = 0.82f;
     private const float ChamberReleaseSeconds = 0.28f;
     private const float EmitSeconds = 0.42f;
-    private const float PostReleaseSettleSeconds = 0.18f;
+    private const float PostReleaseSettleSeconds = 0.0f;
     private static readonly bool EnableHeavyBundleStagingPresentation = true;
     private static readonly bool EnableHeavyBundleProcessingPresentation = true;
     private static readonly bool EnableHeavyBundleProcessingAdvance = true;
+    private static readonly Color UnpackerIntakeProgressColor = new("7DD3FC");
+    private static readonly Color UnpackerProcessingProgressColor = new("FBBF24");
+    private static readonly Color UnpackerEmittingProgressColor = new("34D399");
+    private static readonly Color UnpackerReleaseProgressColor = new("FB923C");
 
     private FactoryItem? _processingBundle;
     private Queue<FactoryItemKind> _pendingManifest = new();
+    private int _manifestInitialCount;
     private double _processProgress;
     private double _releaseProgress;
     private double _emitProgress;
     private double _intakeProgress;
     private double _postReleaseSettleProgress;
     private bool _isEmittingManifest;
+    private bool _isReleasingBundle;
     private string _preferredTemplateId = "bulk-iron-ore-standard";
     private Vector2I _lastHeavyBundleSourceCell = Vector2I.Zero;
     private Vector3 _lastHeavyBundleSourceWorldPosition = Vector3.Zero;
     private bool _hasLastHeavyBundleSourceWorldPosition;
+    private MeshInstance3D? _progressBackground;
+    private MeshInstance3D? _progressFill;
+    private StandardMaterial3D? _progressFillMaterial;
+    private StandardMaterial3D? _statusLampMaterial;
 
     public CargoUnpackerStructure() : base(inputCapacity: 1, outputCapacity: 1)
     {
@@ -461,7 +480,7 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
                 MobileFactoryHeavyCargoPresentationOwner.CargoUnpacker,
                 MobileFactoryHeavyCargoPresentationHost.ConverterProcessing,
                 MobileFactoryHeavyHandoffPhase.WaitingForUnpacker,
-                Mathf.Clamp((float)(_processProgress / ChamberProcessSeconds), 0.0f, 1.0f));
+                ResolveOperationProgress(ResolveOperationStage()));
             return true;
         }
 
@@ -473,6 +492,7 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
     {
         return _postReleaseSettleProgress <= 0.0
             && !_isEmittingManifest
+            && !_isReleasingBundle
             && _processingBundle is null
             && InputCount == 0
             && CanAcceptConversionInput(item, sourceCell);
@@ -514,6 +534,7 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
         _lastHeavyBundleSourceWorldPosition = sourceWorldPosition;
         _hasLastHeavyBundleSourceWorldPosition = hasSourceWorldPosition;
         _intakeProgress = 0.0;
+        _isReleasingBundle = false;
         return true;
     }
 
@@ -524,6 +545,8 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
             var intakeRatio = Mathf.Clamp((float)(_intakeProgress / IntakeStageSeconds), 0.0f, 1.0f);
             yield return $"对接模板：{FactoryBundleCatalog.GetDisplayName(stagedBundle)}";
             yield return $"对接规格：{FactoryBundleCatalog.GetSizeTierLabel(FactoryBundleCatalog.ResolveSizeTier(stagedBundle))}";
+            yield return $"阶段：{DescribeOperationStage(UnpackerOperationStage.Intake)}";
+            yield return $"作业进度：{BuildProgressBar(intakeRatio)} {intakeRatio * 100.0f:0}%";
             yield return $"接舱进度：{intakeRatio * 100.0f:0}%";
             yield break;
         }
@@ -545,18 +568,30 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
             yield break;
         }
 
+        var stage = ResolveOperationStage();
+        var operationProgress = ResolveOperationProgress(stage);
         yield return $"处理模板：{FactoryBundleCatalog.GetDisplayName(_processingBundle)}";
         yield return $"处理规格：{FactoryBundleCatalog.GetSizeTierLabel(FactoryBundleCatalog.ResolveSizeTier(_processingBundle))}";
-        var processRatio = Mathf.Clamp((float)(_processProgress / ChamberProcessSeconds), 0.0f, 1.0f);
-        var releaseRatio = Mathf.Clamp((float)(_releaseProgress / ChamberReleaseSeconds), 0.0f, 1.0f);
-        yield return $"处理进度：{processRatio * 100.0f:0}%";
-        yield return $"解包退场：{releaseRatio * 100.0f:0}%";
+        yield return $"阶段：{DescribeOperationStage(stage)}";
+        yield return $"作业进度：{BuildProgressBar(operationProgress)} {operationProgress * 100.0f:0}%";
+        if (stage == UnpackerOperationStage.Emitting)
+        {
+            yield return $"吐料进度：{Mathf.Max(0, _manifestInitialCount - _pendingManifest.Count)}/{Mathf.Max(1, _manifestInitialCount)}";
+        }
+        else if (stage == UnpackerOperationStage.Release)
+        {
+            yield return $"解包退场：{operationProgress * 100.0f:0}%";
+        }
+        else
+        {
+            yield return $"处理进度：{operationProgress * 100.0f:0}%";
+        }
         yield return $"待吐清单：{_pendingManifest.Count} 件舱内小包";
     }
 
     protected override void AdvanceConverter(SimulationController simulation, double stepSeconds)
     {
-        if (_processingBundle is null && !_isEmittingManifest)
+        if (_processingBundle is null && !_isEmittingManifest && !_isReleasingBundle)
         {
             if (!TryPeekInput(out var stagedBundle) || stagedBundle is null)
             {
@@ -580,11 +615,14 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
                 _processingBundle = input;
                 _preferredTemplateId = string.IsNullOrWhiteSpace(input.BundleTemplateId) ? _preferredTemplateId : input.BundleTemplateId;
                 _pendingManifest = FactoryBundleCatalog.ExpandManifest(input);
+                _manifestInitialCount = _pendingManifest.Count;
                 _processProgress = 0.0;
                 _releaseProgress = 0.0;
                 _emitProgress = 0.0;
                 _intakeProgress = 0.0;
                 _postReleaseSettleProgress = 0.0;
+                _isEmittingManifest = false;
+                _isReleasingBundle = false;
                 HeavyCargoTrace.Log("unpacker_begin_processing", input, this);
             }
 
@@ -593,26 +631,79 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
 
         if (_processingBundle is not null)
         {
+            if (_isReleasingBundle)
+            {
+                _releaseProgress += stepSeconds;
+                if (_releaseProgress < ChamberReleaseSeconds)
+                {
+                    return;
+                }
+
+                HeavyCargoTrace.Log(
+                    "unpacker_release_processing_bundle",
+                    _processingBundle,
+                    this,
+                    $"manifestCount={_manifestInitialCount}");
+                _processingBundle = null;
+                _processProgress = 0.0;
+                _releaseProgress = 0.0;
+                _emitProgress = 0.0;
+                _manifestInitialCount = 0;
+                _isReleasingBundle = false;
+                _postReleaseSettleProgress = PostReleaseSettleSeconds;
+                return;
+            }
+
+            if (_isEmittingManifest)
+            {
+                if (_pendingManifest.Count <= 0)
+                {
+                    _isEmittingManifest = false;
+                    _isReleasingBundle = true;
+                    _releaseProgress = 0.0;
+                    return;
+                }
+
+                if (IsOutputFull)
+                {
+                    return;
+                }
+
+                _emitProgress += stepSeconds;
+                if (_emitProgress < EmitSeconds)
+                {
+                    return;
+                }
+
+                _emitProgress = 0.0;
+                var nextItemKind = _pendingManifest.Dequeue();
+                TryBufferOutput(simulation.CreateItem(Site, Kind, nextItemKind, FactoryCargoForm.InteriorFeed));
+
+                if (_pendingManifest.Count == 0)
+                {
+                    _isEmittingManifest = false;
+                    _isReleasingBundle = true;
+                    _releaseProgress = 0.0;
+                }
+
+                return;
+            }
+
             _processProgress += stepSeconds;
             if (_processProgress < ChamberProcessSeconds)
             {
                 return;
             }
 
-            _releaseProgress += stepSeconds;
-            if (_releaseProgress < ChamberReleaseSeconds)
+            if (_pendingManifest.Count > 0)
             {
+                _isEmittingManifest = true;
+                _emitProgress = 0.0;
                 return;
             }
 
-            HeavyCargoTrace.Log(
-                "unpacker_release_processing_bundle",
-                _processingBundle,
-                this,
-                $"manifestCount={_pendingManifest.Count}");
-            _processingBundle = null;
-            _emitProgress = 0.0;
-            _postReleaseSettleProgress = PostReleaseSettleSeconds;
+            _isReleasingBundle = true;
+            _releaseProgress = 0.0;
             return;
         }
 
@@ -623,33 +714,9 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
             {
                 return;
             }
-
-            if (_pendingManifest.Count > 0)
-            {
-                _isEmittingManifest = true;
-                _emitProgress = 0.0;
-            }
-        }
-
-        if (!_isEmittingManifest || IsOutputFull)
-        {
-            return;
-        }
-
-        _emitProgress += stepSeconds;
-        if (_emitProgress < EmitSeconds || _pendingManifest.Count <= 0)
-        {
-            return;
         }
 
         _emitProgress = 0.0;
-        var nextItemKind = _pendingManifest.Dequeue();
-        TryBufferOutput(simulation.CreateItem(Site, Kind, nextItemKind, FactoryCargoForm.InteriorFeed));
-
-        if (_pendingManifest.Count == 0)
-        {
-            _isEmittingManifest = false;
-        }
     }
 
     protected override void PreparePayloadAnchorsForVisuals()
@@ -685,7 +752,13 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
             var basePosition = carriage.GetMeta("base_position", carriage.Position).AsVector3();
             var processRatio = _processingBundle is null
                 ? 0.0f
-                : Mathf.Clamp((float)(_processProgress / ChamberProcessSeconds), 0.0f, 1.0f);
+                : ResolveOperationStage() switch
+                {
+                    UnpackerOperationStage.Processing => Mathf.Clamp((float)(_processProgress / ChamberProcessSeconds), 0.0f, 1.0f),
+                    UnpackerOperationStage.Emitting => 1.0f,
+                    UnpackerOperationStage.Release => 1.0f - (Mathf.Clamp((float)(_releaseProgress / ChamberReleaseSeconds), 0.0f, 1.0f) * 0.55f),
+                    _ => 0.0f
+                };
             var slide = _processingBundle is null
                 ? 0.0f
                 : Mathf.Sin((float)(Time.GetTicksMsec() * 0.004)) * CellSize * 0.06f * processRatio;
@@ -709,12 +782,42 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
 
         if (GetNodeOrNull<Node3D>("ProcessingPayloadAnchor/ProcessingPayloadAnchor_Visual") is Node3D processingVisual)
         {
-            var releaseRatio = _processingBundle is null
-                ? 0.0f
-                : Mathf.Clamp((float)(_releaseProgress / ChamberReleaseSeconds), 0.0f, 1.0f);
+            var releaseRatio = _processingBundle is not null && _isReleasingBundle
+                ? Mathf.Clamp((float)(_releaseProgress / ChamberReleaseSeconds), 0.0f, 1.0f)
+                : 0.0f;
             var scale = Mathf.Lerp(1.0f, 0.18f, releaseRatio);
             processingVisual.Scale = Vector3.One * Mathf.Max(0.12f, scale);
-            processingVisual.Visible = releaseRatio < 0.98f;
+            processingVisual.Visible = _processingBundle is not null && releaseRatio < 0.98f;
+        }
+
+        var stage = ResolveOperationStage();
+        var progress = ResolveOperationProgress(stage);
+        var showProgress = stage != UnpackerOperationStage.Idle;
+        if (_progressBackground is not null)
+        {
+            _progressBackground.Visible = showProgress;
+        }
+
+        if (_progressFill is not null)
+        {
+            _progressFill.Visible = showProgress;
+            _progressFill.Scale = new Vector3(Mathf.Max(0.01f, progress), 1.0f, 1.0f);
+            _progressFill.Position = new Vector3((-0.29f * CellSize) + (progress * 0.29f * CellSize), 1.04f, 0.0f);
+        }
+
+        if (_progressFillMaterial is not null)
+        {
+            var progressColor = ResolveOperationColor(stage);
+            _progressFillMaterial.AlbedoColor = progressColor;
+            _progressFillMaterial.Emission = progressColor.Darkened(0.05f);
+        }
+
+        if (_statusLampMaterial is not null)
+        {
+            var lampColor = ResolveOperationColor(stage).Lightened(stage == UnpackerOperationStage.Idle ? 0.18f : 0.04f);
+            _statusLampMaterial.AlbedoColor = lampColor;
+            _statusLampMaterial.Emission = lampColor;
+            _statusLampMaterial.EmissionEnergyMultiplier = stage == UnpackerOperationStage.Idle ? 1.2f : 1.65f;
         }
     }
 
@@ -731,6 +834,87 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
         }
 
         return ToLocal(Site.CellToWorld(_lastHeavyBundleSourceCell) + new Vector3(0.0f, 0.24f, 0.0f));
+    }
+
+    private UnpackerOperationStage ResolveOperationStage()
+    {
+        if (_processingBundle is not null)
+        {
+            if (_isReleasingBundle)
+            {
+                return UnpackerOperationStage.Release;
+            }
+
+            if (_isEmittingManifest)
+            {
+                return UnpackerOperationStage.Emitting;
+            }
+
+            return UnpackerOperationStage.Processing;
+        }
+
+        if (TryPeekInput(out var stagedBundle) && stagedBundle is not null)
+        {
+            return UnpackerOperationStage.Intake;
+        }
+
+        return UnpackerOperationStage.Idle;
+    }
+
+    private float ResolveOperationProgress(UnpackerOperationStage stage)
+    {
+        return stage switch
+        {
+            UnpackerOperationStage.Intake => Mathf.Clamp((float)(_intakeProgress / IntakeStageSeconds), 0.0f, 1.0f),
+            UnpackerOperationStage.Processing => Mathf.Clamp((float)(_processProgress / ChamberProcessSeconds), 0.0f, 1.0f),
+            UnpackerOperationStage.Emitting => ResolveEmitProgress(),
+            UnpackerOperationStage.Release => Mathf.Clamp((float)(_releaseProgress / ChamberReleaseSeconds), 0.0f, 1.0f),
+            _ => 0.0f
+        };
+    }
+
+    private float ResolveEmitProgress()
+    {
+        if (_manifestInitialCount <= 0)
+        {
+            return 1.0f;
+        }
+
+        var emittedCount = Mathf.Max(0, _manifestInitialCount - _pendingManifest.Count);
+        var partial = Mathf.Clamp((float)(_emitProgress / EmitSeconds), 0.0f, 1.0f);
+        return Mathf.Clamp((emittedCount + partial) / _manifestInitialCount, 0.0f, 1.0f);
+    }
+
+    private static string DescribeOperationStage(UnpackerOperationStage stage)
+    {
+        return stage switch
+        {
+            UnpackerOperationStage.Intake => "接舱中",
+            UnpackerOperationStage.Processing => "解包处理中",
+            UnpackerOperationStage.Emitting => "舱内吐料中",
+            UnpackerOperationStage.Release => "重包退场中",
+            _ => "待机"
+        };
+    }
+
+    private static string BuildProgressBar(float progress)
+    {
+        const int segments = 12;
+        var clamped = Mathf.Clamp(progress, 0.0f, 1.0f);
+        var filledCount = Mathf.RoundToInt(clamped * segments);
+        return $"[{new string('#', filledCount)}{new string('-', Mathf.Max(0, segments - filledCount))}]";
+    }
+
+    private static Color ResolveOperationColor(UnpackerOperationStage stage)
+    {
+        return stage switch
+        {
+            UnpackerOperationStage.Intake => UnpackerIntakeProgressColor,
+            UnpackerOperationStage.Processing => UnpackerProcessingProgressColor,
+            UnpackerOperationStage.Emitting => UnpackerEmittingProgressColor,
+            UnpackerOperationStage.Release => UnpackerReleaseProgressColor,
+            _ => UnpackerIntakeProgressColor.Darkened(0.18f)
+        };
     }
 
     protected override void BuildVisuals()
@@ -754,8 +938,41 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
             CreateInteriorTray(this, "UnpackerOutfeed", new Vector3(deckWidth * 0.34f, 0.10f, CellSize * 0.22f), new Color("0B5A88"), new Color("DBEAFE"), new Vector3(deckWidth * 0.36f, 0.16f, 0.0f));
             CreateBox("UnpackerClampNorth", new Vector3(deckWidth * 0.48f, 0.06f, CellSize * 0.10f), new Color("E0F2FE"), new Vector3(0.0f, 0.60f, -CellSize * 0.26f));
             CreateBox("UnpackerClampSouth", new Vector3(deckWidth * 0.48f, 0.06f, CellSize * 0.10f), new Color("E0F2FE"), new Vector3(0.0f, 0.60f, CellSize * 0.26f));
-            CreateInteriorIndicatorLight(this, "UnpackerLamp", new Color("7DD3FC"), new Vector3(-deckWidth * 0.34f, 0.64f, 0.0f), CellSize * 0.09f);
+            var unpackerLamp = CreateBox("UnpackerLamp", new Vector3(CellSize * 0.09f, CellSize * 0.09f, CellSize * 0.09f), ResolveOperationColor(UnpackerOperationStage.Idle), new Vector3(-deckWidth * 0.34f, 0.64f, 0.0f));
+            if (unpackerLamp.MaterialOverride is StandardMaterial3D statusLampMaterial)
+            {
+                statusLampMaterial.Roughness = 0.18f;
+                statusLampMaterial.EmissionEnabled = true;
+                statusLampMaterial.Emission = ResolveOperationColor(UnpackerOperationStage.Idle);
+                statusLampMaterial.EmissionEnergyMultiplier = 1.2f;
+                _statusLampMaterial = statusLampMaterial;
+            }
             CreateInteriorLabelPlate(this, "UnpackerTier", "重载", new Color("7DD3FC"), new Vector3(-deckWidth * 0.10f, 0.16f, -deckDepth * 0.32f), 1.1f);
+            _progressBackground = CreateBox(
+                "UnpackerProgressBackground",
+                new Vector3(CellSize * 0.62f, 0.03f, 0.08f),
+                new Color(0.04f, 0.07f, 0.12f, 0.82f),
+                new Vector3(0.0f, 1.04f, 0.0f));
+            if (_progressBackground.MaterialOverride is StandardMaterial3D progressBackgroundMaterial)
+            {
+                progressBackgroundMaterial.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+                progressBackgroundMaterial.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
+            }
+            _progressBackground.Visible = false;
+            _progressFill = CreateBox(
+                "UnpackerProgressFill",
+                new Vector3(CellSize * 0.58f, 0.02f, 0.06f),
+                UnpackerIntakeProgressColor,
+                new Vector3(0.0f, 1.04f, 0.0f));
+            if (_progressFill.MaterialOverride is StandardMaterial3D progressFillMaterial)
+            {
+                progressFillMaterial.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+                progressFillMaterial.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
+                progressFillMaterial.EmissionEnabled = true;
+                progressFillMaterial.Emission = UnpackerIntakeProgressColor.Darkened(0.05f);
+                _progressFillMaterial = progressFillMaterial;
+            }
+            _progressFill.Visible = false;
             CreatePayloadAnchor("StagingPayloadAnchor", new Vector3(-deckWidth * 0.38f, 0.24f, 0.0f));
             CreatePayloadAnchor("ProcessingPayloadAnchor", new Vector3(0.0f, 0.28f, 0.0f));
             CreatePayloadAnchor("DispatchPayloadAnchor", new Vector3(deckWidth * 0.38f, 0.24f, 0.0f));
