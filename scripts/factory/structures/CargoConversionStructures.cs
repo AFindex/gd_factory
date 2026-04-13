@@ -105,6 +105,7 @@ public abstract partial class FactoryCargoConverterStructure : FactoryStructure,
 
     public override void UpdateVisuals(float tickAlpha)
     {
+        PreparePayloadAnchorsForVisuals();
         SyncPayloadVisual(
             "StagingPayloadAnchor",
             ref _stagingPayloadVisual,
@@ -152,6 +153,10 @@ public abstract partial class FactoryCargoConverterStructure : FactoryStructure,
     }
 
     protected virtual void ApplyMechanicsVisuals()
+    {
+    }
+
+    protected virtual void PreparePayloadAnchorsForVisuals()
     {
     }
 
@@ -360,7 +365,10 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
     private const float ChamberProcessSeconds = 0.82f;
     private const float ChamberReleaseSeconds = 0.28f;
     private const float EmitSeconds = 0.42f;
-    private static readonly bool EnableHeavyBundlePresentation = false;
+    private const float PostReleaseSettleSeconds = 0.18f;
+    private static readonly bool EnableHeavyBundleStagingPresentation = true;
+    private static readonly bool EnableHeavyBundleProcessingPresentation = true;
+    private static readonly bool EnableHeavyBundleProcessingAdvance = true;
 
     private FactoryItem? _processingBundle;
     private Queue<FactoryItemKind> _pendingManifest = new();
@@ -368,8 +376,12 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
     private double _releaseProgress;
     private double _emitProgress;
     private double _intakeProgress;
+    private double _postReleaseSettleProgress;
     private bool _isEmittingManifest;
     private string _preferredTemplateId = "bulk-iron-ore-standard";
+    private Vector2I _lastHeavyBundleSourceCell = Vector2I.Zero;
+    private Vector3 _lastHeavyBundleSourceWorldPosition = Vector3.Zero;
+    private bool _hasLastHeavyBundleSourceWorldPosition;
 
     public CargoUnpackerStructure() : base(inputCapacity: 1, outputCapacity: 1)
     {
@@ -419,23 +431,19 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
 
     protected override FactoryItem? GetDisplayedProcessingItem()
     {
-        return EnableHeavyBundlePresentation ? _processingBundle : null;
+        return EnableHeavyBundleProcessingPresentation ? _processingBundle : null;
     }
 
     protected override FactoryItem? GetDisplayedStagingItem()
     {
-        return EnableHeavyBundlePresentation ? base.GetDisplayedStagingItem() : null;
+        return EnableHeavyBundleStagingPresentation ? base.GetDisplayedStagingItem() : null;
     }
 
     protected override bool TryResolveHeavyCargoPresentationState(out MobileFactoryHeavyCargoPresentationState state)
     {
-        if (!EnableHeavyBundlePresentation)
-        {
-            state = default;
-            return false;
-        }
-
-        if (TryPeekInput(out var stagedBundle) && stagedBundle is not null)
+        if (EnableHeavyBundleStagingPresentation
+            && TryPeekInput(out var stagedBundle)
+            && stagedBundle is not null)
         {
             state = new MobileFactoryHeavyCargoPresentationState(
                 stagedBundle,
@@ -446,7 +454,7 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
             return true;
         }
 
-        if (_processingBundle is not null)
+        if (EnableHeavyBundleProcessingPresentation && _processingBundle is not null)
         {
             state = new MobileFactoryHeavyCargoPresentationState(
                 _processingBundle,
@@ -463,13 +471,29 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
 
     public bool CanAcceptHeavyBundle(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
     {
-        return !_isEmittingManifest
+        return _postReleaseSettleProgress <= 0.0
+            && !_isEmittingManifest
             && _processingBundle is null
             && InputCount == 0
             && CanAcceptConversionInput(item, sourceCell);
     }
 
     public bool TryAcceptHeavyBundle(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
+    {
+        return TryAcceptHeavyBundle(item, sourceCell, Vector3.Zero, simulation, hasSourceWorldPosition: false);
+    }
+
+    public bool TryAcceptHeavyBundle(FactoryItem item, Vector2I sourceCell, Vector3 sourceWorldPosition, SimulationController simulation)
+    {
+        return TryAcceptHeavyBundle(item, sourceCell, sourceWorldPosition, simulation, hasSourceWorldPosition: true);
+    }
+
+    private bool TryAcceptHeavyBundle(
+        FactoryItem item,
+        Vector2I sourceCell,
+        Vector3 sourceWorldPosition,
+        SimulationController simulation,
+        bool hasSourceWorldPosition)
     {
         if (!CanAcceptHeavyBundle(item, sourceCell, simulation))
         {
@@ -486,6 +510,9 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
             item,
             this,
             $"source=({sourceCell.X},{sourceCell.Y})");
+        _lastHeavyBundleSourceCell = sourceCell;
+        _lastHeavyBundleSourceWorldPosition = sourceWorldPosition;
+        _hasLastHeavyBundleSourceWorldPosition = hasSourceWorldPosition;
         _intakeProgress = 0.0;
         return true;
     }
@@ -506,6 +533,11 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
             var template = FactoryBundleCatalog.Get(_preferredTemplateId);
             yield return $"待机模板：{FactoryBundleCatalog.DescribeTemplate(template)}";
             yield return $"处理规格：{FactoryBundleCatalog.GetSizeTierLabel(template.SizeTier)}";
+            if (_postReleaseSettleProgress > 0.0)
+            {
+                var settleRatio = 1.0f - Mathf.Clamp((float)(_postReleaseSettleProgress / PostReleaseSettleSeconds), 0.0f, 1.0f);
+                yield return $"退舱清空：{settleRatio * 100.0f:0}%";
+            }
             if (_isEmittingManifest)
             {
                 yield return $"舱内吐料：{_pendingManifest.Count} 件待释放";
@@ -532,7 +564,12 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
                 return;
             }
 
-            _intakeProgress += stepSeconds;
+            _intakeProgress = Math.Min(_intakeProgress + stepSeconds, IntakeStageSeconds);
+            if (!EnableHeavyBundleProcessingAdvance)
+            {
+                return;
+            }
+
             if (_intakeProgress < IntakeStageSeconds)
             {
                 return;
@@ -547,6 +584,7 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
                 _releaseProgress = 0.0;
                 _emitProgress = 0.0;
                 _intakeProgress = 0.0;
+                _postReleaseSettleProgress = 0.0;
                 HeavyCargoTrace.Log("unpacker_begin_processing", input, this);
             }
 
@@ -573,9 +611,24 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
                 this,
                 $"manifestCount={_pendingManifest.Count}");
             _processingBundle = null;
-            _isEmittingManifest = true;
             _emitProgress = 0.0;
+            _postReleaseSettleProgress = PostReleaseSettleSeconds;
             return;
+        }
+
+        if (_postReleaseSettleProgress > 0.0)
+        {
+            _postReleaseSettleProgress = Math.Max(0.0, _postReleaseSettleProgress - stepSeconds);
+            if (_postReleaseSettleProgress > 0.0)
+            {
+                return;
+            }
+
+            if (_pendingManifest.Count > 0)
+            {
+                _isEmittingManifest = true;
+                _emitProgress = 0.0;
+            }
         }
 
         if (!_isEmittingManifest || IsOutputFull)
@@ -599,22 +652,10 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
         }
     }
 
-    protected override void ApplyMechanicsVisuals()
+    protected override void PreparePayloadAnchorsForVisuals()
     {
-        var clampNorth = GetNodeOrNull<MeshInstance3D>("UnpackerClampNorth");
-        var clampSouth = GetNodeOrNull<MeshInstance3D>("UnpackerClampSouth");
         var stagingAnchor = GetNodeOrNull<Node3D>("StagingPayloadAnchor");
         var carriage = GetNodeOrNull<Node3D>("ProcessingPayloadAnchor");
-        if (clampNorth is not null)
-        {
-            clampNorth.Position = new Vector3(0.0f, 0.60f, -CellSize * 0.26f - Mathf.Sin((float)(Time.GetTicksMsec() * 0.005)) * CellSize * 0.05f);
-        }
-
-        if (clampSouth is not null)
-        {
-            clampSouth.Position = new Vector3(0.0f, 0.60f, CellSize * 0.26f + Mathf.Sin((float)(Time.GetTicksMsec() * 0.005)) * CellSize * 0.05f);
-        }
-
         if (stagingAnchor is not null)
         {
             var stagingBase = stagingAnchor.GetMeta("base_position", stagingAnchor.Position).AsVector3();
@@ -622,9 +663,16 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
                 && TryPeekInput(out var stagedBundle)
                 && stagedBundle is not null)
             {
-                var processingBase = GetNodeOrNull<Node3D>("ProcessingPayloadAnchor")?.GetMeta("base_position", Vector3.Zero).AsVector3() ?? stagingBase;
                 var travel = Mathf.Clamp((float)(_intakeProgress / IntakeStageSeconds), 0.0f, 1.0f);
-                stagingAnchor.Position = stagingBase.Lerp(processingBase, travel * 0.82f);
+                if (!EnableHeavyBundleProcessingAdvance)
+                {
+                    stagingAnchor.Position = ResolveInboundDockApproachPosition(stagingBase).Lerp(stagingBase, Mathf.SmoothStep(0.0f, 1.0f, travel));
+                }
+                else
+                {
+                    var processingBase = GetNodeOrNull<Node3D>("ProcessingPayloadAnchor")?.GetMeta("base_position", Vector3.Zero).AsVector3() ?? stagingBase;
+                    stagingAnchor.Position = stagingBase.Lerp(processingBase, Mathf.SmoothStep(0.0f, 1.0f, travel));
+                }
             }
             else
             {
@@ -635,8 +683,28 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
         if (carriage is not null)
         {
             var basePosition = carriage.GetMeta("base_position", carriage.Position).AsVector3();
-            var slide = _processingBundle is null ? 0.0f : Mathf.Sin((float)(Time.GetTicksMsec() * 0.004)) * CellSize * 0.06f;
+            var processRatio = _processingBundle is null
+                ? 0.0f
+                : Mathf.Clamp((float)(_processProgress / ChamberProcessSeconds), 0.0f, 1.0f);
+            var slide = _processingBundle is null
+                ? 0.0f
+                : Mathf.Sin((float)(Time.GetTicksMsec() * 0.004)) * CellSize * 0.06f * processRatio;
             carriage.Position = basePosition + new Vector3(slide, 0.0f, 0.0f);
+        }
+    }
+
+    protected override void ApplyMechanicsVisuals()
+    {
+        var clampNorth = GetNodeOrNull<MeshInstance3D>("UnpackerClampNorth");
+        var clampSouth = GetNodeOrNull<MeshInstance3D>("UnpackerClampSouth");
+        if (clampNorth is not null)
+        {
+            clampNorth.Position = new Vector3(0.0f, 0.60f, -CellSize * 0.26f - Mathf.Sin((float)(Time.GetTicksMsec() * 0.005)) * CellSize * 0.05f);
+        }
+
+        if (clampSouth is not null)
+        {
+            clampSouth.Position = new Vector3(0.0f, 0.60f, CellSize * 0.26f + Mathf.Sin((float)(Time.GetTicksMsec() * 0.005)) * CellSize * 0.05f);
         }
 
         if (GetNodeOrNull<Node3D>("ProcessingPayloadAnchor/ProcessingPayloadAnchor_Visual") is Node3D processingVisual)
@@ -648,6 +716,21 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
             processingVisual.Scale = Vector3.One * Mathf.Max(0.12f, scale);
             processingVisual.Visible = releaseRatio < 0.98f;
         }
+    }
+
+    private Vector3 ResolveInboundDockApproachPosition(Vector3 fallback)
+    {
+        if (_hasLastHeavyBundleSourceWorldPosition)
+        {
+            return ToLocal(_lastHeavyBundleSourceWorldPosition);
+        }
+
+        if (Site is null)
+        {
+            return fallback;
+        }
+
+        return ToLocal(Site.CellToWorld(_lastHeavyBundleSourceCell) + new Vector3(0.0f, 0.24f, 0.0f));
     }
 
     protected override void BuildVisuals()
