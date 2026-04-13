@@ -78,6 +78,11 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         }
 
         _items.Add(state);
+        HeavyCargoTrace.Log(
+            "flow_accept_item",
+            item,
+            this,
+            $"source=({sourceCell.X},{sourceCell.Y}) target=({targetCell.X},{targetCell.Y}) lane={laneKey}");
         OnTransitItemAccepted(state);
         return true;
     }
@@ -193,6 +198,11 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         }
 
         _items.Add(state);
+        HeavyCargoTrace.Log(
+            "flow_receive_provided",
+            item,
+            this,
+            $"source=({sourceCell.X},{sourceCell.Y}) target=({targetCell.X},{targetCell.Y}) lane={laneKey}");
         OnTransitItemAccepted(state);
         return true;
     }
@@ -226,6 +236,17 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
                 {
                     if (TryDispatchItem(itemState, simulation))
                     {
+                        var targetStructureLabel = "none";
+                        if (Site.TryGetStructure(itemState.TargetCell, out var targetStructure) && targetStructure is not null)
+                        {
+                            targetStructureLabel = $"{targetStructure.Kind}@({targetStructure.Cell.X},{targetStructure.Cell.Y})";
+                        }
+
+                        HeavyCargoTrace.Log(
+                            "flow_dispatch_success",
+                            itemState.Item,
+                            this,
+                            $"from=({itemState.SourceCell.X},{itemState.SourceCell.Y}) to=({itemState.TargetCell.X},{itemState.TargetCell.Y}) target={targetStructureLabel} progress={itemState.Position:0.000}");
                         FreeLegacyVisual(itemState);
                         _items.RemoveAt(i);
                         i--;

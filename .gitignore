@@ -24,3 +24,6 @@ android/
 factory-smoke.err
 artifacts/dotnet-diagnostics/
 artifacts
+smoke-heavy-check.log
+tmp_gif_frames
+tmp_gif_frames2

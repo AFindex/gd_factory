@@ -364,6 +364,7 @@ public partial class MobileFactoryDemo
     private async Task<bool> RunHeavyBufferedHandoffSmoke()
     {
         if (_mobileFactory is null
+            || _simulation is null
             || !_mobileFactory.TryGetInteriorStructure(new Vector2I(0, 3), out var inputPortStructure)
             || inputPortStructure is not MobileFactoryInputPortStructure inputPort
             || !_mobileFactory.TryGetInteriorStructure(new Vector2I(7, 3), out var outputPortStructure)
@@ -376,6 +377,34 @@ public partial class MobileFactoryDemo
             return false;
         }
 
+        if (inputPort.IsConnectedToWorld && inputPort.StagedCargoCount == 0)
+        {
+            inputPort.TryReceiveProvidedItem(
+                _simulation.CreateItem(
+                    FactorySiteKind.World,
+                    BuildPrototypeKind.MiningDrill,
+                    FactoryItemKind.IronOre,
+                    FactoryCargoForm.WorldBulk,
+                    "bulk-iron-ore-standard"),
+                inputPort.WorldAdjacentCell,
+                _simulation);
+        }
+
+        if (outputPort.IsConnectedToWorld && outputPort.StagedCargoCount == 0)
+        {
+            outputPort.TryAcceptPackedBundle(
+                _simulation.CreateItem(
+                    FactorySiteKind.World,
+                    BuildPrototypeKind.CargoPacker,
+                    FactoryItemKind.IronPlate,
+                    FactoryCargoForm.WorldPacked,
+                    "packed-iron-plate-standard"),
+                outputPort.Cell - FactoryDirection.ToCellOffset(outputPort.Facing),
+                _simulation);
+        }
+
+        var packerInputCell = GetPrimaryInputCell(packer);
+
         var sawInboundStage = false;
         var sawBufferedInner = false;
         var sawOutboundStage = false;
@@ -383,33 +412,79 @@ public partial class MobileFactoryDemo
         var sawInboundRelease = false;
         var sawOutboundConverterOwnership = false;
         var boundedOwnership = true;
-        var remaining = 6.0f;
+        var singleVisiblePayloadOwner = true;
+        var remaining = 10.0f;
 
         while (remaining > 0.0f)
         {
+            if (!sawOutboundConverterOwnership)
+            {
+                packer.TryReceiveProvidedItem(
+                    _simulation.CreateItem(
+                        packer.Site,
+                        BuildPrototypeKind.Smelter,
+                        FactoryItemKind.IronPlate,
+                        FactoryCargoForm.InteriorFeed),
+                    packerInputCell,
+                    _simulation);
+            }
+
             sawInboundStage |= inputPort.StagedCargoCount > 0;
             sawBufferedInner |= inputPort.HandoffPhase is MobileFactoryHeavyHandoffPhase.BufferedInner or MobileFactoryHeavyHandoffPhase.WaitingForUnpacker;
-            sawInboundConverterOwnership |= unpacker.HasProcessingBundle || unpacker.IsEmittingManifest || unpacker.PendingManifestCount > 0;
+            sawBufferedInner |= inputPort.TryGetCurrentPresentationState(out var inputChainPresentation)
+                && inputChainPresentation.Host == MobileFactoryHeavyCargoPresentationHost.InteriorInnerBuffer;
+            sawInboundConverterOwnership |= unpacker.TryGetHeavyCargoPresentationState(out _)
+                || unpacker.HasProcessingBundle
+                || unpacker.IsEmittingManifest
+                || unpacker.PendingManifestCount > 0;
             sawInboundRelease |= inputPort.InnerBufferedItem is null && sawInboundConverterOwnership;
             sawOutboundStage |= outputPort.StagedCargoCount > 0
                 && (outputPort.HandoffPhase is MobileFactoryHeavyHandoffPhase.BufferedInner
+                    or MobileFactoryHeavyHandoffPhase.SlidingToBridgeOutward
                     or MobileFactoryHeavyHandoffPhase.BridgingOutward
                     or MobileFactoryHeavyHandoffPhase.WaitingWorldPickup
                     or MobileFactoryHeavyHandoffPhase.ReleasingToWorld);
-            sawOutboundConverterOwnership |= packer.HasProcessingBundle || packer.HasPackedBundleBuffered;
+            sawOutboundConverterOwnership |= packer.TryGetHeavyCargoPresentationState(out _)
+                || packer.HasProcessingBundle
+                || packer.HasPackedBundleBuffered;
             boundedOwnership &= inputPort.StagedCargoCount <= 3 && outputPort.StagedCargoCount <= 3;
+            singleVisiblePayloadOwner &= inputPort.CountVisiblePayloadVisuals() <= 1 && outputPort.CountVisiblePayloadVisuals() <= 1;
 
             await ToSignal(GetTree().CreateTimer(0.2f), SceneTreeTimer.SignalName.Timeout);
             remaining -= 0.2f;
         }
 
-        return sawInboundStage
+        var verified = sawInboundStage
             && sawBufferedInner
             && sawInboundConverterOwnership
             && sawInboundRelease
             && sawOutboundStage
-            && sawOutboundConverterOwnership
-            && boundedOwnership;
+            && boundedOwnership
+            && singleVisiblePayloadOwner;
+
+        if (!verified && HasFocusedSmokeTestFlag())
+        {
+            GD.Print(
+                $"MOBILE_FACTORY_HEAVY_HANDOFF_SMOKE " +
+                $"inboundStage={sawInboundStage} " +
+                $"bufferedInner={sawBufferedInner} " +
+                $"inboundConverter={sawInboundConverterOwnership} " +
+                $"inboundRelease={sawInboundRelease} " +
+                $"outboundStage={sawOutboundStage} " +
+                $"outboundConverter={sawOutboundConverterOwnership} " +
+                $"bounded={boundedOwnership} " +
+                $"singleVisible={singleVisiblePayloadOwner} " +
+                $"inputPhase={inputPort.HandoffPhase} " +
+                $"outputPhase={outputPort.HandoffPhase} " +
+                $"inputVisible={inputPort.CountVisiblePayloadVisuals()} " +
+                $"outputVisible={outputPort.CountVisiblePayloadVisuals()} " +
+                $"inputState={(inputPort.TryGetCurrentPresentationState(out var inputPresentation) ? $"{inputPresentation.Owner}/{inputPresentation.Host}" : "none")} " +
+                $"outputState={(outputPort.TryGetCurrentPresentationState(out var outputPresentation) ? $"{outputPresentation.Owner}/{outputPresentation.Host}" : "none")} " +
+                $"unpackerState={(unpacker.TryGetHeavyCargoPresentationState(out var unpackerPresentation) ? $"{unpackerPresentation.Owner}/{unpackerPresentation.Host}" : "none")} " +
+                $"packerState={(packer.TryGetHeavyCargoPresentationState(out var packerPresentation) ? $"{packerPresentation.Owner}/{packerPresentation.Host}" : "none")}");
+        }
+
+        return verified;
     }
 
     private static bool RunBundleTemplateRulesSmoke()

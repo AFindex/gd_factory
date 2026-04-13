@@ -8,10 +8,12 @@ public enum MobileFactoryHeavyHandoffPhase
     WaitingWorldCargo,
     ReceivingFromWorld,
     BufferedOuter,
+    SlidingToBridgeInward,
     BridgingInward,
     BufferedInner,
     WaitingForUnpacker,
     WaitingForPacker,
+    SlidingToBridgeOutward,
     BridgingOutward,
     WaitingWorldPickup,
     ReleasingToWorld
@@ -24,6 +26,49 @@ public enum MobileFactoryHeavyPortTransferMode
     OuterToInnerBuffer,
     InnerToOuterBuffer,
     OuterToWorld
+}
+
+public enum MobileFactoryHeavyCargoPresentationOwner
+{
+    None,
+    HeavyPort,
+    CargoUnpacker,
+    CargoPacker
+}
+
+public enum MobileFactoryHeavyCargoPresentationHost
+{
+    None,
+    WorldRouteHandoff,
+    WorldOuterBuffer,
+    InteriorBridge,
+    InteriorInnerBuffer,
+    ConverterStaging,
+    ConverterProcessing,
+    ConverterDispatch
+}
+
+public readonly struct MobileFactoryHeavyCargoPresentationState
+{
+    public MobileFactoryHeavyCargoPresentationState(
+        FactoryItem item,
+        MobileFactoryHeavyCargoPresentationOwner owner,
+        MobileFactoryHeavyCargoPresentationHost host,
+        MobileFactoryHeavyHandoffPhase phase,
+        float progress)
+    {
+        Item = item;
+        Owner = owner;
+        Host = host;
+        Phase = phase;
+        Progress = Mathf.Clamp(progress, 0.0f, 1.0f);
+    }
+
+    public FactoryItem Item { get; }
+    public MobileFactoryHeavyCargoPresentationOwner Owner { get; }
+    public MobileFactoryHeavyCargoPresentationHost Host { get; }
+    public MobileFactoryHeavyHandoffPhase Phase { get; }
+    public float Progress { get; }
 }
 
 public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTransportStructure
@@ -575,7 +620,7 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         var visual = anchor.GetNodeOrNull<Node3D>("TransitPayloadVisual");
         if (visual is null || !string.Equals(currentKey, visualKey, StringComparison.Ordinal))
         {
-            visual?.QueueFree();
+            RemoveTransitPayloadVisual(anchor, visual);
             visual = FactoryTransportVisualFactory.CreateVisual(item, FactoryConstants.CellSize, FactoryTransportVisualContext.BoundaryHandoff);
             visual.Name = "TransitPayloadVisual";
             anchor.AddChild(visual);
@@ -587,36 +632,64 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
 
     protected static void ClearTransitPayloadVisual(Node3D anchor)
     {
-        anchor.GetNodeOrNull<Node3D>("TransitPayloadVisual")?.QueueFree();
+        RemoveTransitPayloadVisual(anchor, anchor.GetNodeOrNull<Node3D>("TransitPayloadVisual"));
         anchor.SetMeta("transit_visual_key", string.Empty);
+    }
+
+    private static void RemoveTransitPayloadVisual(Node3D anchor, Node3D? visual)
+    {
+        if (visual is null)
+        {
+            return;
+        }
+
+        visual.Visible = false;
+        if (visual.GetParent() == anchor)
+        {
+            anchor.RemoveChild(visual);
+        }
+
+        visual.QueueFree();
     }
 }
 
 public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBoundaryAttachmentStructure
 {
+    protected const float BridgeAlignmentProgress = 0.48f;
+    protected const float BufferSettleSeconds = 0.16f;
+    private const float WorldTransitPayloadHeight = 0.36f;
+
     private FactoryItem? _outerBufferedItem;
     private FactoryItem? _innerBufferedItem;
+    private FactoryItem? _manualTransferItem;
+    private Vector2I _manualTransferSourceCell;
+    private Vector2I _manualTransferTargetCell;
+    private float _manualTransferProgress;
     private MobileFactoryHeavyPortTransferMode _transferMode;
     private MobileFactoryHeavyHandoffPhase _handoffPhase = MobileFactoryHeavyHandoffPhase.Idle;
     private float _handoffPhaseProgress;
+    private Node3D? _activeWorldConnectorRoot;
+    protected float BufferSettleTimer;
 
     protected abstract bool IsInboundHandoff { get; }
 
     public override int StagedCargoCount => (_outerBufferedItem is null ? 0 : 1)
         + (_innerBufferedItem is null ? 0 : 1)
-        + (HasActiveTransitState() ? 1 : 0);
+        + (HasActiveTransitState() ? 1 : 0)
+        + (HasManualTransferState() ? 1 : 0);
     public FactoryItem? OuterBufferedItem => _outerBufferedItem;
     public FactoryItem? InnerBufferedItem => _innerBufferedItem;
     public MobileFactoryHeavyPortTransferMode TransferMode => _transferMode;
     public MobileFactoryHeavyHandoffPhase HandoffPhase => _handoffPhase;
     public float HandoffPhaseProgress => _handoffPhaseProgress;
-    public bool HasBridgeTransfer => HasActiveTransitState();
-    public float BridgeTransferProgress => GetActiveTransitState()?.Position ?? 0.0f;
+    public bool HasBridgeTransfer => HasActiveTransitState() || HasManualTransferState();
+    public float BridgeTransferProgress => GetActiveTransitState()?.Position
+        ?? (HasManualTransferState() ? _manualTransferProgress : 0.0f);
     public override string ConnectionStateLabel => !IsConnectedToWorld
         ? (StagedCargoCount > 0 ? "离线滞留" : "未连接")
         : !IsWorldFlowReady
             ? "展开中"
-            : $"已连接 / {DescribePhase(_handoffPhase)}";
+            : $"已连接 / {DescribePhase(_handoffPhase)}{DescribePresentationSuffix()}";
 
     public override IEnumerable<string> GetInspectionLines()
     {
@@ -626,6 +699,7 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
         }
 
         yield return $"重载阶段：{DescribePhase(_handoffPhase)}";
+        yield return $"显示所有权：{DescribePresentationOwnership()}";
         yield return $"外缓存：{DescribeBufferedItem(_outerBufferedItem)}";
         yield return $"桥接位：{DescribeBridgeState()}";
         yield return $"内缓存：{DescribeBufferedItem(_innerBufferedItem)}";
@@ -634,14 +708,18 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
     public override void SimulationStep(SimulationController simulation, double stepSeconds)
     {
         base.SimulationStep(simulation, stepSeconds);
-        AdvanceHeavyHandoff(simulation);
+        AdvanceManualTransfer(simulation, stepSeconds);
+        BufferSettleTimer = Mathf.Max(0.0f, BufferSettleTimer - (float)stepSeconds);
+        if (BufferSettleTimer <= 0.0f)
+        {
+            AdvanceHeavyHandoff(simulation);
+        }
         RefreshHandoffPhase(simulation);
     }
 
     public override void UpdateVisuals(float tickAlpha)
     {
-        SyncBufferedPayloadVisual("InnerBufferPayloadAnchor", _innerBufferedItem);
-        SyncBridgePayloadVisual();
+        UpdateInteriorPresentationVisual();
         UpdateBeaconPulse();
     }
 
@@ -662,19 +740,22 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
 
     public override void ApplyWorldPayloadVisualProgress(Node3D root, float progress)
     {
+        _activeWorldConnectorRoot = root;
         base.ApplyWorldPayloadVisualProgress(root, progress);
 
         if (root.GetNodeOrNull<Node3D>("OuterBufferPayloadRoot") is Node3D outerBufferRoot
             && outerBufferRoot.GetNodeOrNull<Node3D>("OuterBufferPayloadAnchor") is Node3D outerBufferAnchor)
         {
-            if (_outerBufferedItem is null || progress < 0.92f)
+            if (!TryResolveCurrentPresentation(out var presentation)
+                || presentation.Host != MobileFactoryHeavyCargoPresentationHost.WorldOuterBuffer
+                || progress < 0.92f)
             {
                 ClearTransitPayloadVisual(outerBufferAnchor);
                 outerBufferRoot.Visible = false;
             }
             else
             {
-                SyncTransitPayloadVisual(outerBufferAnchor, _outerBufferedItem);
+                SyncTransitPayloadVisual(outerBufferAnchor, presentation.Item);
                 outerBufferRoot.Visible = true;
             }
         }
@@ -682,7 +763,9 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
         if (root.GetNodeOrNull<Node3D>("ConnectorTransitPayloadRoot") is not Node3D transitRoot
             || transitRoot.GetNodeOrNull<Node3D>("TransitPayloadAnchor") is not Node3D transitAnchor
             || progress < 0.92f
-            || !TryResolveWorldTransitPose(root, out var worldTransitItem, out var worldTransitPosition))
+            || !TryResolveCurrentPresentation(out var currentPresentation)
+            || currentPresentation.Host != MobileFactoryHeavyCargoPresentationHost.WorldRouteHandoff
+            || !TryResolveWorldTransitPose(root, currentPresentation, out var worldTransitPosition))
         {
             if (root.GetNodeOrNull<Node3D>("ConnectorTransitPayloadRoot") is Node3D staleTransitRoot
                 && staleTransitRoot.GetNodeOrNull<Node3D>("TransitPayloadAnchor") is Node3D staleTransitAnchor)
@@ -694,7 +777,7 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
             return;
         }
 
-        SyncTransitPayloadVisual(transitAnchor, worldTransitItem);
+        SyncTransitPayloadVisual(transitAnchor, currentPresentation.Item);
         transitAnchor.Position = worldTransitPosition;
         transitRoot.Visible = true;
     }
@@ -710,7 +793,7 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
         AddChild(new Node3D
         {
             Name = "BridgePayloadAnchor",
-            Position = new Vector3(0.0f, ItemHeight + 0.02f, 0.0f)
+            Position = new Vector3(CellSize * 0.45f, ItemHeight + 0.02f, 0.0f)
         });
         AddChild(new Node3D
         {
@@ -750,13 +833,29 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
 
     protected bool BeginTransfer(MobileFactoryHeavyPortTransferMode mode, FactoryItem item, Vector2I sourceCell, Vector2I targetCell)
     {
-        if (HasActiveTransitState())
+        if (HasBridgeTransfer)
         {
             return false;
         }
 
-        SpawnTransitState(item, sourceCell, targetCell);
         _transferMode = mode;
+        if (mode == MobileFactoryHeavyPortTransferMode.WorldToOuterBuffer)
+        {
+            SpawnTransitState(item, sourceCell, targetCell);
+        }
+        else
+        {
+            _manualTransferItem = item;
+            _manualTransferSourceCell = sourceCell;
+            _manualTransferTargetCell = targetCell;
+            _manualTransferProgress = 0.0f;
+        }
+
+        HeavyCargoTrace.Log(
+            "port_begin_transfer",
+            item,
+            this,
+            $"mode={mode} source=({sourceCell.X},{sourceCell.Y}) target=({targetCell.X},{targetCell.Y})");
         return true;
     }
 
@@ -765,7 +864,19 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
         if (IsInboundHandoff && state.SourceCell == WorldAdjacentCell)
         {
             _transferMode = MobileFactoryHeavyPortTransferMode.WorldToOuterBuffer;
+            HeavyCargoTrace.Log(
+                "input_port_claimed_from_world",
+                state.Item,
+                this,
+                $"source=({state.SourceCell.X},{state.SourceCell.Y}) worldPort=({WorldPortCell.X},{WorldPortCell.Y})");
+            return;
         }
+
+        HeavyCargoTrace.Log(
+            "port_transit_item_accepted",
+            state.Item,
+            this,
+            $"mode={_transferMode} source=({state.SourceCell.X},{state.SourceCell.Y}) target=({state.TargetCell.X},{state.TargetCell.Y})");
     }
 
     protected override bool TryDispatchItem(TransitItemState state, SimulationController simulation)
@@ -779,7 +890,13 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
                 }
 
                 _outerBufferedItem = state.Item;
+                BufferSettleTimer = BufferSettleSeconds;
                 _transferMode = MobileFactoryHeavyPortTransferMode.None;
+                HeavyCargoTrace.Log(
+                    "port_world_to_outer_buffer_complete",
+                    state.Item,
+                    this,
+                    $"outerBuffered=true settle={BufferSettleTimer:0.000}");
                 return true;
             case MobileFactoryHeavyPortTransferMode.OuterToInnerBuffer:
                 if (_innerBufferedItem is not null)
@@ -788,7 +905,13 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
                 }
 
                 _innerBufferedItem = state.Item;
+                BufferSettleTimer = BufferSettleSeconds;
                 _transferMode = MobileFactoryHeavyPortTransferMode.None;
+                HeavyCargoTrace.Log(
+                    "port_outer_to_inner_buffer_complete",
+                    state.Item,
+                    this,
+                    $"innerBuffered=true settle={BufferSettleTimer:0.000}");
                 return true;
             case MobileFactoryHeavyPortTransferMode.InnerToOuterBuffer:
                 if (_outerBufferedItem is not null)
@@ -797,7 +920,13 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
                 }
 
                 _outerBufferedItem = state.Item;
+                BufferSettleTimer = BufferSettleSeconds;
                 _transferMode = MobileFactoryHeavyPortTransferMode.None;
+                HeavyCargoTrace.Log(
+                    "port_inner_to_outer_buffer_complete",
+                    state.Item,
+                    this,
+                    $"outerBuffered=true settle={BufferSettleTimer:0.000}");
                 return true;
             case MobileFactoryHeavyPortTransferMode.OuterToWorld:
                 if (!TryDispatchOuterToWorld(state.Item, simulation))
@@ -806,6 +935,11 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
                 }
 
                 _transferMode = MobileFactoryHeavyPortTransferMode.None;
+                HeavyCargoTrace.Log(
+                    "port_outer_to_world_complete",
+                    state.Item,
+                    this,
+                    $"worldAdjacent=({WorldAdjacentCell.X},{WorldAdjacentCell.Y})");
                 return true;
             default:
                 return false;
@@ -821,16 +955,23 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
     protected bool TryResolveActiveTransitItem(out FactoryItem? item, out float progress)
     {
         var state = GetActiveTransitState();
-        if (state is null)
+        if (state is not null)
         {
-            item = null;
-            progress = 0.0f;
-            return false;
+            item = state.Item;
+            progress = state.Position;
+            return true;
         }
 
-        item = state.Item;
-        progress = state.Position;
-        return true;
+        if (_manualTransferItem is not null)
+        {
+            item = _manualTransferItem;
+            progress = _manualTransferProgress;
+            return true;
+        }
+
+        item = null;
+        progress = 0.0f;
+        return false;
     }
 
     protected virtual bool TryDispatchOuterToWorld(FactoryItem item, SimulationController simulation)
@@ -841,17 +982,76 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
     protected abstract void AdvanceHeavyHandoff(SimulationController simulation);
     protected abstract void RefreshHandoffPhase(SimulationController simulation);
 
-    private void SyncBufferedPayloadVisual(string anchorName, FactoryItem? item)
+    public bool TryGetCurrentPresentationState(out MobileFactoryHeavyCargoPresentationState state)
     {
-        if (GetNodeOrNull<Node3D>(anchorName) is not Node3D anchor)
+        if (TryResolveCurrentPresentation(out var presentation))
         {
+            state = presentation;
+            return true;
+        }
+
+        state = default;
+        return false;
+    }
+
+    public int CountVisiblePayloadVisuals()
+    {
+        var count = CountVisiblePayloadVisualsRecursive(this);
+        if (_activeWorldConnectorRoot is not null && GodotObject.IsInstanceValid(_activeWorldConnectorRoot))
+        {
+            count += CountVisiblePayloadVisualsRecursive(_activeWorldConnectorRoot);
+        }
+
+        return count;
+    }
+
+    public override void OnDeploymentCleared(Node3D worldStructureRoot, SimulationController simulation)
+    {
+        _activeWorldConnectorRoot = null;
+        CollapseManualTransferToBuffer();
+    }
+
+    private void UpdateInteriorPresentationVisual()
+    {
+        if (!TryResolveCurrentPresentation(out var presentation))
+        {
+            ClearInteriorPresentationVisual();
             return;
         }
 
-        if (item is null)
+        switch (presentation.Host)
         {
-            ClearTransitPayloadVisual(anchor);
-            anchor.Visible = false;
+            case MobileFactoryHeavyCargoPresentationHost.InteriorBridge:
+                ApplyInteriorAnchorVisual("BridgePayloadAnchor", presentation.Item, out var bridgeAnchor);
+                if (bridgeAnchor is not null
+                    && TryResolveInteriorTransitPose(presentation, out var bridgePosition))
+                {
+                    bridgeAnchor.Position = bridgePosition;
+                }
+
+                ClearInteriorAnchorVisual("InnerBufferPayloadAnchor");
+                break;
+            case MobileFactoryHeavyCargoPresentationHost.InteriorInnerBuffer:
+                ApplyInteriorAnchorVisual("InnerBufferPayloadAnchor", presentation.Item, out _);
+                ClearInteriorAnchorVisual("BridgePayloadAnchor");
+                break;
+            default:
+                ClearInteriorPresentationVisual();
+                break;
+        }
+    }
+
+    private void ClearInteriorPresentationVisual()
+    {
+        ClearInteriorAnchorVisual("BridgePayloadAnchor");
+        ClearInteriorAnchorVisual("InnerBufferPayloadAnchor");
+    }
+
+    private void ApplyInteriorAnchorVisual(string anchorName, FactoryItem item, out Node3D? anchor)
+    {
+        anchor = GetNodeOrNull<Node3D>(anchorName);
+        if (anchor is null)
+        {
             return;
         }
 
@@ -859,105 +1059,219 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
         anchor.Visible = true;
     }
 
-    private void SyncBridgePayloadVisual()
+    private void ClearInteriorAnchorVisual(string anchorName)
     {
-        if (GetNodeOrNull<Node3D>("BridgePayloadAnchor") is not Node3D anchor
-            || !TryResolveInteriorTransitPose(out var bridgeItem, out var bridgePosition))
+        if (GetNodeOrNull<Node3D>(anchorName) is not Node3D anchor)
         {
-            if (GetNodeOrNull<Node3D>("BridgePayloadAnchor") is Node3D staleAnchor)
-            {
-                ClearTransitPayloadVisual(staleAnchor);
-                staleAnchor.Visible = false;
-            }
-
             return;
         }
 
-        SyncTransitPayloadVisual(anchor, bridgeItem);
-        anchor.Position = bridgePosition;
-        anchor.Visible = true;
+        ClearTransitPayloadVisual(anchor);
+        anchor.Visible = false;
     }
 
-    private bool TryResolveInteriorTransitPose(out FactoryItem item, out Vector3 localPosition)
+    private bool TryResolveCurrentPresentation(out MobileFactoryHeavyCargoPresentationState state)
     {
-        item = default!;
-        localPosition = Vector3.Zero;
         if (!TryResolveActiveTransitItem(out var activeItem, out var progress) || activeItem is null)
         {
+            if (_innerBufferedItem is not null)
+            {
+                state = new MobileFactoryHeavyCargoPresentationState(
+                    _innerBufferedItem,
+                    MobileFactoryHeavyCargoPresentationOwner.HeavyPort,
+                    MobileFactoryHeavyCargoPresentationHost.InteriorInnerBuffer,
+                    _handoffPhase,
+                    _handoffPhaseProgress);
+                return true;
+            }
+
+            if (_outerBufferedItem is not null)
+            {
+                state = new MobileFactoryHeavyCargoPresentationState(
+                    _outerBufferedItem,
+                    MobileFactoryHeavyCargoPresentationOwner.HeavyPort,
+                    MobileFactoryHeavyCargoPresentationHost.WorldOuterBuffer,
+                    _handoffPhase,
+                    _handoffPhaseProgress);
+                return true;
+            }
+
+            state = default;
             return false;
         }
-
-        switch (_transferMode)
-        {
-            case MobileFactoryHeavyPortTransferMode.OuterToInnerBuffer:
-                if (progress < 0.32f)
-                {
-                    return false;
-                }
-
-                item = activeItem;
-                localPosition = EvaluatePortPath(progress, worldToInterior: true);
-                return true;
-            case MobileFactoryHeavyPortTransferMode.InnerToOuterBuffer:
-                if (progress > 0.68f)
-                {
-                    return false;
-                }
-
-                item = activeItem;
-                localPosition = EvaluatePortPath(progress, worldToInterior: false);
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    private bool TryResolveWorldTransitPose(Node3D root, out FactoryItem item, out Vector3 localPosition)
-    {
-        item = default!;
-        localPosition = Vector3.Zero;
-        if (!TryResolveActiveTransitItem(out var activeItem, out var progress) || activeItem is null)
-        {
-            return false;
-        }
-
-        var fullLength = root.GetMeta("full_length", 0.0f).AsSingle();
-        var mouthExtension = root.GetMeta("mouth_extension", 0.14f).AsSingle();
-        var outerZ = fullLength;
-        var routeZ = fullLength + mouthExtension + (CellSize * 0.34f);
-        var mouthZ = Mathf.Max(0.14f, fullLength * 0.16f);
 
         switch (_transferMode)
         {
             case MobileFactoryHeavyPortTransferMode.WorldToOuterBuffer:
-                item = activeItem;
-                localPosition = new Vector3(0.0f, 0.36f, Mathf.Lerp(routeZ, outerZ, progress));
+                state = new MobileFactoryHeavyCargoPresentationState(
+                    activeItem,
+                    MobileFactoryHeavyCargoPresentationOwner.HeavyPort,
+                    MobileFactoryHeavyCargoPresentationHost.WorldRouteHandoff,
+                    _handoffPhase,
+                    progress);
                 return true;
             case MobileFactoryHeavyPortTransferMode.OuterToInnerBuffer:
-                if (progress > 0.42f)
-                {
-                    return false;
-                }
-
-                item = activeItem;
-                localPosition = new Vector3(0.0f, 0.36f, Mathf.Lerp(outerZ, mouthZ, progress / 0.42f));
+                state = new MobileFactoryHeavyCargoPresentationState(
+                    activeItem,
+                    MobileFactoryHeavyCargoPresentationOwner.HeavyPort,
+                    progress < BridgeAlignmentProgress
+                        ? MobileFactoryHeavyCargoPresentationHost.WorldRouteHandoff
+                        : MobileFactoryHeavyCargoPresentationHost.InteriorBridge,
+                    _handoffPhase,
+                    progress);
                 return true;
             case MobileFactoryHeavyPortTransferMode.InnerToOuterBuffer:
-                if (progress < 0.42f)
+                state = new MobileFactoryHeavyCargoPresentationState(
+                    activeItem,
+                    MobileFactoryHeavyCargoPresentationOwner.HeavyPort,
+                    progress < BridgeAlignmentProgress
+                        ? MobileFactoryHeavyCargoPresentationHost.InteriorBridge
+                        : MobileFactoryHeavyCargoPresentationHost.WorldRouteHandoff,
+                    _handoffPhase,
+                    progress);
+                return true;
+            case MobileFactoryHeavyPortTransferMode.OuterToWorld:
+                state = new MobileFactoryHeavyCargoPresentationState(
+                    activeItem,
+                    MobileFactoryHeavyCargoPresentationOwner.HeavyPort,
+                    MobileFactoryHeavyCargoPresentationHost.WorldRouteHandoff,
+                    _handoffPhase,
+                    progress);
+                return true;
+            default:
+                if (_innerBufferedItem is not null)
+                {
+                    state = new MobileFactoryHeavyCargoPresentationState(
+                        _innerBufferedItem,
+                        MobileFactoryHeavyCargoPresentationOwner.HeavyPort,
+                        MobileFactoryHeavyCargoPresentationHost.InteriorInnerBuffer,
+                        _handoffPhase,
+                        _handoffPhaseProgress);
+                    return true;
+                }
+
+                if (_outerBufferedItem is not null)
+                {
+                    state = new MobileFactoryHeavyCargoPresentationState(
+                        _outerBufferedItem,
+                        MobileFactoryHeavyCargoPresentationOwner.HeavyPort,
+                        MobileFactoryHeavyCargoPresentationHost.WorldOuterBuffer,
+                        _handoffPhase,
+                        _handoffPhaseProgress);
+                    return true;
+                }
+
+                state = default;
+                return false;
+        }
+    }
+
+    private bool TryResolveInteriorTransitPose(MobileFactoryHeavyCargoPresentationState presentation, out Vector3 localPosition)
+    {
+        localPosition = Vector3.Zero;
+        var progress = presentation.Progress;
+        switch (_transferMode)
+        {
+            case MobileFactoryHeavyPortTransferMode.OuterToInnerBuffer:
+                if (progress < BridgeAlignmentProgress)
                 {
                     return false;
                 }
 
-                item = activeItem;
-                localPosition = new Vector3(0.0f, 0.36f, Mathf.Lerp(mouthZ, outerZ, (progress - 0.42f) / 0.58f));
+                localPosition = ResolveInteriorBridgePath(
+                    Mathf.Clamp((progress - BridgeAlignmentProgress) / Mathf.Max(0.001f, 1.0f - BridgeAlignmentProgress), 0.0f, 1.0f),
+                    worldToInterior: true);
                 return true;
-            case MobileFactoryHeavyPortTransferMode.OuterToWorld:
-                item = activeItem;
-                localPosition = new Vector3(0.0f, 0.36f, Mathf.Lerp(outerZ, routeZ, progress));
+            case MobileFactoryHeavyPortTransferMode.InnerToOuterBuffer:
+                if (progress >= BridgeAlignmentProgress)
+                {
+                    return false;
+                }
+
+                localPosition = ResolveInteriorBridgePath(
+                    Mathf.Clamp(progress / Mathf.Max(0.001f, BridgeAlignmentProgress), 0.0f, 1.0f),
+                    worldToInterior: false);
                 return true;
             default:
                 return false;
         }
+    }
+
+    private bool TryResolveWorldTransitPose(Node3D root, MobileFactoryHeavyCargoPresentationState presentation, out Vector3 localPosition)
+    {
+        localPosition = Vector3.Zero;
+        var fullLength = root.GetMeta("full_length", 0.0f).AsSingle();
+        var mouthExtension = root.GetMeta("mouth_extension", 0.14f).AsSingle();
+        var routeZ = fullLength + mouthExtension + (CellSize * 0.34f);
+        var mouthZ = Mathf.Max(0.14f, fullLength * 0.16f);
+        var outerBufferPosition = ResolveWorldOuterBufferPosition(root);
+        var routePosition = new Vector3(outerBufferPosition.X, outerBufferPosition.Y, routeZ);
+        var bridgePosition = new Vector3(outerBufferPosition.X, WorldTransitPayloadHeight, mouthZ);
+        var progress = presentation.Progress;
+
+        switch (_transferMode)
+        {
+            case MobileFactoryHeavyPortTransferMode.WorldToOuterBuffer:
+                localPosition = routePosition.Lerp(outerBufferPosition, progress);
+                return true;
+            case MobileFactoryHeavyPortTransferMode.OuterToInnerBuffer:
+                if (progress >= BridgeAlignmentProgress)
+                {
+                    return false;
+                }
+
+                localPosition = outerBufferPosition.Lerp(
+                    bridgePosition,
+                    Mathf.Clamp(progress / Mathf.Max(0.001f, BridgeAlignmentProgress), 0.0f, 1.0f));
+                return true;
+            case MobileFactoryHeavyPortTransferMode.InnerToOuterBuffer:
+                if (progress < BridgeAlignmentProgress)
+                {
+                    return false;
+                }
+
+                localPosition = bridgePosition.Lerp(
+                    outerBufferPosition,
+                    Mathf.Clamp((progress - BridgeAlignmentProgress) / Mathf.Max(0.001f, 1.0f - BridgeAlignmentProgress), 0.0f, 1.0f));
+                return true;
+            case MobileFactoryHeavyPortTransferMode.OuterToWorld:
+                localPosition = outerBufferPosition.Lerp(routePosition, progress);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private Vector3 ResolveInteriorBridgePath(float progress, bool worldToInterior)
+    {
+        var bridgeAnchor = ResolveInteriorAnchorPosition("BridgePayloadAnchor", new Vector3(CellSize * 0.45f, ItemHeight + 0.02f, 0.0f));
+        var innerAnchor = ResolveInteriorAnchorPosition("InnerBufferPayloadAnchor", new Vector3(-CellSize * 0.74f, ItemHeight + 0.01f, 0.0f));
+        return worldToInterior
+            ? bridgeAnchor.Lerp(innerAnchor, progress)
+            : innerAnchor.Lerp(bridgeAnchor, progress);
+    }
+
+    private Vector3 ResolveInteriorAnchorPosition(string anchorName, Vector3 fallback)
+    {
+        return GetNodeOrNull<Node3D>(anchorName) is Node3D anchor
+            ? anchor.Position
+            : fallback;
+    }
+
+    private Vector3 ResolveWorldOuterBufferPosition(Node3D root)
+    {
+        if (root.GetNodeOrNull<Node3D>("WorldPayloadRoot/OuterBufferPayloadRoot/OuterBufferPayloadAnchor") is Node3D anchor)
+        {
+            return root.ToLocal(anchor.GlobalPosition);
+        }
+
+        if (root.GetNodeOrNull<Node3D>("WorldPayloadRoot/PayloadBufferAnchor") is Node3D payloadAnchor)
+        {
+            return root.ToLocal(payloadAnchor.GlobalPosition) + new Vector3(0.0f, WorldTransitPayloadHeight, 0.0f);
+        }
+
+        var fullLength = root.GetMeta("full_length", 0.0f).AsSingle();
+        return new Vector3(0.0f, WorldTransitPayloadHeight, fullLength);
     }
 
     private void UpdateBeaconPulse()
@@ -978,9 +1292,197 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
             : "空";
     }
 
+    private string DescribePresentationOwnership()
+    {
+        return TryResolveCurrentPresentation(out var presentation)
+            ? $"{DescribePresentationOwner(presentation.Owner)} / {DescribePresentationHost(presentation.Host)} / {FactoryPresentation.GetItemDisplayName(presentation.Item)}"
+            : "空";
+    }
+
+    private string DescribePresentationSuffix()
+    {
+        return TryResolveCurrentPresentation(out var presentation)
+            ? $" / 显示:{DescribePresentationHost(presentation.Host)}"
+            : string.Empty;
+    }
+
     private static string DescribeBufferedItem(FactoryItem? item)
     {
         return item is null ? "空" : FactoryPresentation.GetItemDisplayName(item);
+    }
+
+    private static int CountVisiblePayloadVisualsRecursive(Node root)
+    {
+        if (!GodotObject.IsInstanceValid(root))
+        {
+            return 0;
+        }
+
+        var count = root is Node3D node3D && node3D.Visible && string.Equals(root.Name.ToString(), "TransitPayloadVisual", StringComparison.Ordinal)
+            ? 1
+            : 0;
+        foreach (var child in root.GetChildren())
+        {
+            if (child is Node childNode)
+            {
+                count += CountVisiblePayloadVisualsRecursive(childNode);
+            }
+        }
+
+        return count;
+    }
+
+    public static string DescribePresentationOwner(MobileFactoryHeavyCargoPresentationOwner owner)
+    {
+        return owner switch
+        {
+            MobileFactoryHeavyCargoPresentationOwner.HeavyPort => "接口装卸链",
+            MobileFactoryHeavyCargoPresentationOwner.CargoUnpacker => "解包舱",
+            MobileFactoryHeavyCargoPresentationOwner.CargoPacker => "封包舱",
+            _ => "空"
+        };
+    }
+
+    public static string DescribePresentationHost(MobileFactoryHeavyCargoPresentationHost host)
+    {
+        return host switch
+        {
+            MobileFactoryHeavyCargoPresentationHost.WorldRouteHandoff => "世界侧交接位",
+            MobileFactoryHeavyCargoPresentationHost.WorldOuterBuffer => "世界侧缓存位",
+            MobileFactoryHeavyCargoPresentationHost.InteriorBridge => "舱桥位",
+            MobileFactoryHeavyCargoPresentationHost.InteriorInnerBuffer => "舱内缓存位",
+            MobileFactoryHeavyCargoPresentationHost.ConverterStaging => "转换接舱位",
+            MobileFactoryHeavyCargoPresentationHost.ConverterProcessing => "转换处理位",
+            MobileFactoryHeavyCargoPresentationHost.ConverterDispatch => "转换出舱位",
+            _ => "空"
+        };
+    }
+
+    private bool HasManualTransferState()
+    {
+        return _manualTransferItem is not null;
+    }
+
+    private void AdvanceManualTransfer(SimulationController simulation, double stepSeconds)
+    {
+        if (_manualTransferItem is null)
+        {
+            return;
+        }
+
+        _manualTransferProgress = Mathf.Clamp(_manualTransferProgress + ((float)stepSeconds * TravelSpeed), 0.0f, 1.0f);
+        if (_manualTransferProgress < 1.0f)
+        {
+            return;
+        }
+
+        TryCompleteManualTransfer(simulation);
+    }
+
+    private void TryCompleteManualTransfer(SimulationController simulation)
+    {
+        if (_manualTransferItem is null)
+        {
+            return;
+        }
+
+        var item = _manualTransferItem;
+        switch (_transferMode)
+        {
+            case MobileFactoryHeavyPortTransferMode.OuterToInnerBuffer:
+                if (_innerBufferedItem is not null)
+                {
+                    return;
+                }
+
+                _innerBufferedItem = item;
+                BufferSettleTimer = BufferSettleSeconds;
+                ClearManualTransferState();
+                HeavyCargoTrace.Log(
+                    "port_outer_to_inner_buffer_complete",
+                    item,
+                    this,
+                    $"innerBuffered=true settle={BufferSettleTimer:0.000}");
+                return;
+            case MobileFactoryHeavyPortTransferMode.InnerToOuterBuffer:
+                if (_outerBufferedItem is not null)
+                {
+                    return;
+                }
+
+                _outerBufferedItem = item;
+                BufferSettleTimer = BufferSettleSeconds;
+                ClearManualTransferState();
+                HeavyCargoTrace.Log(
+                    "port_inner_to_outer_buffer_complete",
+                    item,
+                    this,
+                    $"outerBuffered=true settle={BufferSettleTimer:0.000}");
+                return;
+            case MobileFactoryHeavyPortTransferMode.OuterToWorld:
+                if (!TryDispatchOuterToWorld(item, simulation))
+                {
+                    return;
+                }
+
+                ClearManualTransferState();
+                HeavyCargoTrace.Log(
+                    "port_outer_to_world_complete",
+                    item,
+                    this,
+                    $"worldAdjacent=({WorldAdjacentCell.X},{WorldAdjacentCell.Y})");
+                return;
+        }
+    }
+
+    private void ClearManualTransferState()
+    {
+        _manualTransferItem = null;
+        _manualTransferSourceCell = Vector2I.Zero;
+        _manualTransferTargetCell = Vector2I.Zero;
+        _manualTransferProgress = 0.0f;
+        _transferMode = MobileFactoryHeavyPortTransferMode.None;
+    }
+
+    private void CollapseManualTransferToBuffer()
+    {
+        if (_manualTransferItem is null)
+        {
+            return;
+        }
+
+        var item = _manualTransferItem;
+        switch (_transferMode)
+        {
+            case MobileFactoryHeavyPortTransferMode.OuterToInnerBuffer:
+                if (_manualTransferProgress >= BridgeAlignmentProgress && _innerBufferedItem is null)
+                {
+                    _innerBufferedItem = item;
+                }
+                else if (_outerBufferedItem is null)
+                {
+                    _outerBufferedItem = item;
+                }
+                break;
+            case MobileFactoryHeavyPortTransferMode.InnerToOuterBuffer:
+                if (_manualTransferProgress < BridgeAlignmentProgress && _innerBufferedItem is null)
+                {
+                    _innerBufferedItem = item;
+                }
+                else if (_outerBufferedItem is null)
+                {
+                    _outerBufferedItem = item;
+                }
+                break;
+            case MobileFactoryHeavyPortTransferMode.OuterToWorld:
+                if (_outerBufferedItem is null)
+                {
+                    _outerBufferedItem = item;
+                }
+                break;
+        }
+
+        ClearManualTransferState();
     }
 
     protected static string DescribePhase(MobileFactoryHeavyHandoffPhase phase)
@@ -990,10 +1492,12 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
             MobileFactoryHeavyHandoffPhase.WaitingWorldCargo => "等待世界来货",
             MobileFactoryHeavyHandoffPhase.ReceivingFromWorld => "接收世界大包",
             MobileFactoryHeavyHandoffPhase.BufferedOuter => "世界侧缓存",
+            MobileFactoryHeavyHandoffPhase.SlidingToBridgeInward => "滑向入舱桥位",
             MobileFactoryHeavyHandoffPhase.BridgingInward => "向舱内桥接",
             MobileFactoryHeavyHandoffPhase.BufferedInner => "舱内缓存",
             MobileFactoryHeavyHandoffPhase.WaitingForUnpacker => "等待解包舱",
             MobileFactoryHeavyHandoffPhase.WaitingForPacker => "等待封包产出",
+            MobileFactoryHeavyHandoffPhase.SlidingToBridgeOutward => "滑向出舱桥位",
             MobileFactoryHeavyHandoffPhase.BridgingOutward => "向世界桥接",
             MobileFactoryHeavyHandoffPhase.WaitingWorldPickup => "等待世界接货",
             MobileFactoryHeavyHandoffPhase.ReleasingToWorld => "释放到世界",
@@ -1057,7 +1561,9 @@ public partial class MobileFactoryOutputPortStructure : MobileFactoryHeavyPortSt
     {
         return IsWorldFlowReady
             && FactoryCargoRules.StructureAcceptsItem(Kind, FactorySiteKind.Interior, item)
-            && InnerBufferedItem is null;
+            && InnerBufferedItem is null
+            && OuterBufferedItem is null
+            && !HasBridgeTransfer;
     }
 
     public bool TryAcceptPackedBundle(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
@@ -1068,6 +1574,12 @@ public partial class MobileFactoryOutputPortStructure : MobileFactoryHeavyPortSt
         }
 
         SetInnerBufferedItem(item);
+        BufferSettleTimer = BufferSettleSeconds;
+        HeavyCargoTrace.Log(
+            "output_port_accept_packed_bundle",
+            item,
+            this,
+            $"source=({sourceCell.X},{sourceCell.Y}) settle={BufferSettleTimer:0.000}");
         return true;
     }
 
@@ -1112,7 +1624,18 @@ public partial class MobileFactoryOutputPortStructure : MobileFactoryHeavyPortSt
         switch (TransferMode)
         {
             case MobileFactoryHeavyPortTransferMode.InnerToOuterBuffer:
-                SetHandoffPhase(MobileFactoryHeavyHandoffPhase.BridgingOutward, BridgeTransferProgress);
+                if (BridgeTransferProgress < BridgeAlignmentProgress)
+                {
+                    SetHandoffPhase(
+                        MobileFactoryHeavyHandoffPhase.SlidingToBridgeOutward,
+                        BridgeTransferProgress / Mathf.Max(0.001f, BridgeAlignmentProgress));
+                }
+                else
+                {
+                    SetHandoffPhase(
+                        MobileFactoryHeavyHandoffPhase.BridgingOutward,
+                        (BridgeTransferProgress - BridgeAlignmentProgress) / Mathf.Max(0.001f, 1.0f - BridgeAlignmentProgress));
+                }
                 return;
             case MobileFactoryHeavyPortTransferMode.OuterToWorld:
                 SetHandoffPhase(MobileFactoryHeavyHandoffPhase.ReleasingToWorld, BridgeTransferProgress);
@@ -1216,7 +1739,18 @@ public partial class MobileFactoryInputPortStructure : MobileFactoryHeavyPortStr
                 SetHandoffPhase(MobileFactoryHeavyHandoffPhase.ReceivingFromWorld, BridgeTransferProgress);
                 return;
             case MobileFactoryHeavyPortTransferMode.OuterToInnerBuffer:
-                SetHandoffPhase(MobileFactoryHeavyHandoffPhase.BridgingInward, BridgeTransferProgress);
+                if (BridgeTransferProgress < BridgeAlignmentProgress)
+                {
+                    SetHandoffPhase(
+                        MobileFactoryHeavyHandoffPhase.SlidingToBridgeInward,
+                        BridgeTransferProgress / Mathf.Max(0.001f, BridgeAlignmentProgress));
+                }
+                else
+                {
+                    SetHandoffPhase(
+                        MobileFactoryHeavyHandoffPhase.BridgingInward,
+                        (BridgeTransferProgress - BridgeAlignmentProgress) / Mathf.Max(0.001f, 1.0f - BridgeAlignmentProgress));
+                }
                 return;
         }
 
@@ -1256,6 +1790,11 @@ public partial class MobileFactoryInputPortStructure : MobileFactoryHeavyPortStr
             var sourceDispatchCell = GetTransferOutputCell(targetCell);
             if (unpacker.TryAcceptHeavyBundle(InnerBufferedItem, sourceDispatchCell, simulation))
             {
+                HeavyCargoTrace.Log(
+                    "input_port_handoff_to_unpacker",
+                    InnerBufferedItem,
+                    this,
+                    $"targetCell=({targetCell.X},{targetCell.Y}) dispatch=({sourceDispatchCell.X},{sourceDispatchCell.Y}) unpacker={unpacker.GetInstanceId()}");
                 return true;
             }
         }
