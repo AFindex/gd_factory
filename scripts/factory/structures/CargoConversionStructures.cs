@@ -370,11 +370,13 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
         Release
     }
 
+    private const float InteriorHeavyCargoRailHeight = 0.38f;
     private const float IntakeStageSeconds = 0.34f;
     private const float ChamberProcessSeconds = 0.82f;
     private const float ChamberReleaseSeconds = 0.28f;
     private const float EmitSeconds = 0.42f;
     private const float PostReleaseSettleSeconds = 0.0f;
+    private const float IntakeApproachEndRatio = 0.68f;
     private static readonly bool EnableHeavyBundleStagingPresentation = true;
     private static readonly bool EnableHeavyBundleProcessingPresentation = true;
     private static readonly bool EnableHeavyBundleProcessingAdvance = true;
@@ -731,15 +733,14 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
                 && stagedBundle is not null)
             {
                 var travel = Mathf.Clamp((float)(_intakeProgress / IntakeStageSeconds), 0.0f, 1.0f);
-                if (!EnableHeavyBundleProcessingAdvance)
-                {
-                    stagingAnchor.Position = ResolveInboundDockApproachPosition(stagingBase).Lerp(stagingBase, Mathf.SmoothStep(0.0f, 1.0f, travel));
-                }
-                else
-                {
-                    var processingBase = GetNodeOrNull<Node3D>("ProcessingPayloadAnchor")?.GetMeta("base_position", Vector3.Zero).AsVector3() ?? stagingBase;
-                    stagingAnchor.Position = stagingBase.Lerp(processingBase, Mathf.SmoothStep(0.0f, 1.0f, travel));
-                }
+                var inboundDock = ResolveInboundDockApproachPosition(stagingBase);
+                var processingBase = GetNodeOrNull<Node3D>("ProcessingPayloadAnchor")?.GetMeta("base_position", Vector3.Zero).AsVector3() ?? stagingBase;
+                stagingAnchor.Position = ResolveInboundIntakePosition(
+                    inboundDock,
+                    stagingBase,
+                    processingBase,
+                    travel,
+                    EnableHeavyBundleProcessingAdvance);
             }
             else
             {
@@ -825,7 +826,9 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
     {
         if (_hasLastHeavyBundleSourceWorldPosition)
         {
-            return ToLocal(_lastHeavyBundleSourceWorldPosition);
+            var local = ToLocal(_lastHeavyBundleSourceWorldPosition);
+            local.Y = fallback.Y;
+            return local;
         }
 
         if (Site is null)
@@ -833,7 +836,42 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
             return fallback;
         }
 
-        return ToLocal(Site.CellToWorld(_lastHeavyBundleSourceCell) + new Vector3(0.0f, 0.24f, 0.0f));
+        var fallbackLocal = ToLocal(Site.CellToWorld(_lastHeavyBundleSourceCell) + new Vector3(0.0f, 0.24f, 0.0f));
+        fallbackLocal.Y = fallback.Y;
+        return fallbackLocal;
+    }
+
+    private static Vector3 ResolveInboundIntakePosition(
+        Vector3 source,
+        Vector3 staging,
+        Vector3 processing,
+        float progress,
+        bool continueIntoProcessing)
+    {
+        var clamped = Mathf.Clamp(progress, 0.0f, 1.0f);
+        if (!continueIntoProcessing)
+        {
+            return source.Lerp(staging, Mathf.SmoothStep(0.0f, 1.0f, clamped));
+        }
+
+        if (clamped <= IntakeApproachEndRatio)
+        {
+            var approachAlpha = NormalizeProgressSegment(clamped, 0.0f, IntakeApproachEndRatio);
+            return source.Lerp(staging, Mathf.SmoothStep(0.0f, 1.0f, approachAlpha));
+        }
+
+        var settleAlpha = NormalizeProgressSegment(clamped, IntakeApproachEndRatio, 1.0f);
+        return staging.Lerp(processing, Mathf.SmoothStep(0.0f, 1.0f, settleAlpha));
+    }
+
+    private static float NormalizeProgressSegment(float progress, float start, float end)
+    {
+        if (end <= start)
+        {
+            return progress >= end ? 1.0f : 0.0f;
+        }
+
+        return Mathf.Clamp((progress - start) / (end - start), 0.0f, 1.0f);
     }
 
     private UnpackerOperationStage ResolveOperationStage()
@@ -924,6 +962,7 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
             var previewSize = Footprint.GetPreviewSize(CellSize, Facing);
             var deckWidth = Mathf.Max(CellSize * 1.56f, previewSize.X * 0.92f);
             var deckDepth = Mathf.Max(CellSize * 1.58f, previewSize.Y * 0.92f);
+            var intakeRailHeight = InteriorHeavyCargoRailHeight;
             CreateOpenHeavyChamber(
                 "UnpackerChamber",
                 new Vector3(deckWidth, 0.14f, deckDepth),
@@ -935,6 +974,8 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
             CreateBox("UnpackerCradle", new Vector3(deckWidth * 0.66f, 0.12f, deckDepth * 0.52f), new Color("0EA5E9"), new Vector3(0.0f, 0.18f, 0.0f));
             CreateBox("UnpackerGuideNorth", new Vector3(deckWidth * 0.62f, 0.06f, CellSize * 0.06f), new Color("DBEAFE"), new Vector3(0.0f, 0.26f, -deckDepth * 0.22f));
             CreateBox("UnpackerGuideSouth", new Vector3(deckWidth * 0.62f, 0.06f, CellSize * 0.06f), new Color("DBEAFE"), new Vector3(0.0f, 0.26f, deckDepth * 0.22f));
+            CreateBox("UnpackerInfeedRailNorth", new Vector3(deckWidth * 0.48f, 0.05f, CellSize * 0.05f), new Color("E0F2FE"), new Vector3(-deckWidth * 0.22f, intakeRailHeight - 0.08f, -deckDepth * 0.16f));
+            CreateBox("UnpackerInfeedRailSouth", new Vector3(deckWidth * 0.48f, 0.05f, CellSize * 0.05f), new Color("E0F2FE"), new Vector3(-deckWidth * 0.22f, intakeRailHeight - 0.08f, deckDepth * 0.16f));
             CreateInteriorTray(this, "UnpackerOutfeed", new Vector3(deckWidth * 0.34f, 0.10f, CellSize * 0.22f), new Color("0B5A88"), new Color("DBEAFE"), new Vector3(deckWidth * 0.36f, 0.16f, 0.0f));
             CreateBox("UnpackerClampNorth", new Vector3(deckWidth * 0.48f, 0.06f, CellSize * 0.10f), new Color("E0F2FE"), new Vector3(0.0f, 0.60f, -CellSize * 0.26f));
             CreateBox("UnpackerClampSouth", new Vector3(deckWidth * 0.48f, 0.06f, CellSize * 0.10f), new Color("E0F2FE"), new Vector3(0.0f, 0.60f, CellSize * 0.26f));
@@ -973,8 +1014,8 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
                 _progressFillMaterial = progressFillMaterial;
             }
             _progressFill.Visible = false;
-            CreatePayloadAnchor("StagingPayloadAnchor", new Vector3(-deckWidth * 0.38f, 0.24f, 0.0f));
-            CreatePayloadAnchor("ProcessingPayloadAnchor", new Vector3(0.0f, 0.28f, 0.0f));
+            CreatePayloadAnchor("StagingPayloadAnchor", new Vector3(-deckWidth * 0.38f, intakeRailHeight, 0.0f));
+            CreatePayloadAnchor("ProcessingPayloadAnchor", new Vector3(0.0f, intakeRailHeight, 0.0f));
             CreatePayloadAnchor("DispatchPayloadAnchor", new Vector3(deckWidth * 0.38f, 0.24f, 0.0f));
             return;
         }

@@ -2375,14 +2375,19 @@ public partial class MobileFactoryInputPortStructure : MobileFactoryHeavyPortStr
 
     private Vector3 ResolveInputInnerBufferWorldPosition()
     {
+        if (GetNodeOrNull<Node3D>("ConverterHandoffAnchor") is Node3D converterHandoffAnchor)
+        {
+            return converterHandoffAnchor.GlobalPosition;
+        }
+
         if (GetNodeOrNull<Node3D>("InnerBufferPayloadAnchor") is Node3D innerBufferAnchor)
         {
             return innerBufferAnchor.GlobalPosition;
         }
 
         return ToGlobal(ResolveInteriorAnchorPosition(
-            "InnerBufferPayloadAnchor",
-            new Vector3(InputInnerBufferDeckPosition.X, ItemHeight + 0.04f, 0.0f)));
+            "ConverterHandoffAnchor",
+            new Vector3(-GetPortDeckWidth() * 0.46f, ItemHeight + 0.04f, 0.0f)));
     }
 
     private bool CanStageInboundWorldCargo()
