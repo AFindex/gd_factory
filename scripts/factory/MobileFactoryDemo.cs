@@ -66,9 +66,9 @@ public partial class MobileFactoryDemo : Node3D
         [BuildPrototypeKind.CargoUnpacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoUnpacker, "解包模块", new Color("38BDF8"), "模板驱动的解包处理舱。世界大货物会以原尺寸进入舱体，并按 manifest 节拍拆成多个舱内小包。"),
         [BuildPrototypeKind.CargoPacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoPacker, "封包模块", new Color("F97316"), "模板驱动的封包处理舱。只有累计到目标模板要求后，才会压装成 1 个世界标准大货物。"),
         [BuildPrototypeKind.TransferBuffer] = new BuildPrototypeDefinition(BuildPrototypeKind.TransferBuffer, "中转缓冲槽", new Color("14B8A6"), "重载/节拍缓冲架。既可暂存世界大包，也可作为封包前的小包汇流位。"),
-        [BuildPrototypeKind.DebugOreSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugOreSource, "原矿调试舱", new Color("4ADE80"), "无成本轮转煤炭与多种矿物原料，便于直接调试舱内供料链。"),
-        [BuildPrototypeKind.DebugPartSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugPartSource, "部件调试舱", new Color("22D3EE"), "无成本轮转板材和中间件，便于快速调试舱内加工链与缓存。"),
-        [BuildPrototypeKind.DebugCombatSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugCombatSource, "战备调试舱", new Color("FB7185"), "无成本轮转弹药与维护补给，便于快速调试炮塔和支援链。"),
+        [BuildPrototypeKind.DebugOreSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugOreSource, "原矿调试舱", new Color("4ADE80"), "无成本按配方持续输出单种基础原料，便于直接调试舱内供料链。"),
+        [BuildPrototypeKind.DebugPartSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugPartSource, "部件调试舱", new Color("22D3EE"), "无成本按配方持续输出单种板材或中间件，便于快速调试舱内加工链与缓存。"),
+        [BuildPrototypeKind.DebugCombatSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugCombatSource, "战备调试舱", new Color("FB7185"), "无成本按配方持续输出单种战备或维护补给，便于快速调试炮塔和支援链。"),
         [BuildPrototypeKind.DebugPowerGenerator] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugPowerGenerator, "永久测试动力舱", new Color("FBBF24"), "调试专用永久供电模块，无需燃料即可持续给舱内电网供能。"),
         [BuildPrototypeKind.Sink] = new BuildPrototypeDefinition(BuildPrototypeKind.Sink, "回收器", new Color("FDE68A"), "吞掉输入物品并作为内部消费端。"),
         [BuildPrototypeKind.Storage] = new BuildPrototypeDefinition(BuildPrototypeKind.Storage, "仓储", new Color("94A3B8"), "缓存多件物品，可向前输出，也能被机械臂抓取。"),
@@ -2818,7 +2818,7 @@ public partial class MobileFactoryDemo : Node3D
             structure.SetCombatFocus(
                 isInteriorStructure && structure == _hoveredInteriorStructure,
                 isInteriorStructure && structure == _selectedInteriorStructure);
-            structure.SetPowerRangeVisible(ShouldShowInteriorPowerRange(structure));
+            structure.SetSelectionRangeVisible(ShouldShowInteriorSelectionRange(structure));
             structure.SyncVisualPresentation(tickAlpha);
             structure.UpdateVisuals(tickAlpha);
             structure.SyncCombatVisuals(tickAlpha);
@@ -2938,13 +2938,16 @@ public partial class MobileFactoryDemo : Node3D
         _interiorPowerLinkOverlayRoot.Visible = visibleCount > 0;
     }
 
-    private bool ShouldShowInteriorPowerRange(FactoryStructure structure)
+    private bool ShouldShowInteriorSelectionRange(FactoryStructure structure)
     {
-        return IsInteriorPowerPreviewActive()
-            && structure is IFactoryPowerNode
+        return GodotObject.IsInstanceValid(structure)
+            && structure.IsInsideTree()
             && structure.Site == _mobileFactory?.InteriorSite
-            && GodotObject.IsInstanceValid(structure)
-            && structure.IsInsideTree();
+            && ((IsInteriorPowerPreviewActive() && structure is IFactoryPowerNode)
+                || (_editorOpen
+                    && _interiorInteractionMode == FactoryInteractionMode.Interact
+                    && structure == _selectedInteriorStructure
+                    && structure.SupportsSelectionRangeIndicator));
     }
 
     private bool IsInteriorPowerPreviewActive()

@@ -2,7 +2,7 @@ using Godot;
 using System;
 using System.Collections.Generic;
 
-public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, IFactoryItemProvider, IFactoryItemReceiver, IFactoryPowerConsumer
+public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, IFactoryFilteredItemProvider, IFactoryItemReceiver, IFactoryPowerConsumer
 {
     private readonly FactorySlottedItemInventory _inputInventory;
     private readonly FactorySlottedItemInventory _outputInventory;
@@ -97,6 +97,40 @@ public abstract partial class FactoryRecipeMachineStructure : FactoryStructure, 
         }
 
         return _outputInventory.TryTakeFirst(out item);
+    }
+
+    public bool TryPeekFilteredProvidedItem(
+        Vector2I requesterCell,
+        SimulationController simulation,
+        FactoryItemKind? filterItemKind,
+        out FactoryItem? item)
+    {
+        item = null;
+        if (!CanOutputTo(requesterCell))
+        {
+            return false;
+        }
+
+        return filterItemKind.HasValue
+            ? _outputInventory.TryPeekFirstMatching(filterItemKind.Value, out item)
+            : _outputInventory.TryPeekFirst(out item);
+    }
+
+    public bool TryTakeFilteredProvidedItem(
+        Vector2I requesterCell,
+        SimulationController simulation,
+        FactoryItemKind? filterItemKind,
+        out FactoryItem? item)
+    {
+        item = null;
+        if (!CanOutputTo(requesterCell))
+        {
+            return false;
+        }
+
+        return filterItemKind.HasValue
+            ? _outputInventory.TryTakeFirstMatching(filterItemKind.Value, out item)
+            : _outputInventory.TryTakeFirst(out item);
     }
 
     public bool CanReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)

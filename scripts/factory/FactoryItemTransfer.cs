@@ -8,6 +8,21 @@ public interface IFactoryItemProvider
     bool TryTakeProvidedItem(Vector2I requesterCell, SimulationController simulation, out FactoryItem? item);
 }
 
+public interface IFactoryFilteredItemProvider : IFactoryItemProvider
+{
+    bool TryPeekFilteredProvidedItem(
+        Vector2I requesterCell,
+        SimulationController simulation,
+        FactoryItemKind? filterItemKind,
+        out FactoryItem? item);
+
+    bool TryTakeFilteredProvidedItem(
+        Vector2I requesterCell,
+        SimulationController simulation,
+        FactoryItemKind? filterItemKind,
+        out FactoryItem? item);
+}
+
 public interface IFactoryItemReceiver
 {
     bool CanReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation);
@@ -93,6 +108,55 @@ public sealed class FactoryItemBuffer
 
         item = _items.Dequeue();
         return true;
+    }
+
+    public bool TryPeekFirstMatching(FactoryItemKind itemKind, out FactoryItem? item)
+    {
+        foreach (var queuedItem in _items)
+        {
+            if (queuedItem.ItemKind != itemKind)
+            {
+                continue;
+            }
+
+            item = queuedItem;
+            return true;
+        }
+
+        item = null;
+        return false;
+    }
+
+    public bool TryTakeFirstMatching(FactoryItemKind itemKind, out FactoryItem? item)
+    {
+        if (_items.Count == 0)
+        {
+            item = null;
+            return false;
+        }
+
+        var remaining = new Queue<FactoryItem>(_items.Count);
+        item = null;
+        var removed = false;
+        while (_items.Count > 0)
+        {
+            var nextItem = _items.Dequeue();
+            if (!removed && nextItem.ItemKind == itemKind)
+            {
+                item = nextItem;
+                removed = true;
+                continue;
+            }
+
+            remaining.Enqueue(nextItem);
+        }
+
+        while (remaining.Count > 0)
+        {
+            _items.Enqueue(remaining.Dequeue());
+        }
+
+        return removed;
     }
 
     public FactoryItem[] Snapshot()

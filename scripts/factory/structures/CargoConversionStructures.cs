@@ -1662,7 +1662,7 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
     }
 }
 
-public partial class TransferBufferStructure : FactoryStructure, IFactoryItemProvider, IFactoryItemReceiver
+public partial class TransferBufferStructure : FactoryStructure, IFactoryFilteredItemProvider, IFactoryItemReceiver
 {
     private readonly FactoryItemBuffer _buffer = new(4);
     private double _dispatchCooldown;
@@ -1692,6 +1692,40 @@ public partial class TransferBufferStructure : FactoryStructure, IFactoryItemPro
     {
         item = null;
         return CanOutputTo(requesterCell) && _buffer.TryDequeue(out item);
+    }
+
+    public bool TryPeekFilteredProvidedItem(
+        Vector2I requesterCell,
+        SimulationController simulation,
+        FactoryItemKind? filterItemKind,
+        out FactoryItem? item)
+    {
+        item = null;
+        if (!CanOutputTo(requesterCell))
+        {
+            return false;
+        }
+
+        return filterItemKind.HasValue
+            ? _buffer.TryPeekFirstMatching(filterItemKind.Value, out item)
+            : _buffer.TryPeek(out item);
+    }
+
+    public bool TryTakeFilteredProvidedItem(
+        Vector2I requesterCell,
+        SimulationController simulation,
+        FactoryItemKind? filterItemKind,
+        out FactoryItem? item)
+    {
+        item = null;
+        if (!CanOutputTo(requesterCell))
+        {
+            return false;
+        }
+
+        return filterItemKind.HasValue
+            ? _buffer.TryTakeFirstMatching(filterItemKind.Value, out item)
+            : _buffer.TryDequeue(out item);
     }
 
     public bool CanReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)

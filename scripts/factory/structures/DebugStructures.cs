@@ -7,17 +7,17 @@ public abstract partial class DebugItemSourceStructure : FactoryRecipeMachineStr
     private MeshInstance3D? _statusLamp;
     private Node3D? _spinnerRig;
 
-    protected DebugItemSourceStructure(FactoryRecipeDefinition recipe)
+    protected DebugItemSourceStructure(IReadOnlyList<FactoryRecipeDefinition> recipes)
         : base(1, 1, 4, 3)
     {
-        _recipes = new[] { recipe };
+        _recipes = recipes;
     }
 
     protected override IReadOnlyList<FactoryRecipeDefinition> AvailableRecipes => _recipes;
     protected override string DetailSubtitle => "零成本调试供料";
     protected override string OutputSectionTitle => "调试输出缓存";
     protected override string RecipeSectionTitle => "调试输出";
-    protected override string RecipeSectionDescription => "固定的调试物品组，无需上游输入。";
+    protected override string RecipeSectionDescription => "切换当前零成本调试输出物品，无需上游输入。";
 
     public override IEnumerable<string> GetInspectionLines()
     {
@@ -84,34 +84,34 @@ public abstract partial class DebugItemSourceStructure : FactoryRecipeMachineStr
 public partial class DebugOreSourceStructure : DebugItemSourceStructure
 {
     public DebugOreSourceStructure()
-        : base(FactoryRecipeCatalog.DebugOreSourceRecipes[0])
+        : base(FactoryRecipeCatalog.DebugOreSourceRecipes)
     {
     }
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.DebugOreSource;
-    public override string Description => "调试专用原料源，无成本轮转产出煤炭与多种矿物原料。";
+    public override string Description => "调试专用原料源，可按所选配方无成本持续产出单种原矿或基础原料。";
 }
 
 public partial class DebugPartSourceStructure : DebugItemSourceStructure
 {
     public DebugPartSourceStructure()
-        : base(FactoryRecipeCatalog.DebugPartSourceRecipes[0])
+        : base(FactoryRecipeCatalog.DebugPartSourceRecipes)
     {
     }
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.DebugPartSource;
-    public override string Description => "调试专用部件源，无成本轮转产出板材与中间件。";
+    public override string Description => "调试专用部件源，可按所选配方无成本持续产出单种板材或中间件。";
 }
 
 public partial class DebugCombatSourceStructure : DebugItemSourceStructure
 {
     public DebugCombatSourceStructure()
-        : base(FactoryRecipeCatalog.DebugCombatSourceRecipes[0])
+        : base(FactoryRecipeCatalog.DebugCombatSourceRecipes)
     {
     }
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.DebugCombatSource;
-    public override string Description => "调试专用战备源，无成本轮转产出弹药与维护补给。";
+    public override string Description => "调试专用战备源，可按所选配方无成本持续产出单种战备或维护补给。";
 }
 
 public partial class DebugPowerGeneratorStructure : FactoryStructure, IFactoryPowerProducer

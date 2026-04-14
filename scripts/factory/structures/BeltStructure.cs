@@ -7,6 +7,7 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
     private MeshInstance3D? _inputArmMesh;
     private MeshInstance3D? _outputArmMesh;
     private MeshInstance3D? _arrowMesh;
+    private MeshInstance3D? _capMesh;
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.Belt;
 
@@ -92,7 +93,7 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
                 new Vector3(CellSize * 0.18f, 0.03f, CellSize * 0.10f),
                 new Color("BAE6FD"),
                 new Vector3(0.26f * CellSize, 0.18f, 0.0f));
-            CreateBox(
+            _capMesh = CreateBox(
                 "CabinTrayCap",
                 new Vector3(CellSize * 0.24f, 0.05f, CellSize * 0.24f),
                 new Color("CBD5E1"),
@@ -136,7 +137,7 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
 
     private void RebuildTrackVisuals()
     {
-        if (_inputArmMesh is null || _outputArmMesh is null || _arrowMesh is null)
+        if (_centerMesh is null || _inputArmMesh is null || _outputArmMesh is null || _arrowMesh is null)
         {
             return;
         }
@@ -144,9 +145,72 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
         var inputLocal = ToDirectionVector(FactoryDirection.ToCellOffset(_inputFacing));
         var outputLocal = ToDirectionVector(FactoryDirection.ToCellOffset(Facing));
 
+        ConfigureCenter(_centerMesh, inputLocal, outputLocal);
+        if (_capMesh is not null)
+        {
+            ConfigureCap(_capMesh, inputLocal, outputLocal);
+        }
         ConfigureArm(_inputArmMesh, inputLocal);
         ConfigureArm(_outputArmMesh, outputLocal);
         ConfigureArrow(_arrowMesh, outputLocal);
+    }
+
+    private void ConfigureCenter(MeshInstance3D mesh, Vector2 inputDirection, Vector2 outputDirection)
+    {
+        if (SiteKind != FactorySiteKind.Interior)
+        {
+            mesh.Position = new Vector3(0.0f, 0.08f, 0.0f);
+            return;
+        }
+
+        var spansHorizontal = Mathf.Abs(inputDirection.X) > 0.1f || Mathf.Abs(outputDirection.X) > 0.1f;
+        var spansVertical = Mathf.Abs(inputDirection.Y) > 0.1f || Mathf.Abs(outputDirection.Y) > 0.1f;
+        var isCorner = spansHorizontal && spansVertical;
+        var width = isCorner
+            ? CellSize * 0.30f
+            : spansHorizontal
+                ? CellSize * 0.48f
+                : CellSize * 0.30f;
+        var depth = isCorner
+            ? CellSize * 0.30f
+            : spansVertical
+                ? CellSize * 0.48f
+                : CellSize * 0.30f;
+
+        mesh.Mesh = new BoxMesh
+        {
+            Size = new Vector3(width, 0.08f, depth)
+        };
+        mesh.Position = new Vector3(0.0f, 0.12f, 0.0f);
+    }
+
+    private void ConfigureCap(MeshInstance3D mesh, Vector2 inputDirection, Vector2 outputDirection)
+    {
+        if (SiteKind != FactorySiteKind.Interior)
+        {
+            mesh.Position = new Vector3(0.0f, 0.18f, 0.0f);
+            return;
+        }
+
+        var spansHorizontal = Mathf.Abs(inputDirection.X) > 0.1f || Mathf.Abs(outputDirection.X) > 0.1f;
+        var spansVertical = Mathf.Abs(inputDirection.Y) > 0.1f || Mathf.Abs(outputDirection.Y) > 0.1f;
+        var isCorner = spansHorizontal && spansVertical;
+        var width = isCorner
+            ? CellSize * 0.18f
+            : spansHorizontal
+                ? CellSize * 0.38f
+                : CellSize * 0.18f;
+        var depth = isCorner
+            ? CellSize * 0.18f
+            : spansVertical
+                ? CellSize * 0.38f
+                : CellSize * 0.18f;
+
+        mesh.Mesh = new BoxMesh
+        {
+            Size = new Vector3(width, 0.05f, depth)
+        };
+        mesh.Position = new Vector3(0.0f, 0.18f, 0.0f);
     }
 
     private void ConfigureArm(MeshInstance3D mesh, Vector2 direction)

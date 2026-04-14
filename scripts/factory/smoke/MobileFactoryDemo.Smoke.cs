@@ -1019,6 +1019,9 @@ public partial class MobileFactoryDemo
             return false;
         }
 
+        var debugRecipeConfigured = sourceStructure.TrySetDetailRecipe("debug-repair-kit-source");
+        var sourceRecipeActive = sourceStructure.GetDetailModel().RecipeSection?.ActiveRecipeId == "debug-repair-kit-source";
+
         await ToSignal(GetTree().CreateTimer(2.5f), SceneTreeTimer.SignalName.Timeout);
         var sourceDelivered = sink.DeliveredTotal > 0;
         var generatorStable = Mathf.IsEqualApprox(generator.GetAvailablePower(_simulation), generator.NominalPowerSupply);
@@ -1030,6 +1033,8 @@ public partial class MobileFactoryDemo
         var removedSource = _mobileFactory.RemoveInteriorStructure(sourceCell);
         return catalogReady
             && authoredInteriorDebugFree
+            && debugRecipeConfigured
+            && sourceRecipeActive
             && sourceDelivered
             && generatorStable
             && generatorStillStable

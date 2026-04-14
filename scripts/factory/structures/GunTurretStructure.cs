@@ -26,10 +26,12 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
     private Node3D? _muzzlePoint;
     private MeshInstance3D? _muzzleFlash;
     private MeshInstance3D? _ammoIndicator;
+    private MeshInstance3D? _rangeIndicator;
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.GunTurret;
     public override string Description => "消耗弹药攻击靠近的敌人，没有补给时停止射击。";
     public override float MaxHealth => 82.0f;
+    public override bool SupportsSelectionRangeIndicator => true;
     public int BufferedAmmo => _ammoInventory.Count;
     public int ShotsFired => _shotsFired;
 
@@ -221,6 +223,14 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
         }
     }
 
+    public override void SetSelectionRangeVisible(bool visible)
+    {
+        if (_rangeIndicator is not null)
+        {
+            _rangeIndicator.Visible = visible;
+        }
+    }
+
     public override void _ExitTree()
     {
         for (var i = 0; i < _tracers.Count; i++)
@@ -273,6 +283,14 @@ public partial class GunTurretStructure : FactoryStructure, IFactoryItemReceiver
 
     protected override void BuildVisuals()
     {
+        _rangeIndicator = CreateDisc(
+            "RangeIndicator",
+            FactoryConstants.GunTurretRange,
+            0.03f,
+            new Color(0.86f, 0.91f, 1.0f, 0.16f),
+            new Vector3(0.0f, 0.02f, 0.0f));
+        _rangeIndicator.Visible = false;
+
         if (SiteKind == FactorySiteKind.Interior)
         {
             CreateBox("Base", new Vector3(CellSize * 0.88f, 0.18f, CellSize * 0.88f), new Color("111827"), new Vector3(0.0f, 0.09f, 0.0f));

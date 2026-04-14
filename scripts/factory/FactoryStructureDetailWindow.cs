@@ -20,16 +20,16 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         public required StyleBoxFlat PanelStyle { get; init; }
         public required string InventoryId { get; init; }
         public required Vector2I SlotPosition { get; init; }
-        public required bool HasItem { get; init; }
-        public required FactoryItemKind? ItemKind { get; init; }
-        public required string ItemLabelText { get; init; }
-        public required int StackCount { get; init; }
-        public required int MaxStackSize { get; init; }
+        public required bool HasItem { get; set; }
+        public required FactoryItemKind? ItemKind { get; set; }
+        public required string ItemLabelText { get; set; }
+        public required int StackCount { get; set; }
+        public required int MaxStackSize { get; set; }
         public required TextureRect Icon { get; init; }
         public required Label Label { get; init; }
         public required Label StackLabel { get; init; }
         public required Label SubLabel { get; init; }
-        public required Color AccentColor { get; init; }
+        public required Color AccentColor { get; set; }
 
         public bool CanAcceptFrom(InventorySlotWidget source)
         {
@@ -120,6 +120,11 @@ public partial class FactoryStructureDetailWindow : PanelContainer
     private VBoxContainer? _actionSections;
     private PanelContainer? _recipePickerPanel;
     private VBoxContainer? _recipePickerList;
+    private bool _recipePickerExpanded;
+    private string? _recipePickerStateKey;
+    private string? _inventorySectionStateKey;
+    private string? _recipeSectionSignature;
+    private string? _actionSectionSignature;
     private Label? _dragStateLabel;
     private PanelContainer? _dragPreview;
     private TextureRect? _dragPreviewIcon;
@@ -422,6 +427,11 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         _leftMouseHeld = false;
         CancelInventoryDrag();
         _hoveredSlot = null;
+        _recipePickerExpanded = false;
+        _recipePickerStateKey = null;
+        _inventorySectionStateKey = null;
+        _recipeSectionSignature = null;
+        _actionSectionSignature = null;
         _recipePickerPanel = null;
         _recipePickerList = null;
         UpdateDragStateLabel();
@@ -602,6 +612,18 @@ public partial class FactoryStructureDetailWindow : PanelContainer
             return;
         }
 
+        var inventorySectionStateKey = BuildInventorySectionStateKey(sections);
+        if (string.Equals(_inventorySectionStateKey, inventorySectionStateKey, StringComparison.Ordinal)
+            && TryUpdateInventorySectionContent(sections))
+        {
+            UpdateHoveredSlotFromPointer();
+            RefreshSlotVisuals();
+            UpdateDragStateLabel();
+            return;
+        }
+
+        _inventorySectionStateKey = inventorySectionStateKey;
+
         var pendingDragReference = CaptureSlotReference(_pendingDragSourceSlot);
         var dragReference = CaptureSlotReference(_dragSourceSlot);
         var hoveredReference = CaptureSlotReference(_hoveredSlot);
@@ -738,6 +760,19 @@ public partial class FactoryStructureDetailWindow : PanelContainer
             return;
         }
 
+        var recipeSectionSignature = BuildRecipeSectionSignature(section);
+        if (string.Equals(_recipeSectionSignature, recipeSectionSignature, StringComparison.Ordinal))
+        {
+            if (_recipePickerPanel is not null)
+            {
+                _recipePickerPanel.Visible = _recipePickerExpanded;
+            }
+
+            return;
+        }
+
+        _recipeSectionSignature = recipeSectionSignature;
+
         foreach (var child in _recipeSections.GetChildren())
         {
             child.QueueFree();
@@ -745,9 +780,18 @@ public partial class FactoryStructureDetailWindow : PanelContainer
 
         if (section is null)
         {
+            _recipePickerExpanded = false;
+            _recipePickerStateKey = null;
             _recipePickerPanel = null;
             _recipePickerList = null;
             return;
+        }
+
+        var recipePickerStateKey = BuildRecipePickerStateKey(section);
+        if (!string.Equals(_recipePickerStateKey, recipePickerStateKey, StringComparison.Ordinal))
+        {
+            _recipePickerExpanded = false;
+            _recipePickerStateKey = recipePickerStateKey;
         }
 
         var title = CreateTextLabel(13, FactoryUiTheme.Text);
@@ -775,6 +819,8 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         activeOption ??= section.Options.Count > 0 ? section.Options[0] : null;
         if (activeOption is null)
         {
+            _recipePickerExpanded = false;
+            _recipePickerStateKey = null;
             _recipePickerPanel = null;
             _recipePickerList = null;
             return;
@@ -793,8 +839,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                 && mouseButton.Pressed
                 && _recipePickerPanel is not null)
             {
-                _recipePickerPanel.Visible = !_recipePickerPanel.Visible;
-                MoveToFront();
+                SetRecipePickerExpanded(!_recipePickerExpanded);
             }
         };
         triggerRow.AddChild(triggerCard);
@@ -817,7 +862,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         activeRecipeText.AddChild(activeHint);
 
         var pickerPanel = new PanelContainer();
-        pickerPanel.Visible = false;
+        pickerPanel.Visible = _recipePickerExpanded;
         pickerPanel.AddThemeStyleboxOverride("panel", CreatePanelStyle(FactoryUiTheme.SurfaceBase, FactoryUiTheme.BorderStrong, 1));
         _recipeSections.AddChild(pickerPanel);
         _recipePickerPanel = pickerPanel;
@@ -850,10 +895,7 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         FactoryUiTheme.ApplyButtonTheme(closeButton, compact: true);
         closeButton.Pressed += () =>
         {
-            if (_recipePickerPanel is not null)
-            {
-                _recipePickerPanel.Visible = false;
-            }
+            SetRecipePickerExpanded(false);
         };
         pickerHeader.AddChild(closeButton);
 
@@ -880,16 +922,139 @@ public partial class FactoryStructureDetailWindow : PanelContainer
                     && mouseButton.ButtonIndex == MouseButton.Left
                     && mouseButton.Pressed)
                 {
-                    if (_recipePickerPanel is not null)
-                    {
-                        _recipePickerPanel.Visible = false;
-                    }
-
+                    SetRecipePickerExpanded(false);
                     RecipeSelected?.Invoke(option.RecipeId);
                 }
             };
             pickerList.AddChild(optionCard);
         }
+    }
+
+    private void SetRecipePickerExpanded(bool expanded)
+    {
+        _recipePickerExpanded = expanded;
+        if (_recipePickerPanel is not null)
+        {
+            _recipePickerPanel.Visible = expanded;
+        }
+
+        if (expanded)
+        {
+            MoveToFront();
+        }
+    }
+
+    private static string BuildRecipePickerStateKey(FactoryRecipeSectionModel section)
+    {
+        var recipeIds = new string[section.Options.Count];
+        for (var index = 0; index < section.Options.Count; index++)
+        {
+            recipeIds[index] = section.Options[index].RecipeId;
+        }
+
+        return $"{section.Title}|{string.Join(",", recipeIds)}";
+    }
+
+    private bool TryUpdateInventorySectionContent(IReadOnlyList<FactoryInventorySectionModel> sections)
+    {
+        var expectedSlotCount = 0;
+        for (var sectionIndex = 0; sectionIndex < sections.Count; sectionIndex++)
+        {
+            expectedSlotCount += sections[sectionIndex].Slots.Count;
+        }
+
+        if (_slotWidgets.Count != expectedSlotCount)
+        {
+            return false;
+        }
+
+        var widgetIndex = 0;
+        for (var sectionIndex = 0; sectionIndex < sections.Count; sectionIndex++)
+        {
+            var section = sections[sectionIndex];
+            for (var slotIndex = 0; slotIndex < section.Slots.Count; slotIndex++)
+            {
+                var slot = section.Slots[slotIndex];
+                var widget = _slotWidgets[widgetIndex++];
+                widget.HasItem = slot.HasItem;
+                widget.ItemKind = slot.ItemKind;
+                widget.ItemLabelText = slot.ItemLabel ?? string.Empty;
+                widget.StackCount = slot.StackCount;
+                widget.MaxStackSize = slot.MaxStackSize;
+                widget.AccentColor = slot.AccentColor;
+                widget.Icon.Texture = slot.IconTexture;
+                widget.Icon.Visible = slot.IconTexture is not null;
+                widget.Label.Text = slot.HasItem ? slot.ItemLabel ?? string.Empty : "空槽位";
+                widget.StackLabel.Text = slot.HasItem ? $"{slot.StackCount}/{slot.MaxStackSize}" : "--";
+                widget.Panel.TooltipText = slot.ItemDescription ?? string.Empty;
+            }
+        }
+
+        if (_pendingDragSourceSlot is not null && !_pendingDragSourceSlot.HasItem)
+        {
+            _pendingDragSourceSlot = null;
+            _pendingDragElapsed = 0.0;
+        }
+
+        if (_dragSourceSlot is not null && !_dragSourceSlot.HasItem)
+        {
+            _dragSourceSlot = null;
+            if (_dragPreview is not null)
+            {
+                _dragPreview.Visible = false;
+            }
+        }
+
+        return true;
+    }
+
+    private static string BuildInventorySectionStateKey(IReadOnlyList<FactoryInventorySectionModel> sections)
+    {
+        var parts = new string[sections.Count];
+        for (var sectionIndex = 0; sectionIndex < sections.Count; sectionIndex++)
+        {
+            var section = sections[sectionIndex];
+            var slotParts = new string[section.Slots.Count];
+            for (var slotIndex = 0; slotIndex < section.Slots.Count; slotIndex++)
+            {
+                var slot = section.Slots[slotIndex];
+                slotParts[slotIndex] = $"{slot.Position.X},{slot.Position.Y}";
+            }
+
+            parts[sectionIndex] =
+                $"{section.InventoryId}:{section.Title}:{section.GridSize.X}x{section.GridSize.Y}:{(section.AllowItemMove ? 1 : 0)}:{string.Join(";", slotParts)}";
+        }
+
+        return string.Join("|", parts);
+    }
+
+    private static string? BuildRecipeSectionSignature(FactoryRecipeSectionModel? section)
+    {
+        if (section is null)
+        {
+            return null;
+        }
+
+        var optionParts = new string[section.Options.Count];
+        for (var index = 0; index < section.Options.Count; index++)
+        {
+            var option = section.Options[index];
+            optionParts[index] = $"{option.RecipeId}:{option.DisplayName}:{option.Summary}:{(option.IsActive ? 1 : 0)}";
+        }
+
+        return $"{section.Title}|{section.Description}|{section.ActiveRecipeId}|{string.Join(";", optionParts)}";
+    }
+
+    private static string BuildActionSectionSignature(IReadOnlyList<FactoryDetailActionModel> actions)
+    {
+        var parts = new string[actions.Count];
+        for (var index = 0; index < actions.Count; index++)
+        {
+            var action = actions[index];
+            parts[index] = $"{action.ActionId}:{action.Label}:{action.Description}:{(action.IsEnabled ? 1 : 0)}";
+        }
+
+        return string.Join("|", parts);
     }
 
     private void RebuildActionSection(IReadOnlyList<FactoryDetailActionModel> actions)
@@ -898,6 +1063,14 @@ public partial class FactoryStructureDetailWindow : PanelContainer
         {
             return;
         }
+
+        var actionSectionSignature = BuildActionSectionSignature(actions);
+        if (string.Equals(_actionSectionSignature, actionSectionSignature, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _actionSectionSignature = actionSectionSignature;
 
         foreach (var child in _actionSections.GetChildren())
         {

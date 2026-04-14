@@ -159,13 +159,22 @@ public partial class FactoryDemo
             return false;
         }
 
+        var debugRecipeConfigured = source.TrySetDetailRecipe("debug-iron-ore-source");
+        var sourceRecipeActive = source.GetDetailModel().RecipeSection?.ActiveRecipeId == "debug-iron-ore-source";
+
         await ToSignal(GetTree().CreateTimer(2.4f), SceneTreeTimer.SignalName.Timeout);
         var sourceDelivered = sink.DeliveredTotal > 0;
         var generatorStable = Mathf.IsEqualApprox(generator.GetAvailablePower(_simulation), generator.NominalPowerSupply);
 
         await ToSignal(GetTree().CreateTimer(0.8f), SceneTreeTimer.SignalName.Timeout);
         var generatorStillStable = Mathf.IsEqualApprox(generator.GetAvailablePower(_simulation), generator.NominalPowerSupply);
-        return catalogReady && authoredLayoutDebugFree && sourceDelivered && generatorStable && generatorStillStable;
+        return catalogReady
+            && authoredLayoutDebugFree
+            && debugRecipeConfigured
+            && sourceRecipeActive
+            && sourceDelivered
+            && generatorStable
+            && generatorStillStable;
     }
 
     private async Task<bool> RunPlayerCharacterSmoke(Vector2I placementCell)
@@ -1018,6 +1027,7 @@ public partial class FactoryDemo
             && hotCoreEnergy > coolCoreEnergy
             && hotFireboxEnergy > coolFireboxEnergy
             && hotPlumeScale > coolPlumeScale;
+        var interiorBeltPresentationVerified = RunInteriorBeltPresentationSmoke();
         var interiorNamingVerified =
             FactoryIndustrialStandards.GetInteriorPresentationLabel(BuildPrototypeKind.Belt).Contains("供料", global::System.StringComparison.Ordinal)
             && FactoryIndustrialStandards.GetInteriorCarrierLabel(FactoryItemKind.IronOre).Contains("矿罐", global::System.StringComparison.Ordinal)
@@ -1034,7 +1044,55 @@ public partial class FactoryDemo
             && genericResolved
             && legacyResolved
             && smelterHotCoolVerified
+            && interiorBeltPresentationVerified
             && interiorNamingVerified;
+    }
+
+    private static bool RunInteriorBeltPresentationSmoke()
+    {
+        var horizontalCenter = ResolveInteriorBeltCenterSize(FacingDirection.East, FacingDirection.East, new Vector2I(-1, 0));
+        var verticalCenter = ResolveInteriorBeltCenterSize(FacingDirection.South, FacingDirection.South, new Vector2I(0, -1));
+        var cornerCenter = ResolveInteriorBeltCenterSize(FacingDirection.East, FacingDirection.South, new Vector2I(0, -1));
+
+        return horizontalCenter is Vector3 horizontal
+            && verticalCenter is Vector3 vertical
+            && cornerCenter is Vector3 corner
+            && horizontal.X > horizontal.Z
+            && vertical.Z > vertical.X
+            && Mathf.Abs(corner.X - corner.Z) <= 0.01f
+            && corner.X < horizontal.X
+            && corner.Z < vertical.Z;
+    }
+
+    private static Vector3? ResolveInteriorBeltCenterSize(FacingDirection targetFacing, FacingDirection sourceFacing, Vector2I sourceCell)
+    {
+        var site = new MobileFactorySite(
+            "belt-visual-smoke",
+            new Vector2I(-4, -4),
+            new Vector2I(4, 4),
+            FactoryConstants.CellSize,
+            null!);
+        site.SetRuntimeState(true, false);
+
+        var target = new BeltStructure();
+        target.Configure(site, Vector2I.Zero, targetFacing);
+        site.AddStructure(target);
+
+        var source = new BeltStructure();
+        source.Configure(site, sourceCell, sourceFacing);
+        site.AddStructure(source);
+
+        target.RefreshTopology();
+        source.RefreshTopology();
+
+        var controller = target.CreateDetachedVisualControllerForTesting();
+        var centerMesh = FindNamedMesh(controller.Root, "CabinChannelCore");
+        var genericChannelMesh = FindNamedMesh(controller.Root, "CargoChannel");
+        var size = (centerMesh?.Mesh as BoxMesh)?.Size;
+        controller.Root.Free();
+        source.Free();
+        target.Free();
+        return genericChannelMesh is null ? size : null;
     }
 
     private static MeshInstance3D? FindFirstMesh(Node node)
@@ -1049,6 +1107,28 @@ public partial class FactoryDemo
             if (child is Node childNode)
             {
                 var found = FindFirstMesh(childNode);
+                if (found is not null)
+                {
+                    return found;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static MeshInstance3D? FindNamedMesh(Node node, string nodeName)
+    {
+        if (node is MeshInstance3D mesh && mesh.Name == nodeName)
+        {
+            return mesh;
+        }
+
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Node childNode)
+            {
+                var found = FindNamedMesh(childNode, nodeName);
                 if (found is not null)
                 {
                     return found;
@@ -1677,7 +1757,10 @@ public partial class FactoryDemo
             new Vector2I(27, 26),
             new Vector2I(26, 28),
             new Vector2I(26, 32),
-            new Vector2I(29, 32)
+            new Vector2I(29, 32),
+            new Vector2I(31, 26),
+            new Vector2I(32, 26),
+            new Vector2I(33, 26)
         };
 
         foreach (var cell in requiredCells)
@@ -1695,13 +1778,19 @@ public partial class FactoryDemo
         var recipeAssembler = PlaceStructure(BuildPrototypeKind.Assembler, 26, 28, FacingDirection.East) as AssemblerStructure;
         var ammoAssembler = PlaceStructure(BuildPrototypeKind.AmmoAssembler, 26, 32, FacingDirection.East) as AmmoAssemblerStructure;
         var turret = PlaceStructure(BuildPrototypeKind.GunTurret, 29, 32, FacingDirection.East) as GunTurretStructure;
+        var filterSourceStorage = PlaceStructure(BuildPrototypeKind.Storage, 31, 26, FacingDirection.East) as StorageStructure;
+        var filterInserter = PlaceStructure(BuildPrototypeKind.Inserter, 32, 26, FacingDirection.East) as InserterStructure;
+        var filterTargetStorage = PlaceStructure(BuildPrototypeKind.Storage, 33, 26, FacingDirection.East) as StorageStructure;
 
         if (feederStorage is null
             || storage is null
             || generator is null
             || recipeAssembler is null
             || ammoAssembler is null
-            || turret is null)
+            || turret is null
+            || filterSourceStorage is null
+            || filterInserter is null
+            || filterTargetStorage is null)
         {
             return false;
         }
@@ -1711,6 +1800,7 @@ public partial class FactoryDemo
 
         var assemblerRecipeChanged = recipeAssembler.TrySetDetailRecipe("gear");
         var ammoRecipeChanged = ammoAssembler.TrySetDetailRecipe("high-velocity-ammo");
+        var inserterFilterChanged = filterInserter.TrySetDetailRecipe("inserter-filter-Gear");
 
         await ToSignal(GetTree().CreateTimer(3.0f), SceneTreeTimer.SignalName.Timeout);
 
@@ -1727,6 +1817,8 @@ public partial class FactoryDemo
         feederStorage.TryReceiveProvidedItem(_simulation.CreateItem(BuildPrototypeKind.Storage, FactoryItemKind.GenericCargo), feederStorage.Cell + Vector2I.Left, _simulation);
         recipeAssembler.TryReceiveProvidedItem(_simulation.CreateItem(BuildPrototypeKind.Smelter, FactoryItemKind.IronPlate), GetPrimaryInputCell(recipeAssembler), _simulation);
         recipeAssembler.TryReceiveProvidedItem(_simulation.CreateItem(BuildPrototypeKind.Smelter, FactoryItemKind.IronPlate), GetPrimaryInputCell(recipeAssembler), _simulation);
+        filterSourceStorage.TryReceiveProvidedItem(_simulation.CreateItem(BuildPrototypeKind.Storage, FactoryItemKind.GenericCargo), filterSourceStorage.Cell + Vector2I.Left, _simulation);
+        filterSourceStorage.TryReceiveProvidedItem(_simulation.CreateItem(BuildPrototypeKind.Storage, FactoryItemKind.Gear), filterSourceStorage.Cell + Vector2I.Left, _simulation);
 
         if (turret.BufferedAmmo <= 0)
         {
@@ -1854,6 +1946,15 @@ public partial class FactoryDemo
 
         await ToSignal(GetTree().CreateTimer(1.8f), SceneTreeTimer.SignalName.Timeout);
 
+        await ToSignal(GetTree().CreateTimer(1.2f), SceneTreeTimer.SignalName.Timeout);
+        var filterTargetDetail = filterTargetStorage.GetDetailModel();
+        var filterSourceDetail = filterSourceStorage.GetDetailModel();
+        var filterDetail = filterInserter.GetDetailModel();
+        var inserterFilterActive = filterDetail.RecipeSection?.ActiveRecipeId == "inserter-filter-Gear";
+        var filterMovedGear = InventoryContainsLabel(filterTargetDetail, FactoryItemCatalog.GetDisplayName(FactoryItemKind.Gear));
+        var filterRejectedGenericAtTarget = !InventoryContainsLabel(filterTargetDetail, FactoryItemCatalog.GetDisplayName(FactoryItemKind.GenericCargo));
+        var filterLeftGenericAtSource = InventoryContainsLabel(filterSourceDetail, FactoryItemCatalog.GetDisplayName(FactoryItemKind.GenericCargo));
+
         _selectedStructure = recipeAssembler;
         UpdateHud();
         var recipeOutputCells = recipeAssembler.GetOutputCells();
@@ -1894,11 +1995,16 @@ public partial class FactoryDemo
             && splitTotalStackCount == totalStackCountBeforeMove
             && assemblerRecipeVerified
             && ammoRecipeChanged
+            && inserterFilterChanged
+            && inserterFilterActive
+            && filterMovedGear
+            && filterRejectedGenericAtTarget
+            && filterLeftGenericAtSource
             && turretHasAmmo
             && turretShowsHighVelocityAmmo;
         if (!passed)
         {
-            GD.Print($"FACTORY_DETAIL_SMOKE storageDetailVisible={storageDetailVisible} stackCountsVisible={stackCountsVisible} emptyDragRejected={emptyDragRejected} storageMoved={storageMoved} movedTargetStackCount={movedTargetStackCount} targetStackBeforeMove={targetStackBeforeMove} movedTotalStackCount={movedTotalStackCount} totalStackCountBeforeMove={totalStackCountBeforeMove} splitMoveWorked={splitMoveWorked} splitTargetCount={splitTargetCount} splitSourceCountBefore={splitSourceCountBefore} splitSourceCountAfter={splitSourceCountAfter} splitTotalStackCount={splitTotalStackCount} assemblerRecipeVerified={assemblerRecipeVerified} ammoRecipeChanged={ammoRecipeChanged} turretHasAmmo={turretHasAmmo} turretShowsHighVelocityAmmo={turretShowsHighVelocityAmmo}");
+            GD.Print($"FACTORY_DETAIL_SMOKE storageDetailVisible={storageDetailVisible} stackCountsVisible={stackCountsVisible} emptyDragRejected={emptyDragRejected} storageMoved={storageMoved} movedTargetStackCount={movedTargetStackCount} targetStackBeforeMove={targetStackBeforeMove} movedTotalStackCount={movedTotalStackCount} totalStackCountBeforeMove={totalStackCountBeforeMove} splitMoveWorked={splitMoveWorked} splitTargetCount={splitTargetCount} splitSourceCountBefore={splitSourceCountBefore} splitSourceCountAfter={splitSourceCountAfter} splitTotalStackCount={splitTotalStackCount} assemblerRecipeVerified={assemblerRecipeVerified} ammoRecipeChanged={ammoRecipeChanged} inserterFilterChanged={inserterFilterChanged} inserterFilterActive={inserterFilterActive} filterMovedGear={filterMovedGear} filterRejectedGenericAtTarget={filterRejectedGenericAtTarget} filterLeftGenericAtSource={filterLeftGenericAtSource} turretHasAmmo={turretHasAmmo} turretShowsHighVelocityAmmo={turretShowsHighVelocityAmmo}");
         }
 
         return passed;

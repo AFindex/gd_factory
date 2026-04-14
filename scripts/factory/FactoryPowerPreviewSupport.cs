@@ -82,7 +82,7 @@ public static class FactoryPowerPreviewSupport
 
     public static void UpdatePreviewPowerRange(BuildPrototypeKind? kind, IFactorySite site, MeshInstance3D previewPowerRange, Color tint)
     {
-        if (!TryGetPowerPreviewInfo(kind, out var rangeCells))
+        if (!TryGetPreviewRangeInfo(kind, site, out var rangeRadius, out var alpha))
         {
             previewPowerRange.Visible = false;
             return;
@@ -90,13 +90,13 @@ public static class FactoryPowerPreviewSupport
 
         previewPowerRange.Mesh = new CylinderMesh
         {
-            TopRadius = site.CellSize * rangeCells,
-            BottomRadius = site.CellSize * rangeCells,
+            TopRadius = rangeRadius,
+            BottomRadius = rangeRadius,
             Height = 0.03f
         };
         previewPowerRange.Position = new Vector3(0.0f, 0.02f, 0.0f);
         previewPowerRange.Visible = true;
-        FactoryPreviewOverlaySupport.ApplyPreviewColor(previewPowerRange, new Color(tint.R, tint.G, tint.B, 0.15f));
+        FactoryPreviewOverlaySupport.ApplyPreviewColor(previewPowerRange, new Color(tint.R, tint.G, tint.B, alpha));
     }
 
     public static bool TryGetPowerPreviewInfo(BuildPrototypeKind? kind, out int rangeCells)
@@ -114,6 +114,37 @@ public static class FactoryPowerPreviewSupport
                 return true;
             default:
                 rangeCells = 0;
+                return false;
+        }
+    }
+
+    private static bool TryGetPreviewRangeInfo(BuildPrototypeKind? kind, IFactorySite site, out float rangeRadius, out float alpha)
+    {
+        switch (kind)
+        {
+            case BuildPrototypeKind.Generator:
+                rangeRadius = site.CellSize * 5;
+                alpha = 0.15f;
+                return true;
+            case BuildPrototypeKind.DebugPowerGenerator:
+                rangeRadius = site.CellSize * 6;
+                alpha = 0.15f;
+                return true;
+            case BuildPrototypeKind.PowerPole:
+                rangeRadius = site.CellSize * FactoryPreviewOverlaySupport.PreviewPowerPoleConnectionRangeCells;
+                alpha = 0.15f;
+                return true;
+            case BuildPrototypeKind.GunTurret:
+                rangeRadius = FactoryConstants.GunTurretRange;
+                alpha = 0.20f;
+                return true;
+            case BuildPrototypeKind.HeavyGunTurret:
+                rangeRadius = FactoryConstants.HeavyGunTurretRange;
+                alpha = 0.20f;
+                return true;
+            default:
+                rangeRadius = 0.0f;
+                alpha = 0.0f;
                 return false;
         }
     }

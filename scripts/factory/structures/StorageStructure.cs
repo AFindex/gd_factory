@@ -2,7 +2,7 @@ using Godot;
 using System;
 using System.Collections.Generic;
 
-public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, IFactoryItemReceiver
+public partial class StorageStructure : FactoryStructure, IFactoryFilteredItemProvider, IFactoryItemReceiver
 {
     private readonly FactorySlottedItemInventory _inventory = new(8, 3);
     private readonly List<MeshInstance3D> _fillIndicators = new();
@@ -78,6 +78,48 @@ public partial class StorageStructure : FactoryStructure, IFactoryItemProvider, 
         }
 
         var removed = _inventory.TryTakeFirst(out item);
+        if (removed)
+        {
+            _dispatchCooldown = FactoryConstants.StorageDispatchSeconds * 0.35f;
+        }
+
+        return removed;
+    }
+
+    public bool TryPeekFilteredProvidedItem(
+        Vector2I requesterCell,
+        SimulationController simulation,
+        FactoryItemKind? filterItemKind,
+        out FactoryItem? item)
+    {
+        item = null;
+
+        if (!IsOrthogonallyAdjacent(Cell, requesterCell))
+        {
+            return false;
+        }
+
+        return filterItemKind.HasValue
+            ? _inventory.TryPeekFirstMatching(filterItemKind.Value, out item)
+            : _inventory.TryPeekFirst(out item);
+    }
+
+    public bool TryTakeFilteredProvidedItem(
+        Vector2I requesterCell,
+        SimulationController simulation,
+        FactoryItemKind? filterItemKind,
+        out FactoryItem? item)
+    {
+        item = null;
+
+        if (!IsOrthogonallyAdjacent(Cell, requesterCell))
+        {
+            return false;
+        }
+
+        var removed = filterItemKind.HasValue
+            ? _inventory.TryTakeFirstMatching(filterItemKind.Value, out item)
+            : _inventory.TryTakeFirst(out item);
         if (removed)
         {
             _dispatchCooldown = FactoryConstants.StorageDispatchSeconds * 0.35f;

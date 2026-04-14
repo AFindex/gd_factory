@@ -30,9 +30,9 @@ public partial class FactoryDemo : Node3D
         [BuildPrototypeKind.Loader] = new BuildPrototypeDefinition(BuildPrototypeKind.Loader, "装载器", new Color("FDBA74"), "把后方带上的物品装入前方机器或回收端。"),
         [BuildPrototypeKind.Unloader] = new BuildPrototypeDefinition(BuildPrototypeKind.Unloader, "卸载器", new Color("93C5FD"), "把机器端输出卸到前方传送网络。"),
         [BuildPrototypeKind.CargoPacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoPacker, "封包站", new Color("F97316"), "把外场产物压成世界标准封装货物，供移动工厂边界或远程收货链继续运输。"),
-        [BuildPrototypeKind.DebugOreSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugOreSource, "调试原料源", new Color("4ADE80"), "无成本轮转煤炭与多种矿物原料，便于快速验证物流与加工链。"),
-        [BuildPrototypeKind.DebugPartSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugPartSource, "调试部件源", new Color("22D3EE"), "无成本轮转板材与中间件，便于快速验证制造、缓存与装卸。"),
-        [BuildPrototypeKind.DebugCombatSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugCombatSource, "调试战备源", new Color("FB7185"), "无成本轮转弹药和维护补给，便于快速验证防线与支援链。"),
+        [BuildPrototypeKind.DebugOreSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugOreSource, "调试原料源", new Color("4ADE80"), "无成本按配方持续输出单种基础原料，便于快速验证物流与加工链。"),
+        [BuildPrototypeKind.DebugPartSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugPartSource, "调试部件源", new Color("22D3EE"), "无成本按配方持续输出单种板材或中间件，便于快速验证制造、缓存与装卸。"),
+        [BuildPrototypeKind.DebugCombatSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugCombatSource, "调试战备源", new Color("FB7185"), "无成本按配方持续输出单种战备或维护补给，便于快速验证防线与支援链。"),
         [BuildPrototypeKind.DebugPowerGenerator] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugPowerGenerator, "永久测试发电机", new Color("FBBF24"), "调试专用永久供电机，无需燃料即可持续给周边电网供能。"),
         [BuildPrototypeKind.Storage] = new BuildPrototypeDefinition(BuildPrototypeKind.Storage, "仓储", new Color("94A3B8"), "缓存多件物品，可向前输出，也能被机械臂抓取。"),
         [BuildPrototypeKind.LargeStorageDepot] = new BuildPrototypeDefinition(BuildPrototypeKind.LargeStorageDepot, "大型仓储", new Color("64748B"), "占据 2x2 空间的大型缓存仓，可作为更稳定的物流缓冲点。"),
@@ -1069,7 +1069,7 @@ public partial class FactoryDemo : Node3D
             if (child is FactoryStructure structure)
             {
                 structure.SetCombatFocus(structure == _hoveredStructure, structure == _selectedStructure);
-                structure.SetPowerRangeVisible(ShouldShowPowerRange(structure));
+                structure.SetSelectionRangeVisible(ShouldShowSelectionRange(structure));
                 structure.SyncVisualPresentation(alpha);
                 structure.UpdateVisuals(alpha);
                 structure.SyncCombatVisuals(alpha);
@@ -1176,12 +1176,14 @@ public partial class FactoryDemo : Node3D
         _powerLinkOverlayRoot.Visible = visibleCount > 0;
     }
 
-    private bool ShouldShowPowerRange(FactoryStructure structure)
+    private bool ShouldShowSelectionRange(FactoryStructure structure)
     {
-        return IsPowerPreviewActive()
-            && structure is IFactoryPowerNode
-            && GodotObject.IsInstanceValid(structure)
-            && structure.IsInsideTree();
+        return GodotObject.IsInstanceValid(structure)
+            && structure.IsInsideTree()
+            && ((IsPowerPreviewActive() && structure is IFactoryPowerNode)
+                || (_interactionMode == FactoryInteractionMode.Interact
+                    && structure == _selectedStructure
+                    && structure.SupportsSelectionRangeIndicator));
     }
 
     private bool IsPowerPreviewActive()

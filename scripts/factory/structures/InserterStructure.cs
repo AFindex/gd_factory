@@ -1,10 +1,15 @@
 using Godot;
 using System;
+using System.Collections.Generic;
 
 public partial class InserterStructure : FactoryStructure
 {
     private const float HeldVisualScale = 0.72f;
+    private const string NoFilterRecipeId = "inserter-filter-any";
+    private const string FilterConfigurationKey = "filter_item_kind";
+    private static readonly IReadOnlyList<FactoryItemKind> SelectableFilterKinds = BuildSelectableFilterKinds();
     private FactoryItem? _heldItem;
+    private FactoryItemKind? _filterItemKind;
     private float _swingProgress;
     private bool _isReturning;
     private Node3D? _shoulderPivot;
@@ -14,7 +19,7 @@ public partial class InserterStructure : FactoryStructure
     private Node3D? _heldVisual;
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.Inserter;
-    public override string Description => "从后方抓取物品并向前方投送，适配传送带、仓储和其他缓冲结构。";
+    public override string Description => "从后方抓取物品并向前方投送，支持对传送带、仓储、中转缓冲和产物缓存做物品筛选。";
 
     public override void SimulationStep(SimulationController simulation, double stepSeconds)
     {
@@ -34,11 +39,7 @@ public partial class InserterStructure : FactoryStructure
 
         if (_heldItem is null)
         {
-            if (!simulation.TryPeekProvidedItem(Site, GetInputCell(), Cell, out var previewItem)
-                || previewItem is null
-                || !simulation.CanReceiveProvidedItem(this, Site, GetOutputCell(), previewItem)
-                || !simulation.TryTakeProvidedItem(Site, GetInputCell(), Cell, out var takenItem)
-                || takenItem is null)
+            if (!TryAcquireFilteredInput(simulation, out var takenItem) || takenItem is null)
             {
                 return;
             }
@@ -78,11 +79,96 @@ public partial class InserterStructure : FactoryStructure
         }
     }
 
+    public override IEnumerable<string> GetInspectionLines()
+    {
+        foreach (var line in base.GetInspectionLines())
+        {
+            yield return line;
+        }
+
+        yield return $"筛选：{DescribeFilter()}";
+        yield return _heldItem is not null
+            ? $"状态：正在搬运 {FactoryItemCatalog.GetDisplayName(_heldItem.ItemKind)}"
+            : _isReturning
+                ? "状态：回臂复位"
+                : "状态：待抓取";
+    }
+
+    public override FactoryStructureDetailModel GetDetailModel()
+    {
+        var summaryLines = new List<string>();
+        foreach (var line in GetInspectionLines())
+        {
+            summaryLines.Add(line);
+        }
+
+        return new FactoryStructureDetailModel(
+            InspectionTitle,
+            "抓取参数",
+            summaryLines,
+            recipeSection: BuildFilterSection());
+    }
+
+    public override bool TrySetDetailRecipe(string recipeId)
+    {
+        if (string.Equals(recipeId, NoFilterRecipeId, StringComparison.Ordinal))
+        {
+            _filterItemKind = null;
+            return true;
+        }
+
+        return TryResolveFilterFromRecipeId(recipeId, out _filterItemKind);
+    }
+
+    public override IReadOnlyDictionary<string, string> CaptureBlueprintConfiguration()
+    {
+        return _filterItemKind.HasValue
+            ? new Dictionary<string, string> { [FilterConfigurationKey] = _filterItemKind.Value.ToString() }
+            : new Dictionary<string, string>();
+    }
+
+    public override bool ApplyBlueprintConfiguration(IReadOnlyDictionary<string, string> configuration)
+    {
+        if (!configuration.TryGetValue(FilterConfigurationKey, out var filterItemKindRaw))
+        {
+            _filterItemKind = null;
+            return configuration.Count == 0;
+        }
+
+        if (!Enum.TryParse<FactoryItemKind>(filterItemKindRaw, out var filterItemKind))
+        {
+            return false;
+        }
+
+        _filterItemKind = filterItemKind;
+        return true;
+    }
+
+    public override string? CaptureMapRecipeId()
+    {
+        return _filterItemKind.HasValue ? BuildFilterRecipeId(_filterItemKind.Value) : null;
+    }
+
+    public override bool TryApplyMapRecipe(string recipeId)
+    {
+        if (string.IsNullOrWhiteSpace(recipeId))
+        {
+            _filterItemKind = null;
+            return true;
+        }
+
+        return TrySetDetailRecipe(recipeId);
+    }
+
     protected override void CaptureRuntimeState(FactoryStructureRuntimeSnapshot snapshot)
     {
         base.CaptureRuntimeState(snapshot);
         snapshot.State["swing_progress"] = FactoryRuntimeSnapshotValues.FormatFloat(_swingProgress);
         snapshot.State["is_returning"] = FactoryRuntimeSnapshotValues.FormatBool(_isReturning);
+        if (_filterItemKind.HasValue)
+        {
+            snapshot.State[FilterConfigurationKey] = _filterItemKind.Value.ToString();
+        }
         if (_heldItem is not null)
         {
             snapshot.State["held_item_id"] = FactoryRuntimeSnapshotValues.FormatInt(_heldItem.Id);
@@ -98,6 +184,10 @@ public partial class InserterStructure : FactoryStructure
             ? Mathf.Clamp(swingProgress, 0.0f, 1.0f)
             : 0.0f;
         _isReturning = FactoryRuntimeSnapshotValues.TryGetBool(snapshot.State, "is_returning", out var isReturning) && isReturning;
+        _filterItemKind = snapshot.State.TryGetValue(FilterConfigurationKey, out var filterItemKindRaw)
+            && Enum.TryParse<FactoryItemKind>(filterItemKindRaw, out var filterItemKind)
+                ? filterItemKind
+                : null;
 
         _heldItem = null;
         if (FactoryRuntimeSnapshotValues.TryGetInt(snapshot.State, "held_item_id", out var itemId)
@@ -280,6 +370,143 @@ public partial class InserterStructure : FactoryStructure
 
         _heldVisual.QueueFree();
         _heldVisual = null;
+    }
+
+    private bool TryAcquireFilteredInput(SimulationController simulation, out FactoryItem? takenItem)
+    {
+        takenItem = null;
+        if (!TryPeekFilteredInput(simulation, out var previewItem)
+            || previewItem is null
+            || !simulation.CanReceiveProvidedItem(this, Site, GetOutputCell(), previewItem))
+        {
+            return false;
+        }
+
+        return TryTakeFilteredInput(simulation, out takenItem) && takenItem is not null;
+    }
+
+    private bool TryPeekFilteredInput(SimulationController simulation, out FactoryItem? item)
+    {
+        item = null;
+        if (Site.TryGetStructure(GetInputCell(), out var providerStructure)
+            && providerStructure is IFactoryFilteredItemProvider filteredProvider)
+        {
+            return filteredProvider.TryPeekFilteredProvidedItem(Cell, simulation, _filterItemKind, out item);
+        }
+
+        if (!simulation.TryPeekProvidedItem(Site, GetInputCell(), Cell, out item) || item is null)
+        {
+            return false;
+        }
+
+        return MatchesFilter(item);
+    }
+
+    private bool TryTakeFilteredInput(SimulationController simulation, out FactoryItem? item)
+    {
+        item = null;
+        if (Site.TryGetStructure(GetInputCell(), out var providerStructure)
+            && providerStructure is IFactoryFilteredItemProvider filteredProvider)
+        {
+            return filteredProvider.TryTakeFilteredProvidedItem(Cell, simulation, _filterItemKind, out item);
+        }
+
+        if (!simulation.TryTakeProvidedItem(Site, GetInputCell(), Cell, out item) || item is null)
+        {
+            return false;
+        }
+
+        return MatchesFilter(item);
+    }
+
+    private bool MatchesFilter(FactoryItem item)
+    {
+        return !_filterItemKind.HasValue || item.ItemKind == _filterItemKind.Value;
+    }
+
+    private FactoryRecipeSectionModel BuildFilterSection()
+    {
+        var options = new List<FactoryRecipeOptionModel>
+        {
+            new(
+                NoFilterRecipeId,
+                "不过滤",
+                "抓取来源结构当前可提供的任意物品。",
+                !_filterItemKind.HasValue,
+                FactoryPresentation.GetBuildPrototypeAccentColor(Kind),
+                FactoryPresentation.GetItemIcon(FactoryItemKind.GenericCargo))
+        };
+
+        for (var index = 0; index < SelectableFilterKinds.Count; index++)
+        {
+            var itemKind = SelectableFilterKinds[index];
+            options.Add(new FactoryRecipeOptionModel(
+                BuildFilterRecipeId(itemKind),
+                FactoryItemCatalog.GetDisplayName(itemKind),
+                $"只抓取 {FactoryItemCatalog.GetDisplayName(itemKind)}；不匹配的物品会留在来源结构中。",
+                _filterItemKind == itemKind,
+                FactoryPresentation.GetItemAccentColor(itemKind),
+                FactoryPresentation.GetItemIcon(itemKind)));
+        }
+
+        return new FactoryRecipeSectionModel(
+            "抓取筛选",
+            "切换机械臂允许抓取的物品种类。对传送带、仓储、中转缓冲和产物缓存都会生效。",
+            _filterItemKind.HasValue ? BuildFilterRecipeId(_filterItemKind.Value) : NoFilterRecipeId,
+            options);
+    }
+
+    private string DescribeFilter()
+    {
+        return _filterItemKind.HasValue
+            ? FactoryItemCatalog.GetDisplayName(_filterItemKind.Value)
+            : "不过滤";
+    }
+
+    private static bool TryResolveFilterFromRecipeId(string recipeId, out FactoryItemKind? itemKind)
+    {
+        itemKind = null;
+        if (string.IsNullOrWhiteSpace(recipeId))
+        {
+            return false;
+        }
+
+        const string prefix = "inserter-filter-";
+        if (!recipeId.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var itemKindRaw = recipeId[prefix.Length..];
+        if (!Enum.TryParse<FactoryItemKind>(itemKindRaw, out var parsedItemKind)
+            || parsedItemKind == FactoryItemKind.BuildingKit)
+        {
+            return false;
+        }
+
+        itemKind = parsedItemKind;
+        return true;
+    }
+
+    private static string BuildFilterRecipeId(FactoryItemKind itemKind)
+    {
+        return $"inserter-filter-{itemKind}";
+    }
+
+    private static IReadOnlyList<FactoryItemKind> BuildSelectableFilterKinds()
+    {
+        var kinds = new List<FactoryItemKind>();
+        foreach (var itemKind in Enum.GetValues<FactoryItemKind>())
+        {
+            if (itemKind == FactoryItemKind.BuildingKit)
+            {
+                continue;
+            }
+
+            kinds.Add(itemKind);
+        }
+
+        return kinds;
     }
 
     private static MeshInstance3D CreateArmMesh(Node3D parent, string name, Vector3 size, Color color, Vector3 localPosition)

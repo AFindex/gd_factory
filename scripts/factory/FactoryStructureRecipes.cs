@@ -118,64 +118,175 @@ public static class FactoryRecipeCatalog
     public static readonly IReadOnlyList<FactoryRecipeDefinition> DebugOreSourceRecipes = new[]
     {
         new FactoryRecipeDefinition(
-            "debug-ore-bundle",
-            "调试原料包",
-            "无成本轮转基础矿物与原料，供物流与加工回归使用。",
+            "debug-coal-source",
+            "调试煤炭",
+            "无成本持续输出煤炭，供发电与燃料链回归使用。",
             BuildPrototypeKind.DebugOreSource,
             0.75f,
             0.0f,
             null,
-            new[]
-            {
-                new FactoryRecipeOutputDefinition(FactoryItemKind.Coal, 1),
-                new FactoryRecipeOutputDefinition(FactoryItemKind.IronOre, 1),
-                new FactoryRecipeOutputDefinition(FactoryItemKind.CopperOre, 1),
-                new FactoryRecipeOutputDefinition(FactoryItemKind.StoneOre, 1),
-                new FactoryRecipeOutputDefinition(FactoryItemKind.SulfurOre, 1),
-                new FactoryRecipeOutputDefinition(FactoryItemKind.QuartzOre, 1)
-            })
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.Coal, 1) }),
+        new FactoryRecipeDefinition(
+            "debug-iron-ore-source",
+            "调试铁矿",
+            "无成本持续输出铁矿石，供采选与冶炼链回归使用。",
+            BuildPrototypeKind.DebugOreSource,
+            0.75f,
+            0.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.IronOre, 1) }),
+        new FactoryRecipeDefinition(
+            "debug-copper-ore-source",
+            "调试铜矿",
+            "无成本持续输出铜矿石，供冶炼与线缆链回归使用。",
+            BuildPrototypeKind.DebugOreSource,
+            0.75f,
+            0.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.CopperOre, 1) }),
+        new FactoryRecipeDefinition(
+            "debug-stone-ore-source",
+            "调试石矿",
+            "无成本持续输出石矿，供建材链回归使用。",
+            BuildPrototypeKind.DebugOreSource,
+            0.75f,
+            0.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.StoneOre, 1) }),
+        new FactoryRecipeDefinition(
+            "debug-sulfur-ore-source",
+            "调试硫矿",
+            "无成本持续输出硫矿，供弹药与化工链回归使用。",
+            BuildPrototypeKind.DebugOreSource,
+            0.75f,
+            0.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.SulfurOre, 1) }),
+        new FactoryRecipeDefinition(
+            "debug-quartz-ore-source",
+            "调试石英",
+            "无成本持续输出石英矿，供玻璃与电子链回归使用。",
+            BuildPrototypeKind.DebugOreSource,
+            0.75f,
+            0.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.QuartzOre, 1) })
     };
 
     public static readonly IReadOnlyList<FactoryRecipeDefinition> DebugPartSourceRecipes = new[]
     {
         new FactoryRecipeDefinition(
-            "debug-part-bundle",
-            "调试部件包",
-            "无成本轮转常用板材和中间件，方便验证组装与缓存。",
+            "debug-iron-plate-source",
+            "调试铁板",
+            "无成本持续输出铁板，方便验证基础装配与缓冲。",
             BuildPrototypeKind.DebugPartSource,
             0.85f,
             0.0f,
             null,
-            new[]
-            {
-                new FactoryRecipeOutputDefinition(FactoryItemKind.IronPlate, 1),
-                new FactoryRecipeOutputDefinition(FactoryItemKind.CopperPlate, 1),
-                new FactoryRecipeOutputDefinition(FactoryItemKind.SteelPlate, 1),
-                new FactoryRecipeOutputDefinition(FactoryItemKind.CopperWire, 1),
-                new FactoryRecipeOutputDefinition(FactoryItemKind.CircuitBoard, 1),
-                new FactoryRecipeOutputDefinition(FactoryItemKind.Gear, 1),
-                new FactoryRecipeOutputDefinition(FactoryItemKind.MachinePart, 1),
-                new FactoryRecipeOutputDefinition(FactoryItemKind.Glass, 1)
-            })
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.IronPlate, 1) }),
+        new FactoryRecipeDefinition(
+            "debug-copper-plate-source",
+            "调试铜板",
+            "无成本持续输出铜板，方便验证线缆与电路链。",
+            BuildPrototypeKind.DebugPartSource,
+            0.85f,
+            0.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.CopperPlate, 1) }),
+        new FactoryRecipeDefinition(
+            "debug-steel-plate-source",
+            "调试钢板",
+            "无成本持续输出钢板，方便验证高级制造链。",
+            BuildPrototypeKind.DebugPartSource,
+            0.85f,
+            0.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.SteelPlate, 1) }),
+        new FactoryRecipeDefinition(
+            "debug-copper-wire-source",
+            "调试铜线",
+            "无成本持续输出铜线，方便验证电子链。",
+            BuildPrototypeKind.DebugPartSource,
+            0.85f,
+            0.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.CopperWire, 1) }),
+        new FactoryRecipeDefinition(
+            "debug-circuit-board-source",
+            "调试电路板",
+            "无成本持续输出电路板，方便验证高级装配链。",
+            BuildPrototypeKind.DebugPartSource,
+            0.85f,
+            0.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.CircuitBoard, 1) }),
+        new FactoryRecipeDefinition(
+            "debug-gear-source",
+            "调试齿轮",
+            "无成本持续输出齿轮，方便验证部件链。",
+            BuildPrototypeKind.DebugPartSource,
+            0.85f,
+            0.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.Gear, 1) }),
+        new FactoryRecipeDefinition(
+            "debug-machine-part-source",
+            "调试机加工件",
+            "无成本持续输出机加工件，方便验证高阶装配与运输。",
+            BuildPrototypeKind.DebugPartSource,
+            0.85f,
+            0.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.MachinePart, 1) }),
+        new FactoryRecipeDefinition(
+            "debug-glass-source",
+            "调试玻璃",
+            "无成本持续输出玻璃，方便验证维护与电子支援链。",
+            BuildPrototypeKind.DebugPartSource,
+            0.85f,
+            0.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.Glass, 1) })
     };
 
     public static readonly IReadOnlyList<FactoryRecipeDefinition> DebugCombatSourceRecipes = new[]
     {
         new FactoryRecipeDefinition(
-            "debug-combat-bundle",
-            "调试战备包",
-            "无成本轮转弹药与维护补给，用于验证防线和支援链。",
+            "debug-ammo-magazine-source",
+            "调试标准弹药",
+            "无成本持续输出标准弹药，用于验证基础防线链。",
             BuildPrototypeKind.DebugCombatSource,
             0.95f,
             0.0f,
             null,
-            new[]
-            {
-                new FactoryRecipeOutputDefinition(FactoryItemKind.AmmoMagazine, 1),
-                new FactoryRecipeOutputDefinition(FactoryItemKind.HighVelocityAmmo, 1),
-                new FactoryRecipeOutputDefinition(FactoryItemKind.BatteryPack, 1),
-                new FactoryRecipeOutputDefinition(FactoryItemKind.RepairKit, 1)
-            })
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.AmmoMagazine, 1) }),
+        new FactoryRecipeDefinition(
+            "debug-high-velocity-ammo-source",
+            "调试高速弹药",
+            "无成本持续输出高速弹药，用于验证高阶炮塔补给链。",
+            BuildPrototypeKind.DebugCombatSource,
+            0.95f,
+            0.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.HighVelocityAmmo, 1) }),
+        new FactoryRecipeDefinition(
+            "debug-battery-pack-source",
+            "调试电池组",
+            "无成本持续输出电池组，用于验证维护与后勤支援。",
+            BuildPrototypeKind.DebugCombatSource,
+            0.95f,
+            0.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.BatteryPack, 1) }),
+        new FactoryRecipeDefinition(
+            "debug-repair-kit-source",
+            "调试维修包",
+            "无成本持续输出维修包，用于验证维护支援链。",
+            BuildPrototypeKind.DebugCombatSource,
+            0.95f,
+            0.0f,
+            null,
+            new[] { new FactoryRecipeOutputDefinition(FactoryItemKind.RepairKit, 1) })
     };
 
     public static readonly IReadOnlyList<FactoryRecipeDefinition> MiningDrillRecipes = new[]

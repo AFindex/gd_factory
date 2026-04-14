@@ -59,6 +59,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
     public bool IsUnderAttack => _recentDamageTimer > 0.0;
     public FactoryStructureVisualSourceKind VisualSourceKind => _visualController?.SourceKind ?? FactoryStructureVisualSourceKind.GenericPlaceholder;
     public virtual float CombatRadius => Footprint.GetCombatRadius(CellSize, Facing);
+    public virtual bool SupportsSelectionRangeIndicator => this is IFactoryPowerNode;
 
     public abstract BuildPrototypeKind Kind { get; }
     public abstract string Description { get; }
@@ -93,6 +94,11 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
 
     public virtual void SetPowerRangeVisible(bool visible)
     {
+    }
+
+    public virtual void SetSelectionRangeVisible(bool visible)
+    {
+        SetPowerRangeVisible(visible);
     }
 
     public virtual bool TryAcceptItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
@@ -784,7 +790,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
                 new Color("223244"),
                 new Color("38BDF8"),
                 new Color("D7F5FF"),
-                UsesChannel: true,
+                UsesChannel: Kind != BuildPrototypeKind.Belt,
                 UsesServiceWalkway: false,
                 UsesHardpointRing: false),
             FactoryInteriorVisualRole.BufferCabinet => new FactoryInteriorVisualStyle(

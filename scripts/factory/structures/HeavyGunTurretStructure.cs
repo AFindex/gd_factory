@@ -16,10 +16,12 @@ public partial class HeavyGunTurretStructure : FactoryStructure, IFactoryItemRec
     private Node3D? _muzzlePoint;
     private MeshInstance3D? _muzzleFlash;
     private MeshInstance3D? _ammoIndicator;
+    private MeshInstance3D? _rangeIndicator;
 
     public override BuildPrototypeKind Kind => BuildPrototypeKind.HeavyGunTurret;
     public override string Description => "占据 2x2 空间，消耗弹药并发射独立炮弹。";
     public override float MaxHealth => 168.0f;
+    public override bool SupportsSelectionRangeIndicator => true;
     public int BufferedAmmo => _ammoInventory.Count;
     public int ShotsFired => _shotsFired;
 
@@ -198,6 +200,14 @@ public partial class HeavyGunTurretStructure : FactoryStructure, IFactoryItemRec
         }
     }
 
+    public override void SetSelectionRangeVisible(bool visible)
+    {
+        if (_rangeIndicator is not null)
+        {
+            _rangeIndicator.Visible = visible;
+        }
+    }
+
     protected override void CaptureRuntimeState(FactoryStructureRuntimeSnapshot snapshot)
     {
         base.CaptureRuntimeState(snapshot);
@@ -240,6 +250,14 @@ public partial class HeavyGunTurretStructure : FactoryStructure, IFactoryItemRec
 
     protected override void BuildVisuals()
     {
+        _rangeIndicator = CreateDisc(
+            "RangeIndicator",
+            FactoryConstants.HeavyGunTurretRange,
+            0.03f,
+            new Color(0.96f, 0.88f, 0.70f, 0.16f),
+            new Vector3(0.0f, 0.02f, 0.0f));
+        _rangeIndicator.Visible = false;
+
         if (SiteKind == FactorySiteKind.Interior)
         {
             CreateBox("Base", new Vector3(CellSize * 1.84f, 0.18f, CellSize * 1.84f), new Color("111827"), new Vector3(0.0f, 0.09f, 0.0f));
