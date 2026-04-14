@@ -193,8 +193,117 @@ public static class FactoryBundleCatalog
             return false;
         }
 
-        template = Get($"packed-{ToSlug(item.ItemKind)}-{GetDefaultTierFor(item.ItemKind)}");
+        return TryGetConverterSelectableTemplate(
+            $"packed-{ToSlug(item.ItemKind)}-{GetDefaultTierFor(item.ItemKind)}",
+            FactoryCargoForm.WorldPacked,
+            out template);
+    }
+
+    public static bool TryResolveOneToOneWorldTemplate(FactoryItem item, out FactoryBundleTemplate? template)
+    {
+        template = null;
+        if (item.CargoForm != FactoryCargoForm.WorldBulk && item.CargoForm != FactoryCargoForm.WorldPacked)
+        {
+            return false;
+        }
+
+        var templateId = ResolveTemplateId(item.ItemKind, item.CargoForm, item.BundleTemplateId);
+        return TryGetConverterSelectableTemplate(templateId, item.CargoForm, out template);
+    }
+
+    public static bool IsConverterSelectableTemplate(FactoryBundleTemplate template)
+    {
+        return (template.CargoForm == FactoryCargoForm.WorldBulk || template.CargoForm == FactoryCargoForm.WorldPacked)
+            && IsSingleItemTemplate(template);
+    }
+
+    public static bool IsSingleItemTemplate(FactoryBundleTemplate template)
+    {
+        if (template.Mode != FactoryBundleTemplateMode.Fixed
+            || template.WorldItemKind == FactoryItemKind.GenericCargo
+            || template.ExactRequirements.Count != 1)
+        {
+            return false;
+        }
+
+        return template.ExactRequirements.TryGetValue(template.WorldItemKind, out var units)
+            && units == template.TotalUnits;
+    }
+
+    public static bool TryResolveSingleItemRequirement(
+        FactoryBundleTemplate template,
+        out FactoryItemKind itemKind,
+        out int units)
+    {
+        itemKind = FactoryItemKind.GenericCargo;
+        units = 0;
+        if (!IsSingleItemTemplate(template)
+            || !template.ExactRequirements.TryGetValue(template.WorldItemKind, out units))
+        {
+            return false;
+        }
+
+        itemKind = template.WorldItemKind;
         return true;
+    }
+
+    public static bool TryGetConverterSelectableTemplate(string templateId, out FactoryBundleTemplate? template)
+    {
+        if (!TryGet(templateId, out template) || template is null)
+        {
+            return false;
+        }
+
+        return IsConverterSelectableTemplate(template);
+    }
+
+    public static bool TryGetConverterSelectableTemplate(
+        string templateId,
+        FactoryCargoForm cargoForm,
+        out FactoryBundleTemplate? template)
+    {
+        if (!TryGetConverterSelectableTemplate(templateId, out template) || template is null)
+        {
+            return false;
+        }
+
+        return template.CargoForm == cargoForm;
+    }
+
+    public static IReadOnlyList<FactoryBundleTemplate> GetConverterSelectableTemplates(params FactoryCargoForm[] cargoForms)
+    {
+        var allowedForms = new HashSet<FactoryCargoForm>(
+            cargoForms is { Length: > 0 }
+                ? cargoForms
+                : new[] { FactoryCargoForm.WorldBulk, FactoryCargoForm.WorldPacked });
+        var templates = new List<FactoryBundleTemplate>();
+        foreach (var template in Templates.Values)
+        {
+            if (!allowedForms.Contains(template.CargoForm) || !IsConverterSelectableTemplate(template))
+            {
+                continue;
+            }
+
+            templates.Add(template);
+        }
+
+        templates.Sort(static (left, right) =>
+        {
+            var cargoFormCompare = left.CargoForm.CompareTo(right.CargoForm);
+            if (cargoFormCompare != 0)
+            {
+                return cargoFormCompare;
+            }
+
+            var displayCompare = string.Compare(left.DisplayName, right.DisplayName, StringComparison.Ordinal);
+            if (displayCompare != 0)
+            {
+                return displayCompare;
+            }
+
+            return string.Compare(left.Id, right.Id, StringComparison.Ordinal);
+        });
+        return templates;
     }
 
     public static bool CanAcceptIntoTemplate(

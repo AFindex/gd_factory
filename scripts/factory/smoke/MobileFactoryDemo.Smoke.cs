@@ -206,13 +206,47 @@ public partial class MobileFactoryDemo
             && CountNamedNodes(bufferStructure, "StorageCabinetShell") > 0
             && escortTurret is not null
             && CountNamedNodes(escortTurret, "Well") > 0;
+        var unpackerRecipeSection = (unpackerStructure as CargoUnpackerStructure)?.GetDetailModel().RecipeSection;
+        var packerRecipeSection = (packerStructure as CargoPackerStructure)?.GetDetailModel().RecipeSection;
+        var unpackerHasAutoRecipeOption = false;
+        if (unpackerRecipeSection is not null)
+        {
+            for (var recipeIndex = 0; recipeIndex < unpackerRecipeSection.Options.Count; recipeIndex++)
+            {
+                if (unpackerRecipeSection.Options[recipeIndex].RecipeId == "cargo-unpacker-auto")
+                {
+                    unpackerHasAutoRecipeOption = true;
+                    break;
+                }
+            }
+        }
+        var packerHasAutoRecipeOption = false;
+        if (packerRecipeSection is not null)
+        {
+            for (var recipeIndex = 0; recipeIndex < packerRecipeSection.Options.Count; recipeIndex++)
+            {
+                if (packerRecipeSection.Options[recipeIndex].RecipeId == "cargo-packer-auto")
+                {
+                    packerHasAutoRecipeOption = true;
+                    break;
+                }
+            }
+        }
         var bundleTemplateChainConfigured =
             unpackerStructure is CargoUnpackerStructure configuredUnpacker
             && packerStructure is CargoPackerStructure configuredPacker
             && configuredUnpacker.CaptureBlueprintConfiguration().TryGetValue("bundle_template_id", out var unpackerTemplateId)
             && unpackerTemplateId == "bulk-iron-ore-standard"
             && configuredPacker.CaptureBlueprintConfiguration().TryGetValue("bundle_template_id", out var packerTemplateId)
-            && packerTemplateId == "packed-iron-plate-standard";
+            && packerTemplateId == "packed-iron-plate-standard"
+            && unpackerRecipeSection is not null
+            && unpackerRecipeSection.ActiveRecipeId == "bulk-iron-ore-standard"
+            && unpackerRecipeSection.Options.Count > 1
+            && unpackerHasAutoRecipeOption
+            && packerRecipeSection is not null
+            && packerRecipeSection.ActiveRecipeId == "packed-iron-plate-standard"
+            && packerRecipeSection.Options.Count > 1
+            && packerHasAutoRecipeOption;
         var worldBundleBlockedOnInteriorBelt =
             _mobileFactory.TryGetInteriorStructure(new Vector2I(3, 7), out var interiorBeltStructure)
             && interiorBeltStructure is BeltStructure interiorBelt
@@ -377,114 +411,195 @@ public partial class MobileFactoryDemo
             return false;
         }
 
-        if (inputPort.IsConnectedToWorld && inputPort.StagedCargoCount == 0)
+        var suspendCombatForVerification = HasFocusedSmokeTestFlag();
+        if (suspendCombatForVerification)
         {
-            inputPort.TryReceiveProvidedItem(
-                _simulation.CreateItem(
-                    FactorySiteKind.World,
-                    BuildPrototypeKind.MiningDrill,
-                    FactoryItemKind.IronOre,
-                    FactoryCargoForm.WorldBulk,
-                    "bulk-iron-ore-standard"),
-                inputPort.WorldAdjacentCell,
-                _simulation);
+            _combatDirector?.ClearLanes();
+            _simulation.ClearCombatActors();
         }
 
-        if (outputPort.IsConnectedToWorld && outputPort.StagedCargoCount == 0)
+        try
         {
-            outputPort.TryAcceptPackedBundle(
-                _simulation.CreateItem(
-                    FactorySiteKind.World,
-                    BuildPrototypeKind.CargoPacker,
-                    FactoryItemKind.IronPlate,
-                    FactoryCargoForm.WorldPacked,
-                    "packed-iron-plate-standard"),
-                outputPort.Cell - FactoryDirection.ToCellOffset(outputPort.Facing),
-                _simulation);
-        }
-
-        var packerInputCell = GetPrimaryInputCell(packer);
-
-        var sawInboundStage = false;
-        var sawBufferedInner = false;
-        var sawOutboundStage = false;
-        var sawInboundConverterOwnership = false;
-        var sawInboundRelease = false;
-        var sawOutboundConverterOwnership = false;
-        var boundedOwnership = true;
-        var singleVisiblePayloadOwner = true;
-        var remaining = 10.0f;
-
-        while (remaining > 0.0f)
-        {
-            if (!sawOutboundConverterOwnership)
+            if (inputPort.IsConnectedToWorld && inputPort.StagedCargoCount == 0)
             {
-                packer.TryReceiveProvidedItem(
+                inputPort.TryReceiveProvidedItem(
                     _simulation.CreateItem(
-                        packer.Site,
-                        BuildPrototypeKind.Smelter,
-                        FactoryItemKind.IronPlate,
-                        FactoryCargoForm.InteriorFeed),
-                    packerInputCell,
+                        FactorySiteKind.World,
+                        BuildPrototypeKind.MiningDrill,
+                        FactoryItemKind.IronOre,
+                        FactoryCargoForm.WorldBulk,
+                        "bulk-iron-ore-standard"),
+                    inputPort.WorldAdjacentCell,
                     _simulation);
             }
 
-            sawInboundStage |= inputPort.StagedCargoCount > 0;
-            sawBufferedInner |= inputPort.HandoffPhase is MobileFactoryHeavyHandoffPhase.BufferedInner or MobileFactoryHeavyHandoffPhase.WaitingForUnpacker;
-            sawBufferedInner |= inputPort.TryGetCurrentPresentationState(out var inputChainPresentation)
-                && inputChainPresentation.Host == MobileFactoryHeavyCargoPresentationHost.InteriorInnerBuffer;
-            sawInboundConverterOwnership |= unpacker.TryGetHeavyCargoPresentationState(out _)
-                || unpacker.HasProcessingBundle
-                || unpacker.IsEmittingManifest
-                || unpacker.PendingManifestCount > 0;
-            sawInboundRelease |= inputPort.InnerBufferedItem is null && sawInboundConverterOwnership;
-            sawOutboundStage |= outputPort.StagedCargoCount > 0
-                && (outputPort.HandoffPhase is MobileFactoryHeavyHandoffPhase.BufferedInner
-                    or MobileFactoryHeavyHandoffPhase.SlidingToBridgeOutward
+            if (outputPort.IsConnectedToWorld && outputPort.StagedCargoCount == 0)
+            {
+                outputPort.TryAcceptPackedBundle(
+                    _simulation.CreateItem(
+                        FactorySiteKind.World,
+                        BuildPrototypeKind.CargoPacker,
+                        FactoryItemKind.IronPlate,
+                        FactoryCargoForm.WorldPacked,
+                        "packed-iron-plate-standard"),
+                    outputPort.Cell - FactoryDirection.ToCellOffset(outputPort.Facing),
+                    _simulation);
+            }
+
+            var packerInputCell = GetPrimaryInputCell(packer);
+
+            var sawInboundStage = false;
+            var sawBufferedInner = false;
+            var sawOutboundStage = false;
+            var sawOutboundInnerBuffer = false;
+            var sawOutboundBridgeStage = false;
+            var sawOutboundOuterWait = false;
+            var sawOutboundRelease = false;
+            var sawOutboundReleaseAfterWait = false;
+            var sawInboundConverterOwnership = false;
+            var sawInboundRelease = false;
+            var sawOutboundConverterOwnership = false;
+            var boundedOwnership = true;
+            var singleVisiblePayloadOwner = true;
+            var outputReleasePickupPrepared = false;
+            var remaining = 10.0f;
+
+            while (remaining > 0.0f)
+            {
+                if (!sawOutboundConverterOwnership)
+                {
+                    packer.TryReceiveProvidedItem(
+                        _simulation.CreateItem(
+                            packer.Site,
+                            BuildPrototypeKind.Smelter,
+                            FactoryItemKind.IronPlate,
+                            FactoryCargoForm.InteriorFeed),
+                        packerInputCell,
+                        _simulation);
+                }
+
+                var inputHasPresentation = inputPort.TryGetCurrentPresentationState(out var inputChainPresentation);
+                var outputHasPresentation = outputPort.TryGetCurrentPresentationState(out var outputChainPresentation);
+                var unpackerHasPresentation = unpacker.TryGetHeavyCargoPresentationState(out _);
+                var packerHasPresentation = packer.TryGetHeavyCargoPresentationState(out _);
+                sawInboundStage |= inputPort.StagedCargoCount > 0;
+                sawBufferedInner |= inputPort.HandoffPhase is MobileFactoryHeavyHandoffPhase.BufferedInner or MobileFactoryHeavyHandoffPhase.WaitingForUnpacker;
+                sawBufferedInner |= inputHasPresentation
+                    && inputChainPresentation.Host == MobileFactoryHeavyCargoPresentationHost.InteriorInnerBuffer;
+                sawInboundConverterOwnership |= unpackerHasPresentation
+                    || unpacker.HasProcessingBundle
+                    || unpacker.IsEmittingManifest
+                    || unpacker.PendingManifestCount > 0;
+                sawInboundRelease |= inputPort.InnerBufferedItem is null && sawInboundConverterOwnership;
+                sawOutboundStage |= outputPort.StagedCargoCount > 0
+                    && (outputPort.HandoffPhase is MobileFactoryHeavyHandoffPhase.BufferedInner
+                        or MobileFactoryHeavyHandoffPhase.ReceivingFromPacker
+                        or MobileFactoryHeavyHandoffPhase.SlidingToBridgeOutward
+                        or MobileFactoryHeavyHandoffPhase.BridgingOutward
+                        or MobileFactoryHeavyHandoffPhase.WaitingWorldPickup
+                        or MobileFactoryHeavyHandoffPhase.ReleasingToWorld);
+                sawOutboundInnerBuffer |= outputPort.HandoffPhase is MobileFactoryHeavyHandoffPhase.ReceivingFromPacker
+                    or MobileFactoryHeavyHandoffPhase.BufferedInner
+                    || outputHasPresentation && outputChainPresentation.Host == MobileFactoryHeavyCargoPresentationHost.InteriorInnerBuffer;
+                sawOutboundBridgeStage |= outputPort.HandoffPhase is MobileFactoryHeavyHandoffPhase.SlidingToBridgeOutward
                     or MobileFactoryHeavyHandoffPhase.BridgingOutward
-                    or MobileFactoryHeavyHandoffPhase.WaitingWorldPickup
-                    or MobileFactoryHeavyHandoffPhase.ReleasingToWorld);
-            sawOutboundConverterOwnership |= packer.TryGetHeavyCargoPresentationState(out _)
-                || packer.HasProcessingBundle
-                || packer.HasPackedBundleBuffered;
-            boundedOwnership &= inputPort.StagedCargoCount <= 3 && outputPort.StagedCargoCount <= 3;
-            singleVisiblePayloadOwner &= inputPort.CountVisiblePayloadVisuals() <= 1 && outputPort.CountVisiblePayloadVisuals() <= 1;
+                    || outputHasPresentation && outputChainPresentation.Host is MobileFactoryHeavyCargoPresentationHost.InteriorBridge or MobileFactoryHeavyCargoPresentationHost.WorldRouteHandoff
+                        && outputPort.TransferMode == MobileFactoryHeavyPortTransferMode.InnerToOuterBuffer;
+                sawOutboundOuterWait |= outputPort.HandoffPhase == MobileFactoryHeavyHandoffPhase.WaitingWorldPickup
+                    || outputHasPresentation && outputChainPresentation.Host == MobileFactoryHeavyCargoPresentationHost.WorldOuterBuffer;
+                sawOutboundRelease |= outputPort.HandoffPhase == MobileFactoryHeavyHandoffPhase.ReleasingToWorld
+                    && outputHasPresentation
+                    && outputChainPresentation.Host == MobileFactoryHeavyCargoPresentationHost.WorldRouteHandoff;
+                sawOutboundReleaseAfterWait |= sawOutboundOuterWait && sawOutboundRelease;
+                sawOutboundConverterOwnership |= packerHasPresentation
+                    || packer.HasProcessingBundle
+                    || packer.HasPackedBundleBuffered;
+                boundedOwnership &= inputPort.StagedCargoCount <= 3 && outputPort.StagedCargoCount <= 3;
+                singleVisiblePayloadOwner &= inputPort.CountVisiblePayloadVisuals() <= 1 && outputPort.CountVisiblePayloadVisuals() <= 1;
+                singleVisiblePayloadOwner &= !(inputHasPresentation && unpackerHasPresentation);
+                singleVisiblePayloadOwner &= !(outputHasPresentation && packerHasPresentation);
 
-            await ToSignal(GetTree().CreateTimer(0.2f), SceneTreeTimer.SignalName.Timeout);
-            remaining -= 0.2f;
+                if (!outputReleasePickupPrepared
+                    && sawOutboundOuterWait
+                    && outputPort.IsConnectedToWorld
+                    && outputPort.OuterBufferedItem is FactoryItem bufferedBundle
+                    && _grid is not null)
+                {
+                    var releaseCell = outputPort.WorldAdjacentCell;
+                    if (!_grid.TryGetStructure(releaseCell, out var releaseTarget)
+                        || releaseTarget is null
+                        || !releaseTarget.CanAcceptItem(bufferedBundle, outputPort.WorldPortCell, _simulation))
+                    {
+                        if (releaseTarget is not null)
+                        {
+                            RemoveWorldStructure(releaseCell);
+                        }
+
+                        releaseTarget = PlaceWorldStructure(BuildPrototypeKind.Sink, releaseCell, outputPort.WorldFacing);
+                    }
+
+                    outputReleasePickupPrepared = releaseTarget is not null
+                        && releaseTarget.CanAcceptItem(bufferedBundle, outputPort.WorldPortCell, _simulation);
+                }
+
+                await ToSignal(GetTree().CreateTimer(0.2f), SceneTreeTimer.SignalName.Timeout);
+                remaining -= 0.2f;
+            }
+
+            var verified = sawInboundStage
+                && sawBufferedInner
+                && sawInboundConverterOwnership
+                && sawInboundRelease
+                && sawOutboundStage
+                && sawOutboundInnerBuffer
+                && sawOutboundBridgeStage
+                && sawOutboundOuterWait
+                && sawOutboundRelease
+                && sawOutboundReleaseAfterWait
+                && boundedOwnership
+                && singleVisiblePayloadOwner;
+
+            if (!verified && HasFocusedSmokeTestFlag())
+            {
+                GD.Print(
+                    $"MOBILE_FACTORY_HEAVY_HANDOFF_SMOKE " +
+                    $"inboundStage={sawInboundStage} " +
+                    $"bufferedInner={sawBufferedInner} " +
+                    $"inboundConverter={sawInboundConverterOwnership} " +
+                    $"inboundRelease={sawInboundRelease} " +
+                    $"outboundStage={sawOutboundStage} " +
+                    $"outboundInner={sawOutboundInnerBuffer} " +
+                    $"outboundBridge={sawOutboundBridgeStage} " +
+                    $"outboundOuterWait={sawOutboundOuterWait} " +
+                    $"outboundRelease={sawOutboundRelease} " +
+                    $"outboundReleaseAfterWait={sawOutboundReleaseAfterWait} " +
+                    $"outboundConverter={sawOutboundConverterOwnership} " +
+                    $"bounded={boundedOwnership} " +
+                    $"singleVisible={singleVisiblePayloadOwner} " +
+                    $"inputPhase={inputPort.HandoffPhase} " +
+                    $"outputPhase={outputPort.HandoffPhase} " +
+                    $"outputMode={outputPort.TransferMode} " +
+                    $"outputProgress={outputPort.BridgeTransferProgress:0.000} " +
+                    $"outputStaged={outputPort.StagedCargoCount} " +
+                    $"outputConnected={outputPort.IsConnectedToWorld} " +
+                    $"outputWorldReady={outputPort.IsWorldFlowReady} " +
+                    $"inputVisible={inputPort.CountVisiblePayloadVisuals()} " +
+                    $"outputVisible={outputPort.CountVisiblePayloadVisuals()} " +
+                    $"inputState={(inputPort.TryGetCurrentPresentationState(out var inputPresentation) ? $"{inputPresentation.Owner}/{inputPresentation.Host}" : "none")} " +
+                    $"outputState={(outputPort.TryGetCurrentPresentationState(out var outputPresentation) ? $"{outputPresentation.Owner}/{outputPresentation.Host}" : "none")} " +
+                    $"unpackerState={(unpacker.TryGetHeavyCargoPresentationState(out var unpackerPresentation) ? $"{unpackerPresentation.Owner}/{unpackerPresentation.Host}" : "none")} " +
+                    $"packerState={(packer.TryGetHeavyCargoPresentationState(out var packerPresentation) ? $"{packerPresentation.Owner}/{packerPresentation.Host}" : "none")}");
+            }
+
+            return verified;
         }
-
-        var verified = sawInboundStage
-            && sawBufferedInner
-            && sawInboundConverterOwnership
-            && sawInboundRelease
-            && sawOutboundStage
-            && boundedOwnership
-            && singleVisiblePayloadOwner;
-
-        if (!verified && HasFocusedSmokeTestFlag())
+        finally
         {
-            GD.Print(
-                $"MOBILE_FACTORY_HEAVY_HANDOFF_SMOKE " +
-                $"inboundStage={sawInboundStage} " +
-                $"bufferedInner={sawBufferedInner} " +
-                $"inboundConverter={sawInboundConverterOwnership} " +
-                $"inboundRelease={sawInboundRelease} " +
-                $"outboundStage={sawOutboundStage} " +
-                $"outboundConverter={sawOutboundConverterOwnership} " +
-                $"bounded={boundedOwnership} " +
-                $"singleVisible={singleVisiblePayloadOwner} " +
-                $"inputPhase={inputPort.HandoffPhase} " +
-                $"outputPhase={outputPort.HandoffPhase} " +
-                $"inputVisible={inputPort.CountVisiblePayloadVisuals()} " +
-                $"outputVisible={outputPort.CountVisiblePayloadVisuals()} " +
-                $"inputState={(inputPort.TryGetCurrentPresentationState(out var inputPresentation) ? $"{inputPresentation.Owner}/{inputPresentation.Host}" : "none")} " +
-                $"outputState={(outputPort.TryGetCurrentPresentationState(out var outputPresentation) ? $"{outputPresentation.Owner}/{outputPresentation.Host}" : "none")} " +
-                $"unpackerState={(unpacker.TryGetHeavyCargoPresentationState(out var unpackerPresentation) ? $"{unpackerPresentation.Owner}/{unpackerPresentation.Host}" : "none")} " +
-                $"packerState={(packer.TryGetHeavyCargoPresentationState(out var packerPresentation) ? $"{packerPresentation.Owner}/{packerPresentation.Host}" : "none")}");
+            if (suspendCombatForVerification)
+            {
+                ConfigureWorldCombatScenarios();
+            }
         }
-
-        return verified;
     }
 
     private static bool RunBundleTemplateRulesSmoke()
@@ -492,6 +607,23 @@ public partial class MobileFactoryDemo
         var fixedTemplate = FactoryBundleCatalog.Get("packed-gear-compact");
         var categoryTemplate = FactoryBundleCatalog.Get("packed-ore-mixed-standard");
         var mixedTemplate = FactoryBundleCatalog.Get("packed-frontline-sustainment-wide");
+        var fixedWorldTemplate = new FactoryItem(
+            -302,
+            BuildPrototypeKind.MiningDrill,
+            FactoryItemKind.IronOre,
+            FactoryCargoForm.WorldBulk,
+            "bulk-iron-ore-standard");
+        var mixedWorldTemplate = new FactoryItem(
+            -303,
+            BuildPrototypeKind.CargoPacker,
+            FactoryItemKind.GenericCargo,
+            FactoryCargoForm.WorldPacked,
+            "packed-frontline-sustainment-wide");
+        var autoPackInput = new FactoryItem(
+            -304,
+            BuildPrototypeKind.Smelter,
+            FactoryItemKind.IronPlate,
+            FactoryCargoForm.InteriorFeed);
 
         var fixedAcceptsGear = FactoryBundleCatalog.CanAcceptIntoTemplate(fixedTemplate, FactoryItemKind.Gear, new Dictionary<FactoryItemKind, int>(), out _);
         var fixedRejectsWrongItem = !FactoryBundleCatalog.CanAcceptIntoTemplate(fixedTemplate, FactoryItemKind.IronPlate, new Dictionary<FactoryItemKind, int>(), out _);
@@ -519,6 +651,31 @@ public partial class MobileFactoryDemo
             FactoryItemKind.IronOre,
             FactoryCargoForm.WorldBulk,
             "bulk-iron-ore-standard"));
+        var resolvesOneToOneWorldTemplate =
+            FactoryBundleCatalog.TryResolveOneToOneWorldTemplate(fixedWorldTemplate, out var resolvedWorldTemplate)
+            && resolvedWorldTemplate is not null
+            && resolvedWorldTemplate.Id == "bulk-iron-ore-standard";
+        var rejectsMixedWorldTemplate = !FactoryBundleCatalog.TryResolveOneToOneWorldTemplate(mixedWorldTemplate, out _);
+        var resolvesAutoPackTemplate =
+            FactoryBundleCatalog.TryResolveAutoPackTemplate(autoPackInput, out var resolvedAutoPackTemplate)
+            && resolvedAutoPackTemplate is not null
+            && resolvedAutoPackTemplate.Id == "packed-iron-plate-standard";
+        var converterSelectableTemplates = FactoryBundleCatalog.GetConverterSelectableTemplates(
+            FactoryCargoForm.WorldBulk,
+            FactoryCargoForm.WorldPacked);
+        var converterSelectableTemplatesOnlySingle = converterSelectableTemplates.Count > 0;
+        var containsBulkIronOreStandard = false;
+        var containsPackedIronPlateStandard = false;
+        var excludesMixedTemplates = true;
+        for (var index = 0; index < converterSelectableTemplates.Count; index++)
+        {
+            var template = converterSelectableTemplates[index];
+            converterSelectableTemplatesOnlySingle &= FactoryBundleCatalog.IsSingleItemTemplate(template);
+            containsBulkIronOreStandard |= template.Id == "bulk-iron-ore-standard";
+            containsPackedIronPlateStandard |= template.Id == "packed-iron-plate-standard";
+            excludesMixedTemplates &= template.Id != "packed-ore-mixed-standard"
+                && template.Id != "packed-frontline-sustainment-wide";
+        }
 
         return fixedAcceptsGear
             && fixedRejectsWrongItem
@@ -526,7 +683,14 @@ public partial class MobileFactoryDemo
             && categorySatisfied
             && mixedRejectsFreeMix
             && mixedSatisfied
-            && unpackManifest.Count == 6;
+            && unpackManifest.Count == 6
+            && resolvesOneToOneWorldTemplate
+            && rejectsMixedWorldTemplate
+            && resolvesAutoPackTemplate
+            && converterSelectableTemplatesOnlySingle
+            && containsBulkIronOreStandard
+            && containsPackedIronPlateStandard
+            && excludesMixedTemplates;
     }
 
     private async Task<bool> RunDebugWorldSupportSmoke()

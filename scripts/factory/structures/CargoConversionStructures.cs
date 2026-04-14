@@ -384,6 +384,9 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
     private static readonly Color UnpackerProcessingProgressColor = new("FBBF24");
     private static readonly Color UnpackerEmittingProgressColor = new("34D399");
     private static readonly Color UnpackerReleaseProgressColor = new("FB923C");
+    private const string AutoUnpackRecipeId = "cargo-unpacker-auto";
+    private const string RecipeSectionTitle = "解包模板";
+    private const string RecipeSectionDescription = "只显示一对一世界货包模板。自动模式会根据接入的大包模板识别当前解包配方。";
 
     private FactoryItem? _processingBundle;
     private Queue<FactoryItemKind> _pendingManifest = new();
@@ -395,7 +398,7 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
     private double _postReleaseSettleProgress;
     private bool _isEmittingManifest;
     private bool _isReleasingBundle;
-    private string _preferredTemplateId = "bulk-iron-ore-standard";
+    private string _preferredTemplateId = string.Empty;
     private Vector2I _lastHeavyBundleSourceCell = Vector2I.Zero;
     private Vector3 _lastHeavyBundleSourceWorldPosition = Vector3.Zero;
     private bool _hasLastHeavyBundleSourceWorldPosition;
@@ -426,12 +429,13 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
 
     public override bool ApplyBlueprintConfiguration(IReadOnlyDictionary<string, string> configuration)
     {
-        if (configuration.TryGetValue("bundle_template_id", out var templateId) && FactoryBundleCatalog.TryGet(templateId, out _))
+        if (!configuration.TryGetValue("bundle_template_id", out var templateId))
         {
-            _preferredTemplateId = templateId;
+            _preferredTemplateId = string.Empty;
+            return configuration.Count == 0;
         }
 
-        return true;
+        return TrySetPreferredTemplateId(templateId);
     }
 
     public override string? CaptureMapRecipeId()
@@ -441,13 +445,60 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
 
     public override bool TryApplyMapRecipe(string recipeId)
     {
-        if (!FactoryBundleCatalog.TryGet(recipeId, out _))
+        if (string.IsNullOrWhiteSpace(recipeId))
+        {
+            _preferredTemplateId = string.Empty;
+            return true;
+        }
+
+        if (!TrySetPreferredTemplateId(recipeId))
         {
             return false;
         }
 
-        _preferredTemplateId = recipeId;
         return true;
+    }
+
+    public override FactoryStructureDetailModel GetDetailModel()
+    {
+        var summaryLines = new List<string>();
+        foreach (var line in GetInspectionLines())
+        {
+            summaryLines.Add(line);
+        }
+
+        return new FactoryStructureDetailModel(
+            InspectionTitle,
+            $"{DisplayName} 详情",
+            summaryLines,
+            recipeSection: BuildRecipeSection());
+    }
+
+    public override bool TrySetDetailRecipe(string recipeId)
+    {
+        if (!CanChangePreferredTemplate())
+        {
+            return false;
+        }
+
+        if (string.Equals(recipeId, AutoUnpackRecipeId, StringComparison.Ordinal))
+        {
+            _preferredTemplateId = string.Empty;
+            return true;
+        }
+
+        return TrySetPreferredTemplateId(recipeId);
+    }
+
+    protected override bool CanAcceptConversionInput(FactoryItem item, Vector2I sourceCell)
+    {
+        return base.CanAcceptConversionInput(item, sourceCell)
+            && _postReleaseSettleProgress <= 0.0
+            && !_isEmittingManifest
+            && !_isReleasingBundle
+            && _processingBundle is null
+            && InputCount == 0
+            && TryResolveAcceptedInputTemplate(item, out _);
     }
 
     protected override FactoryItem? GetDisplayedProcessingItem()
@@ -555,6 +606,22 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
 
         if (_processingBundle is null)
         {
+            if (string.IsNullOrWhiteSpace(_preferredTemplateId))
+            {
+                yield return "待机模板：自动";
+                yield return "处理规格：等待接入一对一世界大包后自动识别";
+                if (_postReleaseSettleProgress > 0.0)
+                {
+                    var settleRatio = 1.0f - Mathf.Clamp((float)(_postReleaseSettleProgress / PostReleaseSettleSeconds), 0.0f, 1.0f);
+                    yield return $"退舱清空：{settleRatio * 100.0f:0}%";
+                }
+                if (_isEmittingManifest)
+                {
+                    yield return $"舱内吐料：{_pendingManifest.Count} 件待释放";
+                }
+                yield break;
+            }
+
             var template = FactoryBundleCatalog.Get(_preferredTemplateId);
             yield return $"待机模板：{FactoryBundleCatalog.DescribeTemplate(template)}";
             yield return $"处理规格：{FactoryBundleCatalog.GetSizeTierLabel(template.SizeTier)}";
@@ -614,8 +681,14 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
 
             if (TryTakeInput(out var input) && input is not null)
             {
+                if (!TryResolveAcceptedInputTemplate(input, out var acceptedTemplate) || acceptedTemplate is null)
+                {
+                    TryBufferInput(input);
+                    _intakeProgress = 0.0;
+                    return;
+                }
+
                 _processingBundle = input;
-                _preferredTemplateId = string.IsNullOrWhiteSpace(input.BundleTemplateId) ? _preferredTemplateId : input.BundleTemplateId;
                 _pendingManifest = FactoryBundleCatalog.ExpandManifest(input);
                 _manifestInitialCount = _pendingManifest.Count;
                 _processProgress = 0.0;
@@ -955,6 +1028,102 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
         };
     }
 
+    private FactoryRecipeSectionModel BuildRecipeSection()
+    {
+        var options = new List<FactoryRecipeOptionModel>
+        {
+            new(
+                AutoUnpackRecipeId,
+                "自动",
+                BuildAutoRecipeSummary(),
+                string.IsNullOrWhiteSpace(_preferredTemplateId),
+                FactoryPresentation.GetBuildPrototypeAccentColor(Kind),
+                FactoryPresentation.GetItemIcon(FactoryItemKind.GenericCargo))
+        };
+
+        var templates = FactoryBundleCatalog.GetConverterSelectableTemplates(
+            FactoryCargoForm.WorldBulk,
+            FactoryCargoForm.WorldPacked);
+        for (var index = 0; index < templates.Count; index++)
+        {
+            var template = templates[index];
+            options.Add(new FactoryRecipeOptionModel(
+                template.Id,
+                template.DisplayName,
+                BuildRecipeSummary(template),
+                string.Equals(template.Id, _preferredTemplateId, StringComparison.Ordinal),
+                FactoryPresentation.GetItemAccentColor(template.WorldItemKind),
+                FactoryPresentation.GetItemIcon(template.WorldItemKind)));
+        }
+
+        return new FactoryRecipeSectionModel(
+            RecipeSectionTitle,
+            RecipeSectionDescription,
+            string.IsNullOrWhiteSpace(_preferredTemplateId) ? AutoUnpackRecipeId : _preferredTemplateId,
+            options);
+    }
+
+    private string BuildAutoRecipeSummary()
+    {
+        if (_processingBundle is not null
+            && FactoryBundleCatalog.TryResolveOneToOneWorldTemplate(_processingBundle, out var processingTemplate)
+            && processingTemplate is not null)
+        {
+            return $"当前处理：{processingTemplate.DisplayName}；下一件大包会再次自动识别。";
+        }
+
+        if (TryPeekInput(out var stagedBundle)
+            && stagedBundle is not null
+            && FactoryBundleCatalog.TryResolveOneToOneWorldTemplate(stagedBundle, out var stagedTemplate)
+            && stagedTemplate is not null)
+        {
+            return $"待处理候选：{stagedTemplate.DisplayName}；解包开始时会按该模板拆成舱内小包。";
+        }
+
+        return "未手动指定模板时，根据接入的一对一世界大包自动识别解包配方。";
+    }
+
+    private static string BuildRecipeSummary(FactoryBundleTemplate template)
+    {
+        if (!FactoryBundleCatalog.TryResolveSingleItemRequirement(template, out var itemKind, out var units))
+        {
+            return template.DisplayName;
+        }
+
+        return $"{template.DisplayName} -> {FactoryItemCatalog.GetDisplayName(itemKind, FactoryCargoForm.InteriorFeed)} x{units}";
+    }
+
+    private bool TryResolveAcceptedInputTemplate(FactoryItem item, out FactoryBundleTemplate? template)
+    {
+        template = null;
+        if (!FactoryBundleCatalog.TryResolveOneToOneWorldTemplate(item, out template) || template is null)
+        {
+            return false;
+        }
+
+        return string.IsNullOrWhiteSpace(_preferredTemplateId)
+            || string.Equals(template.Id, _preferredTemplateId, StringComparison.Ordinal);
+    }
+
+    private bool TrySetPreferredTemplateId(string templateId)
+    {
+        if (!FactoryBundleCatalog.TryGetConverterSelectableTemplate(templateId, out var template) || template is null)
+        {
+            return false;
+        }
+
+        _preferredTemplateId = template.Id;
+        return true;
+    }
+
+    private bool CanChangePreferredTemplate()
+    {
+        return _processingBundle is null
+            && !_isEmittingManifest
+            && !_isReleasingBundle
+            && InputCount == 0;
+    }
+
     protected override void BuildVisuals()
     {
         if (SiteKind == FactorySiteKind.Interior)
@@ -1029,12 +1198,15 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
 public partial class CargoPackerStructure : FactoryCargoConverterStructure
 {
     private const float CompletedBundleHoldSeconds = 0.24f;
+    private const string AutoPackRecipeId = "cargo-packer-auto";
+    private const string RecipeSectionTitle = "封包模板";
+    private const string RecipeSectionDescription = "只显示一对一世界封装模板。自动模式会在内部资源为空时，根据首个入舱小包锁定模板。";
     private readonly Dictionary<FactoryItemKind, int> _packedCounts = new();
 
     private FactoryItem? _processingBundle;
     private double _processProgress;
     private double _completedBundleHold;
-    private string _configuredTemplateId = "packed-gear-compact";
+    private string _configuredTemplateId = string.Empty;
     private string _lockedTemplateId = string.Empty;
 
     public CargoPackerStructure() : base(inputCapacity: 1, outputCapacity: 1)
@@ -1059,12 +1231,14 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
 
     public override bool ApplyBlueprintConfiguration(IReadOnlyDictionary<string, string> configuration)
     {
-        if (configuration.TryGetValue("bundle_template_id", out var templateId) && FactoryBundleCatalog.TryGet(templateId, out _))
+        if (!configuration.TryGetValue("bundle_template_id", out var templateId))
         {
-            _configuredTemplateId = templateId;
+            _configuredTemplateId = string.Empty;
+            _lockedTemplateId = string.Empty;
+            return configuration.Count == 0;
         }
 
-        return true;
+        return TrySetConfiguredTemplateId(templateId);
     }
 
     public override string? CaptureMapRecipeId()
@@ -1074,13 +1248,51 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
 
     public override bool TryApplyMapRecipe(string recipeId)
     {
-        if (!FactoryBundleCatalog.TryGet(recipeId, out _))
+        if (string.IsNullOrWhiteSpace(recipeId))
+        {
+            _configuredTemplateId = string.Empty;
+            _lockedTemplateId = string.Empty;
+            return true;
+        }
+
+        if (!TrySetConfiguredTemplateId(recipeId))
         {
             return false;
         }
 
-        _configuredTemplateId = recipeId;
         return true;
+    }
+
+    public override FactoryStructureDetailModel GetDetailModel()
+    {
+        var summaryLines = new List<string>();
+        foreach (var line in GetInspectionLines())
+        {
+            summaryLines.Add(line);
+        }
+
+        return new FactoryStructureDetailModel(
+            InspectionTitle,
+            $"{DisplayName} 详情",
+            summaryLines,
+            recipeSection: BuildRecipeSection());
+    }
+
+    public override bool TrySetDetailRecipe(string recipeId)
+    {
+        if (!CanChangeConfiguredTemplate())
+        {
+            return false;
+        }
+
+        if (string.Equals(recipeId, AutoPackRecipeId, StringComparison.Ordinal))
+        {
+            _configuredTemplateId = string.Empty;
+            _lockedTemplateId = string.Empty;
+            return true;
+        }
+
+        return TrySetConfiguredTemplateId(recipeId);
     }
 
     protected override bool CanAcceptConversionInput(FactoryItem item, Vector2I sourceCell)
@@ -1134,12 +1346,24 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
 
     protected override IEnumerable<string> DescribeConversionState()
     {
-        var templateId = ResolveTemplateIdForInspection();
-        var template = FactoryBundleCatalog.Get(templateId);
+        var hasDisplayTemplate = TryResolveInspectionTemplate(out var template);
         var packedUnits = CountPackedUnits();
-        yield return $"目标模板：{FactoryBundleCatalog.DescribeTemplate(template)}";
-        yield return $"处理规格：{FactoryBundleCatalog.GetSizeTierLabel(template.SizeTier)}";
-        yield return $"累计装箱：{packedUnits}/{template.TotalUnits}";
+        if (hasDisplayTemplate && template is not null)
+        {
+            var prefix = string.IsNullOrWhiteSpace(_configuredTemplateId)
+                ? string.IsNullOrWhiteSpace(_lockedTemplateId) ? "自动候选" : "自动锁定"
+                : "目标模板";
+            yield return $"{prefix}：{FactoryBundleCatalog.DescribeTemplate(template)}";
+            yield return $"处理规格：{FactoryBundleCatalog.GetSizeTierLabel(template.SizeTier)}";
+            yield return $"累计装箱：{packedUnits}/{template.TotalUnits}";
+        }
+        else
+        {
+            yield return "目标模板：自动";
+            yield return "处理规格：等待首个舱内小包锁定一对一模板";
+            yield return $"累计装箱：{packedUnits}/0";
+        }
+
         if (_processingBundle is not null)
         {
             yield return $"压装进度：{Mathf.Clamp((float)(_processProgress / 1.4f), 0.0f, 1.0f) * 100.0f:0}%";
@@ -1199,6 +1423,7 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
         {
             if (!TryResolveCandidateTemplate(input, out var template) || template is null)
             {
+                TryBufferInput(input);
                 return;
             }
 
@@ -1291,12 +1516,14 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
 
     private bool TryResolveCandidateTemplate(FactoryItem item, out FactoryBundleTemplate? template)
     {
-        if (!string.IsNullOrWhiteSpace(_configuredTemplateId) && FactoryBundleCatalog.TryGet(_configuredTemplateId, out template))
+        if (!string.IsNullOrWhiteSpace(_lockedTemplateId)
+            && FactoryBundleCatalog.TryGetConverterSelectableTemplate(_lockedTemplateId, FactoryCargoForm.WorldPacked, out template))
         {
             return true;
         }
 
-        if (!string.IsNullOrWhiteSpace(_lockedTemplateId) && FactoryBundleCatalog.TryGet(_lockedTemplateId, out template))
+        if (!string.IsNullOrWhiteSpace(_configuredTemplateId)
+            && FactoryBundleCatalog.TryGetConverterSelectableTemplate(_configuredTemplateId, FactoryCargoForm.WorldPacked, out template))
         {
             return true;
         }
@@ -1316,19 +1543,111 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
         return projected;
     }
 
-    private string ResolveTemplateIdForInspection()
+    private FactoryRecipeSectionModel BuildRecipeSection()
     {
-        if (!string.IsNullOrWhiteSpace(_configuredTemplateId))
+        var options = new List<FactoryRecipeOptionModel>
         {
-            return _configuredTemplateId;
+            new(
+                AutoPackRecipeId,
+                "自动",
+                BuildAutoRecipeSummary(),
+                string.IsNullOrWhiteSpace(_configuredTemplateId),
+                FactoryPresentation.GetBuildPrototypeAccentColor(Kind),
+                FactoryPresentation.GetItemIcon(FactoryItemKind.GenericCargo))
+        };
+
+        var templates = FactoryBundleCatalog.GetConverterSelectableTemplates(FactoryCargoForm.WorldPacked);
+        for (var index = 0; index < templates.Count; index++)
+        {
+            var template = templates[index];
+            options.Add(new FactoryRecipeOptionModel(
+                template.Id,
+                template.DisplayName,
+                BuildManualRecipeSummary(template),
+                string.Equals(template.Id, _configuredTemplateId, StringComparison.Ordinal),
+                FactoryPresentation.GetItemAccentColor(template.WorldItemKind),
+                FactoryPresentation.GetItemIcon(template.WorldItemKind)));
         }
 
-        if (!string.IsNullOrWhiteSpace(_lockedTemplateId))
+        return new FactoryRecipeSectionModel(
+            RecipeSectionTitle,
+            RecipeSectionDescription,
+            string.IsNullOrWhiteSpace(_configuredTemplateId) ? AutoPackRecipeId : _configuredTemplateId,
+            options);
+    }
+
+    private string BuildAutoRecipeSummary()
+    {
+        if (!string.IsNullOrWhiteSpace(_lockedTemplateId)
+            && FactoryBundleCatalog.TryGetConverterSelectableTemplate(_lockedTemplateId, FactoryCargoForm.WorldPacked, out var lockedTemplate)
+            && lockedTemplate is not null)
         {
-            return _lockedTemplateId;
+            return $"当前锁定：{lockedTemplate.DisplayName}；内部累计清空后会根据首个入舱小包重新选择。";
         }
 
-        return "packed-gear-compact";
+        if (TryPeekInput(out var stagedInput)
+            && stagedInput is not null
+            && FactoryBundleCatalog.TryResolveAutoPackTemplate(stagedInput, out var candidateTemplate)
+            && candidateTemplate is not null)
+        {
+            return $"待锁定候选：{candidateTemplate.DisplayName}；当前入舱小包一旦进入累计，就会锁定该模板。";
+        }
+
+        return "内部资源为空时，根据首个入舱小包自动锁定一对一世界封装模板。";
+    }
+
+    private static string BuildManualRecipeSummary(FactoryBundleTemplate template)
+    {
+        if (!FactoryBundleCatalog.TryResolveSingleItemRequirement(template, out var itemKind, out var units))
+        {
+            return template.DisplayName;
+        }
+
+        return $"{FactoryItemCatalog.GetDisplayName(itemKind, FactoryCargoForm.InteriorFeed)} x{units} -> {template.DisplayName}";
+    }
+
+    private bool TryResolveInspectionTemplate(out FactoryBundleTemplate? template)
+    {
+        template = null;
+        if (!string.IsNullOrWhiteSpace(_lockedTemplateId)
+            && FactoryBundleCatalog.TryGetConverterSelectableTemplate(_lockedTemplateId, FactoryCargoForm.WorldPacked, out template))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_configuredTemplateId)
+            && FactoryBundleCatalog.TryGetConverterSelectableTemplate(_configuredTemplateId, FactoryCargoForm.WorldPacked, out template))
+        {
+            return true;
+        }
+
+        if (TryPeekInput(out var stagedInput) && stagedInput is not null)
+        {
+            return FactoryBundleCatalog.TryResolveAutoPackTemplate(stagedInput, out template);
+        }
+
+        return false;
+    }
+
+    private bool TrySetConfiguredTemplateId(string templateId)
+    {
+        if (!FactoryBundleCatalog.TryGetConverterSelectableTemplate(templateId, FactoryCargoForm.WorldPacked, out var template)
+            || template is null)
+        {
+            return false;
+        }
+
+        _configuredTemplateId = template.Id;
+        _lockedTemplateId = string.Empty;
+        return true;
+    }
+
+    private bool CanChangeConfiguredTemplate()
+    {
+        return _processingBundle is null
+            && !HasBufferedOutput
+            && InputCount == 0
+            && _packedCounts.Count == 0;
     }
 
     private int CountPackedUnits()
