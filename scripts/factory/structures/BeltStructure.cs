@@ -2,6 +2,11 @@ using Godot;
 
 public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAware
 {
+    private const float InteriorTrackWidthRatio = (2.0f / 3.0f) * 0.70f;
+    private const float InteriorTrackArmLengthRatio = 0.56f;
+    private const float InteriorTrackCenterRunRatio = 0.40f;
+    private const float InteriorTrackCapRunRatio = 0.28f;
+
     private FacingDirection _inputFacing;
     private MeshInstance3D? _centerMesh;
     private MeshInstance3D? _inputArmMesh;
@@ -75,27 +80,27 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
         {
             _centerMesh = CreateBox(
                 "CabinChannelCore",
-                new Vector3(CellSize * 0.48f, 0.08f, CellSize * 0.30f),
+                new Vector3(CellSize * InteriorTrackCenterRunRatio, 0.08f, CellSize * InteriorTrackWidthRatio),
                 new Color("0F172A"),
                 new Vector3(0.0f, 0.12f, 0.0f));
             _inputArmMesh = CreateBox(
                 "CabinInputTray",
-                new Vector3(CellSize * 0.50f, 0.10f, CellSize * 0.18f),
+                new Vector3(CellSize * InteriorTrackArmLengthRatio, 0.10f, CellSize * InteriorTrackWidthRatio),
                 new Color("1D4ED8"),
                 Vector3.Zero);
             _outputArmMesh = CreateBox(
                 "CabinOutputTray",
-                new Vector3(CellSize * 0.50f, 0.10f, CellSize * 0.18f),
+                new Vector3(CellSize * InteriorTrackArmLengthRatio, 0.10f, CellSize * InteriorTrackWidthRatio),
                 new Color("2563EB"),
                 Vector3.Zero);
             _arrowMesh = CreateBox(
                 "CabinDirectionStrip",
-                new Vector3(CellSize * 0.18f, 0.03f, CellSize * 0.10f),
+                new Vector3(CellSize * 0.20f, 0.03f, CellSize * 0.18f),
                 new Color("BAE6FD"),
                 new Vector3(0.26f * CellSize, 0.18f, 0.0f));
             _capMesh = CreateBox(
                 "CabinTrayCap",
-                new Vector3(CellSize * 0.24f, 0.05f, CellSize * 0.24f),
+                new Vector3(CellSize * InteriorTrackCapRunRatio, 0.05f, CellSize * InteriorTrackCapRunRatio),
                 new Color("CBD5E1"),
                 new Vector3(0.0f, 0.18f, 0.0f));
             RefreshTopology();
@@ -135,6 +140,16 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
         return FactoryCargoRules.StructureAcceptsItem(Kind, FactoryIndustrialStandards.ResolveSiteKind(Site), item);
     }
 
+    protected override void BuildSitePresentationAccents()
+    {
+        if (SiteKind == FactorySiteKind.Interior)
+        {
+            return;
+        }
+
+        base.BuildSitePresentationAccents();
+    }
+
     private void RebuildTrackVisuals()
     {
         if (_centerMesh is null || _inputArmMesh is null || _outputArmMesh is null || _arrowMesh is null)
@@ -166,16 +181,18 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
         var spansHorizontal = Mathf.Abs(inputDirection.X) > 0.1f || Mathf.Abs(outputDirection.X) > 0.1f;
         var spansVertical = Mathf.Abs(inputDirection.Y) > 0.1f || Mathf.Abs(outputDirection.Y) > 0.1f;
         var isCorner = spansHorizontal && spansVertical;
+        var trackWidth = CellSize * InteriorTrackWidthRatio;
+        var straightRun = CellSize * InteriorTrackCenterRunRatio;
         var width = isCorner
-            ? CellSize * 0.30f
+            ? trackWidth
             : spansHorizontal
-                ? CellSize * 0.48f
-                : CellSize * 0.30f;
+                ? straightRun
+                : trackWidth;
         var depth = isCorner
-            ? CellSize * 0.30f
+            ? trackWidth
             : spansVertical
-                ? CellSize * 0.48f
-                : CellSize * 0.30f;
+                ? straightRun
+                : trackWidth;
 
         mesh.Mesh = new BoxMesh
         {
@@ -195,16 +212,17 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
         var spansHorizontal = Mathf.Abs(inputDirection.X) > 0.1f || Mathf.Abs(outputDirection.X) > 0.1f;
         var spansVertical = Mathf.Abs(inputDirection.Y) > 0.1f || Mathf.Abs(outputDirection.Y) > 0.1f;
         var isCorner = spansHorizontal && spansVertical;
+        var trackCapRun = CellSize * InteriorTrackCapRunRatio;
         var width = isCorner
-            ? CellSize * 0.18f
+            ? trackCapRun
             : spansHorizontal
-                ? CellSize * 0.38f
-                : CellSize * 0.18f;
+                ? CellSize * 0.42f
+                : trackCapRun;
         var depth = isCorner
-            ? CellSize * 0.18f
+            ? trackCapRun
             : spansVertical
-                ? CellSize * 0.38f
-                : CellSize * 0.18f;
+                ? CellSize * 0.42f
+                : trackCapRun;
 
         mesh.Mesh = new BoxMesh
         {
@@ -216,6 +234,20 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
     private void ConfigureArm(MeshInstance3D mesh, Vector2 direction)
     {
         var alongX = Mathf.Abs(direction.X) > 0.1f;
+        if (SiteKind == FactorySiteKind.Interior)
+        {
+            var trackWidth = CellSize * InteriorTrackWidthRatio;
+            mesh.Mesh = new BoxMesh
+            {
+                Size = alongX
+                    ? new Vector3(CellSize * InteriorTrackArmLengthRatio, 0.10f, trackWidth)
+                    : new Vector3(trackWidth, 0.10f, CellSize * InteriorTrackArmLengthRatio)
+            };
+
+            mesh.Position = new Vector3(direction.X * CellSize * 0.24f, 0.08f, direction.Y * CellSize * 0.24f);
+            return;
+        }
+
         mesh.Mesh = new BoxMesh
         {
             Size = alongX
@@ -229,6 +261,19 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
     private void ConfigureArrow(MeshInstance3D mesh, Vector2 direction)
     {
         var alongX = Mathf.Abs(direction.X) > 0.1f;
+        if (SiteKind == FactorySiteKind.Interior)
+        {
+            mesh.Mesh = new BoxMesh
+            {
+                Size = alongX
+                    ? new Vector3(CellSize * 0.22f, 0.03f, CellSize * 0.22f)
+                    : new Vector3(CellSize * 0.22f, 0.03f, CellSize * 0.22f)
+            };
+
+            mesh.Position = new Vector3(direction.X * CellSize * 0.30f, 0.16f, direction.Y * CellSize * 0.30f);
+            return;
+        }
+
         mesh.Mesh = new BoxMesh
         {
             Size = alongX

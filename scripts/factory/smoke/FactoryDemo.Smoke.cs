@@ -1088,11 +1088,19 @@ public partial class FactoryDemo
         var controller = target.CreateDetachedVisualControllerForTesting();
         var centerMesh = FindNamedMesh(controller.Root, "CabinChannelCore");
         var genericChannelMesh = FindNamedMesh(controller.Root, "CargoChannel");
+        var labelMesh = FindNamedMesh(controller.Root, "CabinLabelPlate");
+        var accessPanelMesh = FindNamedMesh(controller.Root, "AccessPanel");
+        var statusLampMesh = FindNamedMesh(controller.Root, "StatusLamp");
         var size = (centerMesh?.Mesh as BoxMesh)?.Size;
         controller.Root.Free();
         source.Free();
         target.Free();
-        return genericChannelMesh is null ? size : null;
+        return genericChannelMesh is null
+            && labelMesh is null
+            && accessPanelMesh is null
+            && statusLampMesh is null
+            ? size
+            : null;
     }
 
     private static MeshInstance3D? FindFirstMesh(Node node)
