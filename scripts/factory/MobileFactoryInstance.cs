@@ -1235,20 +1235,8 @@ public sealed class MobileFactoryInstance
             root.AddChild(new MeshInstance3D
             {
                 Name = "ConnectorTrackRailNorth",
-                Mesh = new BoxMesh { Size = new Vector3(0.08f, 0.10f, 0.001f) },
-                Position = new Vector3(-0.28f, 0.11f, 0.0005f),
-                MaterialOverride = new StandardMaterial3D
-                {
-                    AlbedoColor = projection.Attachment.AttachmentDefinition.ConnectorColor.Lightened(0.08f),
-                    Roughness = 0.68f
-                }
-            });
-
-            root.AddChild(new MeshInstance3D
-            {
-                Name = "ConnectorTrackRailSouth",
-                Mesh = new BoxMesh { Size = new Vector3(0.08f, 0.10f, 0.001f) },
-                Position = new Vector3(0.28f, 0.11f, 0.0005f),
+                Mesh = new BoxMesh { Size = new Vector3(0.10f, 0.10f, 0.001f) },
+                Position = new Vector3(0.0f, 0.11f, 0.0005f),
                 MaterialOverride = new StandardMaterial3D
                 {
                     AlbedoColor = projection.Attachment.AttachmentDefinition.ConnectorColor.Lightened(0.08f),
@@ -1530,17 +1518,9 @@ public sealed class MobileFactoryInstance
         var trackRailNorth = connectorRoot.GetNodeOrNull<MeshInstance3D>("ConnectorTrackRailNorth");
         if (trackRailNorth is not null)
         {
-            trackRailNorth.Mesh = new BoxMesh { Size = new Vector3(0.08f, 0.10f, trackLength) };
-            trackRailNorth.Position = new Vector3(-0.28f, 0.11f, trackCenter);
+            trackRailNorth.Mesh = new BoxMesh { Size = new Vector3(0.10f, 0.10f, trackLength) };
+            trackRailNorth.Position = new Vector3(0.0f, 0.11f, trackCenter);
             trackRailNorth.Visible = eased > 0.001f;
-        }
-
-        var trackRailSouth = connectorRoot.GetNodeOrNull<MeshInstance3D>("ConnectorTrackRailSouth");
-        if (trackRailSouth is not null)
-        {
-            trackRailSouth.Mesh = new BoxMesh { Size = new Vector3(0.08f, 0.10f, trackLength) };
-            trackRailSouth.Position = new Vector3(0.28f, 0.11f, trackCenter);
-            trackRailSouth.Visible = eased > 0.001f;
         }
 
         var endpoint = connectorRoot.GetNodeOrNull<MeshInstance3D>("ConnectorEndpoint");

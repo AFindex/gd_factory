@@ -207,6 +207,48 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         return true;
     }
 
+    protected bool CanAcceptTransitSpawn(FactoryItem item, Vector2I sourceCell, Vector2I targetCell)
+    {
+        var laneKey = GetTransitLaneKey(sourceCell, targetCell);
+        var tailIndex = FindLastItemIndexInLane(laneKey);
+        var occupiedLengthProgress = ResolveOccupiedLengthProgress(FactoryTransportVisualFactory.ResolveDescriptorSet(item, CellSize));
+        return HasSpawnClearance(tailIndex, occupiedLengthProgress);
+    }
+
+    protected bool TrySpawnTransitItem(FactoryItem item, Vector2I sourceCell, Vector2I targetCell, string traceEventName)
+    {
+        var renderDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(item, CellSize);
+        var laneKey = GetTransitLaneKey(sourceCell, targetCell);
+        var tailIndex = FindLastItemIndexInLane(laneKey);
+        var occupiedLengthProgress = ResolveOccupiedLengthProgress(renderDescriptors);
+        if (!HasSpawnClearance(tailIndex, occupiedLengthProgress))
+        {
+            return false;
+        }
+
+        var legacyVisual = GetTransportRenderManager() is null ? CreateTransitVisual(item) : null;
+        var state = new TransitItemState(item, renderDescriptors, sourceCell, targetCell, legacyVisual)
+        {
+            LaneKey = laneKey,
+            Position = 0.0f,
+            PreviousPosition = 0.0f,
+            OccupiedLengthProgress = occupiedLengthProgress
+        };
+        if (state.LegacyVisual is not null)
+        {
+            UpdateLegacyVisualTransform(state, EvaluatePathPoint(state, 0.0f));
+        }
+
+        _items.Add(state);
+        HeavyCargoTrace.Log(
+            traceEventName,
+            item,
+            this,
+            $"source=({sourceCell.X},{sourceCell.Y}) target=({targetCell.X},{targetCell.Y}) lane={laneKey}");
+        OnTransitItemAccepted(state);
+        return true;
+    }
+
     public override void SimulationStep(SimulationController simulation, double stepSeconds)
     {
         if (_items.Count == 0)

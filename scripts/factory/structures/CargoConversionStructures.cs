@@ -1141,10 +1141,8 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
                 accentColor: new Color("7DD3FC"));
             CreateBox("UnpackerMouthFrame", new Vector3(Mathf.Max(CellSize * 0.18f, deckWidth * 0.12f), 0.48f, deckDepth * 0.74f), new Color("C7EAFE"), new Vector3(-deckWidth * 0.38f, 0.30f, 0.0f));
             CreateBox("UnpackerCradle", new Vector3(deckWidth * 0.66f, 0.12f, deckDepth * 0.52f), new Color("0EA5E9"), new Vector3(0.0f, 0.18f, 0.0f));
-            CreateBox("UnpackerGuideNorth", new Vector3(deckWidth * 0.62f, 0.06f, CellSize * 0.06f), new Color("DBEAFE"), new Vector3(0.0f, 0.26f, -deckDepth * 0.22f));
-            CreateBox("UnpackerGuideSouth", new Vector3(deckWidth * 0.62f, 0.06f, CellSize * 0.06f), new Color("DBEAFE"), new Vector3(0.0f, 0.26f, deckDepth * 0.22f));
-            CreateBox("UnpackerInfeedRailNorth", new Vector3(deckWidth * 0.48f, 0.05f, CellSize * 0.05f), new Color("E0F2FE"), new Vector3(-deckWidth * 0.22f, intakeRailHeight - 0.08f, -deckDepth * 0.16f));
-            CreateBox("UnpackerInfeedRailSouth", new Vector3(deckWidth * 0.48f, 0.05f, CellSize * 0.05f), new Color("E0F2FE"), new Vector3(-deckWidth * 0.22f, intakeRailHeight - 0.08f, deckDepth * 0.16f));
+            CreateBox("UnpackerGuideCenter", new Vector3(deckWidth * 0.62f, 0.06f, CellSize * 0.10f), new Color("DBEAFE"), new Vector3(0.0f, 0.26f, 0.0f));
+            CreateBox("UnpackerInfeedRail", new Vector3(deckWidth * 0.48f, 0.05f, CellSize * 0.08f), new Color("E0F2FE"), new Vector3(-deckWidth * 0.22f, intakeRailHeight - 0.08f, 0.0f));
             CreateInteriorTray(this, "UnpackerOutfeed", new Vector3(deckWidth * 0.34f, 0.10f, CellSize * 0.22f), new Color("0B5A88"), new Color("DBEAFE"), new Vector3(deckWidth * 0.36f, 0.16f, 0.0f));
             CreateBox("UnpackerClampNorth", new Vector3(deckWidth * 0.48f, 0.06f, CellSize * 0.10f), new Color("E0F2FE"), new Vector3(0.0f, 0.60f, -CellSize * 0.26f));
             CreateBox("UnpackerClampSouth", new Vector3(deckWidth * 0.48f, 0.06f, CellSize * 0.10f), new Color("E0F2FE"), new Vector3(0.0f, 0.60f, CellSize * 0.26f));
@@ -1500,8 +1498,7 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
             CreateBox("PackerRamColumnEast", new Vector3(CellSize * 0.08f, 0.54f, CellSize * 0.10f), new Color("FCD7AA"), new Vector3(CellSize * 0.18f, 0.44f, 0.0f));
             CreateBox("PackerCompressionRam", new Vector3(CellSize * 0.22f, 0.14f, CellSize * 0.22f), new Color("FFE4C2"), new Vector3(0.0f, 0.70f, 0.0f));
             CreateBox("PackerExportCradle", new Vector3(deckWidth * 0.48f, 0.12f, deckDepth * 0.40f), new Color("FB923C"), new Vector3(deckWidth * 0.36f, 0.18f, 0.0f));
-            CreateBox("PackerGuideNorth", new Vector3(deckWidth * 0.62f, 0.06f, CellSize * 0.06f), new Color("FED7AA"), new Vector3(0.0f, 0.26f, -deckDepth * 0.22f));
-            CreateBox("PackerGuideSouth", new Vector3(deckWidth * 0.62f, 0.06f, CellSize * 0.06f), new Color("FED7AA"), new Vector3(0.0f, 0.26f, deckDepth * 0.22f));
+            CreateBox("PackerGuideCenter", new Vector3(deckWidth * 0.62f, 0.06f, CellSize * 0.10f), new Color("FED7AA"), new Vector3(0.0f, 0.26f, 0.0f));
             CreateInteriorIndicatorLight(this, "PackerLamp", new Color("FB923C"), new Vector3(deckWidth * 0.34f, 0.64f, 0.0f), CellSize * 0.09f);
             CreateInteriorLabelPlate(this, "PackerTier", "压装", new Color("FB923C"), new Vector3(deckWidth * 0.10f, 0.16f, -deckDepth * 0.32f), 1.1f);
             CreatePayloadAnchor("StagingPayloadAnchor", new Vector3(-deckWidth * 0.38f, 0.22f, 0.0f));

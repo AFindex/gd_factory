@@ -240,12 +240,13 @@ public sealed class GridManager : IFactorySite
 
     public bool TrySendItem(FactoryStructure source, Vector2I sourceCell, Vector2I targetCell, FactoryItem item, SimulationController simulation)
     {
-        if (!TryGetStructure(targetCell, out var structure) || structure is null)
+        if (!FactoryStructurePortResolver.TryResolveReceiver(this, targetCell, out var resolution))
         {
             return false;
         }
 
-        return structure.TryAcceptItem(item, sourceCell, simulation);
+        var effectiveSourceCell = resolution.ResolveEffectiveSourceCell(sourceCell, targetCell);
+        return resolution.Structure.TryAcceptItem(item, effectiveSourceCell, simulation);
     }
 
     public Vector2 GetWorldMin()

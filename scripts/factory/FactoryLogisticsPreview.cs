@@ -71,7 +71,7 @@ public static class FactoryLogisticsPreview
         AppendMarkers(
             markers,
             seenCells,
-            FactoryTransportTopology.GetOutputCells(previewKind, referenceCell, facing),
+            GetPreviewOutputCells(previewKind, referenceCell, facing),
             occupiedCells,
             isInput: false,
             highlightAll: true,
@@ -98,7 +98,7 @@ public static class FactoryLogisticsPreview
             }
 
             var inputCells = GetContextualInputCells(structure);
-            var outputCells = FactoryTransportTopology.GetOutputCells(structure);
+            var outputCells = GetContextualOutputCells(structure);
             if (inputCells.Count <= 0 && outputCells.Count <= 0)
             {
                 continue;
@@ -161,8 +161,13 @@ public static class FactoryLogisticsPreview
 
     private static bool ShouldShowPreviewPortHints(BuildPrototypeKind kind)
     {
+        if (kind is BuildPrototypeKind.CargoUnpacker or BuildPrototypeKind.CargoPacker)
+        {
+            return true;
+        }
+
         var inputCount = GetPreviewInputCells(kind, Vector2I.Zero, FacingDirection.East).Count;
-        var outputCount = FactoryTransportTopology.GetOutputCells(kind, Vector2I.Zero, FacingDirection.East).Count;
+        var outputCount = GetPreviewOutputCells(kind, Vector2I.Zero, FacingDirection.East).Count;
         return inputCount > 1 || outputCount > 1;
     }
 
@@ -190,16 +195,46 @@ public static class FactoryLogisticsPreview
 
     private static IReadOnlyList<Vector2I> GetPreviewInputCells(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
     {
+        if (kind is BuildPrototypeKind.CargoUnpacker or BuildPrototypeKind.CargoPacker)
+        {
+            return new[] { FactoryStructureFactory.GetFootprint(kind).ResolveInputCell(cell, facing) };
+        }
+
         return kind == BuildPrototypeKind.Belt
             ? System.Array.Empty<Vector2I>()
             : FactoryTransportTopology.GetInputCells(kind, cell, facing);
     }
 
+    private static IReadOnlyList<Vector2I> GetPreviewOutputCells(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
+    {
+        if (kind is BuildPrototypeKind.CargoUnpacker or BuildPrototypeKind.CargoPacker)
+        {
+            return new[] { FactoryStructureFactory.GetFootprint(kind).ResolveOutputCell(cell, facing) };
+        }
+
+        return FactoryTransportTopology.GetOutputCells(kind, cell, facing);
+    }
+
     private static IReadOnlyList<Vector2I> GetContextualInputCells(FactoryStructure structure)
     {
+        if (structure.Kind is BuildPrototypeKind.CargoUnpacker or BuildPrototypeKind.CargoPacker)
+        {
+            return new[] { structure.GetInputCell() };
+        }
+
         return structure.Kind == BuildPrototypeKind.Belt
             ? System.Array.Empty<Vector2I>()
             : FactoryTransportTopology.GetInputCells(structure);
+    }
+
+    private static IReadOnlyList<Vector2I> GetContextualOutputCells(FactoryStructure structure)
+    {
+        if (structure.Kind is BuildPrototypeKind.CargoUnpacker or BuildPrototypeKind.CargoPacker)
+        {
+            return new[] { structure.GetOutputCell() };
+        }
+
+        return FactoryTransportTopology.GetOutputCells(structure);
     }
 
     private static FacingDirection ResolvePortFacing(Vector2I portCell, IReadOnlyList<Vector2I> occupiedCells, bool isInput)

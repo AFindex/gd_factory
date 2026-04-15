@@ -2513,6 +2513,7 @@ public partial class MobileFactoryDemo : Node3D
         var tint = _canPlaceInteriorCell
             ? new Color(accent.R, accent.G, accent.B, 0.45f)
             : new Color(1.0f, 0.35f, 0.35f, 0.45f);
+        var usesDedicatedCargoPortHints = UsesDedicatedCargoPortHintPreview(_selectedInteriorKind);
         var previewSize = FactoryPlacement.GetPreviewBaseSize(_mobileFactory.InteriorSite, _selectedInteriorKind);
         _interiorPreviewCell.Mesh = new BoxMesh
         {
@@ -2522,9 +2523,12 @@ public partial class MobileFactoryDemo : Node3D
                 previewSize.Y - (_mobileFactory.InteriorSite.CellSize * 0.02f))
         };
         _interiorPreviewCell.Position = new Vector3(0.0f, 0.04f, 0.0f);
-        _interiorPreviewArrow.Visible = true;
+        _interiorPreviewArrow.Visible = !usesDedicatedCargoPortHints;
         FactoryPreviewOverlaySupport.ApplyPreviewColor(_interiorPreviewCell, tint);
-        FactoryPreviewOverlaySupport.ApplyPreviewColor(_interiorPreviewArrow, tint.Lightened(0.1f));
+        if (_interiorPreviewArrow.Visible)
+        {
+            FactoryPreviewOverlaySupport.ApplyPreviewColor(_interiorPreviewArrow, tint.Lightened(0.1f));
+        }
         UpdatePreviewPowerRange(_selectedInteriorKind, _mobileFactory.InteriorSite, _interiorPreviewPowerRange, tint);
         UpdateInteriorPortHints(_selectedInteriorKind);
 
@@ -5639,6 +5643,12 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
+        if (UsesDedicatedCargoPortHintPreview(previewKind))
+        {
+            ConfigureCargoEdgeInteriorPortHints(previewKind);
+            return;
+        }
+
         var visibleRect = GetVisibleInteriorCellRectOrBounds();
         var markers = GetInteriorPortMarkers(previewKind, visibleRect);
         EnsureInteriorPortHintMeshCount(markers.Count);
@@ -5663,6 +5673,61 @@ public partial class MobileFactoryDemo : Node3D
         }
 
         SetInteriorPortHintCount(visibleCount);
+    }
+
+    private void ConfigureCargoEdgeInteriorPortHints(BuildPrototypeKind previewKind)
+    {
+        if (_mobileFactory is null)
+        {
+            SetInteriorPortHintCount(0);
+            return;
+        }
+
+        var previewFacing = ResolveInteriorPlacementFacing(previewKind, _hoveredInteriorCell, _buildInteriorPlacementDragActive);
+        var markers = FactoryLogisticsPreview.CollectPortMarkers(
+            _mobileFactory.InteriorSite,
+            previewKind,
+            _hoveredInteriorCell,
+            previewFacing);
+        EnsureInteriorPortHintMeshCount(markers.Count);
+        var visibleCount = 0;
+        for (var index = 0; index < markers.Count; index++)
+        {
+            var marker = markers[index];
+            FactoryPreviewOverlaySupport.ConfigureDirectionalArrow(
+                _interiorPortHintMeshes[index],
+                ResolveInteriorCargoPortHintPosition(marker),
+                marker.Facing,
+                marker.IsInput
+                    ? new Color(0.38f, 0.78f, 1.0f, 0.92f)
+                    : new Color(1.0f, 0.68f, 0.26f, 0.92f),
+                1.18f);
+            visibleCount++;
+        }
+
+        SetInteriorPortHintCount(visibleCount);
+    }
+
+    private static bool UsesDedicatedCargoPortHintPreview(BuildPrototypeKind previewKind)
+    {
+        return previewKind is BuildPrototypeKind.CargoUnpacker or BuildPrototypeKind.CargoPacker;
+    }
+
+    private Vector3 ResolveInteriorCargoPortHintPosition(FactoryPortPreviewMarker marker)
+    {
+        if (_mobileFactory is null)
+        {
+            return Vector3.Zero;
+        }
+
+        var cellCenter = _mobileFactory.InteriorSite.CellToWorld(marker.Cell);
+        var worldForward = FactoryDirection.ToWorldForward(
+            _mobileFactory.InteriorSite.WorldRotationRadians + FactoryDirection.ToYRotationRadians(marker.Facing));
+        var edgeOffset = worldForward * (_mobileFactory.InteriorSite.CellSize * 0.5f);
+        var edgePosition = marker.IsInput
+            ? cellCenter + edgeOffset
+            : cellCenter - edgeOffset;
+        return edgePosition + new Vector3(0.0f, 0.16f, 0.0f);
     }
 
     private void EnsureInteriorPortHintMeshCount(int count)

@@ -43,6 +43,36 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
         return GetOutputCell() == targetCell;
     }
 
+    public bool CanAcceptExternalHandoff(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
+    {
+        if (!CanReceiveExternalHandoffFrom(sourceCell))
+        {
+            return false;
+        }
+
+        if (!TryResolveTargetCell(item, sourceCell, simulation, out var targetCell))
+        {
+            return false;
+        }
+
+        return CanAcceptTransitSpawn(item, sourceCell, targetCell);
+    }
+
+    public bool TryAcceptExternalHandoff(FactoryItem item, Vector2I sourceCell, SimulationController simulation)
+    {
+        if (!CanReceiveExternalHandoffFrom(sourceCell))
+        {
+            return false;
+        }
+
+        if (!TryResolveTargetCell(item, sourceCell, simulation, out var targetCell))
+        {
+            return false;
+        }
+
+        return TrySpawnTransitItem(item, sourceCell, targetCell, "flow_receive_external_handoff");
+    }
+
     public void Reorient(FacingDirection facing)
     {
         if (Facing == facing)
@@ -168,6 +198,18 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
         ConfigureArm(_inputArmMesh, inputLocal);
         ConfigureArm(_outputArmMesh, outputLocal);
         ConfigureArrow(_arrowMesh, outputLocal);
+    }
+
+    private bool CanReceiveExternalHandoffFrom(Vector2I sourceCell)
+    {
+        return IsOrthogonallyAdjacentCell(Cell, sourceCell)
+            && sourceCell != GetOutputCell();
+    }
+
+    private static bool IsOrthogonallyAdjacentCell(Vector2I a, Vector2I b)
+    {
+        var delta = a - b;
+        return Mathf.Abs(delta.X) + Mathf.Abs(delta.Y) == 1;
     }
 
     private void ConfigureCenter(MeshInstance3D mesh, Vector2 inputDirection, Vector2 outputDirection)

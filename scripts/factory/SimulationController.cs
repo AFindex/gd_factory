@@ -314,7 +314,8 @@ public partial class SimulationController : Node
     {
         item = null;
 
-        if (!site.TryGetStructure(providerCell, out var structure) || structure is not IFactoryItemProvider provider)
+        if (!FactoryStructurePortResolver.TryResolveProvider(site, providerCell, out var resolution)
+            || resolution.Structure is not IFactoryItemProvider provider)
         {
             return false;
         }
@@ -326,7 +327,8 @@ public partial class SimulationController : Node
     {
         item = null;
 
-        if (!site.TryGetStructure(providerCell, out var structure) || structure is not IFactoryItemProvider provider)
+        if (!FactoryStructurePortResolver.TryResolveProvider(site, providerCell, out var resolution)
+            || resolution.Structure is not IFactoryItemProvider provider)
         {
             return false;
         }
@@ -336,32 +338,37 @@ public partial class SimulationController : Node
 
     public bool CanReceiveProvidedItem(FactoryStructure source, IFactorySite targetSite, Vector2I targetCell, FactoryItem item)
     {
-        if (!targetSite.TryGetStructure(targetCell, out var structure) || structure is not IFactoryItemReceiver receiver)
+        if (!FactoryStructurePortResolver.TryResolveReceiver(targetSite, targetCell, out var resolution)
+            || resolution.Structure is not IFactoryItemReceiver receiver)
         {
             return false;
         }
 
-        return receiver.CanReceiveProvidedItem(item, source.Cell, this);
+        var effectiveSourceCell = resolution.ResolveEffectiveSourceCell(source.Cell, targetCell);
+        return receiver.CanReceiveProvidedItem(item, effectiveSourceCell, this);
     }
 
     public bool TryReceiveProvidedItem(FactoryStructure source, IFactorySite targetSite, Vector2I targetCell, FactoryItem item)
     {
-        if (!targetSite.TryGetStructure(targetCell, out var structure) || structure is not IFactoryItemReceiver receiver)
+        if (!FactoryStructurePortResolver.TryResolveReceiver(targetSite, targetCell, out var resolution)
+            || resolution.Structure is not IFactoryItemReceiver receiver)
         {
             return false;
         }
 
-        return receiver.TryReceiveProvidedItem(item, source.Cell, this);
+        var effectiveSourceCell = resolution.ResolveEffectiveSourceCell(source.Cell, targetCell);
+        return receiver.TryReceiveProvidedItem(item, effectiveSourceCell, this);
     }
 
     public bool TrySendItemToSite(FactoryStructure source, Vector2I sourceCell, IFactorySite targetSite, Vector2I targetCell, FactoryItem item)
     {
-        if (!targetSite.TryGetStructure(targetCell, out var structure) || structure is null)
+        if (!FactoryStructurePortResolver.TryResolveReceiver(targetSite, targetCell, out var resolution))
         {
             return false;
         }
 
-        return structure.TryAcceptItem(item, sourceCell, this);
+        var effectiveSourceCell = resolution.ResolveEffectiveSourceCell(sourceCell, targetCell);
+        return resolution.Structure.TryAcceptItem(item, effectiveSourceCell, this);
     }
 
     public void RebuildTopology()

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Net Factory Godot Helper"
+  short_description: "Run net_factory via godot_mono"
+  default_prompt: "Use $net-factory-godot-helper to run or validate the net_factory Godot C# project with godot_mono."

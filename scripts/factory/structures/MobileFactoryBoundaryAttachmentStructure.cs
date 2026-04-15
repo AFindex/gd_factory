@@ -250,10 +250,8 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         CreateColoredBox("BoundaryDeck", new Vector3(deckWidth * 0.90f, 0.08f, deckDepth * 0.90f), baseColor.Lightened(0.06f), new Vector3(0.02f * CellSize, 0.12f, 0.0f));
         CreateColoredBox("BoundaryHandoffCradle", new Vector3(deckWidth * 0.82f, 0.10f, deckDepth * 0.58f), accentColor.Darkened(0.06f), new Vector3(0.06f * CellSize, 0.18f, 0.0f));
         CreateInteriorTray(this, "BoundaryTransferLane", new Vector3(deckWidth * 0.84f, 0.08f, CellSize * 0.34f), accentColor, tipColor.Lightened(0.16f), new Vector3(0.08f * CellSize, 0.20f, 0.0f));
-        CreateColoredBox("BoundaryDeckRailNorth", new Vector3(deckWidth * 0.88f, 0.10f, CellSize * 0.08f), tipColor.Lightened(0.12f), new Vector3(0.06f * CellSize, 0.24f, -deckDepth * 0.34f));
-        CreateColoredBox("BoundaryDeckRailSouth", new Vector3(deckWidth * 0.88f, 0.10f, CellSize * 0.08f), tipColor.Lightened(0.12f), new Vector3(0.06f * CellSize, 0.24f, deckDepth * 0.34f));
-        CreateColoredBox("BoundaryPortalNorth", new Vector3(CellSize * 0.16f, 0.44f, CellSize * 0.12f), tipColor, new Vector3(deckWidth * 0.40f, 0.32f, -deckDepth * 0.22f));
-        CreateColoredBox("BoundaryPortalSouth", new Vector3(CellSize * 0.16f, 0.44f, CellSize * 0.12f), tipColor, new Vector3(deckWidth * 0.40f, 0.32f, deckDepth * 0.22f));
+        CreateColoredBox("BoundaryDeckRailNorth", new Vector3(deckWidth * 0.74f, 0.10f, CellSize * 0.10f), tipColor.Lightened(0.12f), new Vector3(0.06f * CellSize, 0.24f, 0.0f));
+        CreateColoredBox("BoundaryPortalNorth", new Vector3(CellSize * 0.18f, 0.44f, CellSize * 0.16f), tipColor, new Vector3(deckWidth * 0.40f, 0.32f, 0.0f));
         CreateColoredBox("HullMouth", new Vector3(deckWidth * 0.28f, 0.14f, deckDepth * 0.48f), tipColor.Lightened(0.04f), new Vector3(deckWidth * 0.48f, 0.24f, 0.0f));
         CreateColoredBox("BoundaryScaleMarker", new Vector3(CellSize * 0.30f, 0.06f, CellSize * 0.30f), tipColor.Lightened(0.18f), new Vector3(-CellSize * 0.40f, 0.14f, 0.0f));
         CreateInteriorLabelPlate(this, "BoundaryScaleLabel", "重载", tipColor, new Vector3(-deckWidth * 0.10f, 0.12f, -deckDepth * 0.38f), 1.18f);
@@ -327,7 +325,7 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
         {
             Name = "PayloadGuideNorth",
             Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.72f, 0.06f, FactoryConstants.CellSize * 0.06f) },
-            Position = new Vector3(0.02f * FactoryConstants.CellSize, 0.18f, -FactoryConstants.CellSize * 0.30f),
+            Position = new Vector3(0.02f * FactoryConstants.CellSize, 0.18f, 0.0f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = AttachmentDefinition.Tint.Lightened(0.04f),
@@ -337,33 +335,9 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
 
         payloadRoot.AddChild(new MeshInstance3D
         {
-            Name = "PayloadGuideSouth",
-            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.72f, 0.06f, FactoryConstants.CellSize * 0.06f) },
-            Position = new Vector3(0.02f * FactoryConstants.CellSize, 0.18f, FactoryConstants.CellSize * 0.30f),
-            MaterialOverride = new StandardMaterial3D
-            {
-                AlbedoColor = AttachmentDefinition.Tint.Lightened(0.04f),
-                Roughness = 0.58f
-            }
-        });
-
-        payloadRoot.AddChild(new MeshInstance3D
-        {
             Name = "PayloadPortalNorth",
-            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.12f, 0.32f, FactoryConstants.CellSize * 0.10f) },
-            Position = new Vector3(FactoryConstants.CellSize * 0.42f, 0.22f, -FactoryConstants.CellSize * 0.18f),
-            MaterialOverride = new StandardMaterial3D
-            {
-                AlbedoColor = AttachmentDefinition.ConnectorColor,
-                Roughness = 0.54f
-            }
-        });
-
-        payloadRoot.AddChild(new MeshInstance3D
-        {
-            Name = "PayloadPortalSouth",
-            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.12f, 0.32f, FactoryConstants.CellSize * 0.10f) },
-            Position = new Vector3(FactoryConstants.CellSize * 0.42f, 0.22f, FactoryConstants.CellSize * 0.18f),
+            Mesh = new BoxMesh { Size = new Vector3(FactoryConstants.CellSize * 0.12f, 0.32f, FactoryConstants.CellSize * 0.18f) },
+            Position = new Vector3(FactoryConstants.CellSize * 0.42f, 0.22f, 0.0f),
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = AttachmentDefinition.ConnectorColor,
@@ -2171,17 +2145,22 @@ public partial class MobileFactoryOutputPortStructure : MobileFactoryHeavyPortSt
 
     protected override bool TryDispatchOuterToWorld(FactoryItem item, SimulationController simulation)
     {
-        if (!IsConnectedToWorld || BoundWorldSite is null)
+        if (!TryResolveWorldReleaseTarget(item, simulation, out var sourceCell, out var targetCell))
         {
             return false;
         }
 
-        if (!IsWorldFlowReady)
+        if (!BoundWorldSite!.TryGetStructure(targetCell, out var target) || target is null)
         {
             return false;
         }
 
-        return simulation.TrySendItemToSite(this, WorldPortCell, BoundWorldSite, WorldAdjacentCell, item);
+        if (target is BeltStructure belt)
+        {
+            return belt.TryAcceptExternalHandoff(item, sourceCell, simulation);
+        }
+
+        return simulation.TrySendItemToSite(this, sourceCell, BoundWorldSite!, targetCell, item);
     }
 
     protected override Vector3 EvaluatePathPoint(TransitItemState state, float progress)
@@ -2241,12 +2220,12 @@ public partial class MobileFactoryOutputPortStructure : MobileFactoryHeavyPortSt
 
         if (OuterBufferedItem is not null
             && !HasBridgeTransfer
-            && CanReleaseToWorld(OuterBufferedItem, simulation))
+            && TryResolveWorldReleaseTarget(OuterBufferedItem, simulation, out var releaseSourceCell, out var releaseTargetCell))
         {
             var buffered = TakeOuterBufferedItem();
             if (buffered is not null)
             {
-                BeginTransfer(MobileFactoryHeavyPortTransferMode.OuterToWorld, buffered, WorldPortCell, WorldAdjacentCell);
+                BeginTransfer(MobileFactoryHeavyPortTransferMode.OuterToWorld, buffered, releaseSourceCell, releaseTargetCell);
             }
         }
     }
@@ -2364,11 +2343,60 @@ public partial class MobileFactoryOutputPortStructure : MobileFactoryHeavyPortSt
 
     private bool CanReleaseToWorld(FactoryItem item, SimulationController simulation)
     {
-        return IsConnectedToWorld
-            && BoundWorldSite is not null
-            && BoundWorldSite.TryGetStructure(WorldAdjacentCell, out var target)
-            && target is not null
-            && target.CanAcceptItem(item, WorldPortCell, simulation);
+        return TryResolveWorldReleaseTarget(item, simulation, out _, out _);
+    }
+
+    private bool TryResolveWorldReleaseTarget(
+        FactoryItem item,
+        SimulationController simulation,
+        out Vector2I sourceCell,
+        out Vector2I targetCell)
+    {
+        sourceCell = Vector2I.Zero;
+        targetCell = Vector2I.Zero;
+        if (!IsConnectedToWorld || !IsWorldFlowReady || BoundWorldSite is null)
+        {
+            return false;
+        }
+
+        if (CanWorldTargetAccept(item, WorldPortCell, WorldAdjacentCell, simulation))
+        {
+            sourceCell = WorldPortCell;
+            targetCell = WorldAdjacentCell;
+            return true;
+        }
+
+        var releaseEdgeCell = WorldAdjacentCell;
+        var downstreamCell = releaseEdgeCell + FactoryDirection.ToCellOffset(WorldFacing);
+        if (CanWorldTargetAccept(item, releaseEdgeCell, downstreamCell, simulation))
+        {
+            sourceCell = releaseEdgeCell;
+            targetCell = downstreamCell;
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool CanWorldTargetAccept(
+        FactoryItem item,
+        Vector2I sourceCell,
+        Vector2I targetCell,
+        SimulationController simulation)
+    {
+        if (BoundWorldSite is null
+            || !BoundWorldSite.TryGetStructure(targetCell, out var target)
+            || target is null)
+        {
+            return false;
+        }
+
+        if (target is BeltStructure belt)
+        {
+            return belt.CanAcceptExternalHandoff(item, sourceCell, simulation);
+        }
+
+        return target.CanAcceptItem(item, sourceCell, simulation);
     }
 
     private void StartPackerArrivalSlide(FactoryItem item)
