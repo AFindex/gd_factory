@@ -194,6 +194,8 @@ public partial class MobileFactoryDemo
             && _mobileFactory.TryGetInteriorStructure(new Vector2I(5, 2), out packerStructure)
             && packerStructure is CargoPackerStructure
             && CountNamedNodes(packerStructure, "PackerChamberBaseSkid") > 0
+            && CountNamedNodes(packerStructure, "PackerInputLane0Tray") > 0
+            && CountNamedNodes(packerStructure, "PackerInputLane1Tray") > 0
             && CountNamedNodes(packerStructure, "PackerCompressionDeck") > 0
             && CountNamedNodes(packerStructure, "DispatchPayloadAnchor") > 0
             &&
@@ -643,18 +645,17 @@ public partial class MobileFactoryDemo
             new MobileFactoryInteriorPreset(
                 "smoke-packer-port-resolution",
                 "封包端口回归",
-                "验证机械臂即使对准被其他建筑占用的共享输入格，也能把物品送入多格封包舱。",
-                "仓储经机械臂把小包送到共享输入格，系统应回退到封包舱端口归属。",
+                "验证机械臂可以把物品直接送进封包舱主体边缘的舱内输入口。",
+                "仓储经机械臂向前投送时，应直接命中封包舱主体左侧输入位，不再依赖外挂共享输入格。",
                 global::System.Array.Empty<FactoryPlacementSpec>(),
                 global::System.Array.Empty<MobileFactoryAttachmentPlacementSpec>()));
 
         var storageCell = new Vector2I(0, 1);
         var inserterCell = new Vector2I(1, 1);
-        var smelterCell = new Vector2I(2, 1);
-        var packerCell = new Vector2I(3, 1);
-        var smelterConfigured = false;
+        var packerCell = new Vector2I(2, 1);
         var configured = false;
         var recipeActive = false;
+        var packerIntegratedInputs = false;
         var seededAll = false;
         var storageDrained = false;
         var packerAcceptedInput = false;
@@ -664,36 +665,36 @@ public partial class MobileFactoryDemo
         {
             var placedStorage = scratchFactory.PlaceInteriorStructure(BuildPrototypeKind.Storage, storageCell, FacingDirection.East);
             var placedInserter = scratchFactory.PlaceInteriorStructure(BuildPrototypeKind.Inserter, inserterCell, FacingDirection.East);
-            var placedSmelter = scratchFactory.PlaceInteriorStructure(BuildPrototypeKind.Smelter, smelterCell, FacingDirection.East);
             var placedPacker = scratchFactory.PlaceInteriorStructure(BuildPrototypeKind.CargoPacker, packerCell, FacingDirection.East);
             if (!placedStorage
                 || !placedInserter
-                || !placedSmelter
                 || !placedPacker
                 || !scratchFactory.TryGetInteriorStructure(storageCell, out var storageStructure)
                 || storageStructure is not StorageStructure storage
                 || !scratchFactory.TryGetInteriorStructure(inserterCell, out var inserterStructure)
                 || inserterStructure is not InserterStructure
-                || !scratchFactory.TryGetInteriorStructure(smelterCell, out var smelterStructure)
-                || smelterStructure is not SmelterStructure smelter
                 || !scratchFactory.TryGetInteriorStructure(packerCell, out var packerStructure)
                 || packerStructure is not CargoPackerStructure packer)
             {
                 if (HasFocusedSmokeTestFlag())
                 {
-                    GD.Print($"MOBILE_FACTORY_PACKER_PORT_SMOKE setup_failed storage={placedStorage} inserter={placedInserter} smelter={placedSmelter} packer={placedPacker}");
+                    GD.Print($"MOBILE_FACTORY_PACKER_PORT_SMOKE setup_failed storage={placedStorage} inserter={placedInserter} packer={placedPacker}");
                 }
                 return false;
             }
 
-            smelterConfigured = smelter.TrySetDetailRecipe("iron-smelting");
             configured = packer.TrySetDetailRecipe("packed-iron-plate-standard");
             recipeActive = packer.GetDetailModel().RecipeSection?.ActiveRecipeId == "packed-iron-plate-standard";
-            if (!smelterConfigured || !configured || !recipeActive)
+            packerIntegratedInputs = new HashSet<Vector2I>(packer.GetInputCells()).SetEquals(new[]
+            {
+                packer.Cell,
+                packer.Cell + Vector2I.Down
+            });
+            if (!configured || !recipeActive || !packerIntegratedInputs)
             {
                 if (HasFocusedSmokeTestFlag())
                 {
-                    GD.Print($"MOBILE_FACTORY_PACKER_PORT_SMOKE recipe_failed smelterConfigured={smelterConfigured} configured={configured} recipeActive={recipeActive}");
+                    GD.Print($"MOBILE_FACTORY_PACKER_PORT_SMOKE recipe_failed configured={configured} recipeActive={recipeActive} integratedInputs={packerIntegratedInputs}");
                 }
                 return false;
             }
@@ -760,9 +761,9 @@ public partial class MobileFactoryDemo
             {
                 GD.Print(
                     $"MOBILE_FACTORY_PACKER_PORT_SMOKE " +
-                    $"smelterConfigured={smelterConfigured} " +
                     $"configured={configured} " +
                     $"recipeActive={recipeActive} " +
+                    $"integratedInputs={packerIntegratedInputs} " +
                     $"seeded={seededAll} " +
                     $"storageBuffered={storage.BufferedCount} " +
                     $"packerProcessing={packer.HasProcessingBundle} " +
@@ -770,9 +771,9 @@ public partial class MobileFactoryDemo
                     $"inspection={string.Join(" || ", packer.GetInspectionLines())}");
             }
 
-            return smelterConfigured
-                && configured
+            return configured
                 && recipeActive
+                && packerIntegratedInputs
                 && seededAll
                 && storageDrained
                 && packerAcceptedInput;
@@ -821,17 +822,16 @@ public partial class MobileFactoryDemo
             new MobileFactoryInteriorPreset(
                 "smoke-packer-belt-port-resolution",
                 "封包供料轨回归",
-                "验证供料轨即使对准被其他建筑占用的共享输入格，也能把物品送入多格封包舱。",
-                "供料轨把内部小包送到共享输入格，系统应回退到封包舱端口归属。",
+                "验证供料轨可以把物品直接送进封包舱主体边缘的舱内输入口。",
+                "供料轨正对封包舱时，应直接把物品推进主体左侧输入位，不再隔着一格喂入。",
                 global::System.Array.Empty<FactoryPlacementSpec>(),
                 global::System.Array.Empty<MobileFactoryAttachmentPlacementSpec>()));
 
         var beltCell = new Vector2I(1, 1);
-        var smelterCell = new Vector2I(2, 1);
-        var packerCell = new Vector2I(3, 1);
-        var smelterConfigured = false;
+        var packerCell = new Vector2I(2, 1);
         var configured = false;
         var recipeActive = false;
+        var packerIntegratedInputs = false;
         var beltInjected = false;
         var beltDrained = false;
         var packerAcceptedInput = false;
@@ -840,33 +840,33 @@ public partial class MobileFactoryDemo
         try
         {
             var placedBelt = scratchFactory.PlaceInteriorStructure(BuildPrototypeKind.Belt, beltCell, FacingDirection.East);
-            var placedSmelter = scratchFactory.PlaceInteriorStructure(BuildPrototypeKind.Smelter, smelterCell, FacingDirection.East);
             var placedPacker = scratchFactory.PlaceInteriorStructure(BuildPrototypeKind.CargoPacker, packerCell, FacingDirection.East);
             if (!placedBelt
-                || !placedSmelter
                 || !placedPacker
                 || !scratchFactory.TryGetInteriorStructure(beltCell, out var beltStructure)
                 || beltStructure is not BeltStructure belt
-                || !scratchFactory.TryGetInteriorStructure(smelterCell, out var smelterStructure)
-                || smelterStructure is not SmelterStructure smelter
                 || !scratchFactory.TryGetInteriorStructure(packerCell, out var packerStructure)
                 || packerStructure is not CargoPackerStructure packer)
             {
                 if (HasFocusedSmokeTestFlag())
                 {
-                    GD.Print($"MOBILE_FACTORY_PACKER_BELT_PORT_SMOKE setup_failed belt={placedBelt} smelter={placedSmelter} packer={placedPacker}");
+                    GD.Print($"MOBILE_FACTORY_PACKER_BELT_PORT_SMOKE setup_failed belt={placedBelt} packer={placedPacker}");
                 }
                 return false;
             }
 
-            smelterConfigured = smelter.TrySetDetailRecipe("iron-smelting");
             configured = packer.TrySetDetailRecipe("packed-iron-plate-standard");
             recipeActive = packer.GetDetailModel().RecipeSection?.ActiveRecipeId == "packed-iron-plate-standard";
-            if (!smelterConfigured || !configured || !recipeActive)
+            packerIntegratedInputs = new HashSet<Vector2I>(packer.GetInputCells()).SetEquals(new[]
+            {
+                packer.Cell,
+                packer.Cell + Vector2I.Down
+            });
+            if (!configured || !recipeActive || !packerIntegratedInputs)
             {
                 if (HasFocusedSmokeTestFlag())
                 {
-                    GD.Print($"MOBILE_FACTORY_PACKER_BELT_PORT_SMOKE recipe_failed smelterConfigured={smelterConfigured} configured={configured} recipeActive={recipeActive}");
+                    GD.Print($"MOBILE_FACTORY_PACKER_BELT_PORT_SMOKE recipe_failed configured={configured} recipeActive={recipeActive} integratedInputs={packerIntegratedInputs}");
                 }
                 return false;
             }
@@ -916,9 +916,9 @@ public partial class MobileFactoryDemo
             {
                 GD.Print(
                     $"MOBILE_FACTORY_PACKER_BELT_PORT_SMOKE " +
-                    $"smelterConfigured={smelterConfigured} " +
                     $"configured={configured} " +
                     $"recipeActive={recipeActive} " +
+                    $"integratedInputs={packerIntegratedInputs} " +
                     $"beltInjected={beltInjected} " +
                     $"beltTransit={belt.TransitItemCount} " +
                     $"packerProcessing={packer.HasProcessingBundle} " +
@@ -926,9 +926,9 @@ public partial class MobileFactoryDemo
                     $"inspection={string.Join(" || ", packer.GetInspectionLines())}");
             }
 
-            return smelterConfigured
-                && configured
+            return configured
                 && recipeActive
+                && packerIntegratedInputs
                 && beltInjected
                 && beltDrained
                 && packerAcceptedInput;

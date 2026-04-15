@@ -63,6 +63,10 @@ public static class FactoryStructureFactory
         new[] { Vector2I.Zero, Vector2I.Right, Vector2I.Down, Vector2I.Right + Vector2I.Down },
         inputOffsetsEast: new[] { Vector2I.Left, Vector2I.Left + Vector2I.Down },
         outputOffsetsEast: new[] { Vector2I.Right * 2, (Vector2I.Right * 2) + Vector2I.Down });
+    private static readonly FactoryStructureFootprint PackerIntegratedInputFootprint = new(
+        new[] { Vector2I.Zero, Vector2I.Right, Vector2I.Down, Vector2I.Right + Vector2I.Down },
+        inputOffsetsEast: new[] { Vector2I.Zero, Vector2I.Down },
+        outputOffsetsEast: new[] { Vector2I.Right * 2, (Vector2I.Right * 2) + Vector2I.Down });
     private static readonly FactoryStructureFootprint CompactConversionFootprint = new(
         new[] { Vector2I.Zero, Vector2I.Down },
         inputOffsetEast: Vector2I.Left,
@@ -112,7 +116,7 @@ public static class FactoryStructureFactory
             () => new CargoPackerStructure(),
             true,
             true,
-            CompactConversionFootprint),
+            PackerIntegratedInputFootprint),
         [BuildPrototypeKind.TransferBuffer] = new FactoryStructureDefinition(
             BuildPrototypeKind.TransferBuffer,
             () => new TransferBufferStructure(),
@@ -190,7 +194,7 @@ public static class FactoryStructureFactory
         return kind switch
         {
             BuildPrototypeKind.CargoUnpacker => HeavyConversionFootprint,
-            BuildPrototypeKind.CargoPacker => HeavyConversionFootprint,
+            BuildPrototypeKind.CargoPacker => PackerIntegratedInputFootprint,
             BuildPrototypeKind.InputPort => InputHeavyPortFootprint,
             BuildPrototypeKind.OutputPort => HeavyPortFootprint,
             _ => GetDefinition(kind).Footprint

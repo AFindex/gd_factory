@@ -195,7 +195,7 @@ public static class FactoryLogisticsPreview
 
     private static IReadOnlyList<Vector2I> GetPreviewInputCells(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
     {
-        if (kind is BuildPrototypeKind.CargoUnpacker or BuildPrototypeKind.CargoPacker)
+        if (kind == BuildPrototypeKind.CargoUnpacker)
         {
             return new[] { FactoryStructureFactory.GetFootprint(kind).ResolveInputCell(cell, facing) };
         }
@@ -217,7 +217,7 @@ public static class FactoryLogisticsPreview
 
     private static IReadOnlyList<Vector2I> GetContextualInputCells(FactoryStructure structure)
     {
-        if (structure.Kind is BuildPrototypeKind.CargoUnpacker or BuildPrototypeKind.CargoPacker)
+        if (structure.Kind == BuildPrototypeKind.CargoUnpacker)
         {
             return new[] { structure.GetInputCell() };
         }
@@ -239,6 +239,11 @@ public static class FactoryLogisticsPreview
 
     private static FacingDirection ResolvePortFacing(Vector2I portCell, IReadOnlyList<Vector2I> occupiedCells, bool isInput)
     {
+        if (ContainsCell(occupiedCells, portCell))
+        {
+            return ResolveFacingFromOccupiedPort(portCell, occupiedCells, isInput);
+        }
+
         for (var index = 0; index < occupiedCells.Count; index++)
         {
             var occupiedCell = occupiedCells[index];
@@ -251,6 +256,32 @@ public static class FactoryLogisticsPreview
         return occupiedCells.Count > 0
             ? ResolveFlowFacing(portCell, occupiedCells[0], isInput)
             : (isInput ? FacingDirection.West : FacingDirection.East);
+    }
+
+    private static FacingDirection ResolveFacingFromOccupiedPort(
+        Vector2I portCell,
+        IReadOnlyList<Vector2I> occupiedCells,
+        bool isInput)
+    {
+        var center = Vector2.Zero;
+        for (var index = 0; index < occupiedCells.Count; index++)
+        {
+            center += new Vector2(occupiedCells[index].X, occupiedCells[index].Y);
+        }
+
+        center /= occupiedCells.Count;
+        var delta = new Vector2(portCell.X, portCell.Y) - center;
+        if (delta.LengthSquared() <= 0.0001f)
+        {
+            return isInput ? FacingDirection.West : FacingDirection.East;
+        }
+
+        if (Mathf.Abs(delta.X) >= Mathf.Abs(delta.Y))
+        {
+            return delta.X >= 0.0f ? FacingDirection.East : FacingDirection.West;
+        }
+
+        return delta.Y >= 0.0f ? FacingDirection.South : FacingDirection.North;
     }
 
     private static FacingDirection ResolveFlowFacing(Vector2I portCell, Vector2I occupiedCell, bool isInput)
@@ -273,5 +304,18 @@ public static class FactoryLogisticsPreview
     {
         var delta = a - b;
         return Mathf.Abs(delta.X) + Mathf.Abs(delta.Y) == 1;
+    }
+
+    private static bool ContainsCell(IReadOnlyList<Vector2I> cells, Vector2I targetCell)
+    {
+        for (var index = 0; index < cells.Count; index++)
+        {
+            if (cells[index] == targetCell)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

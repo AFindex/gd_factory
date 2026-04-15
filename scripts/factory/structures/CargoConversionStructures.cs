@@ -1483,6 +1483,7 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
             var previewSize = Footprint.GetPreviewSize(CellSize, Facing);
             var deckWidth = Mathf.Max(CellSize * 1.56f, previewSize.X * 0.92f);
             var deckDepth = Mathf.Max(CellSize * 1.52f, previewSize.Y * 0.92f);
+            var intakeEdgeX = -deckWidth * 0.38f;
             CreateOpenHeavyChamber(
                 "PackerChamber",
                 new Vector3(deckWidth, 0.14f, deckDepth),
@@ -1490,7 +1491,25 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
                 chamberDepth: deckDepth,
                 frameColor: new Color("6A240B"),
                 accentColor: new Color("FDBA74"));
-            CreateInteriorTray(this, "PackerInfeed", new Vector3(deckWidth * 0.32f, 0.10f, CellSize * 0.20f), new Color("B94A13"), new Color("FED7AA"), new Vector3(-deckWidth * 0.38f, 0.16f, 0.0f));
+            for (var inputIndex = 0; inputIndex < Footprint.InputOffsetsEast.Count; inputIndex++)
+            {
+                var inputOffset = Footprint.InputOffsetsEast[inputIndex];
+                var portCenter = Footprint.GetLocalCellCenterOffset(inputOffset, CellSize);
+                var laneCenterX = (portCenter.X + intakeEdgeX) * 0.5f;
+                var laneWidth = Mathf.Max(CellSize * 1.10f, Mathf.Abs(portCenter.X - intakeEdgeX) + CellSize * 0.34f);
+                CreateInteriorTray(
+                    this,
+                    $"PackerInputLane{inputIndex}",
+                    new Vector3(laneWidth, 0.10f, CellSize * 0.22f),
+                    new Color("B94A13"),
+                    new Color("FED7AA"),
+                    new Vector3(laneCenterX, 0.16f, portCenter.Z));
+                CreateBox(
+                    $"PackerInputSocket{inputIndex}",
+                    new Vector3(CellSize * 0.26f, 0.12f, CellSize * 0.28f),
+                    new Color("FDBA74"),
+                    new Vector3(portCenter.X, 0.18f, portCenter.Z));
+            }
             CreateBox("PackerCompressionDeck", new Vector3(deckWidth * 0.66f, 0.12f, deckDepth * 0.54f), new Color("C2410C"), new Vector3(0.0f, 0.18f, 0.0f));
             CreateBox("PackerClampNorth", new Vector3(deckWidth * 0.62f, 0.08f, CellSize * 0.08f), new Color("FED7AA"), new Vector3(0.0f, 0.42f, -CellSize * 0.30f));
             CreateBox("PackerClampSouth", new Vector3(deckWidth * 0.62f, 0.08f, CellSize * 0.08f), new Color("FED7AA"), new Vector3(0.0f, 0.42f, CellSize * 0.30f));

@@ -14,7 +14,21 @@ internal readonly struct FactoryStructurePortResolution
 
     public Vector2I ResolveEffectiveSourceCell(Vector2I sourceCell, Vector2I portCell)
     {
-        return ResolvedFromPortCell ? portCell : sourceCell;
+        if (ResolvedFromPortCell)
+        {
+            return portCell;
+        }
+
+        var inputCells = Structure.GetInputCells();
+        for (var index = 0; index < inputCells.Count; index++)
+        {
+            if (inputCells[index] == portCell)
+            {
+                return portCell;
+            }
+        }
+
+        return sourceCell;
     }
 }
 

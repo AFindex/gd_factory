@@ -134,6 +134,15 @@ internal sealed class FactoryMapValidationContext
 
 internal static class FactoryMapValidationTopologyHelper
 {
+    private static readonly IReadOnlyList<Vector2I> CandidateNeighborOffsets = new[]
+    {
+        Vector2I.Zero,
+        Vector2I.Left,
+        Vector2I.Right,
+        Vector2I.Up,
+        Vector2I.Down
+    };
+
     public static IReadOnlyList<Vector2I> GetInputCells(FactoryStructure structure)
     {
         return structure.Kind switch
@@ -168,17 +177,22 @@ internal static class FactoryMapValidationTopologyHelper
     public static bool TryGetInputProvider(FactoryStructure receiver, Vector2I inputCell, out FactoryStructure? provider)
     {
         provider = null;
-        if (!receiver.Site.TryGetStructure(inputCell, out var candidate) || candidate is null)
+        var seen = new HashSet<ulong>();
+        for (var neighborIndex = 0; neighborIndex < CandidateNeighborOffsets.Count; neighborIndex++)
         {
-            return false;
-        }
+            var candidateCell = inputCell + CandidateNeighborOffsets[neighborIndex];
+            if (!receiver.Site.TryGetStructure(candidateCell, out var candidate)
+                || candidate is null
+                || candidate == receiver
+                || !seen.Add(candidate.GetInstanceId()))
+            {
+                continue;
+            }
 
-        var candidateOutputCells = GetOutputCells(candidate);
-        foreach (var occupiedCell in receiver.GetOccupiedCells())
-        {
+            var candidateOutputCells = GetOutputCells(candidate);
             for (var outputIndex = 0; outputIndex < candidateOutputCells.Count; outputIndex++)
             {
-                if (candidateOutputCells[outputIndex] != occupiedCell)
+                if (candidateOutputCells[outputIndex] != inputCell)
                 {
                     continue;
                 }
@@ -194,23 +208,33 @@ internal static class FactoryMapValidationTopologyHelper
     public static bool TryGetOutputReceiver(FactoryStructure source, Vector2I outputCell, out FactoryStructure? receiver)
     {
         receiver = null;
-        if (!source.Site.TryGetStructure(outputCell, out var candidate) || candidate is null)
+        var seen = new HashSet<ulong>();
+        var transferSourceCell = source.GetTransferOutputCell(outputCell);
+        for (var neighborIndex = 0; neighborIndex < CandidateNeighborOffsets.Count; neighborIndex++)
         {
-            return false;
-        }
-
-        var sourceCell = source.GetTransferOutputCell(outputCell);
-        var candidateInputCells = GetInputCells(candidate);
-        for (var inputIndex = 0; inputIndex < candidateInputCells.Count; inputIndex++)
-        {
-            if (candidateInputCells[inputIndex] != sourceCell)
+            var candidateCell = outputCell + CandidateNeighborOffsets[neighborIndex];
+            if (!source.Site.TryGetStructure(candidateCell, out var candidate)
+                || candidate is null
+                || candidate == source
+                || !seen.Add(candidate.GetInstanceId()))
             {
                 continue;
             }
 
-            receiver = candidate;
-            return true;
+            var candidateInputCells = GetInputCells(candidate);
+            for (var inputIndex = 0; inputIndex < candidateInputCells.Count; inputIndex++)
+            {
+                if (candidateInputCells[inputIndex] != transferSourceCell
+                    && candidateInputCells[inputIndex] != outputCell)
+                {
+                    continue;
+                }
+
+                receiver = candidate;
+                return true;
+            }
         }
+
         return false;
     }
 }
