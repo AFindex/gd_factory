@@ -338,37 +338,66 @@ public partial class SimulationController : Node
 
     public bool CanReceiveProvidedItem(FactoryStructure source, IFactorySite targetSite, Vector2I targetCell, FactoryItem item)
     {
-        if (!FactoryStructurePortResolver.TryResolveReceiver(targetSite, targetCell, out var resolution)
-            || resolution.Structure is not IFactoryItemReceiver receiver)
+        if (FactoryStructurePortResolver.TryResolveDirectReceiver(targetSite, targetCell, out var directResolution)
+            && directResolution.Structure is IFactoryItemReceiver directReceiver)
+        {
+            var effectiveSourceCell = directResolution.ResolveEffectiveSourceCell(source.Cell, targetCell);
+            if (directReceiver.CanReceiveProvidedItem(item, effectiveSourceCell, this))
+            {
+                return true;
+            }
+        }
+
+        if (!FactoryStructurePortResolver.TryResolveReceiverByInputPort(targetSite, targetCell, out var portResolution)
+            || portResolution.Structure is not IFactoryItemReceiver portReceiver)
         {
             return false;
         }
 
-        var effectiveSourceCell = resolution.ResolveEffectiveSourceCell(source.Cell, targetCell);
-        return receiver.CanReceiveProvidedItem(item, effectiveSourceCell, this);
+        var portSourceCell = portResolution.ResolveEffectiveSourceCell(source.Cell, targetCell);
+        return portReceiver.CanReceiveProvidedItem(item, portSourceCell, this);
     }
 
     public bool TryReceiveProvidedItem(FactoryStructure source, IFactorySite targetSite, Vector2I targetCell, FactoryItem item)
     {
-        if (!FactoryStructurePortResolver.TryResolveReceiver(targetSite, targetCell, out var resolution)
-            || resolution.Structure is not IFactoryItemReceiver receiver)
+        if (FactoryStructurePortResolver.TryResolveDirectReceiver(targetSite, targetCell, out var directResolution)
+            && directResolution.Structure is IFactoryItemReceiver directReceiver)
+        {
+            var effectiveSourceCell = directResolution.ResolveEffectiveSourceCell(source.Cell, targetCell);
+            if (directReceiver.TryReceiveProvidedItem(item, effectiveSourceCell, this))
+            {
+                return true;
+            }
+        }
+
+        if (!FactoryStructurePortResolver.TryResolveReceiverByInputPort(targetSite, targetCell, out var portResolution)
+            || portResolution.Structure is not IFactoryItemReceiver portReceiver)
         {
             return false;
         }
 
-        var effectiveSourceCell = resolution.ResolveEffectiveSourceCell(source.Cell, targetCell);
-        return receiver.TryReceiveProvidedItem(item, effectiveSourceCell, this);
+        var portSourceCell = portResolution.ResolveEffectiveSourceCell(source.Cell, targetCell);
+        return portReceiver.TryReceiveProvidedItem(item, portSourceCell, this);
     }
 
     public bool TrySendItemToSite(FactoryStructure source, Vector2I sourceCell, IFactorySite targetSite, Vector2I targetCell, FactoryItem item)
     {
-        if (!FactoryStructurePortResolver.TryResolveReceiver(targetSite, targetCell, out var resolution))
+        if (FactoryStructurePortResolver.TryResolveDirectReceiver(targetSite, targetCell, out var directResolution))
+        {
+            var effectiveSourceCell = directResolution.ResolveEffectiveSourceCell(sourceCell, targetCell);
+            if (directResolution.Structure.TryAcceptItem(item, effectiveSourceCell, this))
+            {
+                return true;
+            }
+        }
+
+        if (!FactoryStructurePortResolver.TryResolveReceiverByInputPort(targetSite, targetCell, out var portResolution))
         {
             return false;
         }
 
-        var effectiveSourceCell = resolution.ResolveEffectiveSourceCell(sourceCell, targetCell);
-        return resolution.Structure.TryAcceptItem(item, effectiveSourceCell, this);
+        var portSourceCell = portResolution.ResolveEffectiveSourceCell(sourceCell, targetCell);
+        return portResolution.Structure.TryAcceptItem(item, portSourceCell, this);
     }
 
     public void RebuildTopology()

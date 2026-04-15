@@ -41,12 +41,24 @@ internal static class FactoryStructurePortResolver
 
     public static bool TryResolveReceiver(IFactorySite site, Vector2I targetCell, out FactoryStructurePortResolution resolution)
     {
+        return TryResolveDirectReceiver(site, targetCell, out resolution)
+            || TryResolveReceiverByInputPort(site, targetCell, out resolution);
+    }
+
+    public static bool TryResolveDirectReceiver(IFactorySite site, Vector2I targetCell, out FactoryStructurePortResolution resolution)
+    {
         if (site.TryGetStructure(targetCell, out var structure) && structure is not null)
         {
             resolution = new FactoryStructurePortResolution(structure, resolvedFromPortCell: false);
             return true;
         }
 
+        resolution = default;
+        return false;
+    }
+
+    public static bool TryResolveReceiverByInputPort(IFactorySite site, Vector2I targetCell, out FactoryStructurePortResolution resolution)
+    {
         return TryResolveByPortCell(site, targetCell, useInputPorts: true, out resolution);
     }
 

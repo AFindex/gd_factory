@@ -348,7 +348,8 @@ public partial class MobileFactoryDemo
             && placedStructure.GlobalPosition.DistanceTo(_mobileFactory.InteriorSite.CellToWorld(new Vector2I(2, 0))) < 0.05f;
         PrimeFocusedOutputPorts(_mobileFactory);
         var heavyHandoffVerified = await RunHeavyBufferedHandoffSmoke();
-        var converterPortResolutionVerified = await RunPackerInserterPortResolutionSmoke();
+        var converterPortResolutionVerified = await RunPackerInserterPortResolutionSmoke()
+            && await RunPackerBeltPortResolutionSmoke();
         var firstDeliveredBaseline = GetScenarioDeliveryTotal();
         await ToSignal(GetTree().CreateTimer(8.0f), SceneTreeTimer.SignalName.Timeout);
         var firstDelivered = GetScenarioDeliveryTotal() - firstDeliveredBaseline;
@@ -642,14 +643,16 @@ public partial class MobileFactoryDemo
             new MobileFactoryInteriorPreset(
                 "smoke-packer-port-resolution",
                 "封包端口回归",
-                "验证机械臂可以通过空端口格把物品送入多格封包舱。",
-                "仓储经机械臂把小包送到封包端口。",
+                "验证机械臂即使对准被其他建筑占用的共享输入格，也能把物品送入多格封包舱。",
+                "仓储经机械臂把小包送到共享输入格，系统应回退到封包舱端口归属。",
                 global::System.Array.Empty<FactoryPlacementSpec>(),
                 global::System.Array.Empty<MobileFactoryAttachmentPlacementSpec>()));
 
-        var storageCell = new Vector2I(0, 2);
-        var inserterCell = new Vector2I(1, 2);
+        var storageCell = new Vector2I(0, 1);
+        var inserterCell = new Vector2I(1, 1);
+        var smelterCell = new Vector2I(2, 1);
         var packerCell = new Vector2I(3, 1);
+        var smelterConfigured = false;
         var configured = false;
         var recipeActive = false;
         var seededAll = false;
@@ -661,24 +664,37 @@ public partial class MobileFactoryDemo
         {
             var placedStorage = scratchFactory.PlaceInteriorStructure(BuildPrototypeKind.Storage, storageCell, FacingDirection.East);
             var placedInserter = scratchFactory.PlaceInteriorStructure(BuildPrototypeKind.Inserter, inserterCell, FacingDirection.East);
+            var placedSmelter = scratchFactory.PlaceInteriorStructure(BuildPrototypeKind.Smelter, smelterCell, FacingDirection.East);
             var placedPacker = scratchFactory.PlaceInteriorStructure(BuildPrototypeKind.CargoPacker, packerCell, FacingDirection.East);
             if (!placedStorage
                 || !placedInserter
+                || !placedSmelter
                 || !placedPacker
                 || !scratchFactory.TryGetInteriorStructure(storageCell, out var storageStructure)
                 || storageStructure is not StorageStructure storage
                 || !scratchFactory.TryGetInteriorStructure(inserterCell, out var inserterStructure)
                 || inserterStructure is not InserterStructure
+                || !scratchFactory.TryGetInteriorStructure(smelterCell, out var smelterStructure)
+                || smelterStructure is not SmelterStructure smelter
                 || !scratchFactory.TryGetInteriorStructure(packerCell, out var packerStructure)
                 || packerStructure is not CargoPackerStructure packer)
             {
+                if (HasFocusedSmokeTestFlag())
+                {
+                    GD.Print($"MOBILE_FACTORY_PACKER_PORT_SMOKE setup_failed storage={placedStorage} inserter={placedInserter} smelter={placedSmelter} packer={placedPacker}");
+                }
                 return false;
             }
 
+            smelterConfigured = smelter.TrySetDetailRecipe("iron-smelting");
             configured = packer.TrySetDetailRecipe("packed-iron-plate-standard");
             recipeActive = packer.GetDetailModel().RecipeSection?.ActiveRecipeId == "packed-iron-plate-standard";
-            if (!configured || !recipeActive)
+            if (!smelterConfigured || !configured || !recipeActive)
             {
+                if (HasFocusedSmokeTestFlag())
+                {
+                    GD.Print($"MOBILE_FACTORY_PACKER_PORT_SMOKE recipe_failed smelterConfigured={smelterConfigured} configured={configured} recipeActive={recipeActive}");
+                }
                 return false;
             }
 
@@ -687,6 +703,10 @@ public partial class MobileFactoryDemo
                     out var requiredItemKind,
                     out var requiredUnits))
             {
+                if (HasFocusedSmokeTestFlag())
+                {
+                    GD.Print("MOBILE_FACTORY_PACKER_PORT_SMOKE requirement_failed=true");
+                }
                 return false;
             }
 
@@ -701,6 +721,10 @@ public partial class MobileFactoryDemo
 
             if (!seededAll)
             {
+                if (HasFocusedSmokeTestFlag())
+                {
+                    GD.Print($"MOBILE_FACTORY_PACKER_PORT_SMOKE seed_failed buffered={storage.BufferedCount}");
+                }
                 return false;
             }
 
@@ -736,6 +760,7 @@ public partial class MobileFactoryDemo
             {
                 GD.Print(
                     $"MOBILE_FACTORY_PACKER_PORT_SMOKE " +
+                    $"smelterConfigured={smelterConfigured} " +
                     $"configured={configured} " +
                     $"recipeActive={recipeActive} " +
                     $"seeded={seededAll} " +
@@ -745,7 +770,8 @@ public partial class MobileFactoryDemo
                     $"inspection={string.Join(" || ", packer.GetInspectionLines())}");
             }
 
-            return configured
+            return smelterConfigured
+                && configured
                 && recipeActive
                 && seededAll
                 && storageDrained
@@ -769,6 +795,162 @@ public partial class MobileFactoryDemo
             if (!removedAll && HasFocusedSmokeTestFlag())
             {
                 GD.Print("MOBILE_FACTORY_PACKER_PORT_SMOKE cleanup_failed=true");
+            }
+        }
+    }
+
+    private async Task<bool> RunPackerBeltPortResolutionSmoke()
+    {
+        if (_simulation is null || _structureRoot is null)
+        {
+            return false;
+        }
+
+        var scratchRoot = new Node3D
+        {
+            Name = "PackerBeltPortResolutionSmokeRoot",
+            Visible = false
+        };
+        _structureRoot.AddChild(scratchRoot);
+
+        var scratchFactory = new MobileFactoryInstance(
+            "smoke-packer-belt-port-resolution",
+            scratchRoot,
+            _simulation,
+            MobileFactoryScenarioLibrary.CreateFocusedDemoProfile(),
+            new MobileFactoryInteriorPreset(
+                "smoke-packer-belt-port-resolution",
+                "封包供料轨回归",
+                "验证供料轨即使对准被其他建筑占用的共享输入格，也能把物品送入多格封包舱。",
+                "供料轨把内部小包送到共享输入格，系统应回退到封包舱端口归属。",
+                global::System.Array.Empty<FactoryPlacementSpec>(),
+                global::System.Array.Empty<MobileFactoryAttachmentPlacementSpec>()));
+
+        var beltCell = new Vector2I(1, 1);
+        var smelterCell = new Vector2I(2, 1);
+        var packerCell = new Vector2I(3, 1);
+        var smelterConfigured = false;
+        var configured = false;
+        var recipeActive = false;
+        var beltInjected = false;
+        var beltDrained = false;
+        var packerAcceptedInput = false;
+        var removedAll = true;
+
+        try
+        {
+            var placedBelt = scratchFactory.PlaceInteriorStructure(BuildPrototypeKind.Belt, beltCell, FacingDirection.East);
+            var placedSmelter = scratchFactory.PlaceInteriorStructure(BuildPrototypeKind.Smelter, smelterCell, FacingDirection.East);
+            var placedPacker = scratchFactory.PlaceInteriorStructure(BuildPrototypeKind.CargoPacker, packerCell, FacingDirection.East);
+            if (!placedBelt
+                || !placedSmelter
+                || !placedPacker
+                || !scratchFactory.TryGetInteriorStructure(beltCell, out var beltStructure)
+                || beltStructure is not BeltStructure belt
+                || !scratchFactory.TryGetInteriorStructure(smelterCell, out var smelterStructure)
+                || smelterStructure is not SmelterStructure smelter
+                || !scratchFactory.TryGetInteriorStructure(packerCell, out var packerStructure)
+                || packerStructure is not CargoPackerStructure packer)
+            {
+                if (HasFocusedSmokeTestFlag())
+                {
+                    GD.Print($"MOBILE_FACTORY_PACKER_BELT_PORT_SMOKE setup_failed belt={placedBelt} smelter={placedSmelter} packer={placedPacker}");
+                }
+                return false;
+            }
+
+            smelterConfigured = smelter.TrySetDetailRecipe("iron-smelting");
+            configured = packer.TrySetDetailRecipe("packed-iron-plate-standard");
+            recipeActive = packer.GetDetailModel().RecipeSection?.ActiveRecipeId == "packed-iron-plate-standard";
+            if (!smelterConfigured || !configured || !recipeActive)
+            {
+                if (HasFocusedSmokeTestFlag())
+                {
+                    GD.Print($"MOBILE_FACTORY_PACKER_BELT_PORT_SMOKE recipe_failed smelterConfigured={smelterConfigured} configured={configured} recipeActive={recipeActive}");
+                }
+                return false;
+            }
+
+            beltInjected = belt.TryAcceptExternalHandoff(
+                _simulation.CreateItem(scratchFactory.InteriorSite, BuildPrototypeKind.Smelter, FactoryItemKind.IronPlate, FactoryCargoForm.InteriorFeed),
+                belt.Cell + Vector2I.Left,
+                _simulation);
+            if (!beltInjected)
+            {
+                if (HasFocusedSmokeTestFlag())
+                {
+                    GD.Print("MOBILE_FACTORY_PACKER_BELT_PORT_SMOKE inject_failed=true");
+                }
+                return false;
+            }
+
+            var remaining = 4.0f;
+            while (remaining > 0.0f)
+            {
+                beltDrained |= belt.TransitItemCount == 0;
+                packerAcceptedInput |= packer.HasProcessingBundle || packer.HasPackedBundleBuffered;
+
+                if (!packerAcceptedInput)
+                {
+                    foreach (var line in packer.GetInspectionLines())
+                    {
+                        if (line.Contains("累计装箱：", global::System.StringComparison.Ordinal)
+                            && !line.EndsWith("/0", global::System.StringComparison.Ordinal))
+                        {
+                            packerAcceptedInput = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (beltDrained && packerAcceptedInput)
+                {
+                    break;
+                }
+
+                await ToSignal(GetTree().CreateTimer(0.2f), SceneTreeTimer.SignalName.Timeout);
+                remaining -= 0.2f;
+            }
+
+            if ((!beltDrained || !packerAcceptedInput) && HasFocusedSmokeTestFlag())
+            {
+                GD.Print(
+                    $"MOBILE_FACTORY_PACKER_BELT_PORT_SMOKE " +
+                    $"smelterConfigured={smelterConfigured} " +
+                    $"configured={configured} " +
+                    $"recipeActive={recipeActive} " +
+                    $"beltInjected={beltInjected} " +
+                    $"beltTransit={belt.TransitItemCount} " +
+                    $"packerProcessing={packer.HasProcessingBundle} " +
+                    $"packerBuffered={packer.HasPackedBundleBuffered} " +
+                    $"inspection={string.Join(" || ", packer.GetInspectionLines())}");
+            }
+
+            return smelterConfigured
+                && configured
+                && recipeActive
+                && beltInjected
+                && beltDrained
+                && packerAcceptedInput;
+        }
+        finally
+        {
+            var cellsToRemove = new List<Vector2I>();
+            foreach (var structure in scratchFactory.InteriorSite.GetStructures())
+            {
+                cellsToRemove.Add(structure.Cell);
+            }
+
+            for (var index = 0; index < cellsToRemove.Count; index++)
+            {
+                removedAll &= scratchFactory.RemoveInteriorStructure(cellsToRemove[index]);
+            }
+
+            scratchRoot.QueueFree();
+
+            if (!removedAll && HasFocusedSmokeTestFlag())
+            {
+                GD.Print("MOBILE_FACTORY_PACKER_BELT_PORT_SMOKE cleanup_failed=true");
             }
         }
     }
