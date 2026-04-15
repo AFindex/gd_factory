@@ -626,7 +626,17 @@ public partial class MobileFactoryDemo
             FactoryCargoForm.InteriorFeed);
 
         var fixedAcceptsGear = FactoryBundleCatalog.CanAcceptIntoTemplate(fixedTemplate, FactoryItemKind.Gear, new Dictionary<FactoryItemKind, int>(), out _);
+        var fixedAcceptsFinalGear = FactoryBundleCatalog.CanAcceptIntoTemplate(
+            fixedTemplate,
+            FactoryItemKind.Gear,
+            new Dictionary<FactoryItemKind, int> { [FactoryItemKind.Gear] = 3 },
+            out _);
         var fixedRejectsWrongItem = !FactoryBundleCatalog.CanAcceptIntoTemplate(fixedTemplate, FactoryItemKind.IronPlate, new Dictionary<FactoryItemKind, int>(), out _);
+        var fixedRejectsOverflowGear = !FactoryBundleCatalog.CanAcceptIntoTemplate(
+            fixedTemplate,
+            FactoryItemKind.Gear,
+            new Dictionary<FactoryItemKind, int> { [FactoryItemKind.Gear] = 4 },
+            out _);
 
         var categoryCounts = new Dictionary<FactoryItemKind, int>
         {
@@ -678,7 +688,9 @@ public partial class MobileFactoryDemo
         }
 
         return fixedAcceptsGear
+            && fixedAcceptsFinalGear
             && fixedRejectsWrongItem
+            && fixedRejectsOverflowGear
             && categoryRejectsSupport
             && categorySatisfied
             && mixedRejectsFreeMix

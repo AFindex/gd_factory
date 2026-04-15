@@ -1307,8 +1307,8 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
             return false;
         }
 
-        var projected = BuildProjectedCounts(item.ItemKind);
-        return FactoryBundleCatalog.CanAcceptIntoTemplate(template, item.ItemKind, projected, out _);
+        var acceptanceCounts = BuildAcceptanceCounts();
+        return FactoryBundleCatalog.CanAcceptIntoTemplate(template, item.ItemKind, acceptanceCounts, out _);
     }
 
     protected override FactoryItem? GetDisplayedProcessingItem()
@@ -1531,16 +1531,15 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
         return FactoryBundleCatalog.TryResolveAutoPackTemplate(item, out template);
     }
 
-    private Dictionary<FactoryItemKind, int> BuildProjectedCounts(FactoryItemKind incomingItemKind)
+    private Dictionary<FactoryItemKind, int> BuildAcceptanceCounts()
     {
-        var projected = new Dictionary<FactoryItemKind, int>(_packedCounts);
+        var counts = new Dictionary<FactoryItemKind, int>(_packedCounts);
         if (TryPeekInput(out var queued) && queued is not null)
         {
-            projected[queued.ItemKind] = projected.TryGetValue(queued.ItemKind, out var queuedCount) ? queuedCount + 1 : 1;
+            counts[queued.ItemKind] = counts.TryGetValue(queued.ItemKind, out var queuedCount) ? queuedCount + 1 : 1;
         }
 
-        projected[incomingItemKind] = projected.TryGetValue(incomingItemKind, out var existing) ? existing + 1 : 1;
-        return projected;
+        return counts;
     }
 
     private FactoryRecipeSectionModel BuildRecipeSection()
