@@ -145,33 +145,12 @@ internal static class FactoryMapValidationTopologyHelper
 
     public static IReadOnlyList<Vector2I> GetInputCells(FactoryStructure structure)
     {
-        return structure.Kind switch
-        {
-            BuildPrototypeKind.InputPort => System.Array.Empty<Vector2I>(),
-            BuildPrototypeKind.MiningInputPort => System.Array.Empty<Vector2I>(),
-            BuildPrototypeKind.OutputPort => new[]
-            {
-                structure.Cell - FactoryDirection.ToCellOffset(structure.Facing)
-            },
-            _ => FactoryTransportTopology.GetInputCells(structure)
-        };
+        return structure.GetResolvedLogisticsContract().InputCells;
     }
 
     public static IReadOnlyList<Vector2I> GetOutputCells(FactoryStructure structure)
     {
-        return structure.Kind switch
-        {
-            BuildPrototypeKind.InputPort => new[]
-            {
-                structure.Cell - FactoryDirection.ToCellOffset(structure.Facing)
-            },
-            BuildPrototypeKind.MiningInputPort => new[]
-            {
-                structure.Cell - FactoryDirection.ToCellOffset(structure.Facing)
-            },
-            BuildPrototypeKind.OutputPort => System.Array.Empty<Vector2I>(),
-            _ => FactoryTransportTopology.GetOutputCells(structure)
-        };
+        return structure.GetResolvedLogisticsContract().OutputCells;
     }
 
     public static bool TryGetInputProvider(FactoryStructure receiver, Vector2I inputCell, out FactoryStructure? provider)
@@ -189,10 +168,10 @@ internal static class FactoryMapValidationTopologyHelper
                 continue;
             }
 
-            var candidateOutputCells = GetOutputCells(candidate);
-            for (var outputIndex = 0; outputIndex < candidateOutputCells.Count; outputIndex++)
+            var candidateContract = candidate.GetResolvedLogisticsContract();
+            for (var outputIndex = 0; outputIndex < candidateContract.OutputAnchors.Count; outputIndex++)
             {
-                if (candidateOutputCells[outputIndex] != inputCell)
+                if (candidateContract.OutputAnchors[outputIndex].Cell != inputCell)
                 {
                     continue;
                 }
@@ -209,7 +188,8 @@ internal static class FactoryMapValidationTopologyHelper
     {
         receiver = null;
         var seen = new HashSet<ulong>();
-        var transferSourceCell = source.GetTransferOutputCell(outputCell);
+        var sourceContract = source.GetResolvedLogisticsContract();
+        var transferSourceCell = sourceContract.ResolveDispatchSourceCell(outputCell, source.Cell);
         for (var neighborIndex = 0; neighborIndex < CandidateNeighborOffsets.Count; neighborIndex++)
         {
             var candidateCell = outputCell + CandidateNeighborOffsets[neighborIndex];
@@ -221,11 +201,12 @@ internal static class FactoryMapValidationTopologyHelper
                 continue;
             }
 
-            var candidateInputCells = GetInputCells(candidate);
-            for (var inputIndex = 0; inputIndex < candidateInputCells.Count; inputIndex++)
+            var candidateContract = candidate.GetResolvedLogisticsContract();
+            for (var inputIndex = 0; inputIndex < candidateContract.InputAnchors.Count; inputIndex++)
             {
-                if (candidateInputCells[inputIndex] != transferSourceCell
-                    && candidateInputCells[inputIndex] != outputCell)
+                var inputAnchorCell = candidateContract.InputAnchors[inputIndex].Cell;
+                if (inputAnchorCell != transferSourceCell
+                    && inputAnchorCell != outputCell)
                 {
                     continue;
                 }
@@ -439,11 +420,12 @@ public static partial class FactoryMapValidationService
             context.MapPath,
             structure.Kind,
             structure.Cell));
+        var contract = structure.GetResolvedLogisticsContract();
         diagnostics.Add(new FactoryMapValidationDiagnostic(
             context.TargetId,
             FactoryMapValidationSeverity.Info,
             "focus",
-            $"Occupied cells: {JoinCells(structure.GetOccupiedCells())}. Inputs: {JoinCells(FactoryTransportTopology.GetInputCells(structure))}. Outputs: {JoinCells(FactoryTransportTopology.GetOutputCells(structure))}.",
+            $"Occupied cells: {JoinCells(contract.OccupiedCells)}. Inputs: {JoinCells(contract.InputCells)}. Outputs: {JoinCells(contract.OutputCells)}.",
             context.MapPath,
             structure.Kind,
             structure.Cell));

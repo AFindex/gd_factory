@@ -59,23 +59,9 @@ public static class FactoryLogisticsPreview
             return;
         }
 
-        var occupiedCells = ResolveOccupiedCells(previewKind, referenceCell, facing);
-        AppendMarkers(
-            markers,
-            seenCells,
-            GetPreviewInputCells(previewKind, referenceCell, facing),
-            occupiedCells,
-            isInput: true,
-            highlightAll: true,
-            referenceCell);
-        AppendMarkers(
-            markers,
-            seenCells,
-            GetPreviewOutputCells(previewKind, referenceCell, facing),
-            occupiedCells,
-            isInput: false,
-            highlightAll: true,
-            referenceCell);
+        var contract = FactoryStructureLogisticsContractResolver.Resolve(previewKind, referenceCell, facing);
+        AppendMarkers(markers, seenCells, contract.InputAnchors, highlightAll: true, referenceCell);
+        AppendMarkers(markers, seenCells, contract.OutputAnchors, highlightAll: true, referenceCell);
     }
 
     private static void AppendVisibleStructurePortMarkers(
@@ -97,16 +83,16 @@ public static class FactoryLogisticsPreview
                 continue;
             }
 
-            var inputCells = GetContextualInputCells(structure);
-            var outputCells = GetContextualOutputCells(structure);
-            if (inputCells.Count <= 0 && outputCells.Count <= 0)
+            var contract = structure.GetResolvedLogisticsContract();
+            var inputAnchors = GetContextualInputAnchors(structure, contract);
+            var outputAnchors = GetContextualOutputAnchors(structure, contract);
+            if (inputAnchors.Count <= 0 && outputAnchors.Count <= 0)
             {
                 continue;
             }
 
-            var occupiedCells = ResolveOccupiedCells(structure.Kind, structure.Cell, structure.Facing);
-            AppendMarkers(markers, seenCells, inputCells, occupiedCells, isInput: true, highlightAll: false, referenceCell);
-            AppendMarkers(markers, seenCells, outputCells, occupiedCells, isInput: false, highlightAll: false, referenceCell);
+            AppendMarkers(markers, seenCells, inputAnchors, highlightAll: false, referenceCell);
+            AppendMarkers(markers, seenCells, outputAnchors, highlightAll: false, referenceCell);
         }
     }
 
@@ -137,37 +123,36 @@ public static class FactoryLogisticsPreview
     private static void AppendMarkers(
         List<FactoryPortPreviewMarker> markers,
         HashSet<(Vector2I, bool)> seenCells,
-        IReadOnlyList<Vector2I> cells,
-        IReadOnlyList<Vector2I> occupiedCells,
-        bool isInput,
+        IReadOnlyList<FactoryStructureLogisticsAnchor> anchors,
         bool highlightAll,
         Vector2I referenceCell)
     {
-        for (var index = 0; index < cells.Count; index++)
+        for (var index = 0; index < anchors.Count; index++)
         {
-            var markerKey = (cells[index], isInput);
+            var markerKey = (anchors[index].Cell, anchors[index].IsInput);
             if (!seenCells.Add(markerKey))
             {
                 continue;
             }
 
             markers.Add(new FactoryPortPreviewMarker(
-                cells[index],
-                ResolvePortFacing(cells[index], occupiedCells, isInput),
-                isInput,
-                highlightAll || cells[index] == referenceCell));
+                anchors[index].Cell,
+                anchors[index].Facing,
+                anchors[index].IsInput,
+                highlightAll || anchors[index].Cell == referenceCell));
         }
     }
 
     private static bool ShouldShowPreviewPortHints(BuildPrototypeKind kind)
     {
-        if (kind is BuildPrototypeKind.CargoUnpacker or BuildPrototypeKind.CargoPacker)
+        if (kind == BuildPrototypeKind.Belt)
         {
-            return true;
+            return false;
         }
 
-        var inputCount = GetPreviewInputCells(kind, Vector2I.Zero, FacingDirection.East).Count;
-        var outputCount = GetPreviewOutputCells(kind, Vector2I.Zero, FacingDirection.East).Count;
+        var contract = FactoryStructureLogisticsContractResolver.Resolve(kind, Vector2I.Zero, FacingDirection.East);
+        var inputCount = contract.InputAnchors.Count;
+        var outputCount = contract.OutputAnchors.Count;
         return inputCount > 1 || outputCount > 1;
     }
 
@@ -182,140 +167,19 @@ public static class FactoryLogisticsPreview
             || kind == BuildPrototypeKind.Bridge;
     }
 
-    private static List<Vector2I> ResolveOccupiedCells(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
+    private static IReadOnlyList<FactoryStructureLogisticsAnchor> GetContextualInputAnchors(
+        FactoryStructure structure,
+        ResolvedFactoryStructureLogisticsContract contract)
     {
-        var occupiedCells = new List<Vector2I>();
-        foreach (var occupiedCell in FactoryStructureFactory.GetFootprint(kind).ResolveOccupiedCells(cell, facing))
-        {
-            occupiedCells.Add(occupiedCell);
-        }
-
-        return occupiedCells;
-    }
-
-    private static IReadOnlyList<Vector2I> GetPreviewInputCells(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
-    {
-        if (kind == BuildPrototypeKind.CargoUnpacker)
-        {
-            return new[] { FactoryStructureFactory.GetFootprint(kind).ResolveInputCell(cell, facing) };
-        }
-
-        return kind == BuildPrototypeKind.Belt
-            ? System.Array.Empty<Vector2I>()
-            : FactoryTransportTopology.GetInputCells(kind, cell, facing);
-    }
-
-    private static IReadOnlyList<Vector2I> GetPreviewOutputCells(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing)
-    {
-        if (kind is BuildPrototypeKind.CargoUnpacker or BuildPrototypeKind.CargoPacker)
-        {
-            return new[] { FactoryStructureFactory.GetFootprint(kind).ResolveOutputCell(cell, facing) };
-        }
-
-        return FactoryTransportTopology.GetOutputCells(kind, cell, facing);
-    }
-
-    private static IReadOnlyList<Vector2I> GetContextualInputCells(FactoryStructure structure)
-    {
-        if (structure.Kind == BuildPrototypeKind.CargoUnpacker)
-        {
-            return new[] { structure.GetInputCell() };
-        }
-
         return structure.Kind == BuildPrototypeKind.Belt
-            ? System.Array.Empty<Vector2I>()
-            : FactoryTransportTopology.GetInputCells(structure);
+            ? System.Array.Empty<FactoryStructureLogisticsAnchor>()
+            : contract.InputAnchors;
     }
 
-    private static IReadOnlyList<Vector2I> GetContextualOutputCells(FactoryStructure structure)
+    private static IReadOnlyList<FactoryStructureLogisticsAnchor> GetContextualOutputAnchors(
+        FactoryStructure structure,
+        ResolvedFactoryStructureLogisticsContract contract)
     {
-        if (structure.Kind is BuildPrototypeKind.CargoUnpacker or BuildPrototypeKind.CargoPacker)
-        {
-            return new[] { structure.GetOutputCell() };
-        }
-
-        return FactoryTransportTopology.GetOutputCells(structure);
-    }
-
-    private static FacingDirection ResolvePortFacing(Vector2I portCell, IReadOnlyList<Vector2I> occupiedCells, bool isInput)
-    {
-        if (ContainsCell(occupiedCells, portCell))
-        {
-            return ResolveFacingFromOccupiedPort(portCell, occupiedCells, isInput);
-        }
-
-        for (var index = 0; index < occupiedCells.Count; index++)
-        {
-            var occupiedCell = occupiedCells[index];
-            if (IsOrthogonallyAdjacent(portCell, occupiedCell))
-            {
-                return ResolveFlowFacing(portCell, occupiedCell, isInput);
-            }
-        }
-
-        return occupiedCells.Count > 0
-            ? ResolveFlowFacing(portCell, occupiedCells[0], isInput)
-            : (isInput ? FacingDirection.West : FacingDirection.East);
-    }
-
-    private static FacingDirection ResolveFacingFromOccupiedPort(
-        Vector2I portCell,
-        IReadOnlyList<Vector2I> occupiedCells,
-        bool isInput)
-    {
-        var center = Vector2.Zero;
-        for (var index = 0; index < occupiedCells.Count; index++)
-        {
-            center += new Vector2(occupiedCells[index].X, occupiedCells[index].Y);
-        }
-
-        center /= occupiedCells.Count;
-        var delta = new Vector2(portCell.X, portCell.Y) - center;
-        if (delta.LengthSquared() <= 0.0001f)
-        {
-            return isInput ? FacingDirection.West : FacingDirection.East;
-        }
-
-        if (Mathf.Abs(delta.X) >= Mathf.Abs(delta.Y))
-        {
-            return delta.X >= 0.0f ? FacingDirection.East : FacingDirection.West;
-        }
-
-        return delta.Y >= 0.0f ? FacingDirection.South : FacingDirection.North;
-    }
-
-    private static FacingDirection ResolveFlowFacing(Vector2I portCell, Vector2I occupiedCell, bool isInput)
-    {
-        var delta = occupiedCell - portCell;
-        if (!isInput)
-        {
-            delta = -delta;
-        }
-
-        if (Mathf.Abs(delta.X) >= Mathf.Abs(delta.Y))
-        {
-            return delta.X >= 0 ? FacingDirection.East : FacingDirection.West;
-        }
-
-        return delta.Y >= 0 ? FacingDirection.South : FacingDirection.North;
-    }
-
-    private static bool IsOrthogonallyAdjacent(Vector2I a, Vector2I b)
-    {
-        var delta = a - b;
-        return Mathf.Abs(delta.X) + Mathf.Abs(delta.Y) == 1;
-    }
-
-    private static bool ContainsCell(IReadOnlyList<Vector2I> cells, Vector2I targetCell)
-    {
-        for (var index = 0; index < cells.Count; index++)
-        {
-            if (cells[index] == targetCell)
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return contract.OutputAnchors;
     }
 }

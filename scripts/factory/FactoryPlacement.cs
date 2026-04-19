@@ -29,30 +29,24 @@ public static class FactoryPlacement
         IReadOnlyDictionary<string, string>? configuration,
         string? mapRecipeId = null)
     {
-        var footprint = FactoryStructureFactory.GetFootprint(kind, configuration, mapRecipeId);
-        var cells = new List<Vector2I>();
-        foreach (var cell in footprint.ResolveOccupiedCells(anchorCell, facing))
-        {
-            cells.Add(cell);
-        }
-
-        return cells;
+        return FactoryStructureLogisticsContractResolver.Resolve(kind, anchorCell, facing, configuration, mapRecipeId).OccupiedCells;
     }
 
     public static Vector3 GetPreviewCenter(IFactorySite site, BuildPrototypeKind kind, Vector2I anchorCell, FacingDirection facing)
     {
         var anchorWorld = site.CellToWorld(anchorCell);
-        var centerOffset = FactoryStructureFactory.GetFootprint(kind).GetWorldCenterOffset(site.CellSize, facing);
+        var contract = FactoryStructureLogisticsContractResolver.Resolve(kind, anchorCell, facing);
+        var centerOffset = contract.GetWorldCenterOffset(site.CellSize);
         return anchorWorld + centerOffset.Rotated(Vector3.Up, site.WorldRotationRadians);
     }
 
     public static Vector2 GetPreviewSize(IFactorySite site, BuildPrototypeKind kind, FacingDirection facing)
     {
-        return FactoryStructureFactory.GetFootprint(kind).GetPreviewSize(site.CellSize, facing);
+        return FactoryStructureLogisticsContractResolver.Resolve(kind, Vector2I.Zero, facing).GetPreviewSize(site.CellSize);
     }
 
     public static Vector2 GetPreviewBaseSize(IFactorySite site, BuildPrototypeKind kind)
     {
-        return FactoryStructureFactory.GetFootprint(kind).GetPreviewSize(site.CellSize, FacingDirection.East);
+        return FactoryStructureLogisticsContractResolver.Resolve(kind, Vector2I.Zero, FacingDirection.East).GetPreviewSize(site.CellSize);
     }
 }

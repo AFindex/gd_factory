@@ -359,7 +359,7 @@ public abstract partial class FactoryCargoConverterStructure : FactoryStructure,
     }
 }
 
-public partial class CargoUnpackerStructure : FactoryCargoConverterStructure
+public partial class CargoUnpackerStructure : FactoryCargoConverterStructure, IFactoryHeavyBundleReceiver
 {
     private enum UnpackerOperationStage
     {

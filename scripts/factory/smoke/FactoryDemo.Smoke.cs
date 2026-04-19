@@ -43,6 +43,7 @@ public partial class FactoryDemo
         var removed = _grid.CanPlace(probeCell);
         var multiCellPlacementVerified = RunMultiCellPlacementSmoke();
         var assemblerPortPreviewVerified = RunAssemblerPortPreviewSmoke();
+        var logisticsContractVerified = RunStructureLogisticsContractSmoke();
         var beltDragAutoFacingVerified = RunBeltDragAutoFacingSmoke();
         var beltExistingJoinAutoFacingVerified = RunBeltExistingJoinAutoFacingSmoke();
         var previewArrowReady = _previewArrow is not null && _previewArrow.GetChildCount() >= 3;
@@ -94,18 +95,19 @@ public partial class FactoryDemo
             || !mapFormatVerified
             || !combatVerified
             || !multiCellPlacementVerified
+            || !logisticsContractVerified
             || !beltDragAutoFacingVerified
             || !beltExistingJoinAutoFacingVerified
             || !assemblerPortPreviewVerified
             || !previewArrowReady
             || !playerInteractionVerified)
         {
-              GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} beltDragAutoFacing={beltDragAutoFacingVerified} beltExistingJoinAutoFacing={beltExistingJoinAutoFacingVerified} assemblerPortPreview={assemblerPortPreviewVerified} playerInteraction={playerInteractionVerified} structures={initialStructureCount} debugWorldSupport={debugWorldSupportVerified} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} miningBlueprint={miningBlueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} transportRenderTelemetry={transportRenderTelemetryVerified} transportRenderCulling={transportRenderCullingVerified} mapFormat={mapFormatVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
+              GD.PushError($"FACTORY_SMOKE_FAILED placed={placed} removed={removed} multiCell={multiCellPlacementVerified} logisticsContract={logisticsContractVerified} beltDragAutoFacing={beltDragAutoFacingVerified} beltExistingJoinAutoFacing={beltExistingJoinAutoFacingVerified} assemblerPortPreview={assemblerPortPreviewVerified} playerInteraction={playerInteractionVerified} structures={initialStructureCount} debugWorldSupport={debugWorldSupportVerified} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} profiler={(!string.IsNullOrWhiteSpace(profilerText))} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} miningBlueprint={miningBlueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} transportRenderTelemetry={transportRenderTelemetryVerified} transportRenderCulling={transportRenderCullingVerified} mapFormat={mapFormatVerified} combat={combatVerified} previewArrowReady={previewArrowReady}");
             GetTree().Quit(1);
             return;
         }
 
-          GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} debugWorldSupport={debugWorldSupportVerified} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} miningBlueprint={miningBlueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} transportRenderTelemetry={transportRenderTelemetryVerified} transportRenderCulling={transportRenderCullingVerified} mapFormat={mapFormatVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} beltDragAutoFacing={beltDragAutoFacingVerified} beltExistingJoinAutoFacing={beltExistingJoinAutoFacingVerified} assemblerPortPreview={assemblerPortPreviewVerified} previewArrowReady={previewArrowReady} playerInteraction={playerInteractionVerified}");
+          GD.Print($"FACTORY_SMOKE_OK structures={initialStructureCount} debugWorldSupport={debugWorldSupportVerified} poweredFactory={poweredFactoryVerified} delivered={sinkStats.deliveredTotal} splitterFallback={splitterFallbackRecovered} midspanMerge={midspanMergeRecovered} threeWayMerger={threeWayMergerRecovered} bridgeLane={bridgeLaneRecovered} storageFlow={storageFlowVerified} inspection={inspectionVerified} detailWindow={detailWindowVerified} blueprint={blueprintVerified} miningBlueprint={miningBlueprintVerified} workspace={workspaceVerified} itemVisualProfiles={itemVisualProfilesVerified} structureVisualProfiles={structureVisualProfilesVerified} transportRenderTelemetry={transportRenderTelemetryVerified} transportRenderCulling={transportRenderCullingVerified} mapFormat={mapFormatVerified} combat={combatVerified} multiCell={multiCellPlacementVerified} logisticsContract={logisticsContractVerified} beltDragAutoFacing={beltDragAutoFacingVerified} beltExistingJoinAutoFacing={beltExistingJoinAutoFacingVerified} assemblerPortPreview={assemblerPortPreviewVerified} previewArrowReady={previewArrowReady} playerInteraction={playerInteractionVerified}");
         GetTree().Quit();
     }
 
@@ -470,6 +472,79 @@ public partial class FactoryDemo
 
         EnterInteractionMode();
         return eastContractVerified && beltHintsVisible && southPreviewSizeVerified && nonBeltHintsHidden && mergerHintsVisible;
+    }
+
+    private bool RunStructureLogisticsContractSmoke()
+    {
+        if (_grid is null
+            || !_grid.TryGetStructure(new Vector2I(14, 2), out var assemblerStructure)
+            || assemblerStructure is not AssemblerStructure assembler)
+        {
+            return false;
+        }
+
+        var assemblerContract = assembler.GetResolvedLogisticsContract();
+        if (FactoryDemoSmokeSupport.TryDescribeContractDrift(_grid, assembler, out var assemblerDrift))
+        {
+            GD.Print($"FACTORY_LOGISTICS_CONTRACT_DRIFT {assemblerDrift}");
+        }
+        var assemblerRuntimeAligned =
+            FactoryDemoSmokeSupport.CellsMatch(assemblerContract.OccupiedCells, assembler.GetOccupiedCells())
+            && FactoryDemoSmokeSupport.CellsMatch(assemblerContract.InputCells, assembler.GetInputCells())
+            && FactoryDemoSmokeSupport.CellsMatch(assemblerContract.OutputCells, assembler.GetOutputCells());
+        var assemblerValidationAligned =
+            FactoryDemoSmokeSupport.CellsMatch(assemblerContract.InputCells, FactoryMapValidationTopologyHelper.GetInputCells(assembler))
+            && FactoryDemoSmokeSupport.CellsMatch(assemblerContract.OutputCells, FactoryMapValidationTopologyHelper.GetOutputCells(assembler));
+        var assemblerPreviewAligned = FactoryDemoSmokeSupport.MarkersMatchPreviewProjection(
+            assembler.Kind,
+            FactoryLogisticsPreview.CollectPortMarkers(_grid, assembler.Kind, assembler.Cell, assembler.Facing),
+            assemblerContract);
+        var assemblerCenterAligned = FactoryDemoSmokeSupport.Vector3ApproxEqual(
+            FactoryPlacement.GetPreviewCenter(_grid, assembler.Kind, assembler.Cell, assembler.Facing),
+            _grid.CellToWorld(assembler.Cell) + assemblerContract.GetWorldCenterOffset(_grid.CellSize).Rotated(Vector3.Up, _grid.WorldRotationRadians));
+        var assemblerSizeAligned = FactoryDemoSmokeSupport.Vector2ApproxEqual(
+            FactoryPlacement.GetPreviewSize(_grid, assembler.Kind, assembler.Facing),
+            assemblerContract.GetPreviewSize(_grid.CellSize));
+
+        var depotAnchor = new Vector2I(18, 18);
+        var placedDepot = PlaceStructure(BuildPrototypeKind.LargeStorageDepot, depotAnchor, FacingDirection.East) as LargeStorageDepotStructure;
+        if (placedDepot is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var depotContract = placedDepot.GetResolvedLogisticsContract();
+            if (FactoryDemoSmokeSupport.TryDescribeContractDrift(_grid, placedDepot, out var depotDrift))
+            {
+                GD.Print($"FACTORY_LOGISTICS_CONTRACT_DRIFT {depotDrift}");
+            }
+            var depotRuntimeAligned =
+                FactoryDemoSmokeSupport.CellsMatch(depotContract.OccupiedCells, placedDepot.GetOccupiedCells())
+                && FactoryDemoSmokeSupport.CellsMatch(depotContract.InputCells, placedDepot.GetInputCells())
+                && FactoryDemoSmokeSupport.CellsMatch(depotContract.OutputCells, placedDepot.GetOutputCells());
+            var depotValidationAligned =
+                FactoryDemoSmokeSupport.CellsMatch(depotContract.InputCells, FactoryMapValidationTopologyHelper.GetInputCells(placedDepot))
+                && FactoryDemoSmokeSupport.CellsMatch(depotContract.OutputCells, FactoryMapValidationTopologyHelper.GetOutputCells(placedDepot));
+            var depotPreviewAligned = FactoryDemoSmokeSupport.MarkersMatchPreviewProjection(
+                placedDepot.Kind,
+                FactoryLogisticsPreview.CollectPortMarkers(_grid, placedDepot.Kind, placedDepot.Cell, placedDepot.Facing),
+                depotContract);
+
+            return assemblerRuntimeAligned
+                && assemblerValidationAligned
+                && assemblerPreviewAligned
+                && assemblerCenterAligned
+                && assemblerSizeAligned
+                && depotRuntimeAligned
+                && depotValidationAligned
+                && depotPreviewAligned;
+        }
+        finally
+        {
+            RemoveStructure(depotAnchor);
+        }
     }
 
     private int CountVisiblePreviewPortHints()

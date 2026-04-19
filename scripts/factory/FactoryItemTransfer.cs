@@ -29,6 +29,77 @@ public interface IFactoryItemReceiver
     bool TryReceiveProvidedItem(FactoryItem item, Vector2I sourceCell, SimulationController simulation);
 }
 
+public interface IFactoryHeavyBundleReceiver
+{
+    bool CanAcceptHeavyBundle(FactoryItem item, Vector2I sourceCell, SimulationController simulation);
+    bool TryAcceptHeavyBundle(FactoryItem item, Vector2I sourceCell, SimulationController simulation);
+    bool TryAcceptHeavyBundle(FactoryItem item, Vector2I sourceCell, Vector3 sourceWorldPosition, SimulationController simulation);
+}
+
+internal static class FactoryItemTransferAdapter
+{
+    // Temporary compatibility bridge: runtime routing now resolves a shared handoff descriptor,
+    // but most provider/receiver interfaces still speak in legacy source/target cells.
+    public static FactoryItemHandoffDescriptor BuildHandoff(
+        FactoryStructure provider,
+        Vector2I providerDispatchCell,
+        FactoryStructurePortResolution receiverResolution,
+        Vector2I targetCell)
+    {
+        return new FactoryItemHandoffDescriptor(
+            provider,
+            receiverResolution.Structure,
+            targetCell,
+            providerDispatchCell,
+            receiverResolution.ResolveReceiverAcceptanceCell(targetCell),
+            receiverResolution.ResolvedFromContractEdge);
+    }
+
+    public static bool CanReceiveProvidedItem(
+        IFactoryItemReceiver receiver,
+        FactoryItem item,
+        FactoryItemHandoffDescriptor handoff,
+        SimulationController simulation)
+    {
+        return receiver.CanReceiveProvidedItem(item, ResolveLegacyReceiverSourceCell(handoff), simulation);
+    }
+
+    public static bool TryReceiveProvidedItem(
+        IFactoryItemReceiver receiver,
+        FactoryItem item,
+        FactoryItemHandoffDescriptor handoff,
+        SimulationController simulation)
+    {
+        return receiver.TryReceiveProvidedItem(item, ResolveLegacyReceiverSourceCell(handoff), simulation);
+    }
+
+    public static bool CanAcceptItem(
+        FactoryStructure receiver,
+        FactoryItem item,
+        FactoryItemHandoffDescriptor handoff,
+        SimulationController simulation)
+    {
+        return receiver.CanAcceptItem(item, ResolveLegacyReceiverSourceCell(handoff), simulation);
+    }
+
+    public static bool TryAcceptItem(
+        FactoryStructure receiver,
+        FactoryItem item,
+        FactoryItemHandoffDescriptor handoff,
+        SimulationController simulation)
+    {
+        return receiver.TryAcceptItem(item, ResolveLegacyReceiverSourceCell(handoff), simulation);
+    }
+
+    private static Vector2I ResolveLegacyReceiverSourceCell(FactoryItemHandoffDescriptor handoff)
+    {
+        // Once receivers accept FactoryItemHandoffDescriptor directly, this downgrade step can be removed.
+        return handoff.ReceiverResolvedFromContractEdge
+            ? handoff.ReceiverAcceptanceCell
+            : handoff.ProviderDispatchCell;
+    }
+}
+
 public interface IFactoryInspectable
 {
     string InspectionTitle { get; }

@@ -3,32 +3,38 @@ using System.Collections.Generic;
 
 internal readonly struct FactoryStructurePortResolution
 {
-    public FactoryStructurePortResolution(FactoryStructure structure, bool resolvedFromPortCell)
+    public FactoryStructurePortResolution(
+        FactoryStructure structure,
+        ResolvedFactoryStructureLogisticsContract contract,
+        bool resolvedFromContractEdge,
+        Vector2I resolvedCell,
+        FactoryStructureLogisticsAnchor? matchedAnchor = null)
     {
         Structure = structure;
-        ResolvedFromPortCell = resolvedFromPortCell;
+        Contract = contract;
+        ResolvedFromContractEdge = resolvedFromContractEdge;
+        ResolvedCell = resolvedCell;
+        MatchedAnchor = matchedAnchor;
     }
 
     public FactoryStructure Structure { get; }
-    public bool ResolvedFromPortCell { get; }
+    public ResolvedFactoryStructureLogisticsContract Contract { get; }
+    public bool ResolvedFromContractEdge { get; }
+    public Vector2I ResolvedCell { get; }
+    public FactoryStructureLogisticsAnchor? MatchedAnchor { get; }
 
-    public Vector2I ResolveEffectiveSourceCell(Vector2I sourceCell, Vector2I portCell)
+    public Vector2I ResolveReceiverAcceptanceCell(Vector2I fallbackCell)
     {
-        if (ResolvedFromPortCell)
-        {
-            return portCell;
-        }
+        return MatchedAnchor is FactoryStructureLogisticsAnchor matchedAnchor && matchedAnchor.IsInput
+            ? matchedAnchor.Cell
+            : fallbackCell;
+    }
 
-        var inputCells = Structure.GetInputCells();
-        for (var index = 0; index < inputCells.Count; index++)
-        {
-            if (inputCells[index] == portCell)
-            {
-                return portCell;
-            }
-        }
-
-        return sourceCell;
+    public Vector2I ResolveProviderDispatchCell(Vector2I fallbackCell)
+    {
+        return MatchedAnchor is FactoryStructureLogisticsAnchor matchedAnchor && !matchedAnchor.IsInput
+            ? matchedAnchor.DispatchSourceCell
+            : fallbackCell;
     }
 }
 
@@ -46,7 +52,16 @@ internal static class FactoryStructurePortResolver
     {
         if (site.TryGetStructure(providerCell, out var structure) && structure is not null)
         {
-            resolution = new FactoryStructurePortResolution(structure, resolvedFromPortCell: false);
+            var contract = structure.GetResolvedLogisticsContract();
+            var matchedAnchor = contract.TryGetOutputAnchor(providerCell, out var outputAnchor)
+                ? outputAnchor
+                : default(FactoryStructureLogisticsAnchor?);
+            resolution = new FactoryStructurePortResolution(
+                structure,
+                contract,
+                resolvedFromContractEdge: matchedAnchor.HasValue,
+                providerCell,
+                matchedAnchor);
             return true;
         }
 
@@ -63,7 +78,16 @@ internal static class FactoryStructurePortResolver
     {
         if (site.TryGetStructure(targetCell, out var structure) && structure is not null)
         {
-            resolution = new FactoryStructurePortResolution(structure, resolvedFromPortCell: false);
+            var contract = structure.GetResolvedLogisticsContract();
+            var matchedAnchor = contract.TryGetInputAnchor(targetCell, out var inputAnchor)
+                ? inputAnchor
+                : default(FactoryStructureLogisticsAnchor?);
+            resolution = new FactoryStructurePortResolution(
+                structure,
+                contract,
+                resolvedFromContractEdge: matchedAnchor.HasValue,
+                targetCell,
+                matchedAnchor);
             return true;
         }
 
@@ -96,15 +120,21 @@ internal static class FactoryStructurePortResolver
                 continue;
             }
 
-            var portCells = useInputPorts ? candidate.GetInputCells() : candidate.GetOutputCells();
-            for (var portIndex = 0; portIndex < portCells.Count; portIndex++)
+            var contract = candidate.GetResolvedLogisticsContract();
+            var anchors = useInputPorts ? contract.InputAnchors : contract.OutputAnchors;
+            for (var anchorIndex = 0; anchorIndex < anchors.Count; anchorIndex++)
             {
-                if (portCells[portIndex] != portCell)
+                if (anchors[anchorIndex].Cell != portCell)
                 {
                     continue;
                 }
 
-                resolution = new FactoryStructurePortResolution(candidate, resolvedFromPortCell: true);
+                resolution = new FactoryStructurePortResolution(
+                    candidate,
+                    contract,
+                    resolvedFromContractEdge: true,
+                    portCell,
+                    anchors[anchorIndex]);
                 return true;
             }
         }

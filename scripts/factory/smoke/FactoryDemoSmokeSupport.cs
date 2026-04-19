@@ -2,10 +2,142 @@ using Godot;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text;
 
 public static class FactoryDemoSmokeSupport
 {
+    public static bool CellsMatch(IEnumerable<Vector2I> expected, IEnumerable<Vector2I> actual)
+    {
+        return new HashSet<Vector2I>(expected).SetEquals(actual);
+    }
+
+    public static bool MarkersMatchContract(
+        IReadOnlyList<FactoryPortPreviewMarker> markers,
+        ResolvedFactoryStructureLogisticsContract contract)
+    {
+        var markerSet = new HashSet<string>();
+        for (var index = 0; index < markers.Count; index++)
+        {
+            markerSet.Add($"{markers[index].Cell.X},{markers[index].Cell.Y},{markers[index].Facing},{markers[index].IsInput}");
+        }
+
+        var contractSet = new HashSet<string>();
+        for (var index = 0; index < contract.InputAnchors.Count; index++)
+        {
+            var anchor = contract.InputAnchors[index];
+            contractSet.Add($"{anchor.Cell.X},{anchor.Cell.Y},{anchor.Facing},{anchor.IsInput}");
+        }
+
+        for (var index = 0; index < contract.OutputAnchors.Count; index++)
+        {
+            var anchor = contract.OutputAnchors[index];
+            contractSet.Add($"{anchor.Cell.X},{anchor.Cell.Y},{anchor.Facing},{anchor.IsInput}");
+        }
+
+        return markerSet.SetEquals(contractSet);
+    }
+
+    public static bool MarkersMatchPreviewProjection(
+        BuildPrototypeKind kind,
+        IReadOnlyList<FactoryPortPreviewMarker> markers,
+        ResolvedFactoryStructureLogisticsContract contract)
+    {
+        if (!FactoryLogisticsPreview.ShouldShowContextualPortHints(kind))
+        {
+            return markers.Count == 0;
+        }
+
+        return MarkersMatchContract(markers, contract);
+    }
+
+    public static bool TryDescribeContractDrift(
+        IFactorySite site,
+        FactoryStructure structure,
+        out string description)
+    {
+        var contract = structure.GetResolvedLogisticsContract();
+        var previewMarkers = FactoryLogisticsPreview.CollectPortMarkers(site, structure.Kind, structure.Cell, structure.Facing);
+        var mismatches = new List<string>();
+
+        AppendMismatch(mismatches, "occupied", contract.OccupiedCells, structure.GetOccupiedCells());
+        AppendMismatch(mismatches, "runtime-input", contract.InputCells, structure.GetInputCells());
+        AppendMismatch(mismatches, "runtime-output", contract.OutputCells, structure.GetOutputCells());
+        AppendMismatch(mismatches, "validation-input", contract.InputCells, FactoryMapValidationTopologyHelper.GetInputCells(structure));
+        AppendMismatch(mismatches, "validation-output", contract.OutputCells, FactoryMapValidationTopologyHelper.GetOutputCells(structure));
+
+        if (!MarkersMatchPreviewProjection(structure.Kind, previewMarkers, contract))
+        {
+            mismatches.Add(
+                $"preview expected={DescribeExpectedPreviewMarkers(structure.Kind, contract)} actual={DescribePreviewMarkers(previewMarkers)}");
+        }
+
+        description = mismatches.Count == 0
+            ? string.Empty
+            : $"{structure.Kind}@({structure.Cell.X},{structure.Cell.Y}) {string.Join(" | ", mismatches)}";
+        return mismatches.Count > 0;
+    }
+
+    private static void AppendMismatch(
+        List<string> mismatches,
+        string label,
+        IEnumerable<Vector2I> expected,
+        IEnumerable<Vector2I> actual)
+    {
+        if (!CellsMatch(expected, actual))
+        {
+            mismatches.Add($"{label} expected={DescribeCells(expected)} actual={DescribeCells(actual)}");
+        }
+    }
+
+    private static string DescribeExpectedPreviewMarkers(
+        BuildPrototypeKind kind,
+        ResolvedFactoryStructureLogisticsContract contract)
+    {
+        if (!FactoryLogisticsPreview.ShouldShowContextualPortHints(kind))
+        {
+            return "[]";
+        }
+
+        var markers = new List<FactoryPortPreviewMarker>(contract.InputAnchors.Count + contract.OutputAnchors.Count);
+        for (var index = 0; index < contract.InputAnchors.Count; index++)
+        {
+            var anchor = contract.InputAnchors[index];
+            markers.Add(new FactoryPortPreviewMarker(anchor.Cell, anchor.Facing, anchor.IsInput, true));
+        }
+
+        for (var index = 0; index < contract.OutputAnchors.Count; index++)
+        {
+            var anchor = contract.OutputAnchors[index];
+            markers.Add(new FactoryPortPreviewMarker(anchor.Cell, anchor.Facing, anchor.IsInput, true));
+        }
+
+        return DescribePreviewMarkers(markers);
+    }
+
+    private static string DescribePreviewMarkers(IReadOnlyList<FactoryPortPreviewMarker> markers)
+    {
+        return "[" + string.Join(", ", markers.Select(marker =>
+            $"({marker.Cell.X},{marker.Cell.Y},{marker.Facing},{(marker.IsInput ? "in" : "out")})")) + "]";
+    }
+
+    private static string DescribeCells(IEnumerable<Vector2I> cells)
+    {
+        return "[" + string.Join(", ", cells.Select(cell => $"({cell.X},{cell.Y})")) + "]";
+    }
+
+    public static bool Vector2ApproxEqual(Vector2 a, Vector2 b)
+    {
+        return Mathf.IsEqualApprox(a.X, b.X) && Mathf.IsEqualApprox(a.Y, b.Y);
+    }
+
+    public static bool Vector3ApproxEqual(Vector3 a, Vector3 b)
+    {
+        return Mathf.IsEqualApprox(a.X, b.X)
+            && Mathf.IsEqualApprox(a.Y, b.Y)
+            && Mathf.IsEqualApprox(a.Z, b.Z);
+    }
+
     public static bool HasWorkspace(IReadOnlyList<string> workspaceIds, string workspaceId)
     {
         for (var index = 0; index < workspaceIds.Count; index++)

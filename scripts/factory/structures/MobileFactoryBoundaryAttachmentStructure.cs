@@ -2630,23 +2630,24 @@ public partial class MobileFactoryInputPortStructure : MobileFactoryHeavyPortStr
             return false;
         }
 
-        var outputCells = GetOutputCells();
-        for (var index = 0; index < outputCells.Count; index++)
+        var contract = GetResolvedLogisticsContract();
+        for (var index = 0; index < contract.OutputAnchors.Count; index++)
         {
-            var targetCell = outputCells[index];
-            if (!Site.TryGetStructure(targetCell, out var structure) || structure is not CargoUnpackerStructure unpacker)
+            var outputAnchor = contract.OutputAnchors[index];
+            if (!FactoryStructurePortResolver.TryResolveReceiver(Site, outputAnchor.Cell, out var resolution)
+                || resolution.Structure is not IFactoryHeavyBundleReceiver unpacker)
             {
                 continue;
             }
 
-            var sourceDispatchCell = GetTransferOutputCell(targetCell);
+            var sourceDispatchCell = outputAnchor.DispatchSourceCell;
             if (unpacker.TryAcceptHeavyBundle(InnerBufferedItem, sourceDispatchCell, ResolveInputInnerBufferWorldPosition(), simulation))
             {
                 HeavyCargoTrace.Log(
                     "input_port_handoff_to_unpacker",
                     InnerBufferedItem,
                     this,
-                    $"targetCell=({targetCell.X},{targetCell.Y}) dispatch=({sourceDispatchCell.X},{sourceDispatchCell.Y}) unpacker={unpacker.GetInstanceId()}");
+                    $"targetCell=({outputAnchor.Cell.X},{outputAnchor.Cell.Y}) dispatch=({sourceDispatchCell.X},{sourceDispatchCell.Y}) unpacker={resolution.Structure.GetInstanceId()}");
                 return true;
             }
         }
@@ -2682,16 +2683,17 @@ public partial class MobileFactoryInputPortStructure : MobileFactoryHeavyPortStr
 
     private bool CanConnectedUnpackerAccept(FactoryItem item, SimulationController simulation)
     {
-        var outputCells = GetOutputCells();
-        for (var index = 0; index < outputCells.Count; index++)
+        var contract = GetResolvedLogisticsContract();
+        for (var index = 0; index < contract.OutputAnchors.Count; index++)
         {
-            var targetCell = outputCells[index];
-            if (!Site.TryGetStructure(targetCell, out var structure) || structure is not CargoUnpackerStructure unpacker)
+            var outputAnchor = contract.OutputAnchors[index];
+            if (!FactoryStructurePortResolver.TryResolveReceiver(Site, outputAnchor.Cell, out var resolution)
+                || resolution.Structure is not IFactoryHeavyBundleReceiver unpacker)
             {
                 continue;
             }
 
-            var sourceDispatchCell = GetTransferOutputCell(targetCell);
+            var sourceDispatchCell = outputAnchor.DispatchSourceCell;
             if (unpacker.CanAcceptHeavyBundle(item, sourceDispatchCell, simulation))
             {
                 return true;

@@ -46,6 +46,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
     protected FactoryStructureFootprint Footprint { get; private set; } = FactoryStructureFootprint.SingleCell;
     protected FactoryStructureVisualController? VisualController => _visualController;
     protected FactorySiteKind SiteKind => FactoryIndustrialStandards.ResolveSiteKind(Site);
+    internal FactoryStructureFootprint ResolvedFootprint => Footprint;
 
     public IFactorySite Site { get; private set; } = null!;
     public Vector2I Cell { get; private set; }
@@ -114,7 +115,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
     public virtual void RefreshPlacement()
     {
         var anchorWorld = Site.CellToWorld(Cell);
-        var centerOffset = Footprint.GetWorldCenterOffset(CellSize, Facing);
+        var centerOffset = GetResolvedLogisticsContract().GetWorldCenterOffset(CellSize);
         var rotatedCenterOffset = centerOffset.Rotated(Vector3.Up, Site.WorldRotationRadians);
         Position = anchorWorld + rotatedCenterOffset;
         Rotation = new Vector3(0.0f, Site.WorldRotationRadians + FactoryDirection.ToYRotationRadians(Facing), 0.0f);
@@ -124,9 +125,10 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
 
     public virtual IEnumerable<Vector2I> GetOccupiedCells()
     {
-        foreach (var cell in Footprint.ResolveOccupiedCells(Cell, Facing))
+        var contract = GetResolvedLogisticsContract();
+        for (var index = 0; index < contract.OccupiedCells.Count; index++)
         {
-            yield return cell;
+            yield return contract.OccupiedCells[index];
         }
     }
 
@@ -241,22 +243,22 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
 
     public Vector2I GetOutputCell()
     {
-        return Footprint.ResolveOutputCell(Cell, Facing);
+        return GetResolvedLogisticsContract().OutputCells[0];
     }
 
     public IReadOnlyList<Vector2I> GetOutputCells()
     {
-        return Footprint.ResolveOutputCells(Cell, Facing);
+        return GetResolvedLogisticsContract().OutputCells;
     }
 
     public Vector2I GetInputCell()
     {
-        return Footprint.ResolveInputCell(Cell, Facing);
+        return GetResolvedLogisticsContract().InputCells[0];
     }
 
     public IReadOnlyList<Vector2I> GetInputCells()
     {
-        return Footprint.ResolveInputCells(Cell, Facing);
+        return GetResolvedLogisticsContract().InputCells;
     }
 
     public bool AcceptsFrom(Vector2I sourceCell)
@@ -294,7 +296,12 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
 
     public virtual Vector2I GetTransferOutputCell(Vector2I targetCell)
     {
-        return Footprint.ResolveOutputTransferCell(Cell, Facing, targetCell);
+        return GetResolvedLogisticsContract().ResolveDispatchSourceCell(targetCell, Cell);
+    }
+
+    public ResolvedFactoryStructureLogisticsContract GetResolvedLogisticsContract()
+    {
+        return FactoryStructureLogisticsContractResolver.Resolve(this);
     }
 
     public void AdvanceCombatState(double stepSeconds)

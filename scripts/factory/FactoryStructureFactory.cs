@@ -9,13 +9,15 @@ public sealed class FactoryStructureDefinition
         Func<FactoryStructure> creator,
         bool allowWorldPlacement,
         bool allowMobileInterior,
-        FactoryStructureFootprint? footprint = null)
+        FactoryStructureFootprint? footprint = null,
+        FactoryStructureLogisticsContractDefinition? logisticsContractDefinition = null)
     {
         Kind = kind;
         Creator = creator;
         AllowWorldPlacement = allowWorldPlacement;
         AllowMobileInterior = allowMobileInterior;
-        Footprint = footprint ?? FactoryStructureFootprint.SingleCell;
+        Footprint = footprint ?? logisticsContractDefinition?.Footprint ?? FactoryStructureFootprint.SingleCell;
+        LogisticsContractDefinition = logisticsContractDefinition ?? FactoryStructureLogisticsContractDefinition.FromFootprint(Footprint);
     }
 
     public BuildPrototypeKind Kind { get; }
@@ -23,6 +25,7 @@ public sealed class FactoryStructureDefinition
     public bool AllowWorldPlacement { get; }
     public bool AllowMobileInterior { get; }
     public FactoryStructureFootprint Footprint { get; }
+    public FactoryStructureLogisticsContractDefinition LogisticsContractDefinition { get; }
 }
 
 public static class FactoryStructureFactory
@@ -79,19 +82,43 @@ public static class FactoryStructureFactory
         new[] { Vector2I.Up, Vector2I.Zero, Vector2I.Down, Vector2I.Down * 2 },
         inputOffsetEast: Vector2I.Left,
         outputOffsetEast: Vector2I.Right);
+    private static readonly FactoryStructureLogisticsContractDefinition PowerPoleLogisticsContract = new(
+        FactoryStructureFootprint.SingleCell,
+        resolveInputCells: static (_, _) => System.Array.Empty<Vector2I>(),
+        resolveOutputCells: static (_, _) => System.Array.Empty<Vector2I>());
+    private static readonly FactoryStructureLogisticsContractDefinition BeltLogisticsContract = new(
+        FactoryStructureFootprint.SingleCell,
+        resolveInputCells: FactoryTransportTopology.GetBeltInputCells,
+        resolveOutputCells: static (cell, facing) => new[] { FactoryTransportTopology.GetBeltOutputCell(cell, facing) });
+    private static readonly FactoryStructureLogisticsContractDefinition MergerLogisticsContract = new(
+        FactoryStructureFootprint.SingleCell,
+        resolveInputCells: FactoryTransportTopology.GetMergerInputCells,
+        resolveOutputCells: static (cell, facing) => new[] { cell + FactoryDirection.ToCellOffset(facing) });
+    private static readonly FactoryStructureLogisticsContractDefinition InputPortLogisticsContract = new(
+        InputHeavyPortFootprint,
+        resolveInputCells: static (_, _) => System.Array.Empty<Vector2I>(),
+        resolveOutputCells: InputHeavyPortFootprint.ResolveOutputCells);
+    private static readonly FactoryStructureLogisticsContractDefinition MiningInputPortLogisticsContract = new(
+        FactoryStructureFootprint.SingleCell,
+        resolveInputCells: static (_, _) => System.Array.Empty<Vector2I>(),
+        resolveOutputCells: static (cell, facing) => new[] { cell - FactoryDirection.ToCellOffset(facing) });
+    private static readonly FactoryStructureLogisticsContractDefinition OutputPortLogisticsContract = new(
+        HeavyPortFootprint,
+        resolveInputCells: HeavyPortFootprint.ResolveInputCells,
+        resolveOutputCells: static (_, _) => System.Array.Empty<Vector2I>());
 
     private static readonly Dictionary<BuildPrototypeKind, FactoryStructureDefinition> Definitions = new()
     {
         [BuildPrototypeKind.Producer] = new FactoryStructureDefinition(BuildPrototypeKind.Producer, () => new ProducerStructure(), true, true),
         [BuildPrototypeKind.MiningDrill] = new FactoryStructureDefinition(BuildPrototypeKind.MiningDrill, () => new MiningDrillStructure(), true, false),
         [BuildPrototypeKind.Generator] = new FactoryStructureDefinition(BuildPrototypeKind.Generator, () => new GeneratorStructure(), true, true),
-        [BuildPrototypeKind.PowerPole] = new FactoryStructureDefinition(BuildPrototypeKind.PowerPole, () => new PowerPoleStructure(), true, true),
+        [BuildPrototypeKind.PowerPole] = new FactoryStructureDefinition(BuildPrototypeKind.PowerPole, () => new PowerPoleStructure(), true, true, logisticsContractDefinition: PowerPoleLogisticsContract),
         [BuildPrototypeKind.Smelter] = new FactoryStructureDefinition(BuildPrototypeKind.Smelter, () => new SmelterStructure(), true, true),
         [BuildPrototypeKind.Assembler] = new FactoryStructureDefinition(BuildPrototypeKind.Assembler, () => new AssemblerStructure(), true, true, MultiPortProcessingFootprint),
-        [BuildPrototypeKind.Belt] = new FactoryStructureDefinition(BuildPrototypeKind.Belt, () => new BeltStructure(), true, true),
+        [BuildPrototypeKind.Belt] = new FactoryStructureDefinition(BuildPrototypeKind.Belt, () => new BeltStructure(), true, true, logisticsContractDefinition: BeltLogisticsContract),
         [BuildPrototypeKind.Sink] = new FactoryStructureDefinition(BuildPrototypeKind.Sink, () => new SinkStructure(), true, true),
         [BuildPrototypeKind.Splitter] = new FactoryStructureDefinition(BuildPrototypeKind.Splitter, () => new SplitterStructure(), true, true),
-        [BuildPrototypeKind.Merger] = new FactoryStructureDefinition(BuildPrototypeKind.Merger, () => new MergerStructure(), true, true),
+        [BuildPrototypeKind.Merger] = new FactoryStructureDefinition(BuildPrototypeKind.Merger, () => new MergerStructure(), true, true, logisticsContractDefinition: MergerLogisticsContract),
         [BuildPrototypeKind.Bridge] = new FactoryStructureDefinition(BuildPrototypeKind.Bridge, () => new BridgeStructure(), true, true),
         [BuildPrototypeKind.Loader] = new FactoryStructureDefinition(BuildPrototypeKind.Loader, () => new LoaderStructure(), true, true),
         [BuildPrototypeKind.Unloader] = new FactoryStructureDefinition(BuildPrototypeKind.Unloader, () => new UnloaderStructure(), true, true),
@@ -110,7 +137,7 @@ public static class FactoryStructureFactory
             () => new CargoUnpackerStructure(),
             false,
             true,
-            CompactConversionFootprint),
+            HeavyConversionFootprint),
         [BuildPrototypeKind.CargoPacker] = new FactoryStructureDefinition(
             BuildPrototypeKind.CargoPacker,
             () => new CargoPackerStructure(),
@@ -137,9 +164,9 @@ public static class FactoryStructureFactory
             true,
             new FactoryStructureFootprint(
                 new[] { Vector2I.Zero, Vector2I.Right, Vector2I.Down, Vector2I.Right + Vector2I.Down })),
-        [BuildPrototypeKind.OutputPort] = new FactoryStructureDefinition(BuildPrototypeKind.OutputPort, () => new MobileFactoryOutputPortStructure(), false, true),
-        [BuildPrototypeKind.InputPort] = new FactoryStructureDefinition(BuildPrototypeKind.InputPort, () => new MobileFactoryInputPortStructure(), false, true),
-        [BuildPrototypeKind.MiningInputPort] = new FactoryStructureDefinition(BuildPrototypeKind.MiningInputPort, () => new MobileFactoryMiningInputPortStructure(), false, true)
+        [BuildPrototypeKind.OutputPort] = new FactoryStructureDefinition(BuildPrototypeKind.OutputPort, () => new MobileFactoryOutputPortStructure(), false, true, HeavyPortFootprint, OutputPortLogisticsContract),
+        [BuildPrototypeKind.InputPort] = new FactoryStructureDefinition(BuildPrototypeKind.InputPort, () => new MobileFactoryInputPortStructure(), false, true, InputHeavyPortFootprint, InputPortLogisticsContract),
+        [BuildPrototypeKind.MiningInputPort] = new FactoryStructureDefinition(BuildPrototypeKind.MiningInputPort, () => new MobileFactoryMiningInputPortStructure(), false, true, logisticsContractDefinition: MiningInputPortLogisticsContract)
     };
 
     public static FactoryStructure Create(BuildPrototypeKind kind, FactoryStructurePlacement placement)
@@ -191,14 +218,51 @@ public static class FactoryStructureFactory
         IReadOnlyDictionary<string, string>? configuration,
         string? mapRecipeId = null)
     {
-        return kind switch
+        return GetLogisticsContractDefinition(kind, configuration, mapRecipeId).Footprint;
+    }
+
+    internal static FactoryStructureLogisticsContractDefinition GetLogisticsContractDefinition(
+        BuildPrototypeKind kind,
+        IReadOnlyDictionary<string, string>? configuration,
+        string? mapRecipeId = null,
+        FactoryStructureFootprint? footprintOverride = null)
+    {
+        if (footprintOverride is not null)
         {
-            BuildPrototypeKind.CargoUnpacker => HeavyConversionFootprint,
-            BuildPrototypeKind.CargoPacker => PackerIntegratedInputFootprint,
-            BuildPrototypeKind.InputPort => InputHeavyPortFootprint,
-            BuildPrototypeKind.OutputPort => HeavyPortFootprint,
-            _ => GetDefinition(kind).Footprint
-        };
+            var definition = GetDefinition(kind);
+            if (ReferenceEquals(footprintOverride, definition.Footprint))
+            {
+                return definition.LogisticsContractDefinition;
+            }
+
+            if (kind == BuildPrototypeKind.PowerPole)
+            {
+                return new FactoryStructureLogisticsContractDefinition(
+                    footprintOverride,
+                    resolveInputCells: static (_, _) => System.Array.Empty<Vector2I>(),
+                    resolveOutputCells: static (_, _) => System.Array.Empty<Vector2I>());
+            }
+
+            if (kind == BuildPrototypeKind.Belt)
+            {
+                return new FactoryStructureLogisticsContractDefinition(
+                    footprintOverride,
+                    resolveInputCells: FactoryTransportTopology.GetBeltInputCells,
+                    resolveOutputCells: static (cell, facing) => new[] { FactoryTransportTopology.GetBeltOutputCell(cell, facing) });
+            }
+
+            if (kind == BuildPrototypeKind.Merger)
+            {
+                return new FactoryStructureLogisticsContractDefinition(
+                    footprintOverride,
+                    resolveInputCells: FactoryTransportTopology.GetMergerInputCells,
+                    resolveOutputCells: static (cell, facing) => new[] { cell + FactoryDirection.ToCellOffset(facing) });
+            }
+
+            return FactoryStructureLogisticsContractDefinition.FromFootprint(footprintOverride);
+        }
+
+        return GetDefinition(kind).LogisticsContractDefinition;
     }
 
     private static string ResolveBundleTemplateId(

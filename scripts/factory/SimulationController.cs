@@ -338,66 +338,40 @@ public partial class SimulationController : Node
 
     public bool CanReceiveProvidedItem(FactoryStructure source, IFactorySite targetSite, Vector2I targetCell, FactoryItem item)
     {
-        if (FactoryStructurePortResolver.TryResolveDirectReceiver(targetSite, targetCell, out var directResolution)
-            && directResolution.Structure is IFactoryItemReceiver directReceiver)
-        {
-            var effectiveSourceCell = directResolution.ResolveEffectiveSourceCell(source.Cell, targetCell);
-            if (directReceiver.CanReceiveProvidedItem(item, effectiveSourceCell, this))
-            {
-                return true;
-            }
-        }
-
-        if (!FactoryStructurePortResolver.TryResolveReceiverByInputPort(targetSite, targetCell, out var portResolution)
-            || portResolution.Structure is not IFactoryItemReceiver portReceiver)
+        if (!FactoryStructurePortResolver.TryResolveReceiver(targetSite, targetCell, out var receiverResolution)
+            || receiverResolution.Structure is not IFactoryItemReceiver receiver)
         {
             return false;
         }
 
-        var portSourceCell = portResolution.ResolveEffectiveSourceCell(source.Cell, targetCell);
-        return portReceiver.CanReceiveProvidedItem(item, portSourceCell, this);
+        var providerDispatchCell = source.GetResolvedLogisticsContract().ResolveDispatchSourceCell(targetCell, source.Cell);
+        var handoff = FactoryItemTransferAdapter.BuildHandoff(source, providerDispatchCell, receiverResolution, targetCell);
+        return FactoryItemTransferAdapter.CanReceiveProvidedItem(receiver, item, handoff, this);
     }
 
     public bool TryReceiveProvidedItem(FactoryStructure source, IFactorySite targetSite, Vector2I targetCell, FactoryItem item)
     {
-        if (FactoryStructurePortResolver.TryResolveDirectReceiver(targetSite, targetCell, out var directResolution)
-            && directResolution.Structure is IFactoryItemReceiver directReceiver)
-        {
-            var effectiveSourceCell = directResolution.ResolveEffectiveSourceCell(source.Cell, targetCell);
-            if (directReceiver.TryReceiveProvidedItem(item, effectiveSourceCell, this))
-            {
-                return true;
-            }
-        }
-
-        if (!FactoryStructurePortResolver.TryResolveReceiverByInputPort(targetSite, targetCell, out var portResolution)
-            || portResolution.Structure is not IFactoryItemReceiver portReceiver)
+        if (!FactoryStructurePortResolver.TryResolveReceiver(targetSite, targetCell, out var receiverResolution)
+            || receiverResolution.Structure is not IFactoryItemReceiver receiver)
         {
             return false;
         }
 
-        var portSourceCell = portResolution.ResolveEffectiveSourceCell(source.Cell, targetCell);
-        return portReceiver.TryReceiveProvidedItem(item, portSourceCell, this);
+        var providerDispatchCell = source.GetResolvedLogisticsContract().ResolveDispatchSourceCell(targetCell, source.Cell);
+        var handoff = FactoryItemTransferAdapter.BuildHandoff(source, providerDispatchCell, receiverResolution, targetCell);
+        return FactoryItemTransferAdapter.TryReceiveProvidedItem(receiver, item, handoff, this);
     }
 
     public bool TrySendItemToSite(FactoryStructure source, Vector2I sourceCell, IFactorySite targetSite, Vector2I targetCell, FactoryItem item)
     {
-        if (FactoryStructurePortResolver.TryResolveDirectReceiver(targetSite, targetCell, out var directResolution))
-        {
-            var effectiveSourceCell = directResolution.ResolveEffectiveSourceCell(sourceCell, targetCell);
-            if (directResolution.Structure.TryAcceptItem(item, effectiveSourceCell, this))
-            {
-                return true;
-            }
-        }
-
-        if (!FactoryStructurePortResolver.TryResolveReceiverByInputPort(targetSite, targetCell, out var portResolution))
+        if (!FactoryStructurePortResolver.TryResolveReceiver(targetSite, targetCell, out var receiverResolution))
         {
             return false;
         }
 
-        var portSourceCell = portResolution.ResolveEffectiveSourceCell(sourceCell, targetCell);
-        return portResolution.Structure.TryAcceptItem(item, portSourceCell, this);
+        var providerDispatchCell = source.GetResolvedLogisticsContract().ResolveDispatchSourceCell(targetCell, sourceCell);
+        var handoff = FactoryItemTransferAdapter.BuildHandoff(source, providerDispatchCell, receiverResolution, targetCell);
+        return FactoryItemTransferAdapter.TryAcceptItem(receiverResolution.Structure, item, handoff, this);
     }
 
     public void RebuildTopology()
