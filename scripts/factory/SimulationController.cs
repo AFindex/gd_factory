@@ -438,7 +438,7 @@ public partial class SimulationController : Node
             ProcessQueuedCombatCleanup();
             _accumulator -= FactoryConstants.SimulationStepSeconds;
             _activeTransportItemCount = CountTransitItems();
-            _averageStepMilliseconds = SmoothMetric(_averageStepMilliseconds, Stopwatch.GetElapsedTime(stepStartTicks).TotalMilliseconds, 0.18);
+            _averageStepMilliseconds = FactoryMetrics.SmoothMetric(_averageStepMilliseconds, Stopwatch.GetElapsedTime(stepStartTicks).TotalMilliseconds, 0.18);
             stepsProcessed++;
         }
 
@@ -715,12 +715,5 @@ public partial class SimulationController : Node
         var aCell = new Vector2(a.Structure.Cell.X, a.Structure.Cell.Y);
         var bCell = new Vector2(b.Structure.Cell.X, b.Structure.Cell.Y);
         return aCell.DistanceTo(bCell) <= maxDistance;
-    }
-
-    private static double SmoothMetric(double current, double sample, double weight)
-    {
-        return current <= 0.0
-            ? sample
-            : current + ((sample - current) * weight);
     }
 }

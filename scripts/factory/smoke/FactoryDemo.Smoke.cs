@@ -1239,7 +1239,7 @@ public partial class FactoryDemo
 
     private bool RunBlueprintWorkflowSmoke()
     {
-        if (_blueprintSite is null || _grid is null || _simulation is null)
+        if (_blueprintWorkflow.Site is null || _grid is null || _simulation is null)
         {
             return false;
         }
@@ -1273,7 +1273,7 @@ public partial class FactoryDemo
         }
 
         var captured = FactoryBlueprintCaptureService.CaptureSelection(
-            _blueprintSite,
+            _blueprintWorkflow.Site,
             new Rect2I(blueprintOrigin.X, blueprintOrigin.Y, 5, 4),
             "Smoke Utility Blueprint");
         if (captured is null || captured.StructureCount < 6)
@@ -1283,17 +1283,17 @@ public partial class FactoryDemo
 
         captured = FactoryBlueprintWorkflowBridge.SavePendingCapture(captured, "Smoke Utility Blueprint");
 
-        var invalidPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintSite, captured.SuggestedAnchorCell);
+        var invalidPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintWorkflow.Site, captured.SuggestedAnchorCell);
         var structureCountBefore = _simulation.RegisteredStructureCount;
         if (!TryFindBlueprintAnchor(captured, FacingDirection.South, out var validAnchor))
         {
             return false;
         }
 
-        var validPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintSite, validAnchor, FacingDirection.South);
+        var validPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintWorkflow.Site, validAnchor, FacingDirection.South);
         _blueprintMode = FactoryBlueprintWorkflowMode.ApplyPreview;
-        _blueprintApplyRotation = FacingDirection.South;
-        _blueprintApplyPlan = validPlan;
+        _blueprintWorkflow.ApplyRotation = FacingDirection.South;
+        _blueprintWorkflow.ApplyPlan = validPlan;
         _hoveredCell = validAnchor;
         _hasHoveredCell = true;
         UpdatePreview();
@@ -1309,7 +1309,7 @@ public partial class FactoryDemo
 
             var expectedPosition = FactoryPlacement.GetPreviewCenter(_grid, entry.SourceEntry.Kind, entry.TargetCell, entry.TargetFacing) + new Vector3(0.0f, 0.06f, 0.0f);
             var expectedRotation = _grid.WorldRotationRadians + FactoryDirection.ToYRotationRadians(entry.TargetFacing);
-            var mesh = _blueprintPreviewMeshes[index];
+            var mesh = _blueprintWorkflow.PreviewMeshes[index];
             previewAligned = mesh.Visible
                 && mesh.Position.DistanceTo(expectedPosition) < 0.05f
                 && Mathf.IsEqualApprox(mesh.Rotation.Y, expectedRotation);
@@ -1317,7 +1317,7 @@ public partial class FactoryDemo
             break;
         }
 
-        var committed = validPlan.IsValid && FactoryBlueprintPlanner.CommitPlan(validPlan, _blueprintSite);
+        var committed = validPlan.IsValid && FactoryBlueprintPlanner.CommitPlan(validPlan, _blueprintWorkflow.Site);
         if (!committed)
         {
             return false;
@@ -1339,7 +1339,7 @@ public partial class FactoryDemo
 
     private bool RunMiningBlueprintWorkflowSmoke()
     {
-        if (_blueprintSite is null || _grid is null)
+        if (_blueprintWorkflow.Site is null || _grid is null)
         {
             return false;
         }
@@ -1367,7 +1367,7 @@ public partial class FactoryDemo
             }
 
             var captured = FactoryBlueprintCaptureService.CaptureSelection(
-                _blueprintSite,
+                _blueprintWorkflow.Site,
                 new Rect2I(sourceDrillCell.X, sourceDrillCell.Y, 3, 1),
                 "Smoke Mining Blueprint");
             if (captured is null || captured.StructureCount != 3)
@@ -1375,8 +1375,8 @@ public partial class FactoryDemo
                 return false;
             }
 
-            var validPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintSite, targetDrillCell);
-            var committed = validPlan.IsValid && FactoryBlueprintPlanner.CommitPlan(validPlan, _blueprintSite);
+            var validPlan = FactoryBlueprintPlanner.CreatePlan(captured, _blueprintWorkflow.Site, targetDrillCell);
+            var committed = validPlan.IsValid && FactoryBlueprintPlanner.CommitPlan(validPlan, _blueprintWorkflow.Site);
             var drillPlaced = _grid.TryGetStructure(targetDrillCell, out var drillStructure) && drillStructure is MiningDrillStructure drill && drill.ResourceKind == FactoryResourceKind.IronOre;
             var beltPlaced = _grid.TryGetStructure(targetBeltCell, out var beltStructure) && beltStructure is BeltStructure;
             var sinkPlaced = _grid.TryGetStructure(targetSinkCell, out var sinkStructure) && sinkStructure is SinkStructure;
@@ -1434,7 +1434,7 @@ public partial class FactoryDemo
     private bool TryFindBlueprintAnchor(FactoryBlueprintRecord blueprint, FacingDirection rotation, out Vector2I anchor)
     {
         anchor = Vector2I.Zero;
-        if (_blueprintSite is null || _grid is null)
+        if (_blueprintWorkflow.Site is null || _grid is null)
         {
             return false;
         }
@@ -1444,7 +1444,7 @@ public partial class FactoryDemo
             for (var x = _grid.MinCell.X; x <= _grid.MaxCell.X; x++)
             {
                 var candidate = new Vector2I(x, y);
-                var plan = FactoryBlueprintPlanner.CreatePlan(blueprint, _blueprintSite, candidate, rotation);
+                var plan = FactoryBlueprintPlanner.CreatePlan(blueprint, _blueprintWorkflow.Site, candidate, rotation);
                 if (!plan.IsValid)
                 {
                     continue;

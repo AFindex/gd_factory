@@ -55,19 +55,15 @@ public partial class FactoryDemo : Node3D
     private Node3D? _previewRoot;
     private Node3D? _previewPortHintRoot;
     private Node3D? _resourceOverlayRoot;
-    private Node3D? _blueprintPreviewRoot;
-    private Node3D? _blueprintGhostPreviewRoot;
     private Node3D? _powerLinkOverlayRoot;
     private MeshInstance3D? _previewCell;
     private Node3D? _previewArrow;
     private MeshInstance3D? _previewPowerRange;
     private readonly List<Node3D> _previewPortHintMeshes = new();
     private readonly List<FactoryPortPreviewMarker> _cachedPreviewPortMarkers = new();
-    private readonly List<MeshInstance3D> _blueprintPreviewMeshes = new();
-    private readonly List<FactoryStructure> _blueprintPreviewGhosts = new();
     private readonly List<MeshInstance3D> _powerLinkDashes = new();
     private FactoryCombatDirector? _combatDirector;
-    private FactoryBlueprintSiteAdapter? _blueprintSite;
+    private BlueprintWorkflowState _blueprintWorkflow = new();
     private double _averageFrameMilliseconds;
     private double _averageVisualSyncMilliseconds;
     private BuildPrototypeKind? _selectedBuildKind;
@@ -80,26 +76,14 @@ public partial class FactoryDemo : Node3D
     private Vector2I _hoveredCell;
     private Vector2I _cachedPreviewPortCell;
     private Rect2I _cachedPreviewPortVisibleRect;
-    private Vector2I _lastBuildStrokeCell;
     private bool _hasHoveredCell;
     private bool _hasCachedPreviewPortMarkers;
-    private bool _hasLastBuildStrokeCell;
     private bool _canPlaceCurrentCell;
     private bool _canDeleteCurrentCell;
-    private bool _deleteDragActive;
-    private Vector2I _deleteDragStartCell;
-    private Vector2I _deleteDragCurrentCell;
-    private bool _buildPlacementDragActive;
-    private readonly HashSet<Vector2I> _buildPlacementStrokeCells = new();
+    private DeleteDragState _deleteDrag = new();
+    private BuildDragState _buildDrag = BuildDragState.Create();
     private FactoryBlueprintWorkflowMode _blueprintMode;
-    private bool _blueprintSelectionDragActive;
-    private bool _hasBlueprintSelectionRect;
-    private Vector2I _blueprintSelectionStartCell;
-    private Vector2I _blueprintSelectionCurrentCell;
-    private Rect2I _blueprintSelectionRect;
     private FactoryBlueprintRecord? _pendingBlueprintCapture;
-    private FactoryBlueprintApplyPlan? _blueprintApplyPlan;
-    private FacingDirection _blueprintApplyRotation = FacingDirection.East;
     private string _previewMessage = "交互模式：点击建筑查看；按数字键选择建筑后进入建造，或按住 Shift 左键框选蓝图。";
     private readonly FactoryBaselinePlayerPlacementState _playerPlacementState = new();
     private BuildPrototypeKind? _cachedPreviewPortKind;
@@ -132,7 +116,7 @@ public partial class FactoryDemo : Node3D
 
     public override void _Process(double delta)
     {
-        _averageFrameMilliseconds = SmoothMetric(_averageFrameMilliseconds, delta * 1000.0, 0.1);
+        _averageFrameMilliseconds = FactoryMetrics.SmoothMetric(_averageFrameMilliseconds, delta * 1000.0, 0.1);
         _playerController?.ApplyMovement(GetPlayerMovementBounds(), delta, allowInput: true);
         if (_cameraRig is not null)
         {
@@ -154,9 +138,9 @@ public partial class FactoryDemo : Node3D
         HandleHotkeys();
         UpdateCursorShape();
 
-        if (_interactionMode == FactoryInteractionMode.Delete && _deleteDragActive && _hasHoveredCell)
+        if (_interactionMode == FactoryInteractionMode.Delete && _deleteDrag.Active && _hasHoveredCell)
         {
-            _deleteDragCurrentCell = _hoveredCell;
+            _deleteDrag.CurrentCell = _hoveredCell;
         }
     }
 
@@ -165,7 +149,7 @@ public partial class FactoryDemo : Node3D
         if (@event is InputEventKey hotbarKeyEvent
             && hotbarKeyEvent.Pressed
             && !hotbarKeyEvent.Echo
-            && TryMapHotbarKey(hotbarKeyEvent.Keycode, out var hotbarIndex))
+            && FactoryInputUtility.TryMapHotbarKey(hotbarKeyEvent.Keycode, out var hotbarIndex))
         {
             HandlePlayerHotbarPressed(hotbarIndex);
             GetViewport().SetInputAsHandled();
@@ -383,8 +367,8 @@ public partial class FactoryDemo : Node3D
         _previewRoot = scaffold.GetRoot("preview");
         _previewPortHintRoot = scaffold.GetRoot("preview-port-hints");
         _powerLinkOverlayRoot = scaffold.GetRoot("power-links");
-        _blueprintPreviewRoot = scaffold.GetRoot("blueprint-preview");
-        _blueprintGhostPreviewRoot = scaffold.GetRoot("blueprint-ghost-preview");
+        _blueprintWorkflow.PreviewRoot = scaffold.GetRoot("blueprint-preview");
+        _blueprintWorkflow.GhostPreviewRoot = scaffold.GetRoot("blueprint-ghost-preview");
         _simulation = scaffold.Simulation;
         _combatDirector = scaffold.CombatDirector;
         _cameraRig = scaffold.CameraRig;
@@ -435,7 +419,8 @@ public partial class FactoryDemo : Node3D
         _cameraRig!.ConfigureBounds(_grid.GetWorldMin() + Vector2.One * 4.0f, _grid.GetWorldMax() - Vector2.One * 4.0f);
         LoadStarterWorldMap();
         RebuildResourceOverlayVisuals();
-        _blueprintSite = CreateBlueprintSiteAdapter();
+        _blueprintWorkflow.Site = CreateBlueprintSiteAdapter();
+        _blueprintWorkflow.FactorySite = _grid;
         EnterInteractionMode();
     }
 
@@ -505,7 +490,7 @@ public partial class FactoryDemo : Node3D
         }
 
         RefreshInteractionModeFromBuildSource();
-        _deleteDragActive = false;
+        _deleteDrag.Active = false;
         ResetBuildPlacementStroke();
 
         if (_interactionMode == FactoryInteractionMode.Build)
@@ -520,7 +505,7 @@ public partial class FactoryDemo : Node3D
         _selectedBuildKind = null;
         _playerPlacementState.DisarmPlacement(_playerController);
         _interactionMode = FactoryInteractionMode.Interact;
-        _deleteDragActive = false;
+        _deleteDrag.Active = false;
         ResetBuildPlacementStroke();
     }
 
@@ -532,7 +517,7 @@ public partial class FactoryDemo : Node3D
         _selectedStructure = null;
         _selectedResourceDeposit = null;
         _interactionMode = FactoryInteractionMode.Delete;
-        _deleteDragActive = false;
+        _deleteDrag.Active = false;
         ResetBuildPlacementStroke();
     }
 
@@ -647,26 +632,6 @@ public partial class FactoryDemo : Node3D
         RefreshInteractionModeFromBuildSource();
     }
 
-    private static bool TryMapHotbarKey(Key keycode, out int hotbarIndex)
-    {
-        hotbarIndex = keycode switch
-        {
-            Key.Key1 => 0,
-            Key.Key2 => 1,
-            Key.Key3 => 2,
-            Key.Key4 => 3,
-            Key.Key5 => 4,
-            Key.Key6 => 5,
-            Key.Key7 => 6,
-            Key.Key8 => 7,
-            Key.Key9 => 8,
-            Key.Key0 => 9,
-            _ => -1
-        };
-
-        return hotbarIndex >= 0;
-    }
-
     private void RebuildResourceOverlayVisuals()
     {
         FactoryMapVisualSupport.RebuildResourceOverlay(
@@ -743,11 +708,11 @@ public partial class FactoryDemo : Node3D
         _hoveredResourceDeposit = null;
         _canPlaceCurrentCell = false;
         _canDeleteCurrentCell = false;
-        _blueprintApplyPlan = null;
+        _blueprintWorkflow.ApplyPlan = null;
         _previewMessage = _blueprintMode switch
         {
             FactoryBlueprintWorkflowMode.CaptureSelection => "蓝图框选：拖拽选择一片现有布局，然后在右侧面板保存。",
-            FactoryBlueprintWorkflowMode.ApplyPreview => $"蓝图预览：移动鼠标选择锚点，按 Q/E 旋转，当前朝向 {FactoryDirection.ToLabel(_blueprintApplyRotation)}。",
+            FactoryBlueprintWorkflowMode.ApplyPreview => $"蓝图预览：移动鼠标选择锚点，按 Q/E 旋转，当前朝向 {FactoryDirection.ToLabel(_blueprintWorkflow.ApplyRotation)}。",
             _ => _interactionMode switch
             {
                 FactoryInteractionMode.Build => "把鼠标移到地面网格上选择格子。",
@@ -784,18 +749,18 @@ public partial class FactoryDemo : Node3D
         FactoryResourceDetailSupport.TryGetDeposit(_grid, cell, out _hoveredResourceDeposit);
         if (_blueprintMode == FactoryBlueprintWorkflowMode.CaptureSelection)
         {
-            if (_blueprintSelectionDragActive)
+            if (_blueprintWorkflow.SelectionDragActive)
             {
-                _blueprintSelectionCurrentCell = cell;
-                var rect = GetDeleteRect(_blueprintSelectionStartCell, _blueprintSelectionCurrentCell);
+                _blueprintWorkflow.SelectionCurrentCell = cell;
+                var rect = GetDeleteRect(_blueprintWorkflow.SelectionStartCell, _blueprintWorkflow.SelectionCurrentCell);
                 var selectedCount = CountStructuresInBlueprintRect(rect);
                 _previewMessage = $"蓝图框选：[{rect.Position.X},{rect.Position.Y}] - [{rect.End.X - 1},{rect.End.Y - 1}]，当前覆盖 {selectedCount} 个建筑。";
                 return;
             }
 
-            if (_hasBlueprintSelectionRect)
+            if (_blueprintWorkflow.HasSelectionRect)
             {
-                var selectedCount = CountStructuresInBlueprintRect(_blueprintSelectionRect);
+                var selectedCount = CountStructuresInBlueprintRect(_blueprintWorkflow.SelectionRect);
                 _previewMessage = $"蓝图框选已完成：覆盖 {selectedCount} 个建筑，填写名称后保存。";
                 return;
             }
@@ -806,7 +771,7 @@ public partial class FactoryDemo : Node3D
 
         if (_blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview)
         {
-            if (_blueprintSite is null)
+            if (_blueprintWorkflow.Site is null)
             {
                 _previewMessage = "蓝图预览不可用：缺少目标站点。";
                 return;
@@ -819,16 +784,16 @@ public partial class FactoryDemo : Node3D
                 return;
             }
 
-            _blueprintApplyPlan = FactoryBlueprintPlanner.CreatePlan(activeBlueprint, _blueprintSite, cell, _blueprintApplyRotation);
-            _previewMessage = _blueprintApplyPlan.IsValid
-                ? $"蓝图 {activeBlueprint.DisplayName} 可应用到锚点 ({cell.X}, {cell.Y})，旋转 {FactoryDirection.ToLabel(_blueprintApplyRotation)}。"
-                : _blueprintApplyPlan.GetIssueSummary();
+            _blueprintWorkflow.UpdateApplyPlan(cell);
+            _previewMessage = _blueprintWorkflow.ApplyPlan.IsValid
+                ? $"蓝图 {activeBlueprint.DisplayName} 可应用到锚点 ({cell.X}, {cell.Y})，旋转 {FactoryDirection.ToLabel(_blueprintWorkflow.ApplyRotation)}。"
+                : _blueprintWorkflow.ApplyPlan.GetIssueSummary();
             return;
         }
 
         if (_interactionMode == FactoryInteractionMode.Build && TryGetActivePlacementKind(out var placementKind, out var usesPlayerInventory))
         {
-            var previewFacing = ResolveWorldPlacementFacing(placementKind, cell, _buildPlacementDragActive);
+            var previewFacing = ResolveWorldPlacementFacing(placementKind, cell, _buildDrag.Active);
             _canPlaceCurrentCell = TryValidateWorldPlacement(placementKind, cell, previewFacing, out var placementIssue);
             _previewMessage = _canPlaceCurrentCell
                 ? DescribeWorldPlacementPreview(placementKind, cell, previewFacing, usesPlayerInventory)
@@ -838,12 +803,12 @@ public partial class FactoryDemo : Node3D
 
         if (_interactionMode == FactoryInteractionMode.Delete)
         {
-            if (_deleteDragActive)
+            if (_deleteDrag.Active)
             {
-                _deleteDragCurrentCell = cell;
-                var deletionCount = CountStructuresInDeleteRect(_deleteDragStartCell, _deleteDragCurrentCell);
+                _deleteDrag.CurrentCell = cell;
+                var deletionCount = CountStructuresInDeleteRect(_deleteDrag.StartCell, _deleteDrag.CurrentCell);
                 _canDeleteCurrentCell = deletionCount > 0;
-                var rect = GetDeleteRect(_deleteDragStartCell, _deleteDragCurrentCell);
+                var rect = GetDeleteRect(_deleteDrag.StartCell, _deleteDrag.CurrentCell);
                 _previewMessage = $"删除模式：框选 [{rect.Position.X},{rect.Position.Y}] - [{rect.End.X - 1},{rect.End.Y - 1}]，将删除 {deletionCount} 个建筑。";
                 return;
             }
@@ -880,7 +845,7 @@ public partial class FactoryDemo : Node3D
         }
 
         var showCapturePreview = _blueprintMode == FactoryBlueprintWorkflowMode.CaptureSelection
-            && (_blueprintSelectionDragActive || _hasBlueprintSelectionRect);
+            && (_blueprintWorkflow.SelectionDragActive || _blueprintWorkflow.HasSelectionRect);
         var hasPlacementPreview = false;
         var previewKind = default(BuildPrototypeKind);
         var previewFacing = _selectedFacing;
@@ -890,7 +855,7 @@ public partial class FactoryDemo : Node3D
             previewKind = activePreviewKind;
             if (_hasHoveredCell)
             {
-                previewFacing = ResolveWorldPlacementFacing(previewKind, _hoveredCell, _buildPlacementDragActive);
+                previewFacing = ResolveWorldPlacementFacing(previewKind, _hoveredCell, _buildDrag.Active);
             }
         }
 
@@ -905,9 +870,9 @@ public partial class FactoryDemo : Node3D
 
         if (showCapturePreview)
         {
-            var rect = _blueprintSelectionDragActive
-                ? GetDeleteRect(_blueprintSelectionStartCell, _blueprintSelectionCurrentCell)
-                : _blueprintSelectionRect;
+            var rect = _blueprintWorkflow.SelectionDragActive
+                ? GetDeleteRect(_blueprintWorkflow.SelectionStartCell, _blueprintWorkflow.SelectionCurrentCell)
+                : _blueprintWorkflow.SelectionRect;
             var minCell = rect.Position;
             var maxCell = rect.End - Vector2I.One;
             var minWorld = _grid.CellToWorld(minCell);
@@ -929,8 +894,8 @@ public partial class FactoryDemo : Node3D
 
         if (_interactionMode == FactoryInteractionMode.Delete)
         {
-            var start = _deleteDragActive ? _deleteDragStartCell : _hoveredCell;
-            var end = _deleteDragActive ? _deleteDragCurrentCell : _hoveredCell;
+            var start = _deleteDrag.Active ? _deleteDrag.StartCell : _hoveredCell;
+            var end = _deleteDrag.Active ? _deleteDrag.CurrentCell : _hoveredCell;
             var rect = GetDeleteRect(start, end);
             var minCell = rect.Position;
             var maxCell = rect.End - Vector2I.One;
@@ -974,46 +939,38 @@ public partial class FactoryDemo : Node3D
 
     private void UpdateBlueprintPreview()
     {
-        if (_grid is null || _blueprintPreviewRoot is null)
+        if (_grid is null || _blueprintWorkflow.PreviewRoot is null)
         {
             return;
         }
 
-        foreach (var mesh in _blueprintPreviewMeshes)
-        {
-            mesh.Visible = false;
-        }
+        _blueprintWorkflow.HideAllPreviews();
 
-        foreach (var ghost in _blueprintPreviewGhosts)
+        var plan = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview ? _blueprintWorkflow.ApplyPlan : null;
+        _blueprintWorkflow.PreviewRoot.Visible = plan is not null && _hasHoveredCell;
+        if (_blueprintWorkflow.GhostPreviewRoot is not null)
         {
-            ghost.Visible = false;
+            _blueprintWorkflow.GhostPreviewRoot.Visible = _blueprintWorkflow.PreviewRoot.Visible;
         }
-
-        var plan = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview ? _blueprintApplyPlan : null;
-        _blueprintPreviewRoot.Visible = plan is not null && _hasHoveredCell;
-        if (_blueprintGhostPreviewRoot is not null)
+        if (!_blueprintWorkflow.PreviewRoot.Visible || plan is null)
         {
-            _blueprintGhostPreviewRoot.Visible = _blueprintPreviewRoot.Visible;
-        }
-        if (!_blueprintPreviewRoot.Visible || plan is null)
-        {
-            if (_blueprintGhostPreviewRoot is not null)
+            if (_blueprintWorkflow.GhostPreviewRoot is not null)
             {
-                _blueprintGhostPreviewRoot.Visible = false;
+                _blueprintWorkflow.GhostPreviewRoot.Visible = false;
             }
             return;
         }
 
         EnsureBlueprintPreviewCapacity(plan.Entries.Count);
         var showGhostPreview = SupportsGhostBlueprintPreview();
-        if (_blueprintGhostPreviewRoot is not null)
+        if (_blueprintWorkflow.GhostPreviewRoot is not null)
         {
-            _blueprintGhostPreviewRoot.Visible = showGhostPreview;
+            _blueprintWorkflow.GhostPreviewRoot.Visible = showGhostPreview;
         }
         for (var index = 0; index < plan.Entries.Count; index++)
         {
             var entry = plan.Entries[index];
-            var mesh = _blueprintPreviewMeshes[index];
+            var mesh = _blueprintWorkflow.PreviewMeshes[index];
             var footprint = FactoryStructureFactory.GetFootprint(entry.SourceEntry.Kind);
             var previewSize = footprint.GetPreviewSize(_grid.CellSize, FacingDirection.East);
             mesh.Visible = true;
@@ -1078,7 +1035,7 @@ public partial class FactoryDemo : Node3D
         }
         _transportRenderManager?.EndFrame();
 
-        _averageVisualSyncMilliseconds = SmoothMetric(_averageVisualSyncMilliseconds, Stopwatch.GetElapsedTime(startTicks).TotalMilliseconds, 0.18);
+        _averageVisualSyncMilliseconds = FactoryMetrics.SmoothMetric(_averageVisualSyncMilliseconds, Stopwatch.GetElapsedTime(startTicks).TotalMilliseconds, 0.18);
     }
 
     private void UpdatePowerLinkVisuals()
@@ -1341,9 +1298,7 @@ public partial class FactoryDemo : Node3D
     {
         return _blueprintMode != FactoryBlueprintWorkflowMode.None
             || _pendingBlueprintCapture is not null
-            || _blueprintApplyPlan is not null
-            || _hasBlueprintSelectionRect
-            || FactoryBlueprintLibrary.GetActive() is not null;
+            || _blueprintWorkflow.HasActiveState();
     }
 
     private FactoryBlueprintPanelState BuildBlueprintPanelState()
@@ -1351,7 +1306,7 @@ public partial class FactoryDemo : Node3D
         var modeText = _blueprintMode switch
         {
             FactoryBlueprintWorkflowMode.CaptureSelection => "蓝图模式：框选保存",
-            FactoryBlueprintWorkflowMode.ApplyPreview => $"蓝图模式：应用预览（旋转 {FactoryDirection.ToLabel(_blueprintApplyRotation)}）",
+            FactoryBlueprintWorkflowMode.ApplyPreview => $"蓝图模式：应用预览（旋转 {FactoryDirection.ToLabel(_blueprintWorkflow.ApplyRotation)}）",
             _ => "蓝图模式：待命"
         };
         var activeBlueprint = FactoryBlueprintLibrary.GetActive();
@@ -1359,8 +1314,8 @@ public partial class FactoryDemo : Node3D
         var captureSummary = _pendingBlueprintCapture is null
             ? "未捕获待保存蓝图。点击“框选保存”或在交互模式按住 Shift 左键拖拽选择。"
             : $"待保存：{_pendingBlueprintCapture.DisplayName} | {_pendingBlueprintCapture.GetSummaryText()}";
-        var issueText = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && _blueprintApplyPlan is not null
-            ? $"当前旋转：{FactoryDirection.ToLabel(_blueprintApplyRotation)} | 占地 {_blueprintApplyPlan.FootprintSize.X}x{_blueprintApplyPlan.FootprintSize.Y}\n{_blueprintApplyPlan.GetIssueSummary()}"
+        var issueText = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && _blueprintWorkflow.ApplyPlan is not null
+            ? $"当前旋转：{FactoryDirection.ToLabel(_blueprintWorkflow.ApplyRotation)} | 占地 {_blueprintWorkflow.ApplyPlan.FootprintSize.X}x{_blueprintWorkflow.ApplyPlan.FootprintSize.Y}\n{_blueprintWorkflow.ApplyPlan.GetIssueSummary()}"
             : _blueprintMode == FactoryBlueprintWorkflowMode.CaptureSelection
                 ? "框选完成后在这里输入名称并保存。"
                 : "选择库中的蓝图后进入预览，再移动鼠标选择落点。";
@@ -1377,7 +1332,7 @@ public partial class FactoryDemo : Node3D
             ActiveBlueprintId = activeBlueprint?.Id,
             AllowFullCapture = false,
             CanSaveCapture = _pendingBlueprintCapture is not null,
-            CanConfirmApply = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && _blueprintApplyPlan?.IsValid == true,
+            CanConfirmApply = _blueprintMode == FactoryBlueprintWorkflowMode.ApplyPreview && _blueprintWorkflow.ApplyPlan?.IsValid == true,
             Blueprints = FactoryBlueprintLibrary.GetAll()
         };
     }
@@ -1502,9 +1457,7 @@ public partial class FactoryDemo : Node3D
 
         if (shiftPressed)
         {
-            _deleteDragActive = true;
-            _deleteDragStartCell = _hoveredCell;
-            _deleteDragCurrentCell = _hoveredCell;
+            _deleteDrag.BeginDrag(_hoveredCell);
             return;
         }
 
@@ -1513,13 +1466,13 @@ public partial class FactoryDemo : Node3D
 
     private void HandleDeletePrimaryRelease()
     {
-        if (!_deleteDragActive)
+        if (!_deleteDrag.Active)
         {
             return;
         }
 
-        _deleteDragActive = false;
-        DeleteStructuresInRect(_deleteDragStartCell, _deleteDragCurrentCell);
+        _deleteDrag.EndDrag();
+        DeleteStructuresInRect(_deleteDrag.StartCell, _deleteDrag.CurrentCell);
     }
 
     private void DeleteHoveredStructure()
@@ -1568,57 +1521,17 @@ public partial class FactoryDemo : Node3D
 
     private int CountStructuresInBlueprintRect(Rect2I rect)
     {
-        if (_blueprintSite is null)
-        {
-            return 0;
-        }
-
-        var seen = new HashSet<ulong>();
-        foreach (var structure in _blueprintSite.EnumerateStructures())
-        {
-            foreach (var occupiedCell in structure.GetOccupiedCells())
-            {
-                if (!rect.HasPoint(occupiedCell))
-                {
-                    continue;
-                }
-
-                seen.Add(structure.GetInstanceId());
-                break;
-            }
-        }
-
-        return seen.Count;
+        return _blueprintWorkflow.CountStructuresInRect(rect);
     }
 
     private void EnsureBlueprintPreviewCapacity(int count)
     {
-        FactoryPreviewPoolSupport.EnsureMeshCapacity(
-            _blueprintPreviewRoot,
-            _blueprintPreviewMeshes,
-            count,
-            index => new MeshInstance3D
-            {
-                Name = $"BlueprintPreview_{index}",
-                Visible = false,
-                Mesh = new BoxMesh
-                {
-                    Size = new Vector3(FactoryConstants.CellSize * 0.84f, 0.10f, FactoryConstants.CellSize * 0.84f)
-                }
-            });
+        _blueprintWorkflow.EnsurePreviewMeshCapacity(count, FactoryConstants.CellSize);
     }
 
     private FactoryStructure EnsureBlueprintGhostPreview(FactoryBlueprintPlanEntry entry, int index)
     {
-        return FactoryPreviewPoolSupport.EnsureGhostPreview(
-            _blueprintGhostPreviewRoot,
-            _blueprintPreviewGhosts,
-            index,
-            entry.SourceEntry.Kind,
-            kind => FactoryStructureFactory.CreateGhostPreview(
-                kind,
-                new FactoryStructurePlacement(_grid!, entry.TargetCell, entry.TargetFacing)),
-            "BlueprintGhostPreview");
+        return _blueprintWorkflow.EnsureGhostPreview(index, entry.SourceEntry.Kind, entry.TargetCell, entry.TargetFacing, "BlueprintGhostPreview");
     }
 
     private static bool SupportsGhostBlueprintPreview()
@@ -1682,13 +1595,10 @@ public partial class FactoryDemo : Node3D
 
     private void StartBlueprintCapture()
     {
+        _blueprintWorkflow.ResetAll();
+        _pendingBlueprintCapture = null;
         EnterInteractionMode();
         _blueprintMode = FactoryBlueprintWorkflowMode.CaptureSelection;
-        _blueprintApplyPlan = null;
-        _blueprintApplyRotation = FacingDirection.East;
-        _pendingBlueprintCapture = null;
-        _hasBlueprintSelectionRect = false;
-        _blueprintSelectionDragActive = false;
     }
 
     private void BeginBlueprintSelection()
@@ -1698,35 +1608,30 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        _blueprintSelectionDragActive = true;
-        _blueprintSelectionStartCell = _hoveredCell;
-        _blueprintSelectionCurrentCell = _hoveredCell;
-        _hasBlueprintSelectionRect = false;
+        _blueprintWorkflow.BeginSelection(_hoveredCell);
         _pendingBlueprintCapture = null;
     }
 
     private void CompleteBlueprintSelection()
     {
-        if (!_blueprintSelectionDragActive)
+        if (!_blueprintWorkflow.SelectionDragActive)
         {
             return;
         }
 
-        _blueprintSelectionDragActive = false;
-        _blueprintSelectionRect = GetDeleteRect(_blueprintSelectionStartCell, _blueprintSelectionCurrentCell);
-        _hasBlueprintSelectionRect = true;
+        var selectionRect = _blueprintWorkflow.CompleteDragSelection();
 
-        if (_blueprintSite is null)
+        if (_blueprintWorkflow.Site is null)
         {
             return;
         }
 
-        var suggestedName = $"沙盒蓝图 {CountStructuresInBlueprintRect(_blueprintSelectionRect)} 件";
-        _pendingBlueprintCapture = FactoryBlueprintCaptureService.CaptureSelection(_blueprintSite, _blueprintSelectionRect, suggestedName);
+        var suggestedName = $"沙盒蓝图 {CountStructuresInBlueprintRect(selectionRect)} 件";
+        _pendingBlueprintCapture = FactoryBlueprintCaptureService.CaptureSelection(_blueprintWorkflow.Site, selectionRect, suggestedName);
         if (_pendingBlueprintCapture is null)
         {
             _previewMessage = "框选区域内没有可保存的建筑。";
-            _hasBlueprintSelectionRect = false;
+            _blueprintWorkflow.ResetSelection();
         }
     }
 
@@ -1739,7 +1644,7 @@ public partial class FactoryDemo : Node3D
 
         var savedRecord = FactoryBlueprintWorkflowBridge.SavePendingCapture(_pendingBlueprintCapture, name, target);
         _pendingBlueprintCapture = null;
-        _hasBlueprintSelectionRect = false;
+        _blueprintWorkflow.ResetAll();
         _blueprintMode = FactoryBlueprintWorkflowMode.None;
         ShowBlueprintPersistenceStatus(savedRecord, target);
     }
@@ -1749,17 +1654,7 @@ public partial class FactoryDemo : Node3D
         FactoryBlueprintWorkflowBridge.SelectBlueprint(
             blueprintId,
             _blueprintMode,
-            () =>
-            {
-                if (_hasHoveredCell && _blueprintSite is not null && FactoryBlueprintLibrary.GetActive() is FactoryBlueprintRecord activeBlueprint)
-                {
-                    _blueprintApplyPlan = FactoryBlueprintPlanner.CreatePlan(activeBlueprint, _blueprintSite, _hoveredCell, _blueprintApplyRotation);
-                }
-                else
-                {
-                    _blueprintApplyPlan = null;
-                }
-            });
+            () => _blueprintWorkflow.UpdateApplyPlan(_hoveredCell));
     }
 
     private void EnterBlueprintApplyMode()
@@ -1769,21 +1664,20 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        EnterInteractionMode();
+        _blueprintWorkflow.ResetAll();
         _pendingBlueprintCapture = null;
-        _hasBlueprintSelectionRect = false;
+        EnterInteractionMode();
         _blueprintMode = FactoryBlueprintWorkflowMode.ApplyPreview;
-        _blueprintApplyRotation = FacingDirection.East;
     }
 
     private void ConfirmBlueprintApply()
     {
-        if (_blueprintSite is null || _blueprintApplyPlan is null)
+        if (_blueprintWorkflow.Site is null || _blueprintWorkflow.ApplyPlan is null)
         {
             return;
         }
 
-        if (!FactoryBlueprintPlanner.CommitPlan(_blueprintApplyPlan, _blueprintSite))
+        if (!FactoryBlueprintPlanner.CommitPlan(_blueprintWorkflow.ApplyPlan, _blueprintWorkflow.Site))
         {
             _previewMessage = "蓝图应用失败，请检查预览中的阻塞原因。";
             return;
@@ -1791,12 +1685,12 @@ public partial class FactoryDemo : Node3D
 
         _selectedStructure = null;
         RefreshAllTopology();
-        _previewMessage = $"已应用蓝图：{_blueprintApplyPlan.Blueprint.DisplayName}（旋转 {FactoryDirection.ToLabel(_blueprintApplyPlan.Rotation)}）";
+        _previewMessage = $"已应用蓝图：{_blueprintWorkflow.ApplyPlan.Blueprint.DisplayName}（旋转 {FactoryDirection.ToLabel(_blueprintWorkflow.ApplyPlan.Rotation)}）";
     }
 
     private void HandleBlueprintDeleteRequested(string blueprintId)
     {
-        FactoryBlueprintWorkflowBridge.DeleteBlueprint(blueprintId, () => _blueprintApplyPlan = null);
+        FactoryBlueprintWorkflowBridge.DeleteBlueprint(blueprintId, () => _blueprintWorkflow.ApplyPlan = null);
     }
 
     private void CancelBlueprintWorkflow()
@@ -1806,12 +1700,9 @@ public partial class FactoryDemo : Node3D
 
     private void CancelBlueprintWorkflow(bool clearActiveBlueprint)
     {
-        _blueprintMode = FactoryBlueprintWorkflowMode.None;
-        _blueprintSelectionDragActive = false;
-        _hasBlueprintSelectionRect = false;
+        _blueprintWorkflow.ResetAll();
         _pendingBlueprintCapture = null;
-        _blueprintApplyPlan = null;
-        _blueprintApplyRotation = FacingDirection.East;
+        _blueprintMode = FactoryBlueprintWorkflowMode.None;
 
         if (clearActiveBlueprint)
         {
@@ -1826,14 +1717,8 @@ public partial class FactoryDemo : Node3D
             return;
         }
 
-        _blueprintApplyRotation = direction < 0
-            ? FactoryDirection.RotateCounterClockwise(_blueprintApplyRotation)
-            : FactoryDirection.RotateClockwise(_blueprintApplyRotation);
-
-        if (_hasHoveredCell && _blueprintSite is not null && FactoryBlueprintLibrary.GetActive() is FactoryBlueprintRecord activeBlueprint)
-        {
-            _blueprintApplyPlan = FactoryBlueprintPlanner.CreatePlan(activeBlueprint, _blueprintSite, _hoveredCell, _blueprintApplyRotation);
-        }
+        _blueprintWorkflow.RotatePreview(direction);
+        _blueprintWorkflow.UpdateApplyPlan(_hoveredCell);
     }
 
     private void UpdateCursorShape()
@@ -2057,7 +1942,7 @@ public partial class FactoryDemo : Node3D
 
         return TryGetVisibleWorldCellRect(out var visibleRect)
             ? visibleRect
-            : BuildCellRect(_grid.MinCell, _grid.MaxCell);
+            : FactoryGridUtility.BuildCellRect(_grid.MinCell, _grid.MaxCell);
     }
 
     private IEnumerable<FactoryStructure> EnumerateStructuresInRect(Rect2I rect)
@@ -2094,29 +1979,15 @@ public partial class FactoryDemo : Node3D
             return false;
         }
 
-        visibleRect = BuildCellRect(
+        FactoryGridUtility.BuildCellRect(
             _grid.WorldToCell(new Vector3(projectedRect.Position.X, 0.0f, projectedRect.Position.Y)),
             _grid.WorldToCell(new Vector3(projectedRect.End.X, 0.0f, projectedRect.End.Y)),
             1);
         return true;
     }
-
-    private static Rect2I BuildCellRect(Vector2I a, Vector2I b, int padding = 0)
-    {
-        var minCell = new Vector2I(
-            System.Math.Min(a.X, b.X) - padding,
-            System.Math.Min(a.Y, b.Y) - padding);
-        var maxCell = new Vector2I(
-            System.Math.Max(a.X, b.X) + padding,
-            System.Math.Max(a.Y, b.Y) + padding);
-        return new Rect2I(
-            minCell,
-            new Vector2I(maxCell.X - minCell.X + 1, maxCell.Y - minCell.Y + 1));
-    }
     private void HandleBuildPrimaryPress()
     {
-        _buildPlacementDragActive = true;
-        _buildPlacementStrokeCells.Clear();
+        _buildDrag.BeginStroke();
         TryPlaceCurrentBuildTarget(trackCurrentCellForStroke: true);
     }
 
@@ -2127,7 +1998,7 @@ public partial class FactoryDemo : Node3D
 
     private bool HandleBuildDragPlacement()
     {
-        if (!_buildPlacementDragActive)
+        if (!_buildDrag.Active)
         {
             return false;
         }
@@ -2148,7 +2019,7 @@ public partial class FactoryDemo : Node3D
             return false;
         }
 
-        if (trackCurrentCellForStroke && _buildPlacementStrokeCells.Contains(_hoveredCell))
+        if (trackCurrentCellForStroke && _buildDrag.StrokeCells.Contains(_hoveredCell))
         {
             return false;
         }
@@ -2165,8 +2036,8 @@ public partial class FactoryDemo : Node3D
         }
 
         var targetCell = _hoveredCell;
-        var previousStrokeCell = _lastBuildStrokeCell;
-        var hadPreviousStrokeCell = _hasLastBuildStrokeCell;
+        var previousStrokeCell = _buildDrag.LastStrokeCell;
+        var hadPreviousStrokeCell = _buildDrag.HasLastStrokeCell;
         var placedStructure = PlaceStructure(placementKind, targetCell, placementFacing);
         TraceLog($"TryPlaceCurrentBuildTarget placement result placed={(placedStructure is not null)}");
         if (placedStructure is null)
@@ -2185,9 +2056,7 @@ public partial class FactoryDemo : Node3D
 
         if (trackCurrentCellForStroke)
         {
-            _buildPlacementStrokeCells.Add(targetCell);
-            _lastBuildStrokeCell = targetCell;
-            _hasLastBuildStrokeCell = true;
+            _buildDrag.TryRegisterCell(targetCell);
         }
 
         if (usesPlayerInventory)
@@ -2202,9 +2071,7 @@ public partial class FactoryDemo : Node3D
 
     private void ResetBuildPlacementStroke()
     {
-        _buildPlacementDragActive = false;
-        _buildPlacementStrokeCells.Clear();
-        _hasLastBuildStrokeCell = false;
+        _buildDrag.Reset();
     }
 
     private FacingDirection ResolveWorldPlacementFacing(BuildPrototypeKind placementKind, Vector2I cell, bool trackCurrentCellForStroke)
@@ -2220,8 +2087,8 @@ public partial class FactoryDemo : Node3D
         }
 
         if (trackCurrentCellForStroke
-            && _hasLastBuildStrokeCell
-            && TryResolveBeltDragFacing(_lastBuildStrokeCell, cell, out var dragFacing))
+            && _buildDrag.HasLastStrokeCell
+            && TryResolveBeltDragFacing(_buildDrag.LastStrokeCell, cell, out var dragFacing))
         {
             _selectedFacing = dragFacing;
             return dragFacing;
@@ -2341,12 +2208,6 @@ public partial class FactoryDemo : Node3D
     }
 
 
-    private static double SmoothMetric(double current, double sample, double weight)
-    {
-        return current <= 0.0
-            ? sample
-            : current + ((sample - current) * weight);
-    }
 
     private bool TryValidateWorldPlacement(BuildPrototypeKind kind, Vector2I cell, FacingDirection facing, out string message)
     {

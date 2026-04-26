@@ -2201,7 +2201,7 @@ public partial class MobileFactoryDemo
 
     private async Task<bool> RunInteriorBlueprintSmoke()
     {
-        if (_mobileFactory is null || _interiorBlueprintSite is null || _simulation is null)
+        if (_mobileFactory is null || _interiorBlueprintWorkflow.Site is null || _simulation is null)
         {
             if (HasFocusedSmokeTestFlag())
             {
@@ -2239,7 +2239,7 @@ public partial class MobileFactoryDemo
             4,
             5);
         var captured = FactoryBlueprintCaptureService.CaptureSelection(
-            _interiorBlueprintSite,
+            _interiorBlueprintWorkflow.Site,
             blueprintCaptureRect,
             "Smoke Interior Blueprint");
         if (captured is null || captured.StructureCount < 2)
@@ -2280,12 +2280,12 @@ public partial class MobileFactoryDemo
             new Vector2I(_mobileFactory.Profile.InteriorWidth + 1, savedRecord.BoundsSize.Y),
             savedRecord.Entries,
             savedRecord.RequiredAttachments);
-        var defaultAnchor = _interiorBlueprintSite.GetDefaultApplyAnchor(savedRecord);
-        var invalidBoundsPlan = FactoryBlueprintPlanner.CreatePlan(oversizeRecord, _interiorBlueprintSite, defaultAnchor);
+        var defaultAnchor = _interiorBlueprintWorkflow.Site.GetDefaultApplyAnchor(savedRecord);
+        var invalidBoundsPlan = FactoryBlueprintPlanner.CreatePlan(oversizeRecord, _interiorBlueprintWorkflow.Site, defaultAnchor);
         var boundsRejected = !invalidBoundsPlan.IsValid
             && invalidBoundsPlan.GetIssueSummary().Contains("尺寸", global::System.StringComparison.Ordinal);
 
-        var invalidPlan = FactoryBlueprintPlanner.CreatePlan(savedRecord, _interiorBlueprintSite, defaultAnchor);
+        var invalidPlan = FactoryBlueprintPlanner.CreatePlan(savedRecord, _interiorBlueprintWorkflow.Site, defaultAnchor);
         var overlapRejected = !invalidPlan.IsValid;
 
         for (var y = blueprintCaptureRect.Position.Y; y < blueprintCaptureRect.End.Y; y++)
@@ -2302,8 +2302,8 @@ public partial class MobileFactoryDemo
 
         await ToSignal(GetTree().CreateTimer(0.1f), SceneTreeTimer.SignalName.Timeout);
 
-        var validPlan = FactoryBlueprintPlanner.CreatePlan(savedRecord, _interiorBlueprintSite, defaultAnchor);
-        var committed = validPlan.IsValid && FactoryBlueprintPlanner.CommitPlan(validPlan, _interiorBlueprintSite);
+        var validPlan = FactoryBlueprintPlanner.CreatePlan(savedRecord, _interiorBlueprintWorkflow.Site, defaultAnchor);
+        var committed = validPlan.IsValid && FactoryBlueprintPlanner.CommitPlan(validPlan, _interiorBlueprintWorkflow.Site);
         if (!validPlan.IsValid || !committed)
         {
             if (HasFocusedSmokeTestFlag())

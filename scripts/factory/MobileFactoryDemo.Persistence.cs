@@ -355,7 +355,7 @@ public partial class MobileFactoryDemo
         _selectedInteriorStructure = null;
         _hoveredInteriorStructure = null;
         _pendingBlueprintCapture = null;
-        _interiorBlueprintPlan = null;
+        _interiorBlueprintWorkflow.ApplyPlan = null;
         _blueprintMode = FactoryBlueprintWorkflowMode.None;
     }
 
@@ -386,7 +386,7 @@ public partial class MobileFactoryDemo
             _mobileFactory.Profile.FootprintOffsetsEast.Count,
             Mathf.Max(1, _mobileFactory.Profile.AttachmentMounts.Count));
         UpdateInteriorPreviewSizing();
-        _interiorBlueprintSite = CreateInteriorBlueprintSiteAdapter();
+        _interiorBlueprintWorkflow.Site = CreateInteriorBlueprintSiteAdapter();
     }
 
     private void RebindFocusedScenarioSinks(FactoryWorldMapLoadResult worldLoad)

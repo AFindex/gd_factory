@@ -216,7 +216,7 @@ public partial class FactoryDemo
         _selectedStructure = null;
         _hoveredStructure = null;
         _pendingBlueprintCapture = null;
-        _blueprintApplyPlan = null;
+        _blueprintWorkflow.ApplyPlan = null;
         _blueprintMode = FactoryBlueprintWorkflowMode.None;
     }
 
