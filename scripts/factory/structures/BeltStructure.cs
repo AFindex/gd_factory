@@ -70,7 +70,7 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
             return false;
         }
 
-        return TrySpawnTransitItem(item, sourceCell, targetCell, "flow_receive_external_handoff");
+        return TrySpawnTransitItem(item, sourceCell, targetCell);
     }
 
     public void Reorient(FacingDirection facing)

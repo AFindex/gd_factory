@@ -929,11 +929,6 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
             _manualTransferProgress = 0.0f;
         }
 
-        HeavyCargoTrace.Log(
-            "port_begin_transfer",
-            item,
-            this,
-            $"mode={mode} source=({sourceCell.X},{sourceCell.Y}) target=({targetCell.X},{targetCell.Y})");
         return true;
     }
 
@@ -948,19 +943,10 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
         if (IsInboundHandoff && state.SourceCell == WorldAdjacentCell)
         {
             _transferMode = MobileFactoryHeavyPortTransferMode.WorldToOuterBuffer;
-            HeavyCargoTrace.Log(
-                "input_port_claimed_from_world",
-                state.Item,
-                this,
-                $"source=({state.SourceCell.X},{state.SourceCell.Y}) worldPort=({WorldPortCell.X},{WorldPortCell.Y})");
             return;
         }
 
-        HeavyCargoTrace.Log(
-            "port_transit_item_accepted",
-            state.Item,
-            this,
-            $"mode={_transferMode} source=({state.SourceCell.X},{state.SourceCell.Y}) target=({state.TargetCell.X},{state.TargetCell.Y})");
+
     }
 
     protected override bool TryDispatchItem(TransitItemState state, SimulationController simulation)
@@ -976,11 +962,6 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
                 _outerBufferedItem = state.Item;
                 BufferSettleTimer = BufferSettleSeconds;
                 _transferMode = MobileFactoryHeavyPortTransferMode.None;
-                HeavyCargoTrace.Log(
-                    "port_world_to_outer_buffer_complete",
-                    state.Item,
-                    this,
-                    $"outerBuffered=true settle={BufferSettleTimer:0.000}");
                 return true;
             case MobileFactoryHeavyPortTransferMode.OuterToInnerBuffer:
                 if (_innerBufferedItem is not null)
@@ -991,11 +972,6 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
                 _innerBufferedItem = state.Item;
                 BufferSettleTimer = BufferSettleSeconds;
                 _transferMode = MobileFactoryHeavyPortTransferMode.None;
-                HeavyCargoTrace.Log(
-                    "port_outer_to_inner_buffer_complete",
-                    state.Item,
-                    this,
-                    $"innerBuffered=true settle={BufferSettleTimer:0.000}");
                 return true;
             case MobileFactoryHeavyPortTransferMode.InnerToOuterBuffer:
                 if (_outerBufferedItem is not null)
@@ -1006,11 +982,6 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
                 _outerBufferedItem = state.Item;
                 BufferSettleTimer = BufferSettleSeconds;
                 _transferMode = MobileFactoryHeavyPortTransferMode.None;
-                HeavyCargoTrace.Log(
-                    "port_inner_to_outer_buffer_complete",
-                    state.Item,
-                    this,
-                    $"outerBuffered=true settle={BufferSettleTimer:0.000}");
                 return true;
             case MobileFactoryHeavyPortTransferMode.OuterToWorld:
                 if (!TryDispatchOuterToWorld(state.Item, simulation))
@@ -1019,11 +990,6 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
                 }
 
                 _transferMode = MobileFactoryHeavyPortTransferMode.None;
-                HeavyCargoTrace.Log(
-                    "port_outer_to_world_complete",
-                    state.Item,
-                    this,
-                    $"worldAdjacent=({WorldAdjacentCell.X},{WorldAdjacentCell.Y})");
                 return true;
             default:
                 return false;
@@ -1951,11 +1917,6 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
                 BufferSettleTimer = BufferSettleSeconds;
                 OnManualTransferCompleted(MobileFactoryHeavyPortTransferMode.OuterToInnerBuffer, item);
                 ClearManualTransferState();
-                HeavyCargoTrace.Log(
-                    "port_outer_to_inner_buffer_complete",
-                    item,
-                    this,
-                    $"innerBuffered=true settle={BufferSettleTimer:0.000}");
                 return;
             case MobileFactoryHeavyPortTransferMode.InnerToOuterBuffer:
                 if (_outerBufferedItem is not null)
@@ -1967,11 +1928,6 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
                 BufferSettleTimer = BufferSettleSeconds;
                 OnManualTransferCompleted(MobileFactoryHeavyPortTransferMode.InnerToOuterBuffer, item);
                 ClearManualTransferState();
-                HeavyCargoTrace.Log(
-                    "port_inner_to_outer_buffer_complete",
-                    item,
-                    this,
-                    $"outerBuffered=true settle={BufferSettleTimer:0.000}");
                 return;
             case MobileFactoryHeavyPortTransferMode.OuterToWorld:
                 if (!TryDispatchOuterToWorld(item, simulation))
@@ -1981,11 +1937,6 @@ public abstract partial class MobileFactoryHeavyPortStructure : MobileFactoryBou
 
                 OnManualTransferCompleted(MobileFactoryHeavyPortTransferMode.OuterToWorld, item);
                 ClearManualTransferState();
-                HeavyCargoTrace.Log(
-                    "port_outer_to_world_complete",
-                    item,
-                    this,
-                    $"worldAdjacent=({WorldAdjacentCell.X},{WorldAdjacentCell.Y})");
                 return;
         }
     }
@@ -2187,11 +2138,6 @@ public partial class MobileFactoryOutputPortStructure : MobileFactoryHeavyPortSt
         SetInnerBufferedItem(item);
         StartPackerArrivalSlide(item);
         BufferSettleTimer = BufferSettleSeconds;
-        HeavyCargoTrace.Log(
-            "output_port_accept_packed_bundle",
-            item,
-            this,
-            $"source=({sourceCell.X},{sourceCell.Y}) settle={BufferSettleTimer:0.000}");
         return true;
     }
 
@@ -2245,11 +2191,7 @@ public partial class MobileFactoryOutputPortStructure : MobileFactoryHeavyPortSt
         if (mode == MobileFactoryHeavyPortTransferMode.InnerToOuterBuffer)
         {
             BufferSettleTimer = Mathf.Max(BufferSettleTimer, OuterBufferPresentationHoldSeconds);
-            HeavyCargoTrace.Log(
-                "output_port_outer_buffer_hold_begin",
-                item,
-                this,
-                $"hold={BufferSettleTimer:0.000}");
+
         }
     }
 
@@ -2643,11 +2585,6 @@ public partial class MobileFactoryInputPortStructure : MobileFactoryHeavyPortStr
             var sourceDispatchCell = outputAnchor.DispatchSourceCell;
             if (unpacker.TryAcceptHeavyBundle(InnerBufferedItem, sourceDispatchCell, ResolveInputInnerBufferWorldPosition(), simulation))
             {
-                HeavyCargoTrace.Log(
-                    "input_port_handoff_to_unpacker",
-                    InnerBufferedItem,
-                    this,
-                    $"targetCell=({outputAnchor.Cell.X},{outputAnchor.Cell.Y}) dispatch=({sourceDispatchCell.X},{sourceDispatchCell.Y}) unpacker={resolution.Structure.GetInstanceId()}");
                 return true;
             }
         }
@@ -2716,11 +2653,6 @@ public partial class MobileFactoryInputPortStructure : MobileFactoryHeavyPortStr
         {
             _worldOuterBufferPresentationItemId = OuterBufferedItem.Id;
             _worldOuterBufferPresentationHoldTimer = WorldOuterBufferPresentationHoldSeconds;
-            HeavyCargoTrace.Log(
-                "input_port_world_buffer_hold_begin",
-                OuterBufferedItem,
-                this,
-                $"hold={_worldOuterBufferPresentationHoldTimer:0.000}");
             return;
         }
 

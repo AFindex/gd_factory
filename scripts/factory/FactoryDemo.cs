@@ -548,6 +548,7 @@ public partial class FactoryDemo : Node3D
         _playerController.GlobalPosition = FindPlayerSpawnPosition();
         _playerController.EnsureStarterLoadout(_simulation);
         _playerController.SelectHotbarIndex(0);
+        _playerController.DisarmHotbarPlacement();
         _cameraRig?.SetFollowTarget(_playerController, snapImmediately: true);
         _cameraRig!.FollowTargetEnabled = true;
         _playerPlacementState.SetSelectedSlot(

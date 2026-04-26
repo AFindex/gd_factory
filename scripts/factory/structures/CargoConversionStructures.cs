@@ -578,11 +578,6 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure, IF
             return false;
         }
 
-        HeavyCargoTrace.Log(
-            "unpacker_accept_heavy_bundle",
-            item,
-            this,
-            $"source=({sourceCell.X},{sourceCell.Y})");
         _lastHeavyBundleSourceCell = sourceCell;
         _lastHeavyBundleSourceWorldPosition = sourceWorldPosition;
         _hasLastHeavyBundleSourceWorldPosition = hasSourceWorldPosition;
@@ -698,7 +693,7 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure, IF
                 _postReleaseSettleProgress = 0.0;
                 _isEmittingManifest = false;
                 _isReleasingBundle = false;
-                HeavyCargoTrace.Log("unpacker_begin_processing", input, this);
+
             }
 
             return;
@@ -714,11 +709,6 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure, IF
                     return;
                 }
 
-                HeavyCargoTrace.Log(
-                    "unpacker_release_processing_bundle",
-                    _processingBundle,
-                    this,
-                    $"manifestCount={_manifestInitialCount}");
                 _processingBundle = null;
                 _processProgress = 0.0;
                 _releaseProgress = 0.0;
@@ -1436,11 +1426,6 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
                     FactoryCargoForm.WorldPacked,
                     template.Id,
                     _packedCounts);
-                HeavyCargoTrace.Log(
-                    "packer_manifest_satisfied",
-                    _processingBundle,
-                    this,
-                    $"inputKind={input.ItemKind} template={template.Id}");
                 _processProgress = 0.0;
                 _completedBundleHold = CompletedBundleHoldSeconds;
             }

@@ -78,11 +78,6 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         }
 
         _items.Add(state);
-        HeavyCargoTrace.Log(
-            "flow_accept_item",
-            item,
-            this,
-            $"source=({sourceCell.X},{sourceCell.Y}) target=({targetCell.X},{targetCell.Y}) lane={laneKey}");
         OnTransitItemAccepted(state);
         return true;
     }
@@ -198,11 +193,6 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         }
 
         _items.Add(state);
-        HeavyCargoTrace.Log(
-            "flow_receive_provided",
-            item,
-            this,
-            $"source=({sourceCell.X},{sourceCell.Y}) target=({targetCell.X},{targetCell.Y}) lane={laneKey}");
         OnTransitItemAccepted(state);
         return true;
     }
@@ -215,7 +205,7 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         return HasSpawnClearance(tailIndex, occupiedLengthProgress);
     }
 
-    protected bool TrySpawnTransitItem(FactoryItem item, Vector2I sourceCell, Vector2I targetCell, string traceEventName)
+    protected bool TrySpawnTransitItem(FactoryItem item, Vector2I sourceCell, Vector2I targetCell)
     {
         var renderDescriptors = FactoryTransportVisualFactory.ResolveDescriptorSet(item, CellSize);
         var laneKey = GetTransitLaneKey(sourceCell, targetCell);
@@ -240,11 +230,6 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
         }
 
         _items.Add(state);
-        HeavyCargoTrace.Log(
-            traceEventName,
-            item,
-            this,
-            $"source=({sourceCell.X},{sourceCell.Y}) target=({targetCell.X},{targetCell.Y}) lane={laneKey}");
         OnTransitItemAccepted(state);
         return true;
     }
@@ -284,11 +269,6 @@ public abstract partial class FlowTransportStructure : FactoryStructure, IFactor
                             targetStructureLabel = $"{targetStructure.Kind}@({targetStructure.Cell.X},{targetStructure.Cell.Y})";
                         }
 
-                        HeavyCargoTrace.Log(
-                            "flow_dispatch_success",
-                            itemState.Item,
-                            this,
-                            $"from=({itemState.SourceCell.X},{itemState.SourceCell.Y}) to=({itemState.TargetCell.X},{itemState.TargetCell.Y}) target={targetStructureLabel} progress={itemState.Position:0.000}");
                         FreeLegacyVisual(itemState);
                         _items.RemoveAt(i);
                         i--;
