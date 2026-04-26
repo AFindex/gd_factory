@@ -56,36 +56,7 @@ public partial class MobileFactoryDemo : Node3D
     [Export]
     public bool UseLargeTestScenario { get; set; }
 
-    private readonly Dictionary<BuildPrototypeKind, BuildPrototypeDefinition> _definitions = new()
-    {
-        [BuildPrototypeKind.Producer] = new BuildPrototypeDefinition(BuildPrototypeKind.Producer, "兼容生产器", new Color("9DC08B"), "兼容型占位产物流，仅用于 legacy 验证。"),
-        [BuildPrototypeKind.Belt] = new BuildPrototypeDefinition(BuildPrototypeKind.Belt, "传送带", new Color("7DD3FC"), "将物品沿直线向前输送，也允许末端直接并入另一段传送带的中段。"),
-        [BuildPrototypeKind.Splitter] = new BuildPrototypeDefinition(BuildPrototypeKind.Splitter, "分流器", new Color("C4B5FD"), "将后方输入分到左右两路。"),
-        [BuildPrototypeKind.Merger] = new BuildPrototypeDefinition(BuildPrototypeKind.Merger, "合并器", new Color("99F6E4"), "把后方、左侧和右侧三路物流汇成前方一路。"),
-        [BuildPrototypeKind.Bridge] = new BuildPrototypeDefinition(BuildPrototypeKind.Bridge, "跨桥", new Color("F59E0B"), "让南北和东西两路物流跨越而不互连。"),
-        [BuildPrototypeKind.CargoUnpacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoUnpacker, "解包模块", new Color("38BDF8"), "模板驱动的解包处理舱。世界大货物会以原尺寸进入舱体，并按 manifest 节拍拆成多个舱内小包。"),
-        [BuildPrototypeKind.CargoPacker] = new BuildPrototypeDefinition(BuildPrototypeKind.CargoPacker, "封包模块", new Color("F97316"), "模板驱动的封包处理舱。只有累计到目标模板要求后，才会压装成 1 个世界标准大货物。"),
-        [BuildPrototypeKind.TransferBuffer] = new BuildPrototypeDefinition(BuildPrototypeKind.TransferBuffer, "中转缓冲槽", new Color("14B8A6"), "重载/节拍缓冲架。既可暂存世界大包，也可作为封包前的小包汇流位。"),
-        [BuildPrototypeKind.DebugOreSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugOreSource, "原矿调试舱", new Color("4ADE80"), "无成本按配方持续输出单种基础原料，便于直接调试舱内供料链。"),
-        [BuildPrototypeKind.DebugPartSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugPartSource, "部件调试舱", new Color("22D3EE"), "无成本按配方持续输出单种板材或中间件，便于快速调试舱内加工链与缓存。"),
-        [BuildPrototypeKind.DebugCombatSource] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugCombatSource, "战备调试舱", new Color("FB7185"), "无成本按配方持续输出单种战备或维护补给，便于快速调试炮塔和支援链。"),
-        [BuildPrototypeKind.DebugPowerGenerator] = new BuildPrototypeDefinition(BuildPrototypeKind.DebugPowerGenerator, "永久测试动力舱", new Color("FBBF24"), "调试专用永久供电模块，无需燃料即可持续给舱内电网供能。"),
-        [BuildPrototypeKind.Sink] = new BuildPrototypeDefinition(BuildPrototypeKind.Sink, "回收器", new Color("FDE68A"), "吞掉输入物品并作为内部消费端。"),
-        [BuildPrototypeKind.Storage] = new BuildPrototypeDefinition(BuildPrototypeKind.Storage, "仓储", new Color("94A3B8"), "缓存多件物品，可向前输出，也能被机械臂抓取。"),
-        [BuildPrototypeKind.LargeStorageDepot] = new BuildPrototypeDefinition(BuildPrototypeKind.LargeStorageDepot, "大型仓储", new Color("64748B"), "占据 2x2 内部格子的仓储缓冲区，用于宽体移动工厂案例。"),
-        [BuildPrototypeKind.Inserter] = new BuildPrototypeDefinition(BuildPrototypeKind.Inserter, "机械臂", new Color("FACC15"), "从后方抓取一件物品并向前投送。"),
-        [BuildPrototypeKind.Wall] = new BuildPrototypeDefinition(BuildPrototypeKind.Wall, "墙体", new Color("D1D5DB"), "给移动工厂的前缘补上一段高耐久掩体。"),
-        [BuildPrototypeKind.AmmoAssembler] = new BuildPrototypeDefinition(BuildPrototypeKind.AmmoAssembler, "弹药组装器", new Color("FB923C"), "在内部持续生产弹药，直接喂给炮塔。"),
-        [BuildPrototypeKind.GunTurret] = new BuildPrototypeDefinition(BuildPrototypeKind.GunTurret, "机枪炮塔", new Color("CBD5E1"), "会跟随移动工厂整体旋转，对世界中的敌人自动转向并射击。"),
-        [BuildPrototypeKind.HeavyGunTurret] = new BuildPrototypeDefinition(BuildPrototypeKind.HeavyGunTurret, "重型炮塔", new Color("E2E8F0"), "占据 2x2 内部格子，消耗高速弹药并发射独立炮弹。"),
-        [BuildPrototypeKind.OutputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.OutputPort, "输出端口", new Color("FB923C"), "把封包完成的世界大货物交给世界侧重型物流，不直接暴露舱内小载具。"),
-        [BuildPrototypeKind.InputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.InputPort, "输入端口", new Color("60A5FA"), "把世界大货物接入壳体交接区，再由解包模块转换为舱内料轨可承载的小载具。"),
-        [BuildPrototypeKind.MiningInputPort] = new BuildPrototypeDefinition(BuildPrototypeKind.MiningInputPort, "采矿输入端口", new Color("34D399"), "部署后会在工厂外侧展开采矿交接链；散装矿料以世界大件形式进舱，再交给解包模块处理。"),
-        [BuildPrototypeKind.Generator] = new BuildPrototypeDefinition(BuildPrototypeKind.Generator, "发电机", new Color("FB923C"), "消耗煤炭发电，为移动工厂内部设备提供基础电力。"),
-        [BuildPrototypeKind.PowerPole] = new BuildPrototypeDefinition(BuildPrototypeKind.PowerPole, "电线杆", new Color("FDE68A"), "延伸移动工厂内部的供电覆盖，并可预览连线。"),
-        [BuildPrototypeKind.Smelter] = new BuildPrototypeDefinition(BuildPrototypeKind.Smelter, "熔炉", new Color("CBD5E1"), "消耗电力把矿石炼成铁板，便于在内部试配生产链。"),
-        [BuildPrototypeKind.Assembler] = new BuildPrototypeDefinition(BuildPrototypeKind.Assembler, "组装机", new Color("67E8F9"), "消耗中间品和电力，在移动工厂内部验证真实配方。")
-    };
+    private readonly Dictionary<BuildPrototypeKind, BuildPrototypeDefinition> _definitions = FactoryPrototypeCatalog.BuildForInterior();
 
     private GridManager? _grid;
     private SimulationController? _simulation;
@@ -114,7 +85,7 @@ public partial class MobileFactoryDemo : Node3D
     private readonly List<MeshInstance3D> _interiorPreviewExteriorMeshes = new();
     private readonly List<Node3D> _interiorPortHintMeshes = new();
     private readonly List<FactoryPortPreviewMarker> _cachedInteriorPortMarkers = new();
-    private readonly List<MeshInstance3D> _interiorPowerLinkDashes = new();
+    private PowerLinkPreviewContext _interiorPowerLinkContext = new();
 
     private MobileFactoryInstance? _mobileFactory;
     private readonly List<MobileFactoryInstance> _backgroundFactories = new();
@@ -602,6 +573,7 @@ public partial class MobileFactoryDemo : Node3D
 
         _interiorPortHintRoot = scaffold.GetRoot("interior-port-hints");
         _interiorPowerLinkOverlayRoot = scaffold.GetRoot("interior-power-links");
+        _interiorPowerLinkContext.OverlayRoot = _interiorPowerLinkOverlayRoot;
         _interiorBlueprintWorkflow.PreviewRoot = scaffold.GetRoot("interior-blueprint-preview");
         _interiorBlueprintWorkflow.GhostPreviewRoot = scaffold.GetRoot("interior-blueprint-ghost-preview");
         _simulation = scaffold.Simulation;
@@ -2805,7 +2777,7 @@ public partial class MobileFactoryDemo : Node3D
 
         if (!_editorOpen || _blueprintMode != FactoryBlueprintWorkflowMode.None)
         {
-            SetInteriorPowerLinkDashCount(0);
+            _interiorPowerLinkContext.RenderPowerLinkSet(_structureRoot!, Vector3.Zero, Vector2I.Zero, 0, Colors.Transparent);
             return;
         }
 
@@ -2816,8 +2788,9 @@ public partial class MobileFactoryDemo : Node3D
             var previewColor = _canPlaceInteriorCell
                 ? new Color(0.98f, 0.89f, 0.52f, 0.92f)
                 : new Color(1.0f, 0.45f, 0.45f, 0.90f);
-            RenderInteriorPowerLinkSet(
-                GetPreviewPowerAnchor(_mobileFactory.InteriorSite, _hoveredInteriorCell, PreviewPowerPoleWireHeight),
+            _interiorPowerLinkContext.RenderPowerLinkSet(
+                _structureRoot!,
+                PowerLinkPreviewContext.GetPreviewPowerAnchor(_mobileFactory.InteriorSite, _hoveredInteriorCell, PreviewPowerPoleWireHeight),
                 _hoveredInteriorCell,
                 PreviewPowerPoleConnectionRangeCells,
                 previewColor,
@@ -2830,8 +2803,9 @@ public partial class MobileFactoryDemo : Node3D
             && GodotObject.IsInstanceValid(selectedPole)
             && selectedPole.IsInsideTree())
         {
-            RenderInteriorPowerLinkSet(
-                GetPowerAnchor(selectedPole),
+            _interiorPowerLinkContext.RenderPowerLinkSet(
+                _structureRoot!,
+                PowerLinkPreviewContext.GetPowerAnchor(selectedPole),
                 selectedPole.Cell,
                 selectedPole.PowerConnectionRangeCells,
                 new Color(0.99f, 0.93f, 0.62f, 0.92f),
@@ -2840,77 +2814,21 @@ public partial class MobileFactoryDemo : Node3D
             return;
         }
 
-        SetInteriorPowerLinkDashCount(0);
-    }
-
-    private void RenderInteriorPowerLinkSet(
-        Vector3 origin,
-        Vector2I originCell,
-        int originRange,
-        Color color,
-        IFactorySite site,
-        FactoryStructure? exclude = null)
-    {
-        FactoryPowerPreviewSupport.RenderPowerLinkSet(
-            _structureRoot,
-            origin,
-            originCell,
-            originRange,
-            color,
-            GetPowerAnchor,
-            DrawInteriorDashedPowerLink,
-            SetInteriorPowerLinkDashCount,
-            site,
-            exclude);
-    }
-
-    private List<FactoryStructure> CollectConnectablePowerNodes(IFactorySite site, Vector2I originCell, int originRange, FactoryStructure? exclude)
-    {
-        return FactoryPowerPreviewSupport.CollectConnectablePowerNodes(_structureRoot, originCell, originRange, site, exclude);
-    }
-
-    private int DrawInteriorDashedPowerLink(Vector3 start, Vector3 end, Color color, int dashIndex)
-    {
-        return FactoryPreviewOverlaySupport.DrawDashedPowerLink(
-            start,
-            end,
-            color,
-            dashIndex,
-            EnsureInteriorPowerLinkDashCapacity,
-            _interiorPowerLinkDashes,
-            ApplyPowerLinkColor);
-    }
-
-    private void EnsureInteriorPowerLinkDashCapacity(int count)
-    {
-        FactoryPreviewOverlaySupport.EnsurePowerLinkDashCapacity(_interiorPowerLinkOverlayRoot, _interiorPowerLinkDashes, count, "InteriorPowerLinkDash");
-    }
-
-    private void SetInteriorPowerLinkDashCount(int visibleCount)
-    {
-        if (_interiorPowerLinkOverlayRoot is null)
-        {
-            return;
-        }
-
-        for (var i = visibleCount; i < _interiorPowerLinkDashes.Count; i++)
-        {
-            _interiorPowerLinkDashes[i].Visible = false;
-        }
-
-        _interiorPowerLinkOverlayRoot.Visible = visibleCount > 0;
+        _interiorPowerLinkContext.RenderPowerLinkSet(_structureRoot!, Vector3.Zero, Vector2I.Zero, 0, Colors.Transparent);
     }
 
     private bool ShouldShowInteriorSelectionRange(FactoryStructure structure)
     {
-        return GodotObject.IsInstanceValid(structure)
-            && structure.IsInsideTree()
-            && structure.Site == _mobileFactory?.InteriorSite
-            && ((IsInteriorPowerPreviewActive() && structure is IFactoryPowerNode)
-                || (_editorOpen
-                    && _interiorInteractionMode == FactoryInteractionMode.Interact
-                    && structure == _selectedInteriorStructure
-                    && structure.SupportsSelectionRangeIndicator));
+        if (structure.Site != _mobileFactory?.InteriorSite)
+        {
+            return false;
+        }
+
+        return PowerLinkPreviewContext.ShouldShowSelectionRange(
+            structure,
+            IsInteriorPowerPreviewActive(),
+            _editorOpen && _interiorInteractionMode == FactoryInteractionMode.Interact,
+            structure == _selectedInteriorStructure);
     }
 
     private bool IsInteriorPowerPreviewActive()
@@ -2920,9 +2838,11 @@ public partial class MobileFactoryDemo : Node3D
             return false;
         }
 
-        return _interiorInteractionMode == FactoryInteractionMode.Build
-            ? _hasHoveredInteriorCell && (_selectedInteriorKind == BuildPrototypeKind.Generator || _selectedInteriorKind == BuildPrototypeKind.DebugPowerGenerator || _selectedInteriorKind == BuildPrototypeKind.PowerPole)
-            : _interiorInteractionMode == FactoryInteractionMode.Interact && _selectedInteriorStructure is IFactoryPowerNode;
+        return PowerLinkPreviewContext.IsPowerPreviewActive(
+            _interiorInteractionMode,
+            _hasHoveredInteriorCell,
+            _selectedInteriorKind,
+            _selectedInteriorStructure);
     }
 
     private static void UpdatePreviewPowerRange(BuildPrototypeKind kind, IFactorySite site, MeshInstance3D previewPowerRange, Color tint)
@@ -2933,34 +2853,6 @@ public partial class MobileFactoryDemo : Node3D
     private static bool TryGetPowerPreviewInfo(BuildPrototypeKind kind, out int rangeCells)
     {
         return FactoryPowerPreviewSupport.TryGetPowerPreviewInfo(kind, out rangeCells);
-    }
-
-    private static void ApplyPowerLinkColor(MeshInstance3D dash, Color color)
-    {
-        if (dash.MaterialOverride is not StandardMaterial3D material)
-        {
-            return;
-        }
-
-        material.AlbedoColor = color;
-        material.Emission = color.Lightened(0.08f);
-    }
-
-    private static Vector3 GetPreviewPowerAnchor(IFactorySite site, Vector2I cell, float height)
-    {
-        return site.CellToWorld(cell) + new Vector3(0.0f, height, 0.0f);
-    }
-
-    private static Vector3 GetPowerAnchor(FactoryStructure structure)
-    {
-        var height = structure switch
-        {
-            PowerPoleStructure => 1.44f,
-            GeneratorStructure => 1.06f,
-            DebugPowerGeneratorStructure => 1.12f,
-            _ => 1.18f
-        };
-        return structure.GlobalPosition + new Vector3(0.0f, height, 0.0f);
     }
 
     private void UpdateEditorCamera()
