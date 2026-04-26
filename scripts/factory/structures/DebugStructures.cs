@@ -1,5 +1,6 @@
 using Godot;
 using System.Collections.Generic;
+using NetFactory.Models;
 
 public abstract partial class DebugItemSourceStructure : FactoryRecipeMachineStructure
 {
@@ -53,31 +54,11 @@ public abstract partial class DebugItemSourceStructure : FactoryRecipeMachineStr
 
     protected override void BuildVisuals()
     {
-        var accent = FactoryPresentation.GetBuildPrototypeAccentColor(Kind);
-        var dark = accent.Darkened(0.35f);
-        var light = accent.Lightened(0.28f);
-        var visualRoot = GetNode<Node3D>("StructureVisualRoot");
+        var builder = new DefaultModelBuilder(this, CellSize);
+        DebugSourceModelDescriptor.BuildModel(builder, SiteKind);
 
-        if (SiteKind == FactorySiteKind.Interior)
-        {
-            CreateInteriorModuleShell(visualRoot, "DebugSource", new Vector3(CellSize * 0.64f, 0.78f, CellSize * 0.64f), dark, light, new Vector3(0.0f, 0.42f, 0.0f));
-            _spinnerRig = new Node3D { Name = "DebugSpinnerRig", Position = new Vector3(0.0f, 0.84f, 0.0f) };
-            visualRoot.AddChild(_spinnerRig);
-            CreateBox(_spinnerRig, "DebugSpinnerNorth", new Vector3(CellSize * 0.10f, 0.14f, CellSize * 0.42f), accent, Vector3.Zero);
-            CreateBox(_spinnerRig, "DebugSpinnerEast", new Vector3(CellSize * 0.42f, 0.14f, CellSize * 0.10f), light, Vector3.Zero);
-            CreateInteriorTray(visualRoot, "DebugSourceTray", new Vector3(CellSize * 0.52f, 0.12f, CellSize * 0.38f), dark.Lightened(0.08f), light, new Vector3(0.0f, 0.20f, 0.0f));
-            _statusLamp = CreateBox("DebugStatusLamp", new Vector3(CellSize * 0.12f, CellSize * 0.12f, CellSize * 0.12f), light, new Vector3(0.0f, 1.04f, 0.0f));
-            return;
-        }
-
-        CreateBox("DebugFooting", new Vector3(CellSize * 0.86f, 0.20f, CellSize * 0.86f), dark, new Vector3(0.0f, 0.10f, 0.0f));
-        CreateBox("DebugCrate", new Vector3(CellSize * 0.64f, 0.92f, CellSize * 0.64f), accent, new Vector3(0.0f, 0.56f, 0.0f));
-        _spinnerRig = new Node3D { Name = "DebugSpinnerRig", Position = new Vector3(0.0f, 1.08f, 0.0f) };
-        visualRoot.AddChild(_spinnerRig);
-        CreateBox(_spinnerRig, "DebugSpinnerNorth", new Vector3(CellSize * 0.12f, 0.14f, CellSize * 0.52f), light, Vector3.Zero);
-        CreateBox(_spinnerRig, "DebugSpinnerEast", new Vector3(CellSize * 0.52f, 0.14f, CellSize * 0.12f), dark, Vector3.Zero);
-        CreateBox("DebugOutlet", new Vector3(CellSize * 0.22f, 0.28f, CellSize * 0.22f), light, new Vector3(CellSize * 0.34f, 0.66f, 0.0f));
-        _statusLamp = CreateBox("DebugStatusLamp", new Vector3(CellSize * 0.14f, CellSize * 0.14f, CellSize * 0.14f), light, new Vector3(0.0f, 1.38f, 0.0f));
+        _spinnerRig = builder.Root.FindChild("DebugSpinnerRig", true, false) as Node3D;
+        _statusLamp = builder.Root.FindChild("DebugStatusLamp", true, false) as MeshInstance3D;
     }
 }
 
@@ -173,34 +154,16 @@ public partial class DebugPowerGeneratorStructure : FactoryStructure, IFactoryPo
 
     protected override void BuildVisuals()
     {
-        var visualRoot = GetNode<Node3D>("StructureVisualRoot");
-        _powerRange = CreateDisc(
-            "PowerRange",
-            CellSize * PowerConnectionRangeCells,
-            0.03f,
-            new Color(0.99f, 0.88f, 0.42f, 0.12f),
-            new Vector3(0.0f, 0.02f, 0.0f));
-        _powerRange.Visible = false;
+        var builder = new DefaultModelBuilder(this, CellSize);
+        DebugPowerModelDescriptor.BuildModel(builder, SiteKind);
 
-        if (SiteKind == FactorySiteKind.Interior)
+        _powerRange = builder.Root.FindChild("PowerRange", true, false) as MeshInstance3D;
+        if (_powerRange is not null)
         {
-            CreateInteriorModuleShell(visualRoot, "DebugPower", new Vector3(CellSize * 0.68f, 0.86f, CellSize * 0.68f), new Color("4C3B12"), new Color("FBBF24"), new Vector3(0.0f, 0.44f, 0.0f));
-            _rotorRig = new Node3D { Name = "DebugPowerRotorRig", Position = new Vector3(0.0f, 0.86f, 0.0f) };
-            visualRoot.AddChild(_rotorRig);
-            CreateBox(_rotorRig, "RotorBladeNorth", new Vector3(CellSize * 0.12f, 0.12f, CellSize * 0.54f), new Color("FCD34D"), Vector3.Zero);
-            CreateBox(_rotorRig, "RotorBladeEast", new Vector3(CellSize * 0.54f, 0.12f, CellSize * 0.12f), new Color("FDE68A"), Vector3.Zero);
-            CreateBox("PowerCore", new Vector3(CellSize * 0.26f, 0.38f, CellSize * 0.26f), new Color("F59E0B"), new Vector3(0.0f, 0.54f, 0.0f));
-            _statusLamp = CreateBox("PowerLamp", new Vector3(CellSize * 0.14f, CellSize * 0.14f, CellSize * 0.14f), new Color("FEF3C7"), new Vector3(0.0f, 1.08f, 0.0f));
-            return;
+            _powerRange.Visible = false;
         }
 
-        CreateBox("Base", new Vector3(CellSize * 0.90f, 0.22f, CellSize * 0.90f), new Color("5B4420"), new Vector3(0.0f, 0.11f, 0.0f));
-        CreateBox("GeneratorBody", new Vector3(CellSize * 0.62f, 0.92f, CellSize * 0.62f), new Color("D97706"), new Vector3(0.0f, 0.58f, 0.0f));
-        _rotorRig = new Node3D { Name = "DebugPowerRotorRig", Position = new Vector3(0.0f, 1.18f, 0.0f) };
-        visualRoot.AddChild(_rotorRig);
-        CreateBox(_rotorRig, "RotorBladeNorth", new Vector3(CellSize * 0.12f, 0.12f, CellSize * 0.62f), new Color("FCD34D"), Vector3.Zero);
-        CreateBox(_rotorRig, "RotorBladeEast", new Vector3(CellSize * 0.62f, 0.12f, CellSize * 0.12f), new Color("FDE68A"), Vector3.Zero);
-        CreateBox("GeneratorCore", new Vector3(CellSize * 0.28f, 0.42f, CellSize * 0.28f), new Color("FDBA74"), new Vector3(0.0f, 0.76f, 0.0f));
-        _statusLamp = CreateBox("PowerLamp", new Vector3(CellSize * 0.16f, CellSize * 0.16f, CellSize * 0.16f), new Color("FEF3C7"), new Vector3(0.0f, 1.52f, 0.0f));
+        _rotorRig = builder.Root.FindChild("DebugPowerRotorRig", true, false) as Node3D;
+        _statusLamp = builder.Root.FindChild("PowerLamp", true, false) as MeshInstance3D;
     }
 }

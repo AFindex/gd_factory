@@ -1,4 +1,5 @@
 using Godot;
+using NetFactory.Models;
 
 public partial class BridgeStructure : FlowTransportStructure
 {
@@ -29,19 +30,8 @@ public partial class BridgeStructure : FlowTransportStructure
 
     protected override void BuildVisuals()
     {
-        if (SiteKind == FactorySiteKind.Interior)
-        {
-            CreateBox("BridgeDeck", new Vector3(CellSize * 0.94f, 0.10f, CellSize * 0.94f), new Color("1E293B"), new Vector3(0.0f, 0.10f, 0.0f));
-            CreateInteriorTray(this, "BridgeLower", new Vector3(CellSize * 0.88f, 0.08f, CellSize * 0.18f), new Color("0EA5E9"), new Color("BAE6FD"), new Vector3(0.0f, 0.16f, 0.0f));
-            CreateInteriorTray(this, "BridgeUpper", new Vector3(CellSize * 0.18f, 0.08f, CellSize * 0.88f), new Color("F59E0B"), new Color("FDE68A"), new Vector3(0.0f, 0.28f, 0.0f));
-            CreateBox("BridgeSpacer", new Vector3(CellSize * 0.22f, 0.12f, CellSize * 0.22f), new Color("475569"), new Vector3(0.0f, 0.22f, 0.0f));
-            CreateInteriorIndicatorLight(this, "BridgeLamp", new Color("E2E8F0"), new Vector3(0.0f, 0.40f, 0.0f), CellSize * 0.07f);
-            return;
-        }
-
-        CreateColoredBox("Base", new Vector3(CellSize * 0.92f, 0.16f, CellSize * 0.92f), new Color("475569"), new Vector3(0.0f, 0.08f, 0.0f));
-        CreateColoredBox("EastWest", new Vector3(CellSize * 0.95f, 0.10f, CellSize * 0.20f), new Color("F59E0B"), new Vector3(0.0f, 0.38f, 0.0f));
-        CreateColoredBox("NorthSouth", new Vector3(CellSize * 0.20f, 0.10f, CellSize * 0.95f), new Color("38BDF8"), new Vector3(0.0f, 0.22f, 0.0f));
+        var builder = new DefaultModelBuilder(this, CellSize);
+        BridgeModelDescriptor.BuildModel(builder, SiteKind);
     }
 
     protected override bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell)

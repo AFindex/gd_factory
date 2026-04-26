@@ -1,5 +1,6 @@
 using Godot;
 using System.Collections.Generic;
+using NetFactory.Models;
 
 public partial class MobileFactoryMiningStakeStructure : FactoryStructure
 {
@@ -118,36 +119,17 @@ public partial class MobileFactoryMiningStakeStructure : FactoryStructure
     protected override void BuildVisuals()
     {
         BuildLinkVisual();
-        CreateDisc("StakePad", CellSize * 0.18f, 0.16f, StakeBaseColor.Darkened(0.18f), new Vector3(0.0f, 0.08f, 0.0f));
-        _stakeMast = CreateDisc("StakeMast", 0.07f, 0.56f, StakeBaseColor, new Vector3(0.0f, 0.40f, 0.0f));
-        _stakeHead = CreateBox("StakeHead", new Vector3(0.26f, 0.16f, 0.44f), StakeAccentColor, new Vector3(0.0f, 0.70f, 0.0f));
-        _stakeTip = CreateBox("StakeTip", new Vector3(0.12f, 0.10f, 0.26f), StakeAccentColor.Lightened(0.18f), new Vector3(0.0f, 0.62f, 0.20f));
-        _stakeBeacon = CreateBox("StakeBeacon", new Vector3(0.08f, 0.08f, 0.08f), Colors.White, new Vector3(0.0f, 0.80f, -0.12f));
 
-        _deployProgressBackground = CreateBox(
-            "DeployProgressBackground",
-            new Vector3(CellSize * 0.54f, 0.03f, 0.08f),
-            new Color(0.04f, 0.07f, 0.12f, 0.82f),
-            new Vector3(0.0f, 1.00f, 0.0f));
-        _deployProgressBackground.Visible = false;
+        var builder = new DefaultModelBuilder(this, CellSize);
+        MiningStakeModelDescriptor.BuildModel(builder, SiteKind);
 
-        _deployProgressFillMaterial = new StandardMaterial3D
-        {
-            AlbedoColor = StakeProgressColor,
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            EmissionEnabled = true,
-            Emission = StakeProgressColor.Darkened(0.08f)
-        };
-        _deployProgressFill = new MeshInstance3D
-        {
-            Name = "DeployProgressFill",
-            Mesh = new BoxMesh { Size = new Vector3(CellSize * 0.50f, 0.02f, 0.06f) },
-            Position = new Vector3(0.0f, 1.00f, 0.0f),
-            MaterialOverride = _deployProgressFillMaterial,
-            Visible = false
-        };
-        AddChild(_deployProgressFill);
+        _stakeMast = builder.Root.FindChild("StakeMast", true, false) as MeshInstance3D;
+        _stakeHead = builder.Root.FindChild("StakeHead", true, false) as MeshInstance3D;
+        _stakeTip = builder.Root.FindChild("StakeTip", true, false) as MeshInstance3D;
+        _stakeBeacon = builder.Root.FindChild("StakeBeacon", true, false) as MeshInstance3D;
+        _deployProgressBackground = builder.Root.FindChild("DeployProgressBackground", true, false) as MeshInstance3D;
+        _deployProgressFill = builder.Root.FindChild("DeployProgressFill", true, false) as MeshInstance3D;
+        _deployProgressFillMaterial = _deployProgressFill?.MaterialOverride as StandardMaterial3D;
 
         UpdateDeploymentVisualState(DeploymentProgress);
     }

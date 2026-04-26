@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using NetFactory.Models;
 
 public enum MobileFactoryHeavyHandoffPhase
 {
@@ -240,22 +241,8 @@ public abstract partial class MobileFactoryBoundaryAttachmentStructure : FlowTra
 
     protected override void BuildVisuals()
     {
-        var deckWidth = GetPortDeckWidth();
-        var baseColor = AttachmentDefinition.Tint.Darkened(0.2f);
-        var accentColor = AttachmentDefinition.Tint;
-        var tipColor = AttachmentDefinition.ConnectorColor;
-        var deckDepth = GetPortDeckDepth();
-
-        CreateColoredBox("BoundaryBaseSkid", new Vector3(deckWidth, 0.12f, deckDepth), baseColor, new Vector3(0.0f, 0.06f, 0.0f));
-        CreateColoredBox("BoundaryDeck", new Vector3(deckWidth * 0.90f, 0.08f, deckDepth * 0.90f), baseColor.Lightened(0.06f), new Vector3(0.02f * CellSize, 0.12f, 0.0f));
-        CreateColoredBox("BoundaryHandoffCradle", new Vector3(deckWidth * 0.82f, 0.10f, deckDepth * 0.58f), accentColor.Darkened(0.06f), new Vector3(0.06f * CellSize, 0.18f, 0.0f));
-        CreateInteriorTray(this, "BoundaryTransferLane", new Vector3(deckWidth * 0.84f, 0.08f, CellSize * 0.34f), accentColor, tipColor.Lightened(0.16f), new Vector3(0.08f * CellSize, 0.20f, 0.0f));
-        CreateColoredBox("BoundaryDeckRailNorth", new Vector3(deckWidth * 0.74f, 0.10f, CellSize * 0.10f), tipColor.Lightened(0.12f), new Vector3(0.06f * CellSize, 0.24f, 0.0f));
-        CreateColoredBox("BoundaryPortalNorth", new Vector3(CellSize * 0.18f, 0.44f, CellSize * 0.16f), tipColor, new Vector3(deckWidth * 0.40f, 0.32f, 0.0f));
-        CreateColoredBox("HullMouth", new Vector3(deckWidth * 0.28f, 0.14f, deckDepth * 0.48f), tipColor.Lightened(0.04f), new Vector3(deckWidth * 0.48f, 0.24f, 0.0f));
-        CreateColoredBox("BoundaryScaleMarker", new Vector3(CellSize * 0.30f, 0.06f, CellSize * 0.30f), tipColor.Lightened(0.18f), new Vector3(-CellSize * 0.40f, 0.14f, 0.0f));
-        CreateInteriorLabelPlate(this, "BoundaryScaleLabel", "重载", tipColor, new Vector3(-deckWidth * 0.10f, 0.12f, -deckDepth * 0.38f), 1.18f);
-        CreateInteriorIndicatorLight(this, "Beacon", tipColor.Lightened(0.22f), new Vector3(-deckWidth * 0.30f, 0.40f, 0.0f), CellSize * 0.07f);
+        var builder = new DefaultModelBuilder(this, CellSize);
+        BoundaryAttachmentModelDescriptor.BuildModel(builder, SiteKind);
     }
 
     protected Vector3 EvaluatePortPath(float progress, bool worldToInterior)

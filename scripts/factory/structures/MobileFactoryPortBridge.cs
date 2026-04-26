@@ -1,4 +1,5 @@
 using Godot;
+using NetFactory.Models;
 
 public partial class MobileFactoryPortBridge : FlowTransportStructure
 {
@@ -43,9 +44,8 @@ public partial class MobileFactoryPortBridge : FlowTransportStructure
 
     protected override void BuildVisuals()
     {
-        CreateColoredBox("Pad", new Vector3(CellSize * 0.72f, 0.14f, CellSize * 0.72f), new Color("475569"), new Vector3(0.0f, 0.08f, 0.0f));
-        CreateColoredBox("Chute", new Vector3(CellSize * 0.68f, 0.18f, CellSize * 0.22f), new Color("F97316"), new Vector3(0.08f * CellSize, 0.18f, 0.0f));
-        CreateColoredBox("Beacon", new Vector3(CellSize * 0.16f, 0.12f, CellSize * 0.16f), new Color("FED7AA"), new Vector3(CellSize * 0.28f, 0.28f, 0.0f));
+        var builder = new DefaultModelBuilder(this, CellSize);
+        PortBridgeModelDescriptor.BuildModel(builder, SiteKind);
     }
 
     protected override bool TryResolveTargetCell(FactoryItem item, Vector2I sourceCell, SimulationController simulation, out Vector2I targetCell)

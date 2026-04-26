@@ -1,5 +1,6 @@
 using Godot;
 using System.Collections.Generic;
+using NetFactory.Models;
 
 public partial class AmmoAssemblerStructure : FactoryRecipeMachineStructure
 {
@@ -35,24 +36,9 @@ public partial class AmmoAssemblerStructure : FactoryRecipeMachineStructure
 
     protected override void BuildVisuals()
     {
-        if (SiteKind == FactorySiteKind.Interior)
-        {
-            CreateBox("Base", new Vector3(CellSize * 2.82f, 0.18f, CellSize * 1.82f), new Color("1F2937"), new Vector3(0.0f, 0.09f, 0.0f));
-            CreateInteriorModuleShell(this, "AmmoCabin", new Vector3(CellSize * 2.18f, 0.84f, CellSize * 1.22f), new Color("52525B"), new Color("A1A1AA"), new Vector3(0.0f, 0.62f, 0.0f));
-            CreateBox("FeedDrawer", new Vector3(CellSize * 0.34f, 0.48f, CellSize * 1.00f), new Color("3F3F46"), new Vector3(-CellSize * 0.92f, 0.48f, 0.0f));
-            CreateBox("MagazineRack", new Vector3(CellSize * 0.34f, 0.48f, CellSize * 1.00f), new Color("F59E0B"), new Vector3(CellSize * 0.92f, 0.74f, 0.0f));
-            CreateInteriorTray(this, "AmmoFeed", new Vector3(CellSize * 0.98f, 0.10f, CellSize * 0.14f), new Color("FCD34D"), new Color("FEF3C7"), new Vector3(0.0f, 0.92f, 0.0f));
-            CreateBox("PressCore", new Vector3(CellSize * 0.48f, 0.44f, CellSize * 0.60f), new Color("D97706"), new Vector3(0.0f, 0.68f, 0.0f));
-            _indicator = CreateBox("Beacon", new Vector3(CellSize * 0.18f, 0.18f, CellSize * 0.18f), new Color("FDE68A"), new Vector3(CellSize * 1.00f, 1.04f, 0.0f));
-            return;
-        }
+        var builder = new DefaultModelBuilder(this, CellSize);
+        AmmoAssemblerModelDescriptor.BuildModel(builder, SiteKind);
 
-        CreateBox("Base", new Vector3(CellSize * 2.82f, 0.22f, CellSize * 1.82f), new Color("3F3F46"), new Vector3(0.0f, 0.11f, 0.0f));
-        CreateBox("Body", new Vector3(CellSize * 2.20f, 0.92f, CellSize * 1.22f), new Color("71717A"), new Vector3(0.0f, 0.68f, 0.0f));
-        CreateBox("IntakeBay", new Vector3(CellSize * 0.40f, 0.62f, CellSize * 1.10f), new Color("52525B"), new Vector3(-CellSize * 0.92f, 0.56f, 0.0f));
-        CreateBox("PressCore", new Vector3(CellSize * 0.54f, 0.58f, CellSize * 0.68f), new Color("D97706"), new Vector3(0.0f, 0.78f, 0.0f));
-        CreateBox("MagazineRack", new Vector3(CellSize * 0.44f, 0.54f, CellSize * 1.18f), new Color("F59E0B"), new Vector3(CellSize * 0.92f, 0.88f, 0.0f));
-        CreateBox("MagazineFeed", new Vector3(CellSize * 1.12f, 0.12f, CellSize * 0.16f), new Color("FCD34D"), new Vector3(0.0f, 1.04f, 0.0f));
-        _indicator = CreateBox("Beacon", new Vector3(CellSize * 0.20f, 0.20f, CellSize * 0.20f), new Color("FDE68A"), new Vector3(CellSize * 1.04f, 1.18f, 0.0f));
+        _indicator = builder.Root.FindChild("Beacon", true, false) as MeshInstance3D;
     }
 }

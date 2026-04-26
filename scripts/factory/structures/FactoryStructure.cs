@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using NetFactory.Models;
 
 public enum FactoryInteriorVisualRole
 {
@@ -28,7 +29,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
     private Node3D? _structureVisualRoot;
     private FactoryStructureVisualProfile? _visualProfile;
     private FactoryStructureVisualController? _visualController;
-    private Node? _currentVisualParent;
+    private Node3D? _currentVisualParent;
     private Node3D? _combatOverlayRoot;
     private MeshInstance3D? _healthBarBackground;
     private MeshInstance3D? _healthBarFill;
@@ -409,7 +410,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
                 : new Color(0.94f, 0.81f, 0.32f, 0.32f);
     }
 
-    internal void BeginVisualBuildScope(Node parent)
+    internal void BeginVisualBuildScope(Node3D parent)
     {
         _currentVisualParent = parent;
     }
@@ -519,98 +520,10 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
             return;
         }
 
-        var previewSize = Footprint.GetPreviewSize(CellSize, Facing);
-        var deckWidth = Mathf.Max(CellSize * 0.96f, previewSize.X + (CellSize * 0.14f));
-        var deckDepth = Mathf.Max(CellSize * 0.96f, previewSize.Y + (CellSize * 0.14f));
-        var visualParent = GetVisualParent();
-        var style = ResolveInteriorVisualStyle();
-
-        CreateBox(
-            visualParent,
-            "MaintenanceDeck",
-            new Vector3(deckWidth, 0.07f, deckDepth),
-            style.DeckColor,
-            new Vector3(0.0f, 0.035f, 0.0f));
-        CreateBox(
-            visualParent,
-            "MaintenanceTrim",
-            new Vector3(deckWidth * 0.92f, 0.02f, deckDepth * 0.92f),
-            style.TrimColor,
-            new Vector3(0.0f, 0.075f, 0.0f));
-        CreateInteriorLabelPlate(
-            visualParent,
-            "CabinLabel",
-            GetInteriorPresentationLabel(),
-            style.LabelColor,
-            new Vector3(0.0f, 0.11f, -deckDepth * 0.28f),
-            Mathf.Clamp(previewSize.X / CellSize, 1.0f, 3.0f));
-
-        if (style.UsesHardpointRing)
-        {
-            CreateBox(
-                visualParent,
-                "HardpointRingOuter",
-                new Vector3(deckWidth * 0.88f, 0.02f, deckDepth * 0.88f),
-                style.AccentColor.Darkened(0.24f),
-                new Vector3(0.0f, 0.094f, 0.0f));
-            CreateBox(
-                visualParent,
-                "HardpointRingInner",
-                new Vector3(deckWidth * 0.54f, 0.025f, deckDepth * 0.54f),
-                style.AccentColor,
-                new Vector3(0.0f, 0.108f, 0.0f));
-        }
-
-        if (style.UsesChannel)
-        {
-            CreateBox(
-                visualParent,
-                "CargoChannel",
-                new Vector3(deckWidth * 0.88f, 0.03f, Mathf.Max(CellSize * 0.16f, deckDepth * 0.24f)),
-                style.AccentColor.Darkened(0.18f),
-                new Vector3(0.0f, 0.095f, 0.0f));
-            CreateBox(
-                visualParent,
-                "CargoChannelStripe",
-                new Vector3(deckWidth * 0.64f, 0.01f, Mathf.Max(CellSize * 0.05f, deckDepth * 0.08f)),
-                style.AccentColor.Lightened(0.24f),
-                new Vector3(0.0f, 0.118f, 0.0f));
-            CreateBox(
-                visualParent,
-                "CargoChannelLeftRail",
-                new Vector3(deckWidth * 0.86f, 0.03f, Mathf.Max(CellSize * 0.03f, deckDepth * 0.05f)),
-                style.LabelColor,
-                new Vector3(0.0f, 0.108f, -Mathf.Max(CellSize * 0.14f, deckDepth * 0.12f)));
-            CreateBox(
-                visualParent,
-                "CargoChannelRightRail",
-                new Vector3(deckWidth * 0.86f, 0.03f, Mathf.Max(CellSize * 0.03f, deckDepth * 0.05f)),
-                style.LabelColor,
-                new Vector3(0.0f, 0.108f, Mathf.Max(CellSize * 0.14f, deckDepth * 0.12f)));
-        }
-
-        if (style.UsesServiceWalkway)
-        {
-            CreateBox(
-                visualParent,
-                "MaintenanceWalkway",
-                new Vector3(deckWidth * 0.86f, 0.02f, Mathf.Max(CellSize * 0.22f, deckDepth * 0.24f)),
-                style.TrimColor.Lightened(0.08f),
-                new Vector3(0.0f, 0.085f, (deckDepth * 0.5f) - Mathf.Max(CellSize * 0.12f, deckDepth * 0.12f)));
-        }
-
-        CreateBox(
-            visualParent,
-            "AccessPanel",
-            new Vector3(Mathf.Max(CellSize * 0.18f, deckWidth * 0.14f), 0.10f, Mathf.Max(CellSize * 0.20f, deckDepth * 0.18f)),
-            style.LabelColor,
-            new Vector3((deckWidth * 0.5f) - Mathf.Max(CellSize * 0.14f, deckWidth * 0.10f), 0.13f, 0.0f));
-        CreateInteriorIndicatorLight(
-            visualParent,
-            "StatusLamp",
-            style.AccentColor.Lightened(0.28f),
-            new Vector3((-deckWidth * 0.5f) + Mathf.Max(CellSize * 0.12f, deckWidth * 0.10f), 0.14f, 0.0f),
-            CellSize * 0.06f);
+        InteriorAccentDescriptor.BuildAccents(
+            new DefaultModelBuilder(GetVisualParent(), CellSize),
+            SiteKind,
+            this);
     }
 
     protected MeshInstance3D CreateBox(string name, Vector3 size, Color color, Vector3? localPosition = null)
@@ -783,7 +696,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
         _recentDamageTimer = 0.0;
     }
 
-    private Node GetVisualParent()
+    private Node3D GetVisualParent()
     {
         return _currentVisualParent ?? this;
     }

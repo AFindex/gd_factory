@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using NetFactory.Models;
 
 public enum FactoryTransportRenderMode
 {
@@ -359,7 +360,7 @@ public static partial class FactoryItemCatalog
                     texturedMeshScale: new Vector3(0.18f, 0.22f, 0.18f),
                     billboardScale: baseProfile.BillboardScale * 0.74f,
                     texture: baseProfile.Texture,
-                    modelFactory: cellSize => FactoryTransportModelLibrary.CreateInteriorCanisterModel(cellSize, tint),
+                    modelFactory: cellSize => TransportModelLibrary.CreateInteriorCanisterModel(cellSize, tint),
                     allowTexturedMeshFallback: true,
                     allowBillboardFallback: true,
                     profileId: $"interior:{carrierLabel}:{itemKind}:{resolvedContext}",
@@ -373,7 +374,7 @@ public static partial class FactoryItemCatalog
                     texturedMeshScale: new Vector3(0.22f, 0.12f, 0.18f),
                     billboardScale: baseProfile.BillboardScale * 0.78f,
                     texture: baseProfile.Texture,
-                    modelFactory: cellSize => FactoryTransportModelLibrary.CreateInteriorTrayModel(cellSize, tint),
+                    modelFactory: cellSize => TransportModelLibrary.CreateInteriorTrayModel(cellSize, tint),
                     allowTexturedMeshFallback: true,
                     allowBillboardFallback: true,
                     profileId: $"interior:{carrierLabel}:{itemKind}:{resolvedContext}",
@@ -387,7 +388,7 @@ public static partial class FactoryItemCatalog
                     texturedMeshScale: new Vector3(0.20f, 0.12f, 0.16f),
                     billboardScale: baseProfile.BillboardScale * 0.76f,
                     texture: baseProfile.Texture,
-                    modelFactory: cellSize => FactoryTransportModelLibrary.CreateInteriorElectronicsCassetteModel(cellSize, tint),
+                    modelFactory: cellSize => TransportModelLibrary.CreateInteriorElectronicsCassetteModel(cellSize, tint),
                     allowTexturedMeshFallback: true,
                     allowBillboardFallback: true,
                     profileId: $"interior:{carrierLabel}:{itemKind}:{resolvedContext}",
@@ -401,7 +402,7 @@ public static partial class FactoryItemCatalog
                     texturedMeshScale: new Vector3(0.20f, 0.14f, 0.14f),
                     billboardScale: baseProfile.BillboardScale * 0.74f,
                     texture: baseProfile.Texture,
-                    modelFactory: cellSize => FactoryTransportModelLibrary.CreateInteriorAmmoCassetteModel(cellSize, tint),
+                    modelFactory: cellSize => TransportModelLibrary.CreateInteriorAmmoCassetteModel(cellSize, tint),
                     allowTexturedMeshFallback: true,
                     allowBillboardFallback: true,
                     profileId: $"interior:{carrierLabel}:{itemKind}:{resolvedContext}",
@@ -415,7 +416,7 @@ public static partial class FactoryItemCatalog
                     texturedMeshScale: new Vector3(0.16f, 0.20f, 0.16f),
                     billboardScale: baseProfile.BillboardScale * 0.72f,
                     texture: baseProfile.Texture,
-                    modelFactory: cellSize => FactoryTransportModelLibrary.CreateInteriorCrystalCaseModel(cellSize, tint),
+                    modelFactory: cellSize => TransportModelLibrary.CreateInteriorCrystalCaseModel(cellSize, tint),
                     allowTexturedMeshFallback: true,
                     allowBillboardFallback: true,
                     profileId: $"interior:{carrierLabel}:{itemKind}:{resolvedContext}",
@@ -428,7 +429,7 @@ public static partial class FactoryItemCatalog
                 texturedMeshScale: new Vector3(0.20f, 0.14f, 0.16f),
                 billboardScale: baseProfile.BillboardScale * 0.76f,
                 texture: baseProfile.Texture,
-                modelFactory: cellSize => FactoryTransportModelLibrary.CreateInteriorUtilityCassetteModel(cellSize, tint),
+                modelFactory: cellSize => TransportModelLibrary.CreateInteriorUtilityCassetteModel(cellSize, tint),
                 allowTexturedMeshFallback: true,
                 allowBillboardFallback: true,
                 profileId: $"interior:{carrierLabel}:{itemKind}:{resolvedContext}",
@@ -471,7 +472,7 @@ public static partial class FactoryItemCatalog
 
     private static IReadOnlyDictionary<FactoryItemKind, FactoryItemDefinition> CreateDefinitions()
     {
-        var textures = FactoryGeneratedItemTextureLibrary.CreateTextures();
+        var textures = GeneratedItemTextureLibrary.CreateTextures();
         return new Dictionary<FactoryItemKind, FactoryItemDefinition>
         {
             [FactoryItemKind.GenericCargo] = new FactoryItemDefinition(
@@ -604,7 +605,7 @@ public static partial class FactoryItemCatalog
                 new FactoryTransportVisualProfile(
                     new Color("FBBF24"),
                     texture: textures["gear"],
-                    modelFactory: FactoryTransportModelLibrary.CreateGearModel),
+                    modelFactory: TransportModelLibrary.CreateGearModel),
                 iconTexture: textures["gear"],
                 maxStackSize: 8),
             [FactoryItemKind.CopperWire] = new FactoryItemDefinition(
@@ -658,7 +659,7 @@ public static partial class FactoryItemCatalog
                 new FactoryTransportVisualProfile(
                     new Color("8B5CF6"),
                     texture: textures["machine-part"],
-                    modelFactory: FactoryTransportModelLibrary.CreateMachinePartModel),
+                    modelFactory: TransportModelLibrary.CreateMachinePartModel),
                 iconTexture: textures["machine-part"],
                 maxStackSize: 6),
             [FactoryItemKind.AmmoMagazine] = new FactoryItemDefinition(
@@ -668,7 +669,7 @@ public static partial class FactoryItemCatalog
                 new FactoryTransportVisualProfile(
                     new Color("FACC15"),
                     texture: textures["ammo-magazine"],
-                    modelFactory: FactoryTransportModelLibrary.CreateAmmoMagazineModel),
+                    modelFactory: TransportModelLibrary.CreateAmmoMagazineModel),
                 iconTexture: textures["ammo-magazine"],
                 maxStackSize: 12),
             [FactoryItemKind.HighVelocityAmmo] = new FactoryItemDefinition(
@@ -957,469 +958,5 @@ public static class FactoryTransportVisualFactory
     private static string FormatVector3(Vector3 value)
     {
         return $"{value.X:0.###},{value.Y:0.###},{value.Z:0.###}";
-    }
-}
-
-internal static class FactoryGeneratedItemTextureLibrary
-{
-    public static IReadOnlyDictionary<string, Texture2D> CreateTextures()
-    {
-        return new Dictionary<string, Texture2D>
-        {
-            ["generic-cargo"] = CreateGenericCargoTexture(),
-            ["building-kit"] = CreateBuildingKitTexture(),
-            ["coal"] = CreateCoalTexture(),
-            ["iron-ore"] = CreateIronOreTexture(),
-            ["copper-ore"] = CreateCopperOreTexture(),
-            ["stone-ore"] = CreateStoneOreTexture(),
-            ["sulfur-ore"] = CreateSulfurOreTexture(),
-            ["quartz-ore"] = CreateQuartzOreTexture(),
-            ["iron-plate"] = CreatePlateTexture(new Color("CBD5E1"), new Color("64748B")),
-            ["copper-plate"] = CreatePlateTexture(new Color("FB923C"), new Color("9A3412")),
-            ["stone-brick"] = CreatePlateTexture(new Color("A8A29E"), new Color("57534E")),
-            ["sulfur-crystal"] = CreateCrystalTexture(new Color("FDE047"), new Color("CA8A04")),
-            ["glass"] = CreateGlassTexture(),
-            ["steel-plate"] = CreatePlateTexture(new Color("94A3B8"), new Color("475569")),
-            ["gear"] = CreateGearTexture(),
-            ["copper-wire"] = CreateCopperWireTexture(),
-            ["circuit-board"] = CreateCircuitBoardTexture(),
-            ["battery-pack"] = CreateBatteryPackTexture(),
-            ["repair-kit"] = CreateRepairKitTexture(),
-            ["machine-part"] = CreateMachinePartTexture(),
-            ["ammo-magazine"] = CreateAmmoTexture(new Color("FACC15"), new Color("78350F")),
-            ["high-velocity-ammo"] = CreateAmmoTexture(new Color("F97316"), new Color("5B4636")),
-        };
-    }
-
-    private static Texture2D CreateGenericCargoTexture()
-    {
-        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
-        FillRect(image, new Rect2I(5, 6, 22, 20), new Color("7DD3FC"));
-        FillRect(image, new Rect2I(9, 10, 14, 12), new Color("E0F2FE"));
-        FillRect(image, new Rect2I(12, 13, 8, 6), new Color("0C4A6E"));
-        return ImageTexture.CreateFromImage(image);
-    }
-
-    private static Texture2D CreateCoalTexture()
-    {
-        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
-        FillCircle(image, 10, 13, 6, new Color("3F3A37"));
-        FillCircle(image, 18, 14, 7, new Color("5B4636"));
-        FillCircle(image, 14, 20, 6, new Color("1F1B18"));
-        return ImageTexture.CreateFromImage(image);
-    }
-
-    private static Texture2D CreateBuildingKitTexture()
-    {
-        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
-        FillRect(image, new Rect2I(5, 8, 22, 16), new Color("60A5FA"));
-        FillRect(image, new Rect2I(8, 11, 16, 10), new Color("DBEAFE"));
-        FillRect(image, new Rect2I(12, 4, 8, 6), new Color("1D4ED8"));
-        FillRect(image, new Rect2I(10, 16, 12, 4), new Color("1E3A8A"));
-        return ImageTexture.CreateFromImage(image);
-    }
-
-    private static Texture2D CreateCopperOreTexture()
-    {
-        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
-        FillCircle(image, 10, 12, 6, new Color("9A3412"));
-        FillCircle(image, 18, 12, 6, new Color("EA580C"));
-        FillCircle(image, 14, 19, 7, new Color("C2410C"));
-        return ImageTexture.CreateFromImage(image);
-    }
-
-    private static Texture2D CreateIronOreTexture()
-    {
-        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
-        FillCircle(image, 10, 12, 6, new Color("475569"));
-        FillCircle(image, 18, 12, 6, new Color("64748B"));
-        FillCircle(image, 14, 19, 7, new Color("94A3B8"));
-        return ImageTexture.CreateFromImage(image);
-    }
-
-    private static Texture2D CreateStoneOreTexture()
-    {
-        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
-        FillCircle(image, 10, 13, 6, new Color("57534E"));
-        FillCircle(image, 18, 12, 6, new Color("78716C"));
-        FillCircle(image, 15, 20, 7, new Color("A8A29E"));
-        return ImageTexture.CreateFromImage(image);
-    }
-
-    private static Texture2D CreateSulfurOreTexture()
-    {
-        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
-        FillCircle(image, 10, 12, 6, new Color("CA8A04"));
-        FillCircle(image, 18, 13, 6, new Color("EAB308"));
-        FillCircle(image, 14, 20, 7, new Color("FDE047"));
-        return ImageTexture.CreateFromImage(image);
-    }
-
-    private static Texture2D CreateQuartzOreTexture()
-    {
-        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
-        FillCircle(image, 10, 12, 6, new Color("7DD3FC"));
-        FillCircle(image, 18, 12, 6, new Color("BAE6FD"));
-        FillCircle(image, 14, 19, 7, new Color("E0F2FE"));
-        return ImageTexture.CreateFromImage(image);
-    }
-
-    private static Texture2D CreatePlateTexture(Color plateColor, Color accentColor)
-    {
-        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
-        FillRect(image, new Rect2I(5, 10, 22, 12), plateColor);
-        FillRect(image, new Rect2I(7, 8, 18, 2), accentColor);
-        FillRect(image, new Rect2I(7, 22, 18, 2), accentColor.Darkened(0.1f));
-        FillRect(image, new Rect2I(9, 13, 14, 6), plateColor.Lightened(0.18f));
-        return ImageTexture.CreateFromImage(image);
-    }
-
-    private static Texture2D CreateGearTexture()
-    {
-        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
-        FillRect(image, new Rect2I(13, 3, 6, 6), new Color("FACC15"));
-        FillRect(image, new Rect2I(13, 23, 6, 6), new Color("FACC15"));
-        FillRect(image, new Rect2I(3, 13, 6, 6), new Color("FACC15"));
-        FillRect(image, new Rect2I(23, 13, 6, 6), new Color("FACC15"));
-        FillCircle(image, 16, 16, 9, new Color("EAB308"));
-        FillCircle(image, 16, 16, 4, new Color("78350F"));
-        return ImageTexture.CreateFromImage(image);
-    }
-
-    private static Texture2D CreateCopperWireTexture()
-    {
-        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
-        FillCircle(image, 9, 16, 5, new Color("FB923C"));
-        FillCircle(image, 16, 12, 5, new Color("F97316"));
-        FillCircle(image, 22, 18, 5, new Color("FDBA74"));
-        DrawLine(image, new Vector2I(9, 16), new Vector2I(16, 12), new Color("7C2D12"));
-        DrawLine(image, new Vector2I(16, 12), new Vector2I(22, 18), new Color("7C2D12"));
-        return ImageTexture.CreateFromImage(image);
-    }
-
-    private static Texture2D CreateCircuitBoardTexture()
-    {
-        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
-        FillRect(image, new Rect2I(4, 6, 24, 18), new Color("10B981"));
-        FillRect(image, new Rect2I(8, 10, 6, 4), new Color("D1FAE5"));
-        FillRect(image, new Rect2I(18, 10, 6, 4), new Color("A7F3D0"));
-        FillRect(image, new Rect2I(11, 17, 10, 4), new Color("FDE68A"));
-        DrawLine(image, new Vector2I(14, 12), new Vector2I(16, 19), new Color("ECFCCB"));
-        DrawLine(image, new Vector2I(21, 12), new Vector2I(16, 19), new Color("ECFCCB"));
-        return ImageTexture.CreateFromImage(image);
-    }
-
-    private static Texture2D CreateMachinePartTexture()
-    {
-        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
-        FillRect(image, new Rect2I(5, 8, 22, 16), new Color("8B5CF6"));
-        FillRect(image, new Rect2I(11, 4, 10, 24), new Color("A78BFA"));
-        FillRect(image, new Rect2I(13, 10, 6, 12), new Color("EDE9FE"));
-        return ImageTexture.CreateFromImage(image);
-    }
-
-    private static Texture2D CreateCrystalTexture(Color body, Color accent)
-    {
-        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
-        FillTriangleUp(image, new Vector2I(16, 4), 6, body);
-        FillRect(image, new Rect2I(11, 10, 10, 10), body);
-        FillRect(image, new Rect2I(13, 12, 6, 8), accent);
-        return ImageTexture.CreateFromImage(image);
-    }
-
-    private static Texture2D CreateGlassTexture()
-    {
-        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
-        FillRect(image, new Rect2I(5, 7, 22, 18), new Color("CFFAFE"));
-        FillRect(image, new Rect2I(8, 10, 16, 12), new Color("67E8F9"));
-        FillRect(image, new Rect2I(11, 6, 4, 20), new Color("ECFEFF"));
-        return ImageTexture.CreateFromImage(image);
-    }
-
-    private static Texture2D CreateBatteryPackTexture()
-    {
-        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
-        FillRect(image, new Rect2I(7, 8, 18, 16), new Color("38BDF8"));
-        FillRect(image, new Rect2I(12, 4, 8, 6), new Color("0F172A"));
-        FillRect(image, new Rect2I(11, 12, 10, 8), new Color("E0F2FE"));
-        FillRect(image, new Rect2I(14, 14, 4, 4), new Color("22C55E"));
-        return ImageTexture.CreateFromImage(image);
-    }
-
-    private static Texture2D CreateRepairKitTexture()
-    {
-        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
-        FillRect(image, new Rect2I(6, 10, 20, 12), new Color("22C55E"));
-        FillRect(image, new Rect2I(13, 5, 6, 22), new Color("DCFCE7"));
-        FillRect(image, new Rect2I(9, 13, 14, 6), new Color("DCFCE7"));
-        return ImageTexture.CreateFromImage(image);
-    }
-
-    private static Texture2D CreateAmmoTexture(Color casing, Color tip)
-    {
-        var image = CreateCanvas(new Color(0.0f, 0.0f, 0.0f, 0.0f));
-        FillRect(image, new Rect2I(9, 8, 14, 14), casing);
-        FillTriangleUp(image, new Vector2I(16, 3), 7, tip);
-        FillRect(image, new Rect2I(12, 22, 8, 4), new Color("1F2937"));
-        return ImageTexture.CreateFromImage(image);
-    }
-
-    private static Image CreateCanvas(Color color)
-    {
-        var image = Image.CreateEmpty(32, 32, false, Image.Format.Rgba8);
-        image.Fill(color);
-        return image;
-    }
-
-    private static void FillRect(Image image, Rect2I rect, Color color)
-    {
-        for (var y = rect.Position.Y; y < rect.End.Y; y++)
-        {
-            for (var x = rect.Position.X; x < rect.End.X; x++)
-            {
-                if (x >= 0 && x < image.GetWidth() && y >= 0 && y < image.GetHeight())
-                {
-                    image.SetPixel(x, y, color);
-                }
-            }
-        }
-    }
-
-    private static void FillCircle(Image image, int centerX, int centerY, int radius, Color color)
-    {
-        var radiusSquared = radius * radius;
-        for (var y = centerY - radius; y <= centerY + radius; y++)
-        {
-            for (var x = centerX - radius; x <= centerX + radius; x++)
-            {
-                var deltaX = x - centerX;
-                var deltaY = y - centerY;
-                if ((deltaX * deltaX) + (deltaY * deltaY) <= radiusSquared
-                    && x >= 0 && x < image.GetWidth()
-                    && y >= 0 && y < image.GetHeight())
-                {
-                    image.SetPixel(x, y, color);
-                }
-            }
-        }
-    }
-
-    private static void DrawLine(Image image, Vector2I from, Vector2I to, Color color)
-    {
-        var steps = Mathf.Max(Mathf.Abs(to.X - from.X), Mathf.Abs(to.Y - from.Y));
-        if (steps == 0)
-        {
-            image.SetPixel(from.X, from.Y, color);
-            return;
-        }
-
-        for (var step = 0; step <= steps; step++)
-        {
-            var ratio = step / (float)steps;
-            var x = Mathf.RoundToInt(Mathf.Lerp(from.X, to.X, ratio));
-            var y = Mathf.RoundToInt(Mathf.Lerp(from.Y, to.Y, ratio));
-            if (x >= 0 && x < image.GetWidth() && y >= 0 && y < image.GetHeight())
-            {
-                image.SetPixel(x, y, color);
-            }
-        }
-    }
-
-    private static void FillTriangleUp(Image image, Vector2I tip, int halfWidth, Color color)
-    {
-        for (var y = 0; y <= halfWidth; y++)
-        {
-            var width = Mathf.Max(1, halfWidth - y);
-            FillRect(image, new Rect2I(tip.X - width, tip.Y + y, (width * 2) + 1, 1), color);
-        }
-    }
-}
-
-internal static class FactoryTransportModelLibrary
-{
-    public static Node3D CreateInteriorCanisterModel(float cellSize, Color tint)
-    {
-        var root = new Node3D();
-        root.AddChild(CreateMesh("CanisterBody", new CylinderMesh
-        {
-            TopRadius = cellSize * 0.08f,
-            BottomRadius = cellSize * 0.08f,
-            Height = cellSize * 0.22f
-        }, tint.Darkened(0.08f), new Vector3(0.0f, 0.0f, 0.0f)));
-        root.AddChild(CreateMesh("CanisterCap", new CylinderMesh
-        {
-            TopRadius = cellSize * 0.07f,
-            BottomRadius = cellSize * 0.07f,
-            Height = cellSize * 0.04f
-        }, new Color("E2E8F0"), new Vector3(0.0f, cellSize * 0.12f, 0.0f)));
-        root.AddChild(CreateMesh("CanisterBand", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.14f, cellSize * 0.04f, cellSize * 0.04f)
-        }, tint.Lightened(0.28f), new Vector3(0.0f, 0.0f, cellSize * 0.08f)));
-        return root;
-    }
-
-    public static Node3D CreateInteriorTrayModel(float cellSize, Color tint)
-    {
-        var root = new Node3D();
-        root.AddChild(CreateMesh("TrayBase", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.22f, cellSize * 0.06f, cellSize * 0.16f)
-        }, new Color("334155"), Vector3.Zero));
-        root.AddChild(CreateMesh("TrayCargo", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.18f, cellSize * 0.04f, cellSize * 0.12f)
-        }, tint, new Vector3(0.0f, cellSize * 0.04f, 0.0f)));
-        root.AddChild(CreateMesh("TrayStripe", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.16f, cellSize * 0.02f, cellSize * 0.03f)
-        }, tint.Lightened(0.24f), new Vector3(0.0f, cellSize * 0.08f, 0.0f)));
-        return root;
-    }
-
-    public static Node3D CreateInteriorElectronicsCassetteModel(float cellSize, Color tint)
-    {
-        var root = new Node3D();
-        root.AddChild(CreateMesh("CassetteBody", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.22f, cellSize * 0.12f, cellSize * 0.14f)
-        }, new Color("1E293B"), Vector3.Zero));
-        root.AddChild(CreateMesh("CassetteFace", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.16f, cellSize * 0.08f, cellSize * 0.02f)
-        }, tint, new Vector3(0.0f, 0.0f, cellSize * 0.08f)));
-        root.AddChild(CreateMesh("CassettePort", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.06f, cellSize * 0.03f, cellSize * 0.02f)
-        }, new Color("E2E8F0"), new Vector3(0.0f, cellSize * 0.03f, cellSize * 0.09f)));
-        return root;
-    }
-
-    public static Node3D CreateInteriorAmmoCassetteModel(float cellSize, Color tint)
-    {
-        var root = new Node3D();
-        root.AddChild(CreateMesh("AmmoBody", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.18f, cellSize * 0.14f, cellSize * 0.12f)
-        }, tint.Darkened(0.06f), Vector3.Zero));
-        root.AddChild(CreateMesh("AmmoRack", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.14f, cellSize * 0.04f, cellSize * 0.10f)
-        }, new Color("1F2937"), new Vector3(0.0f, cellSize * 0.05f, 0.0f)));
-        root.AddChild(CreateMesh("AmmoStripe", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.12f, cellSize * 0.02f, cellSize * 0.02f)
-        }, tint.Lightened(0.18f), new Vector3(0.0f, cellSize * 0.08f, cellSize * 0.06f)));
-        return root;
-    }
-
-    public static Node3D CreateInteriorCrystalCaseModel(float cellSize, Color tint)
-    {
-        var root = new Node3D();
-        root.AddChild(CreateMesh("CaseBody", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.18f, cellSize * 0.16f, cellSize * 0.18f)
-        }, new Color("334155"), Vector3.Zero));
-        root.AddChild(CreateMesh("CrystalCore", new PrismMesh
-        {
-            Size = new Vector3(cellSize * 0.08f, cellSize * 0.14f, cellSize * 0.08f)
-        }, tint, new Vector3(0.0f, cellSize * 0.02f, 0.0f)));
-        return root;
-    }
-
-    public static Node3D CreateInteriorUtilityCassetteModel(float cellSize, Color tint)
-    {
-        var root = new Node3D();
-        root.AddChild(CreateMesh("UtilityBody", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.20f, cellSize * 0.14f, cellSize * 0.16f)
-        }, new Color("334155"), Vector3.Zero));
-        root.AddChild(CreateMesh("UtilityPanel", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.14f, cellSize * 0.08f, cellSize * 0.02f)
-        }, tint, new Vector3(0.0f, 0.0f, cellSize * 0.09f)));
-        root.AddChild(CreateMesh("UtilityLatch", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.06f, cellSize * 0.04f, cellSize * 0.02f)
-        }, new Color("E2E8F0"), new Vector3(0.0f, cellSize * 0.03f, cellSize * 0.10f)));
-        return root;
-    }
-
-    public static Node3D CreateGearModel(float cellSize)
-    {
-        var root = new Node3D();
-        root.AddChild(CreateMesh("GearBody", new CylinderMesh
-        {
-            TopRadius = cellSize * 0.10f,
-            BottomRadius = cellSize * 0.10f,
-            Height = cellSize * 0.10f
-        }, new Color("EAB308"), new Vector3(0.0f, 0.0f, 0.0f)));
-
-        root.AddChild(CreateMesh("GearToothNorth", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.06f, cellSize * 0.08f, cellSize * 0.16f)
-        }, new Color("FACC15"), new Vector3(0.0f, 0.0f, cellSize * 0.11f)));
-        root.AddChild(CreateMesh("GearToothSouth", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.06f, cellSize * 0.08f, cellSize * 0.16f)
-        }, new Color("FACC15"), new Vector3(0.0f, 0.0f, -cellSize * 0.11f)));
-        root.AddChild(CreateMesh("GearToothWest", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.16f, cellSize * 0.08f, cellSize * 0.06f)
-        }, new Color("FACC15"), new Vector3(-cellSize * 0.11f, 0.0f, 0.0f)));
-        root.AddChild(CreateMesh("GearToothEast", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.16f, cellSize * 0.08f, cellSize * 0.06f)
-        }, new Color("FACC15"), new Vector3(cellSize * 0.11f, 0.0f, 0.0f)));
-        return root;
-    }
-
-    public static Node3D CreateMachinePartModel(float cellSize)
-    {
-        var root = new Node3D();
-        root.AddChild(CreateMesh("Core", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.24f, cellSize * 0.10f, cellSize * 0.14f)
-        }, new Color("8B5CF6"), new Vector3(0.0f, 0.0f, 0.0f)));
-        root.AddChild(CreateMesh("Rib", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.10f, cellSize * 0.16f, cellSize * 0.16f)
-        }, new Color("A78BFA"), new Vector3(-cellSize * 0.05f, cellSize * 0.04f, 0.0f)));
-        root.AddChild(CreateMesh("Head", new CylinderMesh
-        {
-            TopRadius = cellSize * 0.04f,
-            BottomRadius = cellSize * 0.04f,
-            Height = cellSize * 0.12f
-        }, new Color("EDE9FE"), new Vector3(cellSize * 0.10f, 0.0f, 0.0f)));
-        return root;
-    }
-
-    public static Node3D CreateAmmoMagazineModel(float cellSize)
-    {
-        var root = new Node3D();
-        root.AddChild(CreateMesh("Casing", new BoxMesh
-        {
-            Size = new Vector3(cellSize * 0.14f, cellSize * 0.20f, cellSize * 0.10f)
-        }, new Color("FACC15"), new Vector3(0.0f, 0.0f, 0.0f)));
-        root.AddChild(CreateMesh("Tip", new PrismMesh
-        {
-            Size = new Vector3(cellSize * 0.10f, cellSize * 0.08f, cellSize * 0.10f)
-        }, new Color("78350F"), new Vector3(0.0f, cellSize * 0.14f, 0.0f)));
-        return root;
-    }
-
-    private static MeshInstance3D CreateMesh(string name, Mesh mesh, Color color, Vector3 position)
-    {
-        return new MeshInstance3D
-        {
-            Name = name,
-            Mesh = mesh,
-            Position = position,
-            MaterialOverride = new StandardMaterial3D
-            {
-                AlbedoColor = color,
-                Roughness = 0.65f
-            }
-        };
     }
 }

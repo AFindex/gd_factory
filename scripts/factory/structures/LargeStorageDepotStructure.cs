@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using NetFactory.Models;
 
 public partial class LargeStorageDepotStructure : FactoryStructure, IFactoryFilteredItemProvider, IFactoryItemReceiver
 {
@@ -236,22 +237,20 @@ public partial class LargeStorageDepotStructure : FactoryStructure, IFactoryFilt
 
     protected override void BuildVisuals()
     {
-        CreateBox("Base", new Vector3(CellSize * 1.86f, 0.24f, CellSize * 1.86f), new Color("334155"), new Vector3(0.0f, 0.12f, 0.0f));
-        CreateBox("DepotBody", new Vector3(CellSize * 1.62f, 1.02f, CellSize * 1.62f), new Color("475569"), new Vector3(0.0f, 0.76f, 0.0f));
-        CreateBox("OutputStripe", new Vector3(CellSize * 0.22f, 0.12f, CellSize * 0.74f), new Color("FBBF24"), new Vector3(CellSize * 0.74f, 1.30f, 0.0f));
+        var builder = new DefaultModelBuilder(this, CellSize);
+        LargeStorageDepotModelDescriptor.BuildModel(builder, SiteKind);
 
+        _fillIndicators.Clear();
         for (var index = 0; index < 5; index++)
         {
-            var indicator = CreateBox(
-                $"Fill_{index}",
-                new Vector3(CellSize * 0.16f, 0.12f, CellSize * 1.18f),
-                new Color("38BDF8"),
-                new Vector3(-CellSize * 0.54f + index * CellSize * 0.27f, 1.30f, 0.0f));
-            indicator.Visible = false;
-            _fillIndicators.Add(indicator);
+            if (builder.Root.FindChild($"Fill_{index}", true, false) is MeshInstance3D indicator)
+            {
+                indicator.Visible = false;
+                _fillIndicators.Add(indicator);
+            }
         }
 
-        _statusBeacon = CreateBox("Beacon", new Vector3(CellSize * 0.24f, 0.24f, CellSize * 0.24f), new Color("E2E8F0"), new Vector3(0.0f, 1.64f, 0.0f));
+        _statusBeacon = builder.Root.FindChild("Beacon", true, false) as MeshInstance3D;
     }
 
     private bool IsAdjacentToFootprint(Vector2I cell)
