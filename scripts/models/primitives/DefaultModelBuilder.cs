@@ -198,6 +198,7 @@ public sealed class DefaultModelBuilder : IModelBuilder
             Name = name,
             Position = position
         };
+        pivot.SetMeta("base_position", position);
         parent.AddChild(pivot);
         return pivot;
     }
