@@ -1,22 +1,52 @@
-using Godot;
+﻿using Godot;
 using System.Collections.Generic;
 
 public partial class FactoryDemo
 {
-    private void LoadStarterWorldMap()
+    private static readonly Vector2I FocusedPrimarySinkCellA = new(0, -3);
+    private static readonly Vector2I FocusedPrimarySinkCellB = new(8, 3);
+
+    private void LoadFocusedWorldMap()
     {
         if (_grid is null || _structureRoot is null || _simulation is null)
         {
             return;
         }
 
-        var mapPath = DemoLaunchOptions.ResolveFactoryWorldMapPath();
-        FactoryMapRuntimeLoader.LoadWorldMap(
+        var mapPath = DemoLaunchOptions.ResolveMobileWorldMapPath();
+        var result = FactoryMapRuntimeLoader.LoadWorldMap(
             mapPath,
             _grid,
             _structureRoot,
             _simulation);
+
+        _scenarioSinks.Clear();
+        for (var i = 0; i < result.LoadedStructures.Count; i++)
+        {
+            if (result.LoadedStructures[i] is SinkStructure sink)
+            {
+                _scenarioSinks.Add(sink);
+            }
+        }
+
+        _sinkA = result.TryGetStructure(FocusedPrimarySinkCellA, out var sinkA) ? sinkA as SinkStructure : null;
+        _sinkB = result.TryGetStructure(FocusedPrimarySinkCellB, out var sinkB) ? sinkB as SinkStructure : null;
+
         AddTransportRenderStressSegment();
+    }
+
+    private void ApplyFocusedInteriorMapRuntimeState()
+    {
+        if (_mobileFactory is null || _simulation is null)
+        {
+            return;
+        }
+
+        var mapPath = DemoLaunchOptions.ResolveMobileInteriorMapPath();
+        FactoryMapRuntimeLoader.ApplyInteriorRuntimeState(
+            mapPath,
+            _mobileFactory,
+            _simulation);
     }
 
     private void AddTransportRenderStressSegment()
@@ -42,7 +72,7 @@ public partial class FactoryDemo
 
     private StorageStructure? CreateSeededStressLane(Vector2I storageCell, int beltLength)
     {
-        var storage = PlaceStructure(BuildPrototypeKind.Storage, storageCell, FacingDirection.East) as StorageStructure;
+        var storage = PlaceWorldStructure(BuildPrototypeKind.Storage, storageCell, FacingDirection.East) as StorageStructure;
         if (storage is null)
         {
             return null;
@@ -50,10 +80,10 @@ public partial class FactoryDemo
 
         for (var step = 1; step <= beltLength; step++)
         {
-            PlaceStructure(BuildPrototypeKind.Belt, storageCell + new Vector2I(step, 0), FacingDirection.East);
+            PlaceWorldStructure(BuildPrototypeKind.Belt, storageCell + new Vector2I(step, 0), FacingDirection.East);
         }
 
-        PlaceStructure(BuildPrototypeKind.Sink, storageCell + new Vector2I(beltLength + 1, 0), FacingDirection.East);
+        PlaceWorldStructure(BuildPrototypeKind.Sink, storageCell + new Vector2I(beltLength + 1, 0), FacingDirection.East);
         return storage;
     }
 
@@ -69,4 +99,8 @@ public partial class FactoryDemo
             endpoint.Inventory.TryAddItem(_simulation.CreateItem(BuildPrototypeKind.Storage, itemKind));
         }
     }
+
+
 }
+
+

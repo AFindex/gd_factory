@@ -43,7 +43,7 @@ godot_console.exe --headless --path 'D:\Godot\projs\net-factory' -- --factory-sm
 godot_console.exe --headless --path 'D:\Godot\projs\net-factory' -- --factory-map-validate
 
 # 移动工厂冒烟测试
-godot_console.exe --headless --path 'D:\Godot\projs\net-factory' res://scenes/mobile_factory_demo.tscn -- --mobile-factory-smoke-test
+godot_console.exe --headless --path 'D:\Godot\projs\net-factory' -- --mobile-factory-smoke-test
 ```
 
 ## 项目结构

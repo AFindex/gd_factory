@@ -1,3 +1,4 @@
+using Godot;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -6,21 +7,62 @@ public partial class FactoryDemo
 {
     private void InitializePersistenceHud()
     {
-        _hud?.SetPersistenceStatus(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: false));
+        _hud?.SetPersistenceStatus(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: true));
         if (FactoryPersistencePaths.IsPersistenceEnabled())
         {
             RefreshRuntimeSaveLibrary();
         }
     }
 
-    private void HandleMapSaveRequested()
+    private void HandleWorldMapSaveRequested()
     {
         SaveCurrentWorldMap(saveToSource: false);
     }
 
-    private void HandleMapSourceSaveRequested()
+    private void HandleWorldMapSourceSaveRequested()
     {
         SaveCurrentWorldMap(saveToSource: true);
+    }
+
+    private void SaveCurrentWorldMap(bool saveToSource)
+    {
+        if (_grid is null)
+        {
+            return;
+        }
+
+        var sourcePath = DemoLaunchOptions.ResolveMobileWorldMapPath();
+        try
+        {
+            var result = saveToSource
+                ? FactoryMapPersistence.SaveWorldMapToSource(sourcePath, _grid)
+                : FactoryMapPersistence.SaveWorldMap(sourcePath, _grid);
+            var status = saveToSource
+                ? "世界地图已保存到当前源。"
+                : "世界地图运行时副本已导出。";
+            _worldPreviewMessage = status;
+            _hud?.SetPersistenceStatus(status);
+            ShowWorldEvent(status, true);
+        }
+        catch (Exception ex)
+        {
+            var status = $"世界地图保存失败：{ex.Message}";
+            _worldPreviewMessage = status;
+            _hud?.SetPersistenceStatus(status);
+            ShowWorldEvent(status, false);
+        }
+
+        UpdateHud();
+    }
+
+    private void HandleInteriorMapSaveRequested()
+    {
+        SaveCurrentInteriorMap(saveToSource: false);
+    }
+
+    private void HandleInteriorMapSourceSaveRequested()
+    {
+        SaveCurrentInteriorMap(saveToSource: true);
     }
 
     private void HandleRuntimeSaveRequested(string slotId)
@@ -33,27 +75,38 @@ public partial class FactoryDemo
         LoadRuntimeSnapshot(slotId);
     }
 
-    private void SaveCurrentWorldMap(bool saveToSource)
+    private void SaveCurrentInteriorMap(bool saveToSource)
     {
-        if (_grid is null)
+        if (_mobileFactory is null)
         {
             return;
         }
 
-        var sourcePath = DemoLaunchOptions.ResolveFactoryWorldMapPath();
+        var sourcePath = DemoLaunchOptions.ResolveMobileInteriorMapPath();
         try
         {
             var result = saveToSource
-                ? FactoryMapPersistence.SaveWorldMapToSource(sourcePath, _grid)
-                : FactoryMapPersistence.SaveWorldMap(sourcePath, _grid);
-            var actionLabel = saveToSource ? "世界地图已保存到当前源。" : "世界地图运行时副本已导出。";
-            _previewMessage = actionLabel;
-            _hud?.SetPersistenceStatus(actionLabel);
+                ? FactoryMapPersistence.SaveInteriorMapToSource(
+                    sourcePath,
+                    _mobileFactory.InteriorSite,
+                    _mobileFactory.Profile.Id)
+                : FactoryMapPersistence.SaveInteriorMap(
+                    sourcePath,
+                    _mobileFactory.InteriorSite,
+                    _mobileFactory.Profile.Id);
+            var status = saveToSource
+                ? "内部地图已保存到当前源。"
+                : "内部地图运行时副本已导出。";
+            _interiorPreviewMessage = status;
+            _hud?.SetPersistenceStatus(status);
+            ShowWorldEvent(status, true);
         }
         catch (Exception ex)
         {
-            _previewMessage = $"地图保存失败：{ex.Message}";
-            _hud?.SetPersistenceStatus($"地图保存失败：{ex.Message}");
+            var status = $"内部地图保存失败：{ex.Message}";
+            _interiorPreviewMessage = status;
+            _hud?.SetPersistenceStatus(status);
+            ShowWorldEvent(status, false);
         }
 
         UpdateHud();
@@ -61,7 +114,16 @@ public partial class FactoryDemo
 
     private void SaveRuntimeSnapshot(string slotId)
     {
-        if (_grid is null || _simulation is null)
+        if (UseLargeTestScenario)
+        {
+            _interiorPreviewMessage = "大型场景暂不支持运行时进度存档。";
+            _hud?.SetPersistenceStatus(_interiorPreviewMessage);
+            ShowWorldEvent(_interiorPreviewMessage, false);
+            UpdateHud();
+            return;
+        }
+
+        if (_grid is null || _simulation is null || _mobileFactory is null)
         {
             return;
         }
@@ -70,13 +132,19 @@ public partial class FactoryDemo
         {
             var document = BuildRuntimeSnapshotDocument(slotId);
             FactoryRuntimeSavePersistence.Save(document);
-            _previewMessage = $"进度已保存：{slotId}";
-            _hud?.SetPersistenceStatus($"进度存档已保存：{slotId}");
+            var status = $"进度存档已保存：{slotId}";
+            _worldPreviewMessage = status;
+            _interiorPreviewMessage = _worldPreviewMessage;
+            _hud?.SetPersistenceStatus(status);
+            ShowWorldEvent(status, true);
         }
         catch (Exception ex)
         {
-            _previewMessage = $"进度保存失败：{ex.Message}";
-            _hud?.SetPersistenceStatus($"进度保存失败：{ex.Message}");
+            var status = $"进度保存失败：{ex.Message}";
+            _worldPreviewMessage = status;
+            _interiorPreviewMessage = status;
+            _hud?.SetPersistenceStatus(status);
+            ShowWorldEvent(status, false);
         }
 
         RefreshRuntimeSaveLibrary();
@@ -85,7 +153,18 @@ public partial class FactoryDemo
 
     private void LoadRuntimeSnapshot(string slotId)
     {
-        if (_grid is null || _structureRoot is null || _simulation is null)
+        if (UseLargeTestScenario)
+        {
+            var status = "大型场景暂不支持运行时进度读档。";
+            _worldPreviewMessage = status;
+            _interiorPreviewMessage = status;
+            _hud?.SetPersistenceStatus(status);
+            ShowWorldEvent(status, false);
+            UpdateHud();
+            return;
+        }
+
+        if (_grid is null || _structureRoot is null || _simulation is null || _enemyRoot is null)
         {
             return;
         }
@@ -93,28 +172,51 @@ public partial class FactoryDemo
         try
         {
             var document = FactoryRuntimeSavePersistence.Load(slotId);
-            var worldSite = FindRequiredSiteSnapshot(document, _grid.SiteId, FactoryMapKind.World);
-            var worldMapDocument = FactoryRuntimeSaveSupport.ParseSiteMap(worldSite, $"{slotId}#world");
-            FactoryMapValidator.ValidateAgainstSiteBounds(worldMapDocument, _grid.MinCell, _grid.MaxCell, FactoryMapKind.World);
-
             if (document.Player is null)
             {
                 throw new InvalidOperationException("该进度存档缺少玩家状态。");
             }
 
+            if (document.MobileFactory is null)
+            {
+                throw new InvalidOperationException("该进度存档缺少移动工厂状态。");
+            }
+
+            if (!string.Equals(document.MobileFactory.FactoryId, "demo-mobile-factory", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("该进度存档不属于当前 focused mobile demo。");
+            }
+
+            var worldSite = FindRequiredSiteSnapshot(document, _grid.SiteId, FactoryMapKind.World);
+            var interiorSite = FindRequiredSiteSnapshot(document, "mobile-site:demo-mobile-factory", FactoryMapKind.Interior);
+            var worldMapDocument = FactoryRuntimeSaveSupport.ParseSiteMap(worldSite, $"{slotId}#world");
+            var interiorMapDocument = FactoryRuntimeSaveSupport.ParseSiteMap(interiorSite, $"{slotId}#interior");
+            FactoryMapValidator.ValidateAgainstSiteBounds(worldMapDocument, _grid.MinCell, _grid.MaxCell, FactoryMapKind.World);
+            FactoryMapRuntimeLoader.ValidateInteriorDocumentAgainstProfile(
+                interiorMapDocument,
+                MobileFactoryScenarioLibrary.CreateFocusedDemoProfile(),
+                $"{slotId}#interior");
             FactoryRuntimeSaveSupport.ValidateEnemySnapshots(document.Enemies);
 
             TearDownRuntimeSession();
-            FactoryMapRuntimeLoader.LoadWorldMapDocument(
+
+            var worldLoad = FactoryMapRuntimeLoader.LoadWorldMapDocument(
                 $"{slotId}#world",
                 worldMapDocument,
                 _grid,
                 _structureRoot,
                 _simulation,
                 applyDocumentRuntimeState: false);
+            RebindFocusedScenarioSinks(worldLoad);
+            ConfigureWorldCombatScenarios();
+
+            RecreateFocusedMobileFactoryForRuntimeLoad();
+            _mobileFactory!.RebuildInteriorFromMapDocument(interiorMapDocument, rebuildTopology: false);
+            _mobileFactory.ApplyRuntimeSnapshot(document.MobileFactory, _grid);
 
             FactoryRuntimeSaveSupport.ApplyStructureSnapshots(worldSite, _grid.GetStructures(), _simulation);
-            ConfigureCombatScenarios();
+            FactoryRuntimeSaveSupport.ApplyStructureSnapshots(interiorSite, _mobileFactory.InteriorSite.GetStructures(), _simulation);
+
             if (_combatDirector is not null && document.CombatDirector is not null)
             {
                 _combatDirector.ValidateRuntimeSnapshot(document.CombatDirector);
@@ -127,20 +229,26 @@ public partial class FactoryDemo
             _playerController!.ApplyRuntimeSnapshot(document.Player, _simulation);
             RestorePlayerSelection(document.Player);
 
-            if (_enemyRoot is not null)
-            {
-                FactoryRuntimeSaveSupport.RestoreEnemies(_enemyRoot, _simulation, document.Enemies);
-            }
+            FactoryRuntimeSaveSupport.RestoreEnemies(_enemyRoot, _simulation, document.Enemies);
 
-            RebuildResourceOverlayVisuals();
-            RefreshAllTopology();
-            _previewMessage = $"已读取进度：{slotId}";
-            _hud?.SetPersistenceStatus($"进度存档已读取：{slotId}");
+            RebuildMobileResourceOverlayVisuals();
+            PullFactoryStatusMessage();
+            RefreshInteriorInteractionModeFromBuildSource();
+            _simulation.RebuildTopology();
+
+            var status = $"进度存档已读取：{slotId}";
+            _worldPreviewMessage = status;
+            _interiorPreviewMessage = status;
+            _hud?.SetPersistenceStatus(status);
+            ShowWorldEvent(status, true);
         }
         catch (Exception ex)
         {
-            _previewMessage = $"进度读取失败：{ex.Message}";
-            _hud?.SetPersistenceStatus($"进度读取失败：{ex.Message}");
+            var status = $"进度读取失败：{ex.Message}";
+            _worldPreviewMessage = status;
+            _interiorPreviewMessage = status;
+            _hud?.SetPersistenceStatus(status);
+            ShowWorldEvent(status, false);
         }
 
         RefreshRuntimeSaveLibrary();
@@ -149,13 +257,19 @@ public partial class FactoryDemo
 
     private FactoryRuntimeSaveSnapshotDocument BuildRuntimeSnapshotDocument(string slotId)
     {
-        if (_grid is null || _simulation is null)
+        if (_grid is null || _simulation is null || _mobileFactory is null)
         {
-            throw new InvalidOperationException("世界站点尚未初始化。");
+            throw new InvalidOperationException("移动工厂场景尚未初始化。");
         }
 
-        var sourcePath = DemoLaunchOptions.ResolveFactoryWorldMapPath();
-        var worldDocument = FactoryMapPersistence.CaptureWorldMapDocument(sourcePath, _grid);
+        var worldSourcePath = DemoLaunchOptions.ResolveMobileWorldMapPath();
+        var interiorSourcePath = DemoLaunchOptions.ResolveMobileInteriorMapPath();
+        var worldDocument = FactoryMapPersistence.CaptureWorldMapDocument(worldSourcePath, _grid);
+        var interiorDocument = FactoryMapPersistence.CaptureInteriorMapDocument(
+            interiorSourcePath,
+            _mobileFactory.InteriorSite,
+            _mobileFactory.Profile.Id);
+
         var snapshot = new FactoryRuntimeSaveSnapshotDocument
         {
             Version = FactoryRuntimeSavePersistence.SupportedVersion,
@@ -164,14 +278,22 @@ public partial class FactoryDemo
             SavedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
             MaxItemId = Math.Max(0, _simulation.NextItemId - 1),
             Player = _playerController?.CaptureRuntimeSnapshot(),
-            CombatDirector = _combatDirector?.CaptureRuntimeSnapshot(_simulation)
+            CombatDirector = _combatDirector?.CaptureRuntimeSnapshot(_simulation),
+            MobileFactory = _mobileFactory.CaptureRuntimeSnapshot()
         };
+
         snapshot.Sites.Add(FactoryRuntimeSaveSupport.BuildSiteSnapshot(
             _grid.SiteId,
             FactoryMapKind.World,
             worldDocument,
-            _grid.GetStructures(),
-            sourcePath));
+            FilterWorldRuntimeStructures(_grid.GetStructures()),
+            worldSourcePath));
+        snapshot.Sites.Add(FactoryRuntimeSaveSupport.BuildSiteSnapshot(
+            _mobileFactory.InteriorSite.SiteId,
+            FactoryMapKind.Interior,
+            interiorDocument,
+            _mobileFactory.InteriorSite.GetStructures(),
+            interiorSourcePath));
 
         var enemies = _simulation.SnapshotActiveEnemies();
         for (var index = 0; index < enemies.Count; index++)
@@ -190,34 +312,96 @@ public partial class FactoryDemo
         }
 
         var targetLabel = target == FactoryBlueprintPersistenceTarget.Source ? "工程内" : "运行时";
-        _previewMessage = $"已保存蓝图到{targetLabel}：{savedRecord.DisplayName}";
+        _interiorPreviewMessage = $"已保存蓝图到{targetLabel}：{savedRecord.DisplayName}";
         _hud.SetPersistenceStatus($"蓝图已保存到{targetLabel}：{savedRecord.DisplayName}");
     }
 
     private void TearDownRuntimeSession()
     {
-        if (_grid is null || _simulation is null)
+        if (_grid is null || _structureRoot is null || _simulation is null)
         {
             return;
         }
 
         _simulation.ClearCombatActors();
-        var structures = new List<FactoryStructure>(_grid.GetStructures());
-        for (var index = 0; index < structures.Count; index++)
+
+        var worldStructures = new List<FactoryStructure>(_grid.GetStructures());
+        for (var index = 0; index < worldStructures.Count; index++)
         {
-            var structure = structures[index];
+            var structure = worldStructures[index];
             _simulation.UnregisterStructure(structure);
             structure.Site.RemoveStructure(structure);
             structure.QueueFree();
         }
 
+        _mobileFactory?.ClearInteriorStructures(rebuildTopology: false);
+        foreach (var child in _structureRoot.GetChildren())
+        {
+            if (child is Node node)
+            {
+                node.QueueFree();
+            }
+        }
+
         _grid.SetResourceDeposits(Array.Empty<FactoryResourceDepositDefinition>());
         _combatDirector?.ClearLanes();
-        _selectedStructure = null;
-        _hoveredStructure = null;
+        _scenarioSinks.Clear();
+        _sinkA = null;
+        _sinkB = null;
+        _mobileFactory = null;
+        _backgroundFactories.Clear();
+        _backgroundControllers.Clear();
+        ClearFactoryLabels();
+        _selectedInteriorStructure = null;
+        _hoveredInteriorStructure = null;
         _pendingBlueprintCapture = null;
-        _blueprintWorkflow.ApplyPlan = null;
+        _interiorBlueprintWorkflow.ApplyPlan = null;
         _blueprintMode = FactoryBlueprintWorkflowMode.None;
+    }
+
+    private void RecreateFocusedMobileFactoryForRuntimeLoad()
+    {
+        if (_structureRoot is null || _simulation is null)
+        {
+            throw new InvalidOperationException("移动工厂结构根节点不可用。");
+        }
+
+        _backgroundFactories.Clear();
+        _backgroundControllers.Clear();
+        ClearFactoryLabels();
+        _mobileFactory = new MobileFactoryInstance(
+            "demo-mobile-factory",
+            _structureRoot,
+            _simulation,
+            MobileFactoryScenarioLibrary.CreateFocusedDemoProfile(),
+            MobileFactoryScenarioLibrary.CreateFocusedDemoPreset());
+
+        if (!_factoryLabelMap.ContainsKey(_mobileFactory))
+        {
+            AddFactoryLabel(_mobileFactory, "玩家工厂", new Color(0.72f, 0.88f, 1.0f, 0.98f));
+        }
+
+        _selectedDeployFacing = _mobileFactory.DeploymentFacing;
+        CreateWorldPreviewVisuals(
+            _mobileFactory.Profile.FootprintOffsetsEast.Count,
+            Mathf.Max(1, _mobileFactory.Profile.AttachmentMounts.Count));
+        UpdateInteriorPreviewSizing();
+        _interiorBlueprintWorkflow.Site = CreateInteriorBlueprintSiteAdapter();
+    }
+
+    private void RebindFocusedScenarioSinks(FactoryWorldMapLoadResult worldLoad)
+    {
+        _scenarioSinks.Clear();
+        for (var index = 0; index < worldLoad.LoadedStructures.Count; index++)
+        {
+            if (worldLoad.LoadedStructures[index] is SinkStructure sink)
+            {
+                _scenarioSinks.Add(sink);
+            }
+        }
+
+        _sinkA = worldLoad.TryGetStructure(FocusedPrimarySinkCellA, out var sinkA) ? sinkA as SinkStructure : null;
+        _sinkB = worldLoad.TryGetStructure(FocusedPrimarySinkCellB, out var sinkB) ? sinkB as SinkStructure : null;
     }
 
     private void RestorePlayerSelection(FactoryPlayerRuntimeSnapshot snapshot)
@@ -228,7 +412,8 @@ public partial class FactoryDemo
                 : snapshot.SelectedInventoryId,
             snapshot.SelectedSlot.ToVector2I(),
             snapshot.IsHotbarPlacementArmed);
-        RefreshInteractionModeFromBuildSource();
+        _selectedInteriorKind = _playerController?.GetArmedPlaceablePrototype() ?? _selectedInteriorKind;
+        _selectedDeployFacing = _mobileFactory?.DeploymentFacing ?? _selectedDeployFacing;
     }
 
     private static FactoryRuntimeSiteSnapshot FindRequiredSiteSnapshot(
@@ -248,13 +433,19 @@ public partial class FactoryDemo
         throw new InvalidOperationException($"进度存档缺少站点 '{siteId}'。");
     }
 
+    private static IEnumerable<FactoryStructure> FilterWorldRuntimeStructures(IEnumerable<FactoryStructure> structures)
+    {
+        foreach (var structure in structures)
+        {
+            if (!MobileFactoryBoundaryAttachmentCatalog.IsAttachmentKind(structure.Kind))
+            {
+                yield return structure;
+            }
+        }
+    }
+
     private void RefreshRuntimeSaveLibrary()
     {
-        if (!FactoryPersistencePaths.IsPersistenceEnabled())
-        {
-            return;
-        }
-
         var slots = FactoryRuntimeSavePersistence.LoadIndex().Slots;
         _hud?.SetRuntimeSaveLibrary(slots);
     }

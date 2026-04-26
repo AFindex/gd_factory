@@ -57,14 +57,9 @@ public static class DemoCatalog
     {
         new(
             "factory-demo",
-            "Factory Sandbox",
-            "静态工厂 sandbox，现已包含矿点、发电、真实制造链，以及保留的仓储/蓝图/战斗回归线。",
+            "Factory Demo",
+            "统一工厂沙盒：支持静态工厂建造、移动工厂部署与内部编辑、蓝图、战斗、地图加载与运行时存档。",
             "res://scenes/factory_demo.tscn"),
-        new(
-            "mobile-factory-demo",
-            "Mobile Factory Demo",
-            "聚焦移动工厂的部署、回收、世界交互与内部编辑分屏。",
-            "res://scenes/mobile_factory_demo.tscn"),
         new(
             "mobile-factory-test-scenario",
             "Mobile Factory Scenario",

@@ -1,0 +1,93 @@
+{
+  "FormatVersion": 1,
+  "Id": "2ffcb5df8d624e09b3ecb83dbdf6f179",
+  "DisplayName": "\u6D4B\u8BD5\u5DE5\u7A0B\u70AE\u7EC41",
+  "SourceSiteKind": "MobileInterior",
+  "SuggestedAnchorCell": {
+    "X": 3,
+    "Y": 0
+  },
+  "BoundsSize": {
+    "X": 5,
+    "Y": 3
+  },
+  "Entries": [
+    {
+      "Kind": "DebugCombatSource",
+      "LocalCell": {
+        "X": 0,
+        "Y": 1
+      },
+      "Facing": "East",
+      "Configuration": {
+        "recipe_id": "debug-ammo-magazine-source"
+      }
+    },
+    {
+      "Kind": "Belt",
+      "LocalCell": {
+        "X": 1,
+        "Y": 1
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "Inserter",
+      "LocalCell": {
+        "X": 2,
+        "Y": 1
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "HeavyGunTurret",
+      "LocalCell": {
+        "X": 3,
+        "Y": 1
+      },
+      "Facing": "North",
+      "Configuration": null
+    },
+    {
+      "Kind": "DebugCombatSource",
+      "LocalCell": {
+        "X": 0,
+        "Y": 2
+      },
+      "Facing": "East",
+      "Configuration": {
+        "recipe_id": "debug-ammo-magazine-source"
+      }
+    },
+    {
+      "Kind": "Belt",
+      "LocalCell": {
+        "X": 1,
+        "Y": 2
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "Inserter",
+      "LocalCell": {
+        "X": 2,
+        "Y": 2
+      },
+      "Facing": "East",
+      "Configuration": null
+    },
+    {
+      "Kind": "GunTurret",
+      "LocalCell": {
+        "X": 3,
+        "Y": 2
+      },
+      "Facing": "East",
+      "Configuration": null
+    }
+  ],
+  "RequiredAttachments": []
+}

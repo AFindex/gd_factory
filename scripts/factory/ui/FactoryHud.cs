@@ -1,55 +1,166 @@
 using Godot;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 
 public partial class FactoryHud : CanvasLayer
 {
-    private const string BuildWorkspaceId = "build";
-    private const string BlueprintWorkspaceId = "blueprints";
-    private const string TelemetryWorkspaceId = "telemetry";
-    private const string CombatWorkspaceId = "combat";
+    private enum DetailSurfaceContext
+    {
+        None,
+        World,
+        Editor
+    }
+
+    private const string CommandWorkspaceId = "command";
+    private const string WorldBuildWorkspaceId = "world-build";
+    private const string EditorWorkspaceId = "editor";
     private const string TestingWorkspaceId = "testing";
+    private const string BlueprintWorkspaceId = "blueprints";
+    private const string DetailsWorkspaceId = "details";
+    private const string OverviewWorkspaceId = "overview";
+    private const string BuildTestWorkspaceId = "build-test";
+    private const string DiagnosticsWorkspaceId = "diagnostics";
     private const string SavesWorkspaceId = "saves";
+    private const float EditorSidebarWidth = 292.0f;
     private const int CompactTabFontSize = 10;
 
-    private readonly Dictionary<BuildPrototypeKind, Button> _selectionButtons = new();
-    private readonly Dictionary<string, Control> _workspacePanels = new();
+    private static readonly Color EditorFocusColor = FactoryUiTheme.BorderStrong;
+    private static readonly Color WorldFocusColor = FactoryUiTheme.Border;
 
-    private Control? _root;
-    private PanelContainer? _chromePanel;
-    private PanelContainer? _panel;
+    private readonly Dictionary<BuildPrototypeKind, Button> _paletteButtons = new();
+    private readonly Dictionary<BuildPrototypeKind, Button> _worldBuildButtons = new();
+    private readonly Dictionary<string, Control> _worldWorkspacePanels = new();
+    private readonly Dictionary<string, Control> _editorWorkspacePanels = new();
+
+    private PanelContainer? _topChromePanel;
+    private Control? _overviewHeaderChromeHost;
+    private Button? _overviewCollapseButton;
     private FactoryWorkspaceChrome? _workspaceChrome;
+    private PanelContainer? _worldFocusFrame;
+    private StyleBoxFlat? _worldFocusFrameStyle;
+    private Control? _overlayRoot;
+    private PanelContainer? _infoPanel;
+    private PanelContainer? _editorViewportPanel;
+    private StyleBoxFlat? _editorViewportPanelStyle;
+    private PanelContainer? _editorPanel;
+    private StyleBoxFlat? _editorPanelStyle;
+    private TextureRect? _editorViewportRect;
+    private SubViewport? _editorViewport;
     private Label? _modeLabel;
-    private Label? _selectedLabel;
-    private Label? _selectionTargetLabel;
+    private Label? _stateLabel;
     private Label? _hoverLabel;
     private Label? _previewLabel;
-    private Label? _rotationLabel;
     private Label? _deliveryLabel;
-    private Label? _noteLabel;
-    private Label? _profilerLabel;
+    private Label? _diagnosticsDeliveryLabel;
+    private Label? _hintLabel;
+    private Label? _diagnosticsHintLabel;
+    private Label? _worldBuildSelectionLabel;
+    private Label? _worldBuildRotationLabel;
+    private Label? _worldSelectionTargetLabel;
+    private PanelContainer? _worldInspectionPanel;
+    private Label? _worldInspectionTitleLabel;
+    private Label? _worldInspectionBodyLabel;
+    private Label? _editorModeLabel;
+    private Label? _selectionLabel;
+    private Label? _selectionTargetLabel;
+    private Label? _editorPreviewLabel;
+    private Label? _portStatusLabel;
     private Label? _combatLabel;
-    private Label? _testingNoteLabel;
-    private Label? _testingTargetLabel;
-    private Label? _testingPreviewLabel;
-    private Label? _testingSaveStatusLabel;
-    private Label? _saveWorkspaceStatusLabel;
+    private Label? _diagnosticsCombatLabel;
+    private Label? _focusLabel;
+    private Label? _diagnosticsFocusLabel;
+    private Label? _factoryDetailLabel;
+    private Label? _worldWorkspaceHintLabel;
+    private Label? _editorWorkspaceHintLabel;
+    private Label? _saveStatusLabel;
+    private Label? _saveLibraryStatusLabel;
     private VBoxContainer? _saveLibraryList;
     private LineEdit? _saveWorkspaceSlotEdit;
     private ConfirmationDialog? _overwriteSaveDialog;
+    private Label? _testingEditorStateLabel;
+    private Label? _testingSelectionTargetLabel;
+    private Label? _testingPreviewLabel;
+    private Label? _testingPortStatusLabel;
+    private Label? _testingHintLabel;
+    private Label? _testingPersistenceLabel;
     private PanelContainer? _inspectionPanel;
     private Label? _inspectionTitleLabel;
     private Label? _inspectionBodyLabel;
     private FactoryStructureDetailWindow? _detailWindow;
     private FactoryBlueprintPanel? _blueprintPanel;
+    private Button? _factoryCommandButton;
+    private Button? _observerButton;
+    private Button? _deployButton;
+    private Button? _editModeButton;
+    private Button? _editorBuildModeButton;
+    private Button? _editorInteractionModeButton;
+    private Button? _editorDeleteModeButton;
+    private float _editorProgress;
+    private float _overviewCollapseProgress;
+    private bool _editorOpen;
+    private bool _editorViewportFocused;
+    private bool _editorOperationFocused;
+    private bool _overviewCollapsed;
+    private FactoryInteractionMode _editorInteractionMode = FactoryInteractionMode.Interact;
+    private DetailSurfaceContext _detailSurfaceContext;
     private Action? _pendingOverwriteSaveAction;
 
-    public event Action<BuildPrototypeKind?>? SelectionChanged;
-    public event Action<string, Vector2I, Vector2I, bool>? DetailInventoryMoveRequested;
-    public event Action<string, Vector2I, string, Vector2I, bool>? DetailInventoryTransferRequested;
-    public event Action<string>? DetailRecipeSelected;
-    public event Action? DetailClosed;
+    public bool UseLargeScenarioWorkspaces { get; set; }
+    public SubViewport EditorViewport => _editorViewport!;
+    public bool IsEditorVisible => _editorOpen;
+    public string PortStatusText => _portStatusLabel?.Text ?? _testingPortStatusLabel?.Text ?? string.Empty;
+    public bool IsDetailVisible => _detailWindow?.IsShowing ?? false;
+    public bool HasActiveInventoryInteraction => _detailWindow?.HasActiveInventoryInteraction ?? false;
+    public string DetailTitleText => _detailWindow?.CurrentTitleText ?? string.Empty;
+    public string ActiveWorkspaceId => _workspaceChrome?.ActiveWorkspaceId ?? string.Empty;
+    public bool IsOverviewCollapsed => _overviewCollapsed;
+    public string OverviewCollapseButtonText => _overviewCollapseButton?.Text ?? string.Empty;
+    public float OverviewVisibleWidth
+    {
+        get
+        {
+            if (_infoPanel is null)
+            {
+                return 0.0f;
+            }
+
+            var rect = _infoPanel.GetGlobalRect();
+            var viewportRect = GetViewport().GetVisibleRect();
+            var visibleLeft = Mathf.Max(rect.Position.X, viewportRect.Position.X);
+            var visibleRight = Mathf.Min(rect.End.X, viewportRect.End.X);
+            return Mathf.Max(0.0f, visibleRight - visibleLeft);
+        }
+    }
+    public bool IsEditorOperationPanelBuildFocused => _editorModeLabel is null
+        && _selectionLabel is null
+        && _editorPreviewLabel is null
+        && _inspectionPanel is null;
+    public bool IsWorkspaceChromeEmbeddedInOverview => _workspaceChrome is not null
+        && _overviewHeaderChromeHost is not null
+        && _workspaceChrome.GetParent() == _topChromePanel
+        && _topChromePanel?.GetParent() == _overviewHeaderChromeHost;
+
+    public event Action<BuildPrototypeKind>? EditorPaletteSelected;
+    public event Action<BuildPrototypeKind?>? WorldBuildSelectionChanged;
+    public event Action<int>? EditorRotateRequested;
+    public event Action? EditModeToggleRequested;
+    public event Action? EditorBuildModeRequested;
+    public event Action? EditorInteractionModeRequested;
+    public event Action? EditorDeleteModeRequested;
+    public event Action? FactoryCommandModeToggleRequested;
+    public event Action? ObserverModeToggleRequested;
+    public event Action? DeployModeToggleRequested;
+    public event Action<string, Vector2I, Vector2I, bool>? EditorDetailInventoryMoveRequested;
+    public event Action<string, Vector2I, string, Vector2I, bool>? EditorDetailInventoryTransferRequested;
+    public event Action<string>? EditorDetailRecipeSelected;
+    public event Action<string>? EditorDetailActionRequested;
+    public event Action? EditorDetailClosed;
+    public event Action<string, Vector2I, Vector2I, bool>? WorldDetailInventoryMoveRequested;
+    public event Action<string, Vector2I, string, Vector2I, bool>? WorldDetailInventoryTransferRequested;
+    public event Action<string>? WorldDetailRecipeSelected;
+    public event Action<string>? WorldDetailActionRequested;
+    public event Action? WorldDetailClosed;
+    public event Action? BlueprintCaptureFullRequested;
     public event Action<string>? BlueprintRuntimeSaveRequested;
     public event Action<string>? BlueprintSourceSaveRequested;
     public event Action<string>? BlueprintSelected;
@@ -57,97 +168,30 @@ public partial class FactoryHud : CanvasLayer
     public event Action? BlueprintConfirmRequested;
     public event Action<string>? BlueprintDeleteRequested;
     public event Action? BlueprintCancelRequested;
-    public event Action? MapSaveRequested;
-    public event Action? MapSourceSaveRequested;
+    public event Action? WorldMapSaveRequested;
+    public event Action? InteriorMapSaveRequested;
+    public event Action? WorldMapSourceSaveRequested;
+    public event Action? InteriorMapSourceSaveRequested;
     public event Action<string>? RuntimeSaveRequested;
     public event Action<string>? RuntimeLoadRequested;
     public event Action? RuntimeSaveLibraryRefreshRequested;
     public event Action<string>? WorkspaceSelected;
 
-    public string ProfilerText => _profilerLabel?.Text ?? string.Empty;
-    public string InspectionTitleText => _inspectionTitleLabel?.Text ?? string.Empty;
-    public string InspectionBodyText => _inspectionBodyLabel?.Text ?? string.Empty;
-    public bool IsDetailVisible => _detailWindow?.IsShowing ?? false;
-    public string DetailTitleText => _detailWindow?.CurrentTitleText ?? string.Empty;
-    public string ActiveWorkspaceId => _workspaceChrome?.ActiveWorkspaceId ?? string.Empty;
-    public bool HasActiveInventoryInteraction => _detailWindow?.HasActiveInventoryInteraction ?? false;
-
     public override void _Ready()
     {
         Name = "FactoryHud";
-
-        var root = new Control();
-        root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        root.MouseFilter = Control.MouseFilterEnum.Ignore;
-        AddChild(root);
-        _root = root;
-
-        var chromePanel = new PanelContainer();
-        chromePanel.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
-        chromePanel.MouseFilter = Control.MouseFilterEnum.Ignore;
-        root.AddChild(chromePanel);
-        _chromePanel = chromePanel;
-
-        _workspaceChrome = new FactoryWorkspaceChrome();
-        _workspaceChrome.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        _workspaceChrome.WorkspaceSelected += HandleWorkspaceSelected;
-        chromePanel.AddChild(_workspaceChrome);
-        _workspaceChrome.Configure(
-            string.Empty,
-            string.Empty,
-            BuildWorkspaceDescriptors(),
-            BuildWorkspaceId);
-
-        var panel = new PanelContainer();
-        panel.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
-        panel.MouseFilter = Control.MouseFilterEnum.Ignore;
-        panel.AddThemeStyleboxOverride("panel", CreatePanelStyle());
-        root.AddChild(panel);
-        _panel = panel;
-
-        var chrome = new MarginContainer();
-        chrome.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        chrome.MouseFilter = Control.MouseFilterEnum.Ignore;
-        chrome.AddThemeConstantOverride("margin_left", 10);
-        chrome.AddThemeConstantOverride("margin_top", 10);
-        chrome.AddThemeConstantOverride("margin_right", 10);
-        chrome.AddThemeConstantOverride("margin_bottom", 10);
-        panel.AddChild(chrome);
-
-        var workspaceHost = new PanelContainer();
-        workspaceHost.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        workspaceHost.ClipContents = true;
-        workspaceHost.AddThemeStyleboxOverride("panel", CreateWorkspaceBodyStyle());
-        chrome.AddChild(workspaceHost);
-
-        var workspaceMargin = new MarginContainer();
-        workspaceMargin.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        workspaceMargin.AddThemeConstantOverride("margin_left", 10);
-        workspaceMargin.AddThemeConstantOverride("margin_top", 10);
-        workspaceMargin.AddThemeConstantOverride("margin_right", 10);
-        workspaceMargin.AddThemeConstantOverride("margin_bottom", 10);
-        workspaceHost.AddChild(workspaceMargin);
-
-        var workspaceRoot = new Control();
-        workspaceRoot.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        workspaceRoot.MouseFilter = Control.MouseFilterEnum.Ignore;
-        workspaceRoot.ClipContents = true;
-        workspaceMargin.AddChild(workspaceRoot);
-
-        workspaceRoot.AddChild(BuildBuildWorkspace());
-        workspaceRoot.AddChild(BuildBlueprintWorkspace());
-        workspaceRoot.AddChild(BuildTelemetryWorkspace());
-        workspaceRoot.AddChild(BuildCombatWorkspace());
-        workspaceRoot.AddChild(BuildTestingWorkspace());
-        workspaceRoot.AddChild(BuildSaveWorkspace());
-        ApplyWorkspaceVisibility();
-
-        _detailWindow = new FactoryStructureDetailWindow();
-        _detailWindow.InventoryMoveRequested += (inventoryId, fromSlot, toSlot, splitStack) => DetailInventoryMoveRequested?.Invoke(inventoryId, fromSlot, toSlot, splitStack);
-        _detailWindow.InventoryTransferRequested += (fromInventoryId, fromSlot, toInventoryId, toSlot, splitStack) => DetailInventoryTransferRequested?.Invoke(fromInventoryId, fromSlot, toInventoryId, toSlot, splitStack);
-        _detailWindow.RecipeSelected += recipeId => DetailRecipeSelected?.Invoke(recipeId);
-        _detailWindow.CloseRequested += () => DetailClosed?.Invoke();
-        root.AddChild(_detailWindow);
+        var overlayRoot = new Control();
+        overlayRoot.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        overlayRoot.MouseFilter = Control.MouseFilterEnum.Ignore;
+        AddChild(overlayRoot);
+        _overlayRoot = overlayRoot;
+        BuildTopChrome();
+        BuildInfoPanel();
+        BuildEditorPanel();
+        if (_overlayRoot is not null)
+        {
+            MoveChild(_overlayRoot, GetChildCount() - 1);
+        }
 
         _overwriteSaveDialog = new ConfirmationDialog();
         _overwriteSaveDialog.Title = "确认覆盖保存";
@@ -161,22 +205,20 @@ public partial class FactoryHud : CanvasLayer
             action?.Invoke();
         };
         _overwriteSaveDialog.Canceled += () => _pendingOverwriteSaveAction = null;
-        root.AddChild(_overwriteSaveDialog);
+        AddChild(_overwriteSaveDialog);
 
-        SetMode(FactoryInteractionMode.Interact);
-        SetBuildSelection(null, null);
-        SetSelectionTarget("未选中建筑");
-        SetHoverCell(Vector2I.Zero, false);
-        SetPreviewStatus(false, "交互模式：点击建筑查看；按数字键选择建筑后进入建造。");
-        SetRotation(FacingDirection.East);
-        SetSinkStats(0, 0, 0);
-        SetProfilerStats(0, 0.0, 0, 0, 0, 0, false, 0.0, 0.0, 0.0);
-        SetCombatStats(0, 0, 0);
-        SetNote("默认场景现在围绕真实采矿、冶炼、弹药补给、维护站与接收站循环组织；验证工作区主要用于观察这些链路。");
-        SetInspection(null, null);
-        SetPersistenceStatus(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: false));
+        SetPersistenceStatus(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: true));
         UpdateLayout();
         GetViewport().SizeChanged += UpdateLayout;
+    }
+
+    public override void _Process(double delta)
+    {
+        var target = _editorOpen ? 1.0f : 0.0f;
+        _editorProgress = Mathf.MoveToward(_editorProgress, target, (float)delta * 4.5f);
+        var overviewTarget = _overviewCollapsed ? 1.0f : 0.0f;
+        _overviewCollapseProgress = Mathf.MoveToward(_overviewCollapseProgress, overviewTarget, (float)delta * 5.0f);
+        UpdateLayout();
     }
 
     public override void _ExitTree()
@@ -187,93 +229,252 @@ public partial class FactoryHud : CanvasLayer
         }
     }
 
-    public IReadOnlyList<string> GetWorkspaceIds()
-    {
-        return _workspaceChrome?.GetWorkspaceIds() ?? Array.Empty<string>();
-    }
+    public IReadOnlyList<string> GetWorkspaceIds() => _workspaceChrome?.GetWorkspaceIds() ?? Array.Empty<string>();
 
     public bool IsWorkspaceVisible(string workspaceId)
     {
-        return _workspacePanels.TryGetValue(workspaceId, out var panel) && panel.Visible;
+        return (_worldWorkspacePanels.TryGetValue(workspaceId, out var worldPanel) && worldPanel.Visible)
+            || (_editorWorkspacePanels.TryGetValue(workspaceId, out var editorPanel) && editorPanel.Visible);
     }
 
-    public void SelectWorkspace(string workspaceId)
+    public void SelectWorkspace(string workspaceId) => _workspaceChrome?.SetActiveWorkspace(workspaceId);
+
+    public void ToggleOverviewCollapsed()
     {
-        _workspaceChrome?.SetActiveWorkspace(workspaceId);
+        SetOverviewCollapsed(!_overviewCollapsed);
     }
 
-    public void SetMode(FactoryInteractionMode mode)
+    public void SetOverviewCollapsed(bool collapsed)
     {
-        if (_modeLabel is null)
+        _overviewCollapsed = collapsed;
+        RefreshOverviewCollapseButton();
+    }
+
+    public void SetEditorOpen(bool isOpen)
+    {
+        _editorOpen = isOpen;
+        RefreshEditModeButton();
+    }
+
+    public bool IsPointerOverEditor(Vector2 mousePosition)
+        => IsPointerOverEditorViewport(mousePosition) || IsPointerOverEditorOperationPanel(mousePosition);
+
+    public bool IsPointerOverEditorViewport(Vector2 mousePosition)
+        => _editorViewportRect is not null && _editorProgress > 0.01f && _editorViewportRect.GetGlobalRect().HasPoint(mousePosition);
+
+    public bool IsPointerOverEditorOperationPanel(Vector2 mousePosition)
+        => _editorPanel is not null && _editorProgress > 0.01f && _editorPanel.GetGlobalRect().HasPoint(mousePosition);
+
+    public bool TryGetEditorMousePosition(Vector2 mousePosition, out Vector2 editorMousePosition)
+    {
+        editorMousePosition = Vector2.Zero;
+        if (_editorViewportRect is null || _editorViewport is null)
+        {
+            return false;
+        }
+
+        var globalRect = _editorViewportRect.GetGlobalRect();
+        if (!globalRect.HasPoint(mousePosition) || globalRect.Size.X <= 0.0f || globalRect.Size.Y <= 0.0f)
+        {
+            return false;
+        }
+
+        var localMouse = mousePosition - globalRect.Position;
+        editorMousePosition = new Vector2(
+            localMouse.X * _editorViewport.Size.X / globalRect.Size.X,
+            localMouse.Y * _editorViewport.Size.Y / globalRect.Size.Y);
+        return true;
+    }
+
+    public void SetPaneFocus(bool editorOpen, bool editorViewportFocused, bool editorOperationFocused)
+    {
+        _editorOpen = editorOpen;
+        _editorViewportFocused = editorViewportFocused;
+        _editorOperationFocused = editorOperationFocused;
+        RefreshFocusVisuals();
+    }
+
+    public void SetControlMode(MobileFactoryControlMode controlMode, MobileFactoryLifecycleState lifecycleState, FacingDirection transitFacing, FacingDirection deployFacing, bool editSessionOpen)
+    {
+        if (_modeLabel is not null)
+        {
+            var modeText = controlMode switch
+            {
+                MobileFactoryControlMode.Player => "[PLAYER] 玩家控制",
+                MobileFactoryControlMode.FactoryCommand => "[COMMAND] 工厂控制",
+                MobileFactoryControlMode.DeployPreview => "[DEPLOY] 部署预览",
+                MobileFactoryControlMode.Observer => "[OBSERVE] 观察模式",
+                _ => "[COMMAND] 工厂控制"
+            };
+            var editText = editSessionOpen ? "编辑会话：开启" : "编辑会话：关闭";
+            _modeLabel.Text = $"{modeText} | {editText} | 行进朝向：{FactoryDirection.ToLabel(transitFacing)} | 部署朝向：{FactoryDirection.ToLabel(deployFacing)}";
+            _modeLabel.Modulate = controlMode switch
+            {
+                MobileFactoryControlMode.Player => FactoryUiTheme.StatusOk,
+                MobileFactoryControlMode.Observer => FactoryUiTheme.Text,
+                _ => FactoryUiTheme.StatusWarn
+            };
+        }
+
+        if (_factoryCommandButton is not null)
+        {
+            _factoryCommandButton.Text = controlMode == MobileFactoryControlMode.FactoryCommand
+                ? "返回玩家 (C)"
+                : "工厂控制 (C)";
+            _factoryCommandButton.ButtonPressed = controlMode == MobileFactoryControlMode.FactoryCommand;
+            _factoryCommandButton.Disabled = lifecycleState == MobileFactoryLifecycleState.Recalling;
+        }
+
+        if (_observerButton is not null)
+        {
+            _observerButton.Text = controlMode == MobileFactoryControlMode.Observer ? "返回玩家 (Tab)" : "观察模式 (Tab)";
+            _observerButton.ButtonPressed = controlMode == MobileFactoryControlMode.Observer;
+            _observerButton.Disabled = lifecycleState == MobileFactoryLifecycleState.Recalling;
+        }
+
+        if (_deployButton is not null)
+        {
+            _deployButton.Text = controlMode == MobileFactoryControlMode.DeployPreview ? "取消部署 (G)" : "部署预览 (G)";
+            _deployButton.ButtonPressed = controlMode == MobileFactoryControlMode.DeployPreview;
+            _deployButton.Disabled = lifecycleState != MobileFactoryLifecycleState.InTransit;
+        }
+
+        RefreshEditModeButton();
+    }
+
+    public void SetState(MobileFactoryLifecycleState state, Vector2I? anchorCell)
+    {
+        if (_stateLabel is null)
         {
             return;
         }
 
-        _modeLabel.Text = mode switch
+        _stateLabel.Text = state switch
         {
-            FactoryInteractionMode.Build => "[BUILD] 当前模式：建造模式",
-            FactoryInteractionMode.Delete => "[DELETE] 当前模式：删除模式",
-            _ => "[INTERACT] 当前模式：交互模式"
-        };
-        _modeLabel.Modulate = mode switch
-        {
-            FactoryInteractionMode.Build => FactoryUiTheme.StatusOk,
-            FactoryInteractionMode.Delete => FactoryUiTheme.StatusError,
-            _ => FactoryUiTheme.StatusWarn
+            MobileFactoryLifecycleState.Deployed when anchorCell is not null => $"[DEPLOYED] 工厂状态：已部署于 ({anchorCell.Value.X}, {anchorCell.Value.Y})",
+            MobileFactoryLifecycleState.AutoDeploying => "[AUTO] 工厂状态：自动部署中，正在进场并对齐朝向",
+            MobileFactoryLifecycleState.Recalling => "[RECALL] 工厂状态：切回移动态中，部署机构正在收拢",
+            _ => "[TRANSIT] 工厂状态：运输中，可自由移动或下达部署命令"
         };
     }
 
-    public void SetBuildSelection(BuildPrototypeKind? kind, string? details)
+    public void SetHoverAnchor(Vector2I anchorCell, bool hasHover)
     {
-        foreach (var pair in _selectionButtons)
+        if (_hoverLabel is not null)
+        {
+            _hoverLabel.Text = hasHover ? $"[ANCHOR] 当前锚点：({anchorCell.X}, {anchorCell.Y})" : "[ANCHOR] 当前锚点：未选择";
+        }
+    }
+
+    public void SetPreviewStatus(FactoryStatusTone tone, string text)
+    {
+        if (_previewLabel is not null)
+        {
+            var prefix = tone switch
+            {
+                FactoryStatusTone.Positive => "[OK]",
+                FactoryStatusTone.Warning => "[WARN]",
+                _ => "[BLOCK]"
+            };
+            _previewLabel.Text = $"{prefix} 世界提示：{text}";
+            _previewLabel.Modulate = FactoryUiTheme.GetStatusTone(tone);
+        }
+    }
+
+    public void SetDeliveryStats(int sinkA, int sinkB)
+    {
+        if (_deliveryLabel is not null)
+        {
+            _deliveryLabel.Text = $"演示回收站：A 线路累计 {sinkA} | B 线路累计 {sinkB}";
+        }
+
+        if (_diagnosticsDeliveryLabel is not null)
+        {
+            _diagnosticsDeliveryLabel.Text = $"演示回收站：A 线路累计 {sinkA} | B 线路累计 {sinkB}";
+        }
+    }
+
+    public void SetWorldBuildSelection(BuildPrototypeKind? kind, FacingDirection facing, string? details)
+    {
+        foreach (var pair in _worldBuildButtons)
         {
             pair.Value.ButtonPressed = kind.HasValue && pair.Key == kind.Value;
         }
 
-        if (_selectedLabel is null)
+        if (_worldBuildSelectionLabel is not null)
+        {
+            _worldBuildSelectionLabel.Text = kind.HasValue
+                ? $"[WORLD] 当前世界建造：{FactoryIndustrialStandards.GetSiteAwarePrototypeLabel(kind.Value, FactorySiteKind.World)}"
+                : "[WORLD] 当前世界建造：未选择";
+            _worldBuildSelectionLabel.TooltipText = details ?? string.Empty;
+        }
+
+        if (_worldBuildRotationLabel is not null)
+        {
+            _worldBuildRotationLabel.Text = kind.HasValue
+                ? $"[FACING] 世界朝向：{FactoryDirection.ToLabel(facing)}"
+                : "[FACING] 世界朝向：未启用";
+        }
+    }
+
+    public void SetWorldSelectionTarget(string text)
+    {
+        if (_worldSelectionTargetLabel is not null)
+        {
+            _worldSelectionTargetLabel.Text = $"[TARGET] 世界选中：{text}";
+        }
+    }
+
+    public void SetWorldInspection(string? title, string? body)
+    {
+        if (_worldInspectionPanel is null || _worldInspectionTitleLabel is null || _worldInspectionBodyLabel is null)
         {
             return;
         }
 
-        if (!kind.HasValue)
-        {
-            _selectedLabel.Text = "[SELECT] 当前建造：未选择";
-            _selectedLabel.TooltipText = "交互模式下点击建筑查看详情。";
-            return;
-        }
-
-        var detailText = details ?? string.Empty;
-        _selectedLabel.Text = $"[SELECT] 当前建造：{FactoryIndustrialStandards.GetSiteAwarePrototypeLabel(kind.Value, FactorySiteKind.World)}\n{detailText}";
-        _selectedLabel.TooltipText = detailText;
+        var isVisible = !string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(body);
+        _worldInspectionPanel.Visible = isVisible;
+        _worldInspectionTitleLabel.Text = title ?? string.Empty;
+        _worldInspectionBodyLabel.Text = body ?? string.Empty;
     }
 
-    public void SetSelectionTarget(string text)
+    public void SetEditorSelection(FactoryInteractionMode interactionMode, BuildPrototypeKind? kind, FacingDirection facing)
     {
-        if (_selectionTargetLabel is not null)
+        _editorInteractionMode = interactionMode;
+        if (interactionMode == FactoryInteractionMode.Build && kind.HasValue)
         {
-            _selectionTargetLabel.Text = $"[TARGET] 当前选中: {text}";
+            if (_selectionLabel is not null)
+            {
+                _selectionLabel.Text = $"[BUILD] 内部模式：建造 | {FactoryIndustrialStandards.GetSiteAwarePrototypeLabel(kind.Value, FactorySiteKind.Interior)} | 朝向 {FactoryDirection.ToLabel(facing)}";
+            }
+            RefreshPaletteButtons(kind.Value);
+        }
+        else if (interactionMode == FactoryInteractionMode.Delete)
+        {
+            if (_selectionLabel is not null)
+            {
+                _selectionLabel.Text = "[DELETE] 内部模式：删除 | X 切换，右键退出，Shift 可框选删除";
+            }
+            RefreshPaletteButtons(null);
+        }
+        else
+        {
+            if (_selectionLabel is not null)
+            {
+                _selectionLabel.Text = "[INTERACT] 内部模式：交互 | 点击建筑查看状态";
+            }
+            RefreshPaletteButtons(null);
         }
 
-        if (_testingTargetLabel is not null)
-        {
-            _testingTargetLabel.Text = $"[TARGET] 验证目标: {text}";
-        }
+        RefreshEditorModeButtons();
     }
 
-    public void SetHoverCell(Vector2I cell, bool hasHover)
+    public void SetEditorPreview(bool isValid, string text)
     {
-        if (_hoverLabel is not null)
+        if (_editorPreviewLabel is not null)
         {
-            _hoverLabel.Text = hasHover ? $"[CELL] 格子: ({cell.X}, {cell.Y})" : "[CELL] 格子: 超出可建造区域";
-        }
-    }
-
-    public void SetPreviewStatus(bool isValid, string text)
-    {
-        if (_previewLabel is not null)
-        {
-            _previewLabel.Text = $"{(isValid ? "[OK]" : "[BLOCK]")} 提示：{text}";
-            _previewLabel.Modulate = FactoryUiTheme.GetStatusTone(isValid);
+            _editorPreviewLabel.Text = $"{(isValid ? "[OK]" : "[BLOCK]")} 内部预览：{text}";
+            _editorPreviewLabel.Modulate = FactoryUiTheme.GetStatusTone(isValid);
         }
 
         if (_testingPreviewLabel is not null)
@@ -283,131 +484,184 @@ public partial class FactoryHud : CanvasLayer
         }
     }
 
-    public void SetRotation(FacingDirection facing)
+    public void SetPortStatus(string text)
     {
-        if (_rotationLabel is not null)
+        if (_portStatusLabel is not null)
         {
-            _rotationLabel.Text = $"[FACING] 朝向: {FactoryDirection.ToLabel(facing)}";
-        }
-    }
-
-    public void SetSinkStats(int deliveredTotal, int deliveredRate, int sinkCount)
-    {
-        if (_deliveryLabel is not null)
-        {
-            _deliveryLabel.Text = $"[FLOW] 活跃回收端: {sinkCount} | 累计: {deliveredTotal} | 最近: {deliveredRate}/秒";
-        }
-    }
-
-    public void SetProfilerStats(
-        int fps,
-        double frameMilliseconds,
-        int structureCount,
-        int transitItemCount,
-        int visibleTransportItemCount,
-        int transportBatchCount,
-        bool optimizedTransportActive,
-        double simulationMilliseconds,
-        double visualMilliseconds,
-        double topologyMilliseconds)
-    {
-        if (_profilerLabel is null)
-        {
-            return;
+            _portStatusLabel.Text = $"[PORT] {text}";
+            _portStatusLabel.Modulate = FactoryUiTheme.TextSubtle;
         }
 
-        _profilerLabel.Text =
-            $"FPS {fps} | 帧 {frameMilliseconds:0.0} ms\n" +
-            $"结构 {structureCount} | 在途 {transitItemCount}\n" +
-            $"渲染中 {visibleTransportItemCount} | 批次 {transportBatchCount} | 优化 {(optimizedTransportActive ? "ON" : "OFF")}\n" +
-            $"热点 sim {simulationMilliseconds:0.00} ms | visual {visualMilliseconds:0.00} ms\n" +
-            $"拓扑重建 {topologyMilliseconds:0.00} ms";
+        if (_testingPortStatusLabel is not null)
+        {
+            _testingPortStatusLabel.Text = $"[PORT] {text}";
+            _testingPortStatusLabel.Modulate = FactoryUiTheme.TextSubtle;
+        }
     }
 
     public void SetCombatStats(int activeEnemies, int kills, int structuresLost)
     {
         if (_combatLabel is not null)
         {
-            _combatLabel.Text = $"[{(activeEnemies > 0 ? "THREAT" : "CLEAR")}] 敌人 {activeEnemies} | 击杀 {kills} | 损失建筑 {structuresLost}";
+            _combatLabel.Text = $"[{(activeEnemies > 0 ? "THREAT" : "CLEAR")}] 世界威胁：敌人 {activeEnemies} | 击杀 {kills} | 损失建筑 {structuresLost}";
             _combatLabel.Modulate = activeEnemies > 0 ? FactoryUiTheme.StatusError : FactoryUiTheme.StatusWarn;
         }
-    }
 
-    public void SetNote(string text)
-    {
-        if (_noteLabel is not null)
+        if (_diagnosticsCombatLabel is not null)
         {
-            _noteLabel.Text = text;
-        }
-
-        if (_testingNoteLabel is not null)
-        {
-            _testingNoteLabel.Text = text;
+            _diagnosticsCombatLabel.Text = $"[{(activeEnemies > 0 ? "THREAT" : "CLEAR")}] 世界威胁：敌人 {activeEnemies} | 击杀 {kills} | 损失建筑 {structuresLost}";
+            _diagnosticsCombatLabel.Modulate = activeEnemies > 0 ? FactoryUiTheme.StatusError : FactoryUiTheme.StatusWarn;
         }
     }
 
-    public void SetInspection(string? title, string? body)
+    public void SetEditorSelectionTarget(string text)
     {
-        if (_inspectionPanel is null || _inspectionTitleLabel is null || _inspectionBodyLabel is null)
+        if (_selectionTargetLabel is not null)
         {
-            return;
+            _selectionTargetLabel.Text = $"[TARGET] 内部选中：{text}";
         }
 
-        var isVisible = !string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(body);
-        _inspectionPanel.Visible = isVisible;
-        _inspectionTitleLabel.Text = title ?? string.Empty;
-        _inspectionBodyLabel.Text = body ?? string.Empty;
-    }
-
-    public bool BlocksWorldInput(Control? control)
-    {
-        return BlocksWorldInput(control, GetViewport().GetMousePosition());
-    }
-
-    public bool BlocksWorldInput(Control? control, Vector2 screenPoint)
-    {
-        if ((_detailWindow?.BlocksInput(control) ?? false)
-            || (_detailWindow?.ContainsScreenPoint(screenPoint) ?? false))
+        if (_testingSelectionTargetLabel is not null)
         {
-            return true;
+            _testingSelectionTargetLabel.Text = $"[TARGET] 验证目标：{text}";
+        }
+    }
+
+    public void SetEditorInspection(string? title, string? body)
+    {
+        if (_inspectionPanel is not null && _inspectionTitleLabel is not null && _inspectionBodyLabel is not null)
+        {
+            var isVisible = !string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(body);
+            _inspectionPanel.Visible = isVisible;
+            _inspectionTitleLabel.Text = title ?? string.Empty;
+            _inspectionBodyLabel.Text = body ?? string.Empty;
+        }
+    }
+
+    public void SetEditorFocusHint(bool overEditorViewport, bool overEditorOperationPanel)
+    {
+        var focusText = overEditorViewport
+            ? "[FOCUS] 鼠标焦点：内部编辑视口"
+            : overEditorOperationPanel
+                ? "[FOCUS] 鼠标焦点：编辑操作面板"
+                : "[FOCUS] 鼠标焦点：大世界";
+        if (_focusLabel is not null)
+        {
+            _focusLabel.Text = focusText;
         }
 
-        if (_blueprintPanel?.BlocksInput(control) ?? false)
+        if (_diagnosticsFocusLabel is not null)
         {
-            return true;
+            _diagnosticsFocusLabel.Text = focusText;
         }
-
-        return BlocksInteractiveInput(control, _chromePanel)
-            || BlocksInteractiveInput(control, _panel)
-            || ContainsScreenPoint(_chromePanel, screenPoint)
-            || ContainsScreenPoint(_panel, screenPoint);
     }
 
-    public void SetStructureDetails(FactoryStructureDetailModel? model)
+    public void SetEditorState(bool isOpen, MobileFactoryLifecycleState lifecycleState, int structureCount, FactoryInteractionMode interactionMode)
     {
-        if (_detailWindow is null || _panel is null)
+        _editorInteractionMode = interactionMode;
+        var stateText = lifecycleState switch
+        {
+            MobileFactoryLifecycleState.Deployed => "已部署",
+            MobileFactoryLifecycleState.AutoDeploying => "自动部署中",
+            MobileFactoryLifecycleState.Recalling => "回收中",
+            _ => "运输中"
+        };
+        var paneText = isOpen ? "编辑会话已开启，独立操作面板可用" : "按 F 或主面板按钮进入编辑模式";
+        var interactionText = interactionMode switch
+        {
+            FactoryInteractionMode.Build => "建造模式",
+            FactoryInteractionMode.Delete => "删除模式",
+            _ => "交互模式"
+        };
+        var maintenanceNote = FactoryIndustrialStandards.GetBuildCatalog(FactorySiteKind.Interior).MaintenanceNote;
+        if (_editorModeLabel is not null)
+        {
+            _editorModeLabel.Text = $"[EDITOR] {paneText} | 生命周期：{stateText} | {interactionText} | 当前内部件数：{structureCount}\n{maintenanceNote}";
+        }
+
+        if (_testingEditorStateLabel is not null)
+        {
+            _testingEditorStateLabel.Text = $"[CHECK] {paneText} | 生命周期：{stateText} | {interactionText} | 当前内部件数：{structureCount}\n{maintenanceNote}";
+        }
+
+        RefreshEditorModeButtons();
+    }
+
+    public void SetHintText(string text)
+    {
+        if (_hintLabel is not null)
+        {
+            _hintLabel.Text = text;
+        }
+
+        if (_diagnosticsHintLabel is not null)
+        {
+            _diagnosticsHintLabel.Text = text;
+        }
+
+        if (_testingHintLabel is not null)
+        {
+            _testingHintLabel.Text = text;
+        }
+    }
+
+    public void SetFactoryDetails(string text)
+    {
+        if (_factoryDetailLabel is not null)
+        {
+            _factoryDetailLabel.Text = text;
+        }
+    }
+
+    public void SetEditorStructureDetails(FactoryStructureDetailModel? model)
+    {
+        if (_detailWindow is null || (_editorViewportPanel is null && _editorPanel is null))
         {
             return;
         }
 
         if (model is null)
         {
-            _detailWindow.HideWindow();
+            if (_detailSurfaceContext == DetailSurfaceContext.Editor)
+            {
+                _detailWindow.HideWindow();
+                _detailSurfaceContext = DetailSurfaceContext.None;
+            }
+        }
+        else
+        {
+            var anchorPanel = _editorViewportPanel ?? _editorPanel!;
+            _detailSurfaceContext = DetailSurfaceContext.Editor;
+            _detailWindow.ShowDetails(model, anchorPanel.Position + new Vector2(24.0f, 24.0f));
+        }
+    }
+
+    public void SetWorldStructureDetails(FactoryStructureDetailModel? model)
+    {
+        if (_detailWindow is null || _infoPanel is null)
+        {
             return;
         }
 
-        var defaultPosition = new Vector2(_panel.Position.X + _panel.Size.X + 18.0f, 18.0f);
-        _detailWindow.ShowDetails(model, defaultPosition);
+        if (model is null)
+        {
+            if (_detailSurfaceContext == DetailSurfaceContext.World)
+            {
+                _detailWindow.HideWindow();
+                _detailSurfaceContext = DetailSurfaceContext.None;
+            }
+
+            return;
+        }
+
+        _detailSurfaceContext = DetailSurfaceContext.World;
+        _detailWindow.ShowDetails(model, _infoPanel.Position + new Vector2(_infoPanel.Size.X + 18.0f, 18.0f));
     }
 
     public void SetBlueprintState(FactoryBlueprintPanelState state)
     {
         _blueprintPanel?.SetState(state);
-
-        if (state.PendingCaptureId is not null
-            || state.CanConfirmApply
-            || state.ModeText.Contains("框选", StringComparison.Ordinal)
-            || state.ModeText.Contains("应用预览", StringComparison.Ordinal))
+        if (state.PendingCaptureId is not null || state.CanConfirmApply || state.ModeText.Contains("框选", StringComparison.Ordinal) || state.ModeText.Contains("应用预览", StringComparison.Ordinal))
         {
             SetActiveWorkspace(BlueprintWorkspaceId, emitSignal: false);
         }
@@ -415,15 +669,33 @@ public partial class FactoryHud : CanvasLayer
 
     public void SetPersistenceStatus(string text)
     {
-        if (_testingSaveStatusLabel is not null)
+        if (_saveStatusLabel is not null)
         {
-            _testingSaveStatusLabel.Text = text;
+            _saveStatusLabel.Text = text;
         }
 
-        if (_saveWorkspaceStatusLabel is not null)
+        if (_saveLibraryStatusLabel is not null)
         {
-            _saveWorkspaceStatusLabel.Text = text;
+            _saveLibraryStatusLabel.Text = text;
         }
+
+        if (_testingPersistenceLabel is not null)
+        {
+            _testingPersistenceLabel.Text = text;
+        }
+    }
+
+    private void RefreshOverviewCollapseButton()
+    {
+        if (_overviewCollapseButton is null)
+        {
+            return;
+        }
+
+        _overviewCollapseButton.Text = _overviewCollapsed ? "> 展开" : "收起 <";
+        _overviewCollapseButton.TooltipText = _overviewCollapsed
+            ? "将移动工厂总览向右侧滑出并重新显示。"
+            : "将移动工厂总览向左侧滑隐藏，腾出更多世界与编辑空间。";
     }
 
     public void SetRuntimeSaveLibrary(IReadOnlyList<FactoryRuntimeSaveSlotMetadata> slots)
@@ -440,7 +712,7 @@ public partial class FactoryHud : CanvasLayer
 
         if (slots.Count == 0)
         {
-            _saveLibraryList.AddChild(CreateValueLabel("当前还没有进度存档。", FactoryUiTheme.TextMuted));
+            _saveLibraryList.AddChild(CreateEditorLabel("当前还没有进度存档。", 11, FactoryUiTheme.TextMuted));
             return;
         }
 
@@ -450,289 +722,65 @@ public partial class FactoryHud : CanvasLayer
         }
     }
 
-    private IReadOnlyList<FactoryWorkspaceDescriptor> BuildWorkspaceDescriptors()
+    public bool BlocksInput(Control? control)
     {
-        return new[]
+        return BlocksInput(control, GetViewport().GetMousePosition());
+    }
+
+    public bool BlocksInput(Control? control, Vector2 screenPoint)
+    {
+        if ((_detailWindow?.BlocksInput(control) ?? false)
+            || (_detailWindow?.ContainsScreenPoint(screenPoint) ?? false))
         {
-            new FactoryWorkspaceDescriptor(BuildWorkspaceId, "建造"),
-            new FactoryWorkspaceDescriptor(BlueprintWorkspaceId, "蓝图"),
-            new FactoryWorkspaceDescriptor(TelemetryWorkspaceId, "遥测"),
-            new FactoryWorkspaceDescriptor(CombatWorkspaceId, "战斗"),
-            new FactoryWorkspaceDescriptor(TestingWorkspaceId, "验证"),
-            new FactoryWorkspaceDescriptor(SavesWorkspaceId, "存档")
-        };
-    }
+            return true;
+        }
 
-    private Control BuildBuildWorkspace()
-    {
-        var (workspace, body) = CreateWorkspacePanel(BuildWorkspaceId);
-        body.AddChild(CreateSectionLabel("建造工作区", 14, FactoryUiTheme.Text));
-        body.AddChild(CreateValueLabel("默认交互模式下可选中建筑，显式选择原型后才进入建造模式。", FactoryUiTheme.TextSubtle));
-
-        body.AddChild(CreateDivider());
-        body.AddChild(CreateSectionLabel("建造面板", 12, FactoryUiTheme.Text));
-        body.AddChild(CreateValueLabel("按功能拆成页签；多格建筑会保留在各自所属功能分类中。", FactoryUiTheme.TextSubtle));
-        BuildSelectionCategories(body);
-
-        body.AddChild(CreateDivider());
-        body.AddChild(CreateSectionLabel("快速观察", 12, FactoryUiTheme.Text));
-        var inspectionPanel = new PanelContainer();
-        inspectionPanel.MouseFilter = Control.MouseFilterEnum.Ignore;
-        inspectionPanel.Visible = false;
-        body.AddChild(inspectionPanel);
-        _inspectionPanel = inspectionPanel;
-
-        var inspectionBody = new VBoxContainer();
-        inspectionBody.MouseFilter = Control.MouseFilterEnum.Ignore;
-        inspectionBody.AddThemeConstantOverride("separation", 4);
-        inspectionPanel.AddChild(inspectionBody);
-
-        _inspectionTitleLabel = CreateValueLabel(string.Empty, FactoryUiTheme.Text);
-        _inspectionBodyLabel = CreateValueLabel(string.Empty, FactoryUiTheme.TextMuted);
-        inspectionBody.AddChild(_inspectionTitleLabel);
-        inspectionBody.AddChild(_inspectionBodyLabel);
-
-        return workspace;
-    }
-
-    private Control BuildBlueprintWorkspace()
-    {
-        var workspace = new Control();
-        workspace.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        workspace.MouseFilter = Control.MouseFilterEnum.Ignore;
-        workspace.Visible = false;
-
-        var body = new VBoxContainer();
-        body.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        body.MouseFilter = Control.MouseFilterEnum.Ignore;
-        body.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        body.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
-        body.AddThemeConstantOverride("separation", 8);
-        workspace.AddChild(body);
-
-        body.AddChild(CreateSectionLabel("蓝图工作区", 14, FactoryUiTheme.Text));
-        body.AddChild(CreateValueLabel("框选保存、库浏览和应用预览都集中在这里，不再单独弹出默认常驻窗口。", FactoryUiTheme.TextSubtle));
-        body.AddChild(CreateValueLabel(FactoryPersistencePaths.BuildBlueprintPersistenceHint(), FactoryUiTheme.TextSubtle));
-
-        var blueprintMargin = new MarginContainer();
-        blueprintMargin.MouseFilter = Control.MouseFilterEnum.Ignore;
-        blueprintMargin.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        blueprintMargin.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
-        blueprintMargin.AddThemeConstantOverride("margin_left", 2);
-        blueprintMargin.AddThemeConstantOverride("margin_top", 2);
-        blueprintMargin.AddThemeConstantOverride("margin_right", 2);
-        blueprintMargin.AddThemeConstantOverride("margin_bottom", 2);
-        body.AddChild(blueprintMargin);
-
-        _blueprintPanel = new FactoryBlueprintPanel();
-        _blueprintPanel.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        _blueprintPanel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        _blueprintPanel.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
-        _blueprintPanel.SetDocked(true);
-        _blueprintPanel.BlueprintSelected += blueprintId => BlueprintSelected?.Invoke(blueprintId);
-        _blueprintPanel.SaveCaptureRuntimeRequested += name => BlueprintRuntimeSaveRequested?.Invoke(name);
-        _blueprintPanel.SaveCaptureSourceRequested += name => BlueprintSourceSaveRequested?.Invoke(name);
-        _blueprintPanel.ApplyActiveRequested += () => BlueprintApplyRequested?.Invoke();
-        _blueprintPanel.ConfirmApplyRequested += () => BlueprintConfirmRequested?.Invoke();
-        _blueprintPanel.DeleteSelectedRequested += blueprintId => BlueprintDeleteRequested?.Invoke(blueprintId);
-        _blueprintPanel.CancelRequested += () => BlueprintCancelRequested?.Invoke();
-        blueprintMargin.AddChild(_blueprintPanel);
-
-        _workspacePanels[BlueprintWorkspaceId] = workspace;
-        return workspace;
-    }
-
-    private Control BuildTelemetryWorkspace()
-    {
-        var (workspace, body) = CreateWorkspacePanel(TelemetryWorkspaceId);
-        body.AddChild(CreateSectionLabel("遥测工作区", 14, FactoryUiTheme.Text));
-        body.AddChild(CreateValueLabel("把吞吐、性能和稳定性读数收敛在一个面板里，方便观察 sandbox 当前运行状态。", FactoryUiTheme.TextSubtle));
-
-        body.AddChild(CreateDivider());
-        _deliveryLabel = CreateValueLabel(string.Empty);
-        _profilerLabel = CreateValueLabel(string.Empty, FactoryUiTheme.TextMuted);
-        body.AddChild(_deliveryLabel);
-        body.AddChild(_profilerLabel);
-
-        body.AddChild(CreateDivider());
-        _noteLabel = CreateValueLabel(string.Empty, FactoryUiTheme.TextSubtle);
-        body.AddChild(_noteLabel);
-
-        return workspace;
-    }
-
-    private Control BuildCombatWorkspace()
-    {
-        var (workspace, body) = CreateWorkspacePanel(CombatWorkspaceId);
-        body.AddChild(CreateSectionLabel("战斗工作区", 14, FactoryUiTheme.Text));
-        body.AddChild(CreateValueLabel("把威胁与损失读数从主建造界面中分离出来，便于在需要时单独盯防。", FactoryUiTheme.TextSubtle));
-
-        body.AddChild(CreateDivider());
-        _combatLabel = CreateValueLabel(string.Empty, FactoryUiTheme.StatusError);
-        body.AddChild(_combatLabel);
-
-        body.AddChild(CreateDivider());
-        body.AddChild(CreateValueLabel("验证炮塔供弹、敌潮压力和防线破口时，可将视图切到这个工作区。", FactoryUiTheme.TextSubtle));
-
-        return workspace;
-    }
-
-    private Control BuildTestingWorkspace()
-    {
-        var (workspace, body) = CreateWorkspacePanel(TestingWorkspaceId);
-        body.AddChild(CreateSectionLabel("验证工作区", 14, FactoryUiTheme.Text));
-        body.AddChild(CreateValueLabel("把 sandbox 案例观察、建造验证和蓝图验证整理成一个独立面板，而不是默认摊开在主 HUD 上。", FactoryUiTheme.TextSubtle));
-
-        var jumpGrid = new GridContainer();
-        jumpGrid.Columns = 2;
-        jumpGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        jumpGrid.AddThemeConstantOverride("h_separation", 6);
-        jumpGrid.AddThemeConstantOverride("v_separation", 6);
-        body.AddChild(jumpGrid);
-
-        jumpGrid.AddChild(CreateWorkspaceJumpButton("打开建造工作区", BuildWorkspaceId));
-        jumpGrid.AddChild(CreateWorkspaceJumpButton("打开蓝图工作区", BlueprintWorkspaceId));
-        jumpGrid.AddChild(CreateWorkspaceJumpButton("打开存档工作区", SavesWorkspaceId));
-        jumpGrid.AddChild(CreateActionButton("导出运行时副本", () => MapSaveRequested?.Invoke()));
-        jumpGrid.AddChild(CreateActionButton("保存到当前源", () => MapSourceSaveRequested?.Invoke()));
-
-        body.AddChild(CreateDivider());
-        body.AddChild(CreateSectionLabel("进度存档", 12, FactoryUiTheme.Text));
-        var runtimeSlotEdit = new LineEdit
+        if (_blueprintPanel?.BlocksInput(control) ?? false)
         {
-            Text = "progress-1",
-            PlaceholderText = "输入存档名",
-            MouseFilter = Control.MouseFilterEnum.Stop,
-            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
-        };
-        FactoryUiTheme.ApplyLineEditTheme(runtimeSlotEdit);
-        _saveWorkspaceSlotEdit = runtimeSlotEdit;
-        body.AddChild(runtimeSlotEdit);
+            return true;
+        }
 
-        var runtimeGrid = new GridContainer();
-        runtimeGrid.Columns = 2;
-        runtimeGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        runtimeGrid.AddThemeConstantOverride("h_separation", 6);
-        runtimeGrid.AddThemeConstantOverride("v_separation", 6);
-        runtimeGrid.AddChild(CreateActionButton("保存进度", () => RuntimeSaveRequested?.Invoke(runtimeSlotEdit.Text?.Trim() ?? string.Empty)));
-        runtimeGrid.AddChild(CreateActionButton("读取进度", () => RuntimeLoadRequested?.Invoke(runtimeSlotEdit.Text?.Trim() ?? string.Empty)));
-        body.AddChild(runtimeGrid);
-
-        body.AddChild(CreateDivider());
-        _testingNoteLabel = CreateValueLabel(string.Empty, FactoryUiTheme.TextSubtle);
-        _testingTargetLabel = CreateValueLabel("验证目标: 未选中建筑", FactoryUiTheme.TextMuted);
-        _testingPreviewLabel = CreateValueLabel("验证提示: 等待状态更新。", FactoryUiTheme.TextMuted);
-        _testingSaveStatusLabel = CreateValueLabel(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: false), FactoryUiTheme.TextSubtle);
-        body.AddChild(_testingNoteLabel);
-        body.AddChild(_testingTargetLabel);
-        body.AddChild(_testingPreviewLabel);
-        body.AddChild(_testingSaveStatusLabel);
-
-        body.AddChild(CreateDivider());
-        body.AddChild(CreateValueLabel("建议验证路径：观察采矿与接收站吞吐、点击建筑查看详情、Shift+左键框选蓝图、Delete/X 验证拆除与恢复。", FactoryUiTheme.TextSubtle));
-
-        return workspace;
+        return BlocksInteractiveInput(control, _topChromePanel)
+            || BlocksInteractiveInput(control, _infoPanel)
+            || BlocksInteractiveInput(control, _editorViewportPanel)
+            || BlocksInteractiveInput(control, _editorPanel)
+            || ContainsScreenPoint(_topChromePanel, screenPoint)
+            || ContainsScreenPoint(_infoPanel, screenPoint)
+            || ContainsScreenPoint(_editorViewportPanel, screenPoint)
+            || ContainsScreenPoint(_editorPanel, screenPoint);
     }
 
-    private Control BuildSaveWorkspace()
+    private void RefreshEditModeButton()
     {
-        var (workspace, body) = CreateWorkspacePanel(SavesWorkspaceId);
-        body.AddChild(CreateSectionLabel("存档工作区", 14, FactoryUiTheme.Text));
-        body.AddChild(CreateValueLabel("这里会列出当前运行时进度存档，便于快速保存、读取和核对快照状态。", FactoryUiTheme.TextSubtle));
-
-        body.AddChild(CreateDivider());
-        body.AddChild(CreateSectionLabel("快速存读", 12, FactoryUiTheme.Text));
-        var runtimeSlotEdit = new LineEdit
+        if (_editModeButton is null)
         {
-            Text = "progress-1",
-            PlaceholderText = "输入存档名",
-            MouseFilter = Control.MouseFilterEnum.Stop,
-            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill
-        };
-        FactoryUiTheme.ApplyLineEditTheme(runtimeSlotEdit);
-        body.AddChild(runtimeSlotEdit);
+            return;
+        }
 
-        var runtimeGrid = new GridContainer();
-        runtimeGrid.Columns = 2;
-        runtimeGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        runtimeGrid.AddThemeConstantOverride("h_separation", 6);
-        runtimeGrid.AddThemeConstantOverride("v_separation", 6);
-        runtimeGrid.AddChild(CreateActionButton("保存进度", () => RuntimeSaveRequested?.Invoke(runtimeSlotEdit.Text?.Trim() ?? string.Empty)));
-        runtimeGrid.AddChild(CreateActionButton("读取进度", () => RuntimeLoadRequested?.Invoke(runtimeSlotEdit.Text?.Trim() ?? string.Empty)));
-        runtimeGrid.AddChild(CreateActionButton("刷新列表", () => RuntimeSaveLibraryRefreshRequested?.Invoke()));
-        runtimeGrid.AddChild(CreateWorkspaceJumpButton("返回验证工作区", TestingWorkspaceId));
-        body.AddChild(runtimeGrid);
-
-        body.AddChild(CreateDivider());
-        _saveWorkspaceStatusLabel = CreateValueLabel(FactoryPersistencePaths.BuildPersistenceSummary(includeInteriorMap: false), FactoryUiTheme.TextSubtle);
-        body.AddChild(_saveWorkspaceStatusLabel);
-
-        body.AddChild(CreateDivider());
-        body.AddChild(CreateSectionLabel("存档列表", 12, FactoryUiTheme.Text));
-        var list = new VBoxContainer();
-        list.MouseFilter = Control.MouseFilterEnum.Ignore;
-        list.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        list.AddThemeConstantOverride("separation", 6);
-        _saveLibraryList = list;
-        body.AddChild(list);
-        list.AddChild(CreateValueLabel("正在读取存档列表...", FactoryUiTheme.TextMuted));
-
-        return workspace;
+        _editModeButton.Text = _editorOpen ? "退出编辑模式 (F)" : "进入编辑模式 (F)";
     }
 
-    private (ScrollContainer workspace, VBoxContainer body) CreateWorkspacePanel(string workspaceId)
+    private void RefreshEditorModeButtons()
     {
-        var workspace = new ScrollContainer();
-        workspace.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        workspace.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
-        workspace.VerticalScrollMode = ScrollContainer.ScrollMode.Auto;
-        workspace.MouseFilter = Control.MouseFilterEnum.Ignore;
-        workspace.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        workspace.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
-        workspace.Visible = false;
-
-        var body = new VBoxContainer();
-        body.MouseFilter = Control.MouseFilterEnum.Ignore;
-        body.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        body.AddThemeConstantOverride("separation", 8);
-        body.CustomMinimumSize = new Vector2(240.0f, 0.0f);
-        workspace.AddChild(body);
-
-        _workspacePanels[workspaceId] = workspace;
-        return (workspace, body);
-    }
-
-    private Button CreateWorkspaceJumpButton(string text, string workspaceId)
-    {
-        var button = new Button
+        if (_editorBuildModeButton is not null)
         {
-            Text = text,
-            MouseFilter = Control.MouseFilterEnum.Stop,
-            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-            CustomMinimumSize = new Vector2(0.0f, 30.0f)
-        };
-        FactoryUiTheme.ApplyButtonTheme(button);
-        button.Pressed += () => SetActiveWorkspace(workspaceId);
-        return button;
-    }
+            _editorBuildModeButton.ButtonPressed = _editorInteractionMode == FactoryInteractionMode.Build;
+        }
 
-    private Button CreateActionButton(string text, Action pressed)
-    {
-        var button = new Button
+        if (_editorInteractionModeButton is not null)
         {
-            Text = text,
-            MouseFilter = Control.MouseFilterEnum.Stop,
-            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-            CustomMinimumSize = new Vector2(0.0f, 30.0f)
-        };
-        FactoryUiTheme.ApplyButtonTheme(button);
-        button.Pressed += pressed;
-        return button;
+            _editorInteractionModeButton.ButtonPressed = _editorInteractionMode == FactoryInteractionMode.Interact;
+        }
+
+        if (_editorDeleteModeButton is not null)
+        {
+            _editorDeleteModeButton.ButtonPressed = _editorInteractionMode == FactoryInteractionMode.Delete;
+        }
     }
 
     private void RequestOverwriteSave(FactoryRuntimeSaveSlotMetadata slot)
     {
-        if (_overwriteSaveDialog is null)
+        if (_overwriteSaveDialog is null || UseLargeScenarioWorkspaces)
         {
             return;
         }
@@ -778,20 +826,22 @@ public partial class FactoryHud : CanvasLayer
         header.AddThemeConstantOverride("separation", 8);
         body.AddChild(header);
 
-        var title = CreateValueLabel(slot.DisplayName, FactoryUiTheme.Text);
+        var title = CreateEditorLabel(slot.DisplayName, 12, FactoryUiTheme.Text);
         title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        title.AddThemeFontSizeOverride("font_size", 13);
         header.AddChild(title);
 
         var overwriteButton = new Button
         {
             Text = "覆盖保存",
             MouseFilter = Control.MouseFilterEnum.Stop,
-            CustomMinimumSize = new Vector2(84.0f, 26.0f)
+            CustomMinimumSize = new Vector2(84.0f, 24.0f),
+            Disabled = UseLargeScenarioWorkspaces
         };
-        overwriteButton.AddThemeFontSizeOverride("font_size", 11);
+        overwriteButton.AddThemeFontSizeOverride("font_size", 10);
         FactoryUiTheme.ApplyButtonTheme(overwriteButton, compact: true);
-        overwriteButton.TooltipText = $"覆盖保存到存档 {slot.SlotId}";
+        overwriteButton.TooltipText = UseLargeScenarioWorkspaces
+            ? "large scenario 当前不支持运行时进度覆盖保存"
+            : $"覆盖保存到存档 {slot.SlotId}";
         overwriteButton.Pressed += () => RequestOverwriteSave(slot);
         header.AddChild(overwriteButton);
 
@@ -799,11 +849,14 @@ public partial class FactoryHud : CanvasLayer
         {
             Text = "读取",
             MouseFilter = Control.MouseFilterEnum.Stop,
-            CustomMinimumSize = new Vector2(64.0f, 26.0f)
+            CustomMinimumSize = new Vector2(62.0f, 24.0f),
+            Disabled = UseLargeScenarioWorkspaces
         };
-        loadButton.AddThemeFontSizeOverride("font_size", 11);
+        loadButton.AddThemeFontSizeOverride("font_size", 10);
         FactoryUiTheme.ApplyButtonTheme(loadButton, compact: true);
-        loadButton.TooltipText = $"直接读取存档 {slot.SlotId}";
+        loadButton.TooltipText = UseLargeScenarioWorkspaces
+            ? "large scenario 当前不支持运行时进度读档"
+            : $"直接读取存档 {slot.SlotId}";
         loadButton.Pressed += () =>
         {
             if (_saveWorkspaceSlotEdit is not null)
@@ -815,206 +868,15 @@ public partial class FactoryHud : CanvasLayer
         };
         header.AddChild(loadButton);
 
-        var meta = CreateValueLabel(
+        var meta = CreateEditorLabel(
             $"{FactoryRuntimeSavePersistence.FormatSavedAtDisplay(slot.SavedAtUtc)}  |  {slot.SiteCount} 站点",
+            10,
             FactoryUiTheme.TextSubtle);
-        meta.AddThemeFontSizeOverride("font_size", 11);
         body.AddChild(meta);
 
-        var maps = CreateValueLabel(FactoryRuntimeSavePersistence.BuildSlotCompactSummary(slot), FactoryUiTheme.TextMuted);
-        maps.AddThemeFontSizeOverride("font_size", 11);
+        var maps = CreateEditorLabel(FactoryRuntimeSavePersistence.BuildSlotCompactSummary(slot), 10, FactoryUiTheme.TextMuted);
         body.AddChild(maps);
 
         return card;
-    }
-
-    private void HandleWorkspaceSelected(string workspaceId)
-    {
-        ApplyWorkspaceVisibility();
-        WorkspaceSelected?.Invoke(workspaceId);
-    }
-
-    private void SetActiveWorkspace(string workspaceId, bool emitSignal = true)
-    {
-        _workspaceChrome?.SetActiveWorkspace(workspaceId, emitSignal);
-        ApplyWorkspaceVisibility();
-    }
-
-    private void ApplyWorkspaceVisibility()
-    {
-        var activeWorkspaceId = _workspaceChrome?.ActiveWorkspaceId ?? BuildWorkspaceId;
-        foreach (var pair in _workspacePanels)
-        {
-            pair.Value.Visible = pair.Key == activeWorkspaceId;
-        }
-    }
-
-    private void UpdateLayout()
-    {
-        if (_root is null || _panel is null || _chromePanel is null)
-        {
-            return;
-        }
-
-        var viewportSize = GetViewport().GetVisibleRect().Size;
-        var outerMargin = 10.0f;
-        var panelWidth = Mathf.Clamp(viewportSize.X * 0.25f, 280.0f, 380.0f);
-        var chromeHeight = 40.0f;
-        var contentTop = chromeHeight + 6.0f;
-        var contentHeight = Mathf.Max(320.0f, viewportSize.Y - contentTop - outerMargin);
-
-        _chromePanel.Position = new Vector2(0.0f, 0.0f);
-        _chromePanel.Size = new Vector2(panelWidth, chromeHeight);
-        _panel.Position = new Vector2(0.0f, contentTop);
-        _panel.Size = new Vector2(panelWidth, contentHeight);
-        _detailWindow?.SetDragBounds(new Rect2(Vector2.Zero, viewportSize));
-    }
-
-    private void CreateSelectionButton(Container parent, BuildPrototypeKind kind, string text)
-    {
-        var localKind = kind;
-        var button = new Button();
-        button.Text = text;
-        button.ToggleMode = true;
-        button.MouseFilter = Control.MouseFilterEnum.Stop;
-        button.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        button.CustomMinimumSize = new Vector2(0.0f, 30.0f);
-        button.AddThemeFontSizeOverride("font_size", 12);
-        FactoryUiTheme.ApplyButtonTheme(button);
-        button.Pressed += () =>
-        {
-            BuildPrototypeKind? nextKind = button.ButtonPressed ? localKind : null;
-            SelectionChanged?.Invoke(nextKind);
-        };
-        parent.AddChild(button);
-        _selectionButtons[kind] = button;
-    }
-
-    private void BuildSelectionCategories(Container parent)
-    {
-        var catalog = FactoryIndustrialStandards.GetBuildCatalog(FactorySiteKind.World);
-        var tabs = new TabContainer();
-        tabs.MouseFilter = Control.MouseFilterEnum.Ignore;
-        tabs.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        tabs.AddThemeFontSizeOverride("font_size", CompactTabFontSize);
-        tabs.AddThemeConstantOverride("side_margin", 2);
-        FactoryUiTheme.ApplyTabContainerTheme(tabs);
-        parent.AddChild(tabs);
-
-        for (var index = 0; index < catalog.Categories.Count; index++)
-        {
-            var category = catalog.Categories[index];
-            var section = new VBoxContainer();
-            section.Name = category.Title;
-            section.MouseFilter = Control.MouseFilterEnum.Ignore;
-            section.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-            section.AddThemeConstantOverride("separation", 4);
-            tabs.AddChild(section);
-
-            var buttonGrid = new GridContainer();
-            buttonGrid.Columns = 2;
-            buttonGrid.MouseFilter = Control.MouseFilterEnum.Ignore;
-            buttonGrid.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-            buttonGrid.AddThemeConstantOverride("h_separation", 6);
-            buttonGrid.AddThemeConstantOverride("v_separation", 6);
-            section.AddChild(buttonGrid);
-
-            for (var kindIndex = 0; kindIndex < category.Kinds.Count; kindIndex++)
-            {
-                var kind = category.Kinds[kindIndex];
-                CreateSelectionButton(buttonGrid, kind, GetBuildPaletteLabel(kind));
-            }
-        }
-    }
-
-    private static string GetBuildPaletteLabel(BuildPrototypeKind kind)
-    {
-        return FactoryIndustrialStandards.GetBuildPaletteLabel(kind, FactorySiteKind.World);
-    }
-
-    private static bool BlocksInteractiveInput(Control? control, Control? container)
-    {
-        if (control is null || container is null)
-        {
-            return false;
-        }
-
-        var current = control;
-        while (current is not null)
-        {
-            if (current == container)
-            {
-                return false;
-            }
-
-            if (current is BaseButton or ItemList or LineEdit)
-            {
-                return IsInside(current, container);
-            }
-
-            current = current.GetParent() as Control;
-        }
-
-        return false;
-    }
-
-    private static bool IsInside(Control control, Control container)
-    {
-        var current = control;
-        while (current is not null)
-        {
-            if (current == container)
-            {
-                return true;
-            }
-
-            current = current.GetParent() as Control;
-        }
-
-        return false;
-    }
-
-    private static bool ContainsScreenPoint(Control? control, Vector2 screenPoint)
-    {
-        return control is not null
-            && control.Visible
-            && control.GetGlobalRect().HasPoint(screenPoint);
-    }
-
-    private static Label CreateSectionLabel(string text, int fontSize, Color color)
-    {
-        var label = new Label();
-        label.MouseFilter = Control.MouseFilterEnum.Ignore;
-        label.Text = text;
-        label.Modulate = color;
-        label.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-        label.AddThemeFontSizeOverride("font_size", fontSize);
-        return label;
-    }
-
-    private static Label CreateValueLabel(string text, Color? color = null)
-    {
-        var label = new Label();
-        label.MouseFilter = Control.MouseFilterEnum.Ignore;
-        label.Text = text;
-        label.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-        label.Modulate = color ?? FactoryUiTheme.TextMuted;
-        label.AddThemeFontSizeOverride("font_size", 12);
-        return label;
-    }
-
-    private static ColorRect CreateDivider()
-    {
-        return FactoryUiTheme.CreateDivider();
-    }
-
-    private static StyleBoxFlat CreatePanelStyle()
-    {
-        return FactoryUiTheme.CreateChromePanelStyle();
-    }
-
-    private static StyleBoxFlat CreateWorkspaceBodyStyle()
-    {
-        return FactoryUiTheme.CreateWorkspaceBodyStyle();
     }
 }

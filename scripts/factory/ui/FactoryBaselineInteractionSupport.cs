@@ -133,24 +133,8 @@ public static class FactoryBaselineHudProjectionBuilder
 
 public static class FactoryBaselineHudApplicator
 {
-    public static void ApplyToFactoryHud(
-        FactoryHud hud,
-        FactoryBaselineHudProjection projection,
-        Vector2I hoverCell,
-        bool hasHover)
-    {
-        hud.SetMode(projection.InteractionMode);
-        hud.SetBuildSelection(projection.BuildKind, projection.BuildDetails);
-        hud.SetHoverCell(hoverCell, hasHover);
-        hud.SetPreviewStatus(projection.PreviewPositive, projection.PreviewMessage);
-        hud.SetRotation(projection.Facing);
-        hud.SetSelectionTarget(projection.SelectionTargetText);
-        hud.SetInspection(projection.InspectionTitle, projection.InspectionBody);
-        hud.SetStructureDetails(projection.StructureDetails);
-    }
-
     public static void ApplyToMobileWorldHud(
-        MobileFactoryHud hud,
+        FactoryHud hud,
         FactoryBaselineHudProjection projection,
         FactoryStatusTone tone)
     {

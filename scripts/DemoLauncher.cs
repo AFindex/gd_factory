@@ -402,21 +402,33 @@ public partial class DemoLauncher : Control
     {
         if (entry.Id == "factory-demo")
         {
-            Label? summaryLabel = null;
-            var selector = CreateMapSelector("世界地图", _worldMapEntries, DemoLaunchOptions.ResolveFactoryWorldMapPath(), selected =>
+            Label? worldSummaryLabel = null;
+            var worldSelector = CreateMapSelector("世界地图", _worldMapEntries, DemoLaunchOptions.ResolveMobileWorldMapPath(), selected =>
             {
-                DemoLaunchOptions.FactoryWorldMapPath = selected.Path;
-                if (summaryLabel is not null)
+                DemoLaunchOptions.MobileWorldMapPath = selected.Path;
+                if (worldSummaryLabel is not null)
                 {
-                    summaryLabel.Text = selected.BuildSummaryText();
+                    worldSummaryLabel.Text = selected.BuildSummaryText();
                 }
             });
-            summaryLabel = selector.SummaryLabel;
-            parent.AddChild(selector.Container);
+            worldSummaryLabel = worldSelector.SummaryLabel;
+            parent.AddChild(worldSelector.Container);
+
+            Label? interiorSummaryLabel = null;
+            var interiorSelector = CreateMapSelector("内部地图", _interiorMapEntries, DemoLaunchOptions.ResolveMobileInteriorMapPath(), selected =>
+            {
+                DemoLaunchOptions.MobileInteriorMapPath = selected.Path;
+                if (interiorSummaryLabel is not null)
+                {
+                    interiorSummaryLabel.Text = selected.BuildSummaryText();
+                }
+            });
+            interiorSummaryLabel = interiorSelector.SummaryLabel;
+            parent.AddChild(interiorSelector.Container);
             return;
         }
 
-        if (entry.Id == "mobile-factory-demo" || entry.Id == "mobile-factory-test-scenario")
+        if (entry.Id == "mobile-factory-test-scenario")
         {
             Label? worldSummaryLabel = null;
             var worldSelector = CreateMapSelector("世界地图", _worldMapEntries, DemoLaunchOptions.ResolveMobileWorldMapPath(), selected =>
@@ -498,12 +510,20 @@ public partial class DemoLauncher : Control
 
     private void ApplyLaunchSelection(DemoSceneEntry entry)
     {
-        if (entry.Id == "factory-demo" && string.IsNullOrWhiteSpace(DemoLaunchOptions.FactoryWorldMapPath))
+        if (entry.Id == "factory-demo")
         {
-            DemoLaunchOptions.FactoryWorldMapPath = FactoryMapPaths.StaticSandboxWorld;
+            if (string.IsNullOrWhiteSpace(DemoLaunchOptions.MobileWorldMapPath))
+            {
+                DemoLaunchOptions.MobileWorldMapPath = FactoryMapPaths.FocusedMobileWorld;
+            }
+
+            if (string.IsNullOrWhiteSpace(DemoLaunchOptions.MobileInteriorMapPath))
+            {
+                DemoLaunchOptions.MobileInteriorMapPath = FactoryMapPaths.FocusedMobileInterior;
+            }
         }
 
-        if ((entry.Id == "mobile-factory-demo" || entry.Id == "mobile-factory-test-scenario"))
+        if (entry.Id == "mobile-factory-test-scenario")
         {
             if (string.IsNullOrWhiteSpace(DemoLaunchOptions.MobileWorldMapPath))
             {

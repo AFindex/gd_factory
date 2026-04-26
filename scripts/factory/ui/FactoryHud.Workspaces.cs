@@ -2,7 +2,7 @@ using Godot;
 using System;
 using System.Collections.Generic;
 
-public partial class MobileFactoryHud
+public partial class FactoryHud
 {
     private void BuildTopChrome()
     {

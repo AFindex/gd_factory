@@ -1,7 +1,7 @@
 using Godot;
 using System.Collections.Generic;
 
-public partial class MobileFactoryDemo
+public partial class FactoryDemo
 {
     private void ConfigureWorldCombatScenarios()
     {

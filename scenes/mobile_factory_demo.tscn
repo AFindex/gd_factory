@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://f4qb7qvlipa3"]
 
 [ext_resource type="Script" path="res://scripts/factory/MobileFactoryDemo.cs" id="1"]
 
-[node name="MobileFactoryDemo" type="Node3D"]
+[node name="MobileFactoryDemo" type="Node3D" unique_id=202874124]
 script = ExtResource("1")
+UseLargeTestScenario = null
