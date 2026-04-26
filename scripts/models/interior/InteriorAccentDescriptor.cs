@@ -11,7 +11,7 @@ public static class InteriorAccentDescriptor
             return;
         }
 
-        var cellSize = FactoryConstants.CellSize;
+        var cellSize = builder.CellSize;
         var previewSize = structure.ResolvedFootprint.GetPreviewSize(cellSize, structure.Facing);
         var deckWidth = Mathf.Max(cellSize * 0.96f, previewSize.X + (cellSize * 0.14f));
         var deckDepth = Mathf.Max(cellSize * 0.96f, previewSize.Y + (cellSize * 0.14f));

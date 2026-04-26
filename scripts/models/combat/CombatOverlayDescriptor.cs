@@ -6,7 +6,7 @@ public static class CombatOverlayDescriptor
 {
     public static void BuildOverlay(IModelBuilder builder, FactoryStructure structure)
     {
-        var cellSize = FactoryConstants.CellSize;
+        var cellSize = builder.CellSize;
         var previewSize = structure.ResolvedFootprint.GetPreviewSize(cellSize, structure.Facing);
 
         builder.AddCombatBox("HealthBarBackground",
