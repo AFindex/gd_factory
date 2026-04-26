@@ -1,4 +1,5 @@
 using Godot;
+using NetFactory.Models;
 using System;
 using System.Collections.Generic;
 
@@ -247,81 +248,21 @@ public partial class GeneratorStructure : FactoryStructure, IFactoryItemReceiver
 
     protected override void BuildVisuals()
     {
-        if (SiteKind == FactorySiteKind.Interior)
+        var builder = new DefaultModelBuilder(this, CellSize);
+        GeneratorModelDescriptor.BuildModel(builder, SiteKind, GetInteriorVisualRole());
+        _beacon = builder.Root.FindChild("Beacon", true, false) as MeshInstance3D;
+        _powerRange = builder.Root.FindChild("PowerRange", true, false) as MeshInstance3D;
+        _rotorRig = builder.Root.FindChild("RotorRig", true, false) as Node3D;
+        _frontBandRig = builder.Root.FindChild("ShellBandFrontRig", true, false) as Node3D;
+        _rearBandRig = builder.Root.FindChild("ShellBandRearRig", true, false) as Node3D;
+        _rotorCore = builder.Root.FindChild("RotorCore", true, false) as MeshInstance3D;
+        _rotorMarker = builder.Root.FindChild("RotorMarker", true, false) as MeshInstance3D;
+        _steamParticles = builder.Root.FindChild("SteamParticles", true, false) as GpuParticles3D;
+
+        if (_powerRange is not null)
         {
-            _powerRange = CreateDisc(
-                "PowerRange",
-                CellSize * PowerConnectionRangeCells,
-                0.03f,
-                new Color(0.98f, 0.66f, 0.19f, 0.12f),
-                new Vector3(0.0f, 0.02f, 0.0f));
             _powerRange.Visible = false;
-
-            CreateBox("Base", new Vector3(CellSize * 0.96f, 0.16f, CellSize * 0.96f), new Color("1C1917"), new Vector3(0.0f, 0.08f, 0.0f));
-            CreateInteriorModuleShell(this, "GeneratorCabin", new Vector3(CellSize * 0.78f, 0.74f, CellSize * 0.78f), new Color("44403C"), new Color("A8A29E"), new Vector3(0.0f, 0.56f, 0.0f));
-            CreateBox("FuelDrawer", new Vector3(CellSize * 0.22f, 0.30f, CellSize * 0.26f), new Color("57534E"), new Vector3(CellSize * 0.28f, 0.32f, 0.18f));
-            CreateBox("BusCoupler", new Vector3(CellSize * 0.18f, 0.18f, CellSize * 0.54f), new Color("FBBF24"), new Vector3(-CellSize * 0.28f, 0.72f, 0.0f));
-            CreateBox("HeatStack", new Vector3(CellSize * 0.12f, 0.40f, CellSize * 0.12f), new Color("A8A29E"), new Vector3(-CellSize * 0.28f, 1.08f, CellSize * 0.20f));
-            _beacon = CreateBox("Beacon", new Vector3(CellSize * 0.12f, 0.12f, CellSize * 0.12f), new Color("FBBF24"), new Vector3(CellSize * 0.26f, 0.96f, CellSize * 0.18f));
-
-            _rotorRig = new Node3D
-            {
-                Name = "RotorRig",
-                Position = new Vector3(0.0f, 0.70f, 0.0f)
-            };
-            AddChild(_rotorRig);
-            _rotorCore = CreateTurbineCylinder(_rotorRig, "RotorCore", CellSize * 0.08f, CellSize * 0.18f, new Color("CBD5E1"), Vector3.Zero);
-            CreateFanBlades(_rotorRig);
-            _rotorMarker = CreateBox(_rotorRig, "RotorMarker", new Vector3(CellSize * 0.05f, CellSize * 0.10f, CellSize * 0.06f), new Color("FDE047"), new Vector3(CellSize * 0.17f, 0.0f, 0.0f));
-            _steamParticles = CreateSteamParticles();
-            AddChild(_steamParticles);
-            return;
         }
-
-        _powerRange = CreateDisc(
-            "PowerRange",
-            CellSize * PowerConnectionRangeCells,
-            0.03f,
-            new Color(0.98f, 0.66f, 0.19f, 0.14f),
-            new Vector3(0.0f, 0.02f, 0.0f));
-        _powerRange.Visible = false;
-
-        CreateBox("Base", new Vector3(CellSize * 0.96f, 0.20f, CellSize * 0.96f), new Color("292524"), new Vector3(0.0f, 0.10f, 0.0f));
-        CreateBox("ServiceDeck", new Vector3(CellSize * 0.84f, 0.10f, CellSize * 0.84f), new Color("44403C"), new Vector3(0.0f, 0.24f, 0.0f));
-        CreateBox("FuelCabinet", new Vector3(CellSize * 0.24f, 0.40f, CellSize * 0.28f), new Color("57534E"), new Vector3(CellSize * 0.28f, 0.46f, 0.18f));
-        CreateBox("ExhaustStack", new Vector3(CellSize * 0.12f, 0.62f, CellSize * 0.12f), new Color("A8A29E"), new Vector3(-CellSize * 0.28f, 1.08f, CellSize * 0.20f));
-
-        CreateTurbineCylinder("TurbineShell", CellSize * 0.26f, CellSize * 0.78f, new Color("71717A"), new Vector3(0.0f, 0.66f, 0.0f));
-        _frontBandRig = CreateDashedBandRing("ShellBandFront", -CellSize * 0.14f, new Color("38BDF8"));
-        _rearBandRig = CreateDashedBandRing("ShellBandRear", CellSize * 0.16f, new Color("F59E0B"));
-        CreateBox("ShellMaintenancePanel", new Vector3(CellSize * 0.10f, CellSize * 0.18f, CellSize * 0.24f), new Color("FDE68A"), new Vector3(CellSize * 0.22f, 0.66f, 0.06f));
-        CreateBox("ShellHeatPanel", new Vector3(CellSize * 0.10f, CellSize * 0.18f, CellSize * 0.22f), new Color("FB7185"), new Vector3(-CellSize * 0.22f, 0.66f, -0.04f));
-        CreateTurbineCylinder("TurbineIntakeRing", CellSize * 0.31f, CellSize * 0.08f, new Color("D6D3D1"), new Vector3(0.0f, 0.66f, -CellSize * 0.34f));
-        CreateTurbineCylinder("TurbineRearRing", CellSize * 0.22f, CellSize * 0.08f, new Color("A8A29E"), new Vector3(0.0f, 0.66f, CellSize * 0.34f));
-        CreateTurbineCylinder("TurbineNozzle", CellSize * 0.17f, CellSize * 0.12f, new Color("78716C"), new Vector3(0.0f, 0.66f, CellSize * 0.46f));
-        CreateBox("SupportLeft", new Vector3(CellSize * 0.08f, 0.50f, CellSize * 0.08f), new Color("78716C"), new Vector3(-CellSize * 0.20f, 0.46f, 0.0f));
-        CreateBox("SupportRight", new Vector3(CellSize * 0.08f, 0.50f, CellSize * 0.08f), new Color("78716C"), new Vector3(CellSize * 0.20f, 0.46f, 0.0f));
-        CreateBox("IntakeRingAccentTop", new Vector3(CellSize * 0.18f, CellSize * 0.06f, CellSize * 0.040f), new Color("F59E0B"), new Vector3(0.0f, 0.92f, -CellSize * 0.34f));
-        CreateBox("IntakeRingAccentBottom", new Vector3(CellSize * 0.18f, CellSize * 0.06f, CellSize * 0.040f), new Color("F59E0B"), new Vector3(0.0f, 0.40f, -CellSize * 0.34f));
-        CreateBox("IntakeRingAccentLeft", new Vector3(CellSize * 0.06f, CellSize * 0.18f, CellSize * 0.040f), new Color("38BDF8"), new Vector3(-CellSize * 0.26f, 0.66f, -CellSize * 0.34f));
-        CreateBox("IntakeRingAccentRight", new Vector3(CellSize * 0.06f, CellSize * 0.18f, CellSize * 0.040f), new Color("38BDF8"), new Vector3(CellSize * 0.26f, 0.66f, -CellSize * 0.34f));
-        CreateBox("IntakeRingAccentTopLeft", new Vector3(CellSize * 0.06f, CellSize * 0.06f, CellSize * 0.040f), new Color("FDE68A"), new Vector3(-CellSize * 0.18f, 0.84f, -CellSize * 0.34f));
-        CreateBox("IntakeRingAccentBottomRight", new Vector3(CellSize * 0.06f, CellSize * 0.06f, CellSize * 0.040f), new Color("7DD3FC"), new Vector3(CellSize * 0.18f, 0.48f, -CellSize * 0.34f));
-
-        _rotorRig = new Node3D
-        {
-            Name = "RotorRig",
-            Position = new Vector3(0.0f, 0.66f, -CellSize * 0.31f)
-        };
-        AddChild(_rotorRig);
-        _rotorCore = CreateTurbineCylinder(_rotorRig, "RotorCore", CellSize * 0.08f, CellSize * 0.18f, new Color("CBD5E1"), new Vector3(0.0f, 0.0f, 0.0f));
-        CreateFanBlades(_rotorRig);
-        _rotorMarker = CreateBox(_rotorRig, "RotorMarker", new Vector3(CellSize * 0.05f, CellSize * 0.10f, CellSize * 0.06f), new Color("FDE047"), new Vector3(CellSize * 0.17f, 0.0f, 0.0f));
-        CreateBox("IntakeStrutTop", new Vector3(CellSize * 0.05f, 0.16f, CellSize * 0.05f), new Color("A8A29E"), new Vector3(0.0f, 0.87f, -CellSize * 0.31f));
-        CreateBox("IntakeStrutBottom", new Vector3(CellSize * 0.05f, 0.16f, CellSize * 0.05f), new Color("A8A29E"), new Vector3(0.0f, 0.45f, -CellSize * 0.31f));
-        _beacon = CreateBox("Beacon", new Vector3(CellSize * 0.14f, 0.14f, CellSize * 0.14f), new Color("FBBF24"), new Vector3(CellSize * 0.28f, 1.06f, CellSize * 0.18f));
-        _steamParticles = CreateSteamParticles();
-        AddChild(_steamParticles);
     }
 
     private void CreateFanBlades(Node parent)

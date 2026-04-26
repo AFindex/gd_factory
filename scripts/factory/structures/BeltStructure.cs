@@ -1,4 +1,5 @@
 using Godot;
+using NetFactory.Models;
 
 public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAware
 {
@@ -106,60 +107,24 @@ public partial class BeltStructure : FlowTransportStructure, IFactoryTopologyAwa
 
     protected override void BuildVisuals()
     {
+        var builder = new DefaultModelBuilder(this, CellSize);
+        BeltModelDescriptor.BuildModel(builder, SiteKind, GetInteriorVisualRole());
+
         if (SiteKind == FactorySiteKind.Interior)
         {
-            _centerMesh = CreateBox(
-                "CabinChannelCore",
-                new Vector3(CellSize * InteriorTrackCenterRunRatio, 0.08f, CellSize * InteriorTrackWidthRatio),
-                new Color("0F172A"),
-                new Vector3(0.0f, 0.12f, 0.0f));
-            _inputArmMesh = CreateBox(
-                "CabinInputTray",
-                new Vector3(CellSize * InteriorTrackArmLengthRatio, 0.10f, CellSize * InteriorTrackWidthRatio),
-                new Color("1D4ED8"),
-                Vector3.Zero);
-            _outputArmMesh = CreateBox(
-                "CabinOutputTray",
-                new Vector3(CellSize * InteriorTrackArmLengthRatio, 0.10f, CellSize * InteriorTrackWidthRatio),
-                new Color("2563EB"),
-                Vector3.Zero);
-            _arrowMesh = CreateBox(
-                "CabinDirectionStrip",
-                new Vector3(CellSize * 0.20f, 0.03f, CellSize * 0.18f),
-                new Color("BAE6FD"),
-                new Vector3(0.26f * CellSize, 0.18f, 0.0f));
-            _capMesh = CreateBox(
-                "CabinTrayCap",
-                new Vector3(CellSize * InteriorTrackCapRunRatio, 0.05f, CellSize * InteriorTrackCapRunRatio),
-                new Color("CBD5E1"),
-                new Vector3(0.0f, 0.18f, 0.0f));
-            RefreshTopology();
-            return;
+            _centerMesh = builder.Root.FindChild("CabinChannelCore", true, false) as MeshInstance3D;
+            _inputArmMesh = builder.Root.FindChild("CabinInputTray", true, false) as MeshInstance3D;
+            _outputArmMesh = builder.Root.FindChild("CabinOutputTray", true, false) as MeshInstance3D;
+            _arrowMesh = builder.Root.FindChild("CabinDirectionStrip", true, false) as MeshInstance3D;
+            _capMesh = builder.Root.FindChild("CabinTrayCap", true, false) as MeshInstance3D;
         }
-
-        _centerMesh = CreateColoredBox(
-            "Center",
-            new Vector3(CellSize * 0.42f, 0.12f, CellSize * 0.42f),
-            new Color("4B5563"),
-            new Vector3(0.0f, 0.08f, 0.0f));
-
-        _inputArmMesh = CreateColoredBox(
-            "InputArm",
-            new Vector3(CellSize * 0.55f, 0.12f, CellSize * 0.22f),
-            new Color("4B5563"),
-            Vector3.Zero);
-
-        _outputArmMesh = CreateColoredBox(
-            "OutputArm",
-            new Vector3(CellSize * 0.55f, 0.12f, CellSize * 0.22f),
-            new Color("4B5563"),
-            Vector3.Zero);
-
-        _arrowMesh = CreateColoredBox(
-            "Arrow",
-            new Vector3(CellSize * 0.22f, 0.05f, CellSize * 0.18f),
-            new Color("7DD3FC"),
-            new Vector3(0.26f * CellSize, 0.16f, 0.0f));
+        else
+        {
+            _centerMesh = builder.Root.FindChild("Center", true, false) as MeshInstance3D;
+            _inputArmMesh = builder.Root.FindChild("InputArm", true, false) as MeshInstance3D;
+            _outputArmMesh = builder.Root.FindChild("OutputArm", true, false) as MeshInstance3D;
+            _arrowMesh = builder.Root.FindChild("Arrow", true, false) as MeshInstance3D;
+        }
 
         RefreshTopology();
     }

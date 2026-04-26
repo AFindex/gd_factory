@@ -1,4 +1,5 @@
 using Godot;
+using NetFactory.Models;
 using System;
 
 public partial class SinkStructure : FactoryStructure, IFactoryItemReceiver
@@ -92,8 +93,8 @@ public partial class SinkStructure : FactoryStructure, IFactoryItemReceiver
 
     protected override void BuildVisuals()
     {
-        CreateBox("Base", new Vector3(CellSize * 0.95f, 0.7f, CellSize * 0.95f), new Color("334155"), new Vector3(0.0f, 0.35f, 0.0f));
-        CreateBox("Bin", new Vector3(CellSize * 0.72f, 1.1f, CellSize * 0.72f), new Color("94A3B8"), new Vector3(0.0f, 1.0f, 0.0f));
-        _indicator = CreateBox("Beacon", new Vector3(CellSize * 0.25f, 0.25f, CellSize * 0.25f), new Color("FDE68A"), new Vector3(-CellSize * 0.3f, 1.55f, 0.0f));
+        var builder = new DefaultModelBuilder(this, CellSize);
+        SinkModelDescriptor.BuildModel(builder, SiteKind, GetInteriorVisualRole());
+        _indicator = builder.Root.FindChild("Beacon", true, false) as MeshInstance3D;
     }
 }

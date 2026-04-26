@@ -1,4 +1,5 @@
 using Godot;
+using NetFactory.Models;
 using System.Collections.Generic;
 
 public partial class MiningDrillStructure : FactoryRecipeMachineStructure
@@ -79,11 +80,10 @@ public partial class MiningDrillStructure : FactoryRecipeMachineStructure
 
     protected override void BuildVisuals()
     {
-        CreateBox("Base", new Vector3(CellSize * 0.92f, 0.18f, CellSize * 0.92f), new Color("334155"), new Vector3(0.0f, 0.09f, 0.0f));
-        CreateBox("Chassis", new Vector3(CellSize * 0.72f, 0.58f, CellSize * 0.72f), new Color("475569"), new Vector3(0.0f, 0.47f, 0.0f));
-        _drum = CreateBox("Drum", new Vector3(CellSize * 0.44f, 0.44f, CellSize * 0.44f), new Color("94A3B8"), new Vector3(-0.16f, 0.86f, 0.0f));
-        CreateBox("Arm", new Vector3(CellSize * 0.52f, 0.12f, CellSize * 0.12f), new Color("CBD5E1"), new Vector3(CellSize * 0.10f, 0.92f, 0.0f));
-        _statusBeacon = CreateBox("Beacon", new Vector3(CellSize * 0.18f, 0.18f, CellSize * 0.18f), new Color("FBBF24"), new Vector3(CellSize * 0.28f, 1.08f, 0.0f));
+        var builder = new DefaultModelBuilder(this, CellSize);
+        MiningDrillModelDescriptor.BuildModel(builder, SiteKind, GetInteriorVisualRole());
+        _drum = builder.Root.FindChild("Drum", true, false) as MeshInstance3D;
+        _statusBeacon = builder.Root.FindChild("Beacon", true, false) as MeshInstance3D;
     }
 
     private void SyncDepositBinding()

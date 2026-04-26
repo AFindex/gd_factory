@@ -1,4 +1,5 @@
 using Godot;
+using NetFactory.Models;
 using System.Collections.Generic;
 
 public partial class PowerPoleStructure : FactoryStructure, IFactoryPowerNode
@@ -66,70 +67,18 @@ public partial class PowerPoleStructure : FactoryStructure, IFactoryPowerNode
 
     protected override void BuildVisuals()
     {
-        _powerRange = CreateDisc(
-            "PowerRange",
-            CellSize * PowerConnectionRangeCells,
-            0.03f,
-            new Color(0.99f, 0.88f, 0.42f, 0.12f),
-            new Vector3(0.0f, 0.02f, 0.0f));
-        _powerRange.Visible = false;
+        var builder = new DefaultModelBuilder(this, CellSize);
+        PowerPoleModelDescriptor.BuildModel(builder, SiteKind, GetInteriorVisualRole());
+        _powerRange = builder.Root.FindChild("PowerRange", true, false) as MeshInstance3D;
+        _pole = builder.Root.FindChild("Pole", true, false) as MeshInstance3D;
+        _crossbar = builder.Root.FindChild("Crossbar", true, false) as MeshInstance3D;
+        _lamp = builder.Root.FindChild("Lamp", true, false) as MeshInstance3D;
 
-        if (SiteKind == FactorySiteKind.Interior)
+        if (_powerRange is not null)
         {
-            CreateBox("Base", new Vector3(CellSize * 0.44f, 0.14f, CellSize * 0.44f), new Color("1C1917"), new Vector3(0.0f, 0.07f, 0.0f));
-            CreateBox("BusRoot", new Vector3(CellSize * 0.26f, 0.24f, CellSize * 0.26f), new Color("57534E"), new Vector3(0.0f, 0.20f, 0.0f));
-            _pole = CreateBox("Pole", new Vector3(CellSize * 0.12f, 0.92f, CellSize * 0.12f), new Color("FBBF24"), new Vector3(0.0f, 0.46f, 0.0f));
-            _crossbar = CreateBox("Crossbar", new Vector3(CellSize * 0.56f, 0.10f, CellSize * 0.10f), new Color("FDE68A"), new Vector3(0.0f, 0.92f, 0.0f));
-            CreateBox("BusNorth", new Vector3(CellSize * 0.10f, 0.10f, CellSize * 0.24f), new Color("FCD34D"), new Vector3(0.0f, 0.62f, -CellSize * 0.20f));
-            CreateBox("BusSouth", new Vector3(CellSize * 0.10f, 0.10f, CellSize * 0.24f), new Color("FCD34D"), new Vector3(0.0f, 0.62f, CellSize * 0.20f));
-            _lamp = CreateBox("Lamp", new Vector3(CellSize * 0.12f, 0.12f, CellSize * 0.12f), new Color("FEF08A"), new Vector3(0.0f, 1.08f, 0.0f));
-
-            _deployElapsed = 0.0;
-            if (_pole is not null)
-            {
-                _pole.Scale = new Vector3(1.0f, 0.02f, 1.0f);
-                _pole.Position = new Vector3(0.0f, 0.03f, 0.0f);
-            }
-
-            if (_crossbar is not null)
-            {
-                _crossbar.Scale = new Vector3(0.08f, 1.0f, 1.0f);
-                _crossbar.Position = new Vector3(0.0f, 0.74f, 0.0f);
-            }
-
-            if (_lamp is not null)
-            {
-                _lamp.Scale = Vector3.One * 0.65f;
-                _lamp.Position = new Vector3(0.0f, 0.82f, 0.0f);
-            }
-            return;
+            _powerRange.Visible = false;
         }
-
-        CreateBox("Footing", new Vector3(CellSize * 0.32f, 0.12f, CellSize * 0.32f), new Color("475569"), new Vector3(0.0f, 0.06f, 0.0f));
-        CreateBox("SupportBase", new Vector3(CellSize * 0.22f, 0.18f, CellSize * 0.22f), new Color("78716C"), new Vector3(0.0f, 0.18f, 0.0f));
-        _pole = CreateBox("Pole", new Vector3(CellSize * 0.12f, 1.48f, CellSize * 0.12f), new Color("A16207"), new Vector3(0.0f, 0.74f, 0.0f));
-        CreateBox("BraceNorth", new Vector3(CellSize * 0.06f, 0.46f, CellSize * 0.06f), new Color("B45309"), new Vector3(0.11f, 0.42f, 0.08f));
-        CreateBox("BraceSouth", new Vector3(CellSize * 0.06f, 0.46f, CellSize * 0.06f), new Color("B45309"), new Vector3(-0.11f, 0.42f, -0.08f));
-        _crossbar = CreateBox("Crossbar", new Vector3(CellSize * 0.62f, 0.10f, CellSize * 0.10f), new Color("FDE68A"), new Vector3(0.0f, 1.42f, 0.0f));
-        _lamp = CreateBox("Lamp", new Vector3(CellSize * 0.12f, 0.12f, CellSize * 0.12f), new Color("FEF08A"), new Vector3(0.0f, 1.62f, 0.0f));
 
         _deployElapsed = 0.0;
-        if (_pole is not null)
-        {
-            _pole.Scale = new Vector3(1.0f, 0.02f, 1.0f);
-            _pole.Position = new Vector3(0.0f, 0.03f, 0.0f);
-        }
-
-        if (_crossbar is not null)
-        {
-            _crossbar.Scale = new Vector3(0.08f, 1.0f, 1.0f);
-            _crossbar.Position = new Vector3(0.0f, 1.06f, 0.0f);
-        }
-
-        if (_lamp is not null)
-        {
-            _lamp.Scale = Vector3.One * 0.65f;
-            _lamp.Position = new Vector3(0.0f, 1.14f, 0.0f);
-        }
     }
 }

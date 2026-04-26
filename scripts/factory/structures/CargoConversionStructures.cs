@@ -1,4 +1,5 @@
 using Godot;
+using NetFactory.Models;
 using System;
 using System.Collections.Generic;
 
@@ -1116,70 +1117,25 @@ public partial class CargoUnpackerStructure : FactoryCargoConverterStructure, IF
 
     protected override void BuildVisuals()
     {
+        var previewSize = Footprint.GetPreviewSize(CellSize, Facing);
+        var builder = new DefaultModelBuilder(this, CellSize);
+        CargoConversionModelDescriptor.BuildUnpackerModel(builder, SiteKind, previewSize.X, previewSize.Y);
+
         if (SiteKind == FactorySiteKind.Interior)
         {
-            var previewSize = Footprint.GetPreviewSize(CellSize, Facing);
-            var deckWidth = Mathf.Max(CellSize * 1.56f, previewSize.X * 0.92f);
-            var deckDepth = Mathf.Max(CellSize * 1.58f, previewSize.Y * 0.92f);
-            var intakeRailHeight = InteriorHeavyCargoRailHeight;
-            CreateOpenHeavyChamber(
-                "UnpackerChamber",
-                new Vector3(deckWidth, 0.14f, deckDepth),
-                frameHeight: 0.86f,
-                chamberDepth: deckDepth,
-                frameColor: new Color("12324A"),
-                accentColor: new Color("7DD3FC"));
-            CreateBox("UnpackerMouthFrame", new Vector3(Mathf.Max(CellSize * 0.18f, deckWidth * 0.12f), 0.48f, deckDepth * 0.74f), new Color("C7EAFE"), new Vector3(-deckWidth * 0.38f, 0.30f, 0.0f));
-            CreateBox("UnpackerCradle", new Vector3(deckWidth * 0.66f, 0.12f, deckDepth * 0.52f), new Color("0EA5E9"), new Vector3(0.0f, 0.18f, 0.0f));
-            CreateBox("UnpackerGuideCenter", new Vector3(deckWidth * 0.62f, 0.06f, CellSize * 0.10f), new Color("DBEAFE"), new Vector3(0.0f, 0.26f, 0.0f));
-            CreateBox("UnpackerInfeedRail", new Vector3(deckWidth * 0.48f, 0.05f, CellSize * 0.08f), new Color("E0F2FE"), new Vector3(-deckWidth * 0.22f, intakeRailHeight - 0.08f, 0.0f));
-            CreateInteriorTray(this, "UnpackerOutfeed", new Vector3(deckWidth * 0.34f, 0.10f, CellSize * 0.22f), new Color("0B5A88"), new Color("DBEAFE"), new Vector3(deckWidth * 0.36f, 0.16f, 0.0f));
-            CreateBox("UnpackerClampNorth", new Vector3(deckWidth * 0.48f, 0.06f, CellSize * 0.10f), new Color("E0F2FE"), new Vector3(0.0f, 0.60f, -CellSize * 0.26f));
-            CreateBox("UnpackerClampSouth", new Vector3(deckWidth * 0.48f, 0.06f, CellSize * 0.10f), new Color("E0F2FE"), new Vector3(0.0f, 0.60f, CellSize * 0.26f));
-            var unpackerLamp = CreateBox("UnpackerLamp", new Vector3(CellSize * 0.09f, CellSize * 0.09f, CellSize * 0.09f), ResolveOperationColor(UnpackerOperationStage.Idle), new Vector3(-deckWidth * 0.34f, 0.64f, 0.0f));
-            if (unpackerLamp.MaterialOverride is StandardMaterial3D statusLampMaterial)
+            if (builder.Root.FindChild("UnpackerLamp", true, false) is MeshInstance3D lamp
+                && lamp.MaterialOverride is StandardMaterial3D lampMat)
             {
-                statusLampMaterial.Roughness = 0.18f;
-                statusLampMaterial.EmissionEnabled = true;
-                statusLampMaterial.Emission = ResolveOperationColor(UnpackerOperationStage.Idle);
-                statusLampMaterial.EmissionEnergyMultiplier = 1.2f;
-                _statusLampMaterial = statusLampMaterial;
+                _statusLampMaterial = lampMat;
             }
-            CreateInteriorLabelPlate(this, "UnpackerTier", "重载", new Color("7DD3FC"), new Vector3(-deckWidth * 0.10f, 0.16f, -deckDepth * 0.32f), 1.1f);
-            _progressBackground = CreateBox(
-                "UnpackerProgressBackground",
-                new Vector3(CellSize * 0.62f, 0.03f, 0.08f),
-                new Color(0.04f, 0.07f, 0.12f, 0.82f),
-                new Vector3(0.0f, 1.04f, 0.0f));
-            if (_progressBackground.MaterialOverride is StandardMaterial3D progressBackgroundMaterial)
-            {
-                progressBackgroundMaterial.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
-                progressBackgroundMaterial.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
-            }
-            _progressBackground.Visible = false;
-            _progressFill = CreateBox(
-                "UnpackerProgressFill",
-                new Vector3(CellSize * 0.58f, 0.02f, 0.06f),
-                UnpackerIntakeProgressColor,
-                new Vector3(0.0f, 1.04f, 0.0f));
-            if (_progressFill.MaterialOverride is StandardMaterial3D progressFillMaterial)
-            {
-                progressFillMaterial.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
-                progressFillMaterial.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
-                progressFillMaterial.EmissionEnabled = true;
-                progressFillMaterial.Emission = UnpackerIntakeProgressColor.Darkened(0.05f);
-                _progressFillMaterial = progressFillMaterial;
-            }
-            _progressFill.Visible = false;
-            CreatePayloadAnchor("StagingPayloadAnchor", new Vector3(-deckWidth * 0.38f, intakeRailHeight, 0.0f));
-            CreatePayloadAnchor("ProcessingPayloadAnchor", new Vector3(0.0f, intakeRailHeight, 0.0f));
-            CreatePayloadAnchor("DispatchPayloadAnchor", new Vector3(deckWidth * 0.38f, 0.24f, 0.0f));
-            return;
-        }
 
-        CreateBox("Deck", new Vector3(CellSize * 1.2f, 0.16f, CellSize * 1.2f), new Color("164E63"), new Vector3(0.0f, 0.08f, 0.0f));
-        CreateBox("Chamber", new Vector3(CellSize * 0.86f, 0.58f, CellSize * 0.86f), new Color("38BDF8"), new Vector3(0.0f, 0.30f, 0.0f));
-        CreateBox("FeedRail", new Vector3(CellSize * 1.24f, 0.08f, CellSize * 0.18f), new Color("BAE6FD"), new Vector3(0.0f, 0.22f, 0.0f));
+            _progressBackground = builder.Root.FindChild("UnpackerProgressBackground", true, false) as MeshInstance3D;
+            _progressFill = builder.Root.FindChild("UnpackerProgressFill", true, false) as MeshInstance3D;
+            if (_progressFill?.MaterialOverride is StandardMaterial3D fillMat)
+            {
+                _progressFillMaterial = fillMat;
+            }
+        }
     }
 }
 
@@ -1463,56 +1419,9 @@ public partial class CargoPackerStructure : FactoryCargoConverterStructure
 
     protected override void BuildVisuals()
     {
-        if (SiteKind == FactorySiteKind.Interior)
-        {
-            var previewSize = Footprint.GetPreviewSize(CellSize, Facing);
-            var deckWidth = Mathf.Max(CellSize * 1.56f, previewSize.X * 0.92f);
-            var deckDepth = Mathf.Max(CellSize * 1.52f, previewSize.Y * 0.92f);
-            var intakeEdgeX = -deckWidth * 0.38f;
-            CreateOpenHeavyChamber(
-                "PackerChamber",
-                new Vector3(deckWidth, 0.14f, deckDepth),
-                frameHeight: 0.84f,
-                chamberDepth: deckDepth,
-                frameColor: new Color("6A240B"),
-                accentColor: new Color("FDBA74"));
-            for (var inputIndex = 0; inputIndex < Footprint.InputOffsetsEast.Count; inputIndex++)
-            {
-                var inputOffset = Footprint.InputOffsetsEast[inputIndex];
-                var portCenter = Footprint.GetLocalCellCenterOffset(inputOffset, CellSize);
-                var laneCenterX = (portCenter.X + intakeEdgeX) * 0.5f;
-                var laneWidth = Mathf.Max(CellSize * 1.10f, Mathf.Abs(portCenter.X - intakeEdgeX) + CellSize * 0.34f);
-                CreateInteriorTray(
-                    this,
-                    $"PackerInputLane{inputIndex}",
-                    new Vector3(laneWidth, 0.10f, CellSize * 0.22f),
-                    new Color("B94A13"),
-                    new Color("FED7AA"),
-                    new Vector3(laneCenterX, 0.16f, portCenter.Z));
-                CreateBox(
-                    $"PackerInputSocket{inputIndex}",
-                    new Vector3(CellSize * 0.26f, 0.12f, CellSize * 0.28f),
-                    new Color("FDBA74"),
-                    new Vector3(portCenter.X, 0.18f, portCenter.Z));
-            }
-            CreateBox("PackerCompressionDeck", new Vector3(deckWidth * 0.66f, 0.12f, deckDepth * 0.54f), new Color("C2410C"), new Vector3(0.0f, 0.18f, 0.0f));
-            CreateBox("PackerClampNorth", new Vector3(deckWidth * 0.62f, 0.08f, CellSize * 0.08f), new Color("FED7AA"), new Vector3(0.0f, 0.42f, -CellSize * 0.30f));
-            CreateBox("PackerClampSouth", new Vector3(deckWidth * 0.62f, 0.08f, CellSize * 0.08f), new Color("FED7AA"), new Vector3(0.0f, 0.42f, CellSize * 0.30f));
-            CreateBox("PackerRamColumnWest", new Vector3(CellSize * 0.08f, 0.54f, CellSize * 0.10f), new Color("FCD7AA"), new Vector3(-CellSize * 0.18f, 0.44f, 0.0f));
-            CreateBox("PackerRamColumnEast", new Vector3(CellSize * 0.08f, 0.54f, CellSize * 0.10f), new Color("FCD7AA"), new Vector3(CellSize * 0.18f, 0.44f, 0.0f));
-            CreateBox("PackerCompressionRam", new Vector3(CellSize * 0.22f, 0.14f, CellSize * 0.22f), new Color("FFE4C2"), new Vector3(0.0f, 0.70f, 0.0f));
-            CreateBox("PackerExportCradle", new Vector3(deckWidth * 0.48f, 0.12f, deckDepth * 0.40f), new Color("FB923C"), new Vector3(deckWidth * 0.36f, 0.18f, 0.0f));
-            CreateBox("PackerGuideCenter", new Vector3(deckWidth * 0.62f, 0.06f, CellSize * 0.10f), new Color("FED7AA"), new Vector3(0.0f, 0.26f, 0.0f));
-            CreateInteriorIndicatorLight(this, "PackerLamp", new Color("FB923C"), new Vector3(deckWidth * 0.34f, 0.64f, 0.0f), CellSize * 0.09f);
-            CreateInteriorLabelPlate(this, "PackerTier", "压装", new Color("FB923C"), new Vector3(deckWidth * 0.10f, 0.16f, -deckDepth * 0.32f), 1.1f);
-            CreatePayloadAnchor("StagingPayloadAnchor", new Vector3(-deckWidth * 0.38f, 0.22f, 0.0f));
-            CreatePayloadAnchor("ProcessingPayloadAnchor", new Vector3(0.0f, 0.28f, 0.0f));
-            CreatePayloadAnchor("DispatchPayloadAnchor", new Vector3(deckWidth * 0.38f, 0.24f, 0.0f));
-            return;
-        }
-
-        CreateBox("Deck", new Vector3(CellSize * 1.2f, 0.16f, CellSize * 1.2f), new Color("7C2D12"), new Vector3(0.0f, 0.08f, 0.0f));
-        CreateBox("Compressor", new Vector3(CellSize * 0.86f, 0.58f, CellSize * 0.86f), new Color("F97316"), new Vector3(0.0f, 0.30f, 0.0f));
+        var previewSize = Footprint.GetPreviewSize(CellSize, Facing);
+        var builder = new DefaultModelBuilder(this, CellSize);
+        CargoConversionModelDescriptor.BuildPackerModel(builder, SiteKind, previewSize.X, previewSize.Y, Footprint.InputOffsetsEast);
     }
 
     private bool TryResolveCandidateTemplate(FactoryItem item, out FactoryBundleTemplate? template)
@@ -1812,25 +1721,8 @@ public partial class TransferBufferStructure : FactoryStructure, IFactoryFiltere
 
     protected override void BuildVisuals()
     {
-        if (SiteKind == FactorySiteKind.Interior)
-        {
-            CreateBox("BufferDeck", new Vector3(CellSize * 1.24f, 0.12f, CellSize * 0.98f), new Color("062827"), new Vector3(0.0f, 0.06f, 0.0f));
-            CreateBox("BufferCradle", new Vector3(CellSize * 0.92f, 0.14f, CellSize * 0.68f), new Color("0F766E"), new Vector3(0.0f, 0.18f, 0.0f));
-            CreateBox("BufferGuideNorth", new Vector3(CellSize * 0.82f, 0.08f, CellSize * 0.06f), new Color("99F6E4"), new Vector3(0.0f, 0.28f, -CellSize * 0.30f));
-            CreateBox("BufferGuideSouth", new Vector3(CellSize * 0.82f, 0.08f, CellSize * 0.06f), new Color("99F6E4"), new Vector3(0.0f, 0.28f, CellSize * 0.30f));
-            CreateBox("BufferRackBack", new Vector3(CellSize * 0.12f, 0.52f, CellSize * 0.74f), new Color("134E4A"), new Vector3(-CellSize * 0.42f, 0.34f, 0.0f));
-            CreateInteriorTray(this, "BufferOutfeed", new Vector3(CellSize * 0.44f, 0.08f, CellSize * 0.16f), new Color("115E59"), new Color("CCFBF1"), new Vector3(CellSize * 0.44f, 0.14f, 0.0f));
-            CreateInteriorIndicatorLight(this, "BufferLamp", new Color("5EEAD4"), new Vector3(-CellSize * 0.50f, 0.50f, 0.0f), CellSize * 0.08f);
-            AddChild(new Node3D
-            {
-                Name = "BufferPayloadAnchor",
-                Position = new Vector3(0.0f, 0.26f, 0.0f)
-            });
-            return;
-        }
-
-        CreateBox("Trench", new Vector3(CellSize * 0.84f, 0.12f, CellSize * 0.84f), new Color("0F766E"), new Vector3(0.0f, 0.06f, 0.0f));
-        CreateBox("Tray", new Vector3(CellSize * 0.56f, 0.14f, CellSize * 0.56f), new Color("14B8A6"), new Vector3(0.0f, 0.18f, 0.0f));
+        var builder = new DefaultModelBuilder(this, CellSize);
+        CargoConversionModelDescriptor.BuildTransferBufferModel(builder, SiteKind);
     }
 
     private bool CanAcceptBufferedItem(FactoryItem item, Vector2I sourceCell)

@@ -15,7 +15,7 @@ public enum FactoryInteriorVisualRole
 
 public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IFactoryStructureDetailProvider, IFactoryInventoryEndpointProvider
 {
-    private readonly record struct FactoryInteriorVisualStyle(
+    public readonly record struct FactoryInteriorVisualStyle(
         Color DeckColor,
         Color TrimColor,
         Color AccentColor,
@@ -507,7 +507,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
         };
     }
 
-    protected string GetInteriorPresentationLabel()
+    public string GetInteriorPresentationLabel()
     {
         return FactoryIndustrialStandards.GetInteriorPresentationLabel(Kind);
     }
@@ -788,7 +788,7 @@ public abstract partial class FactoryStructure : Node3D, IFactoryInspectable, IF
         return _currentVisualParent ?? this;
     }
 
-    private FactoryInteriorVisualStyle ResolveInteriorVisualStyle()
+    public FactoryInteriorVisualStyle ResolveInteriorVisualStyle()
     {
         return GetInteriorVisualRole() switch
         {

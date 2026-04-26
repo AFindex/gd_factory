@@ -1,4 +1,5 @@
 using Godot;
+using NetFactory.Models;
 using System.Collections.Generic;
 
 public partial class ProducerStructure : FactoryRecipeMachineStructure
@@ -34,8 +35,8 @@ public partial class ProducerStructure : FactoryRecipeMachineStructure
 
     protected override void BuildVisuals()
     {
-        CreateBox("Base", new Vector3(CellSize * 0.9f, 0.8f, CellSize * 0.9f), new Color("6D8B74"), new Vector3(0.0f, 0.4f, 0.0f));
-        CreateBox("Tower", new Vector3(CellSize * 0.45f, 1.4f, CellSize * 0.45f), new Color("9DC08B"), new Vector3(-0.15f, 1.1f, 0.0f));
-        _indicator = CreateBox("Outlet", new Vector3(CellSize * 0.35f, 0.2f, CellSize * 0.35f), new Color("D7FFC2"), new Vector3(CellSize * 0.45f, 0.75f, 0.0f));
+        var builder = new DefaultModelBuilder(this, CellSize);
+        ProducerModelDescriptor.BuildModel(builder, SiteKind, GetInteriorVisualRole());
+        _indicator = builder.Root.FindChild("Outlet", true, false) as MeshInstance3D;
     }
 }

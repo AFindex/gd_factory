@@ -1,4 +1,5 @@
 using Godot;
+using NetFactory.Models;
 using System.Collections.Generic;
 
 public partial class SmelterStructure : FactoryRecipeMachineStructure
@@ -40,88 +41,33 @@ public partial class SmelterStructure : FactoryRecipeMachineStructure
 
     private void BuildFurnaceVisualProfile(FactoryStructureVisualController controller)
     {
-        var bodyRig = new Node3D { Name = "BodyRig" };
-        controller.Root.AddChild(bodyRig);
-        controller.RegisterNodeAnchor(FurnaceBodyAlias, bodyRig);
+        var builder = new DefaultModelBuilder(controller.Root, CellSize);
+        SmelterModelDescriptor.BuildModel(builder, SiteKind, GetInteriorVisualRole());
 
-        if (SiteKind == FactorySiteKind.Interior)
+        var bodyRig = controller.Root.FindChild("BodyRig", true, false) as Node3D;
+        if (bodyRig is not null)
         {
-            CreateBox(bodyRig, "Base", new Vector3(CellSize * 0.98f, 0.14f, CellSize * 0.98f), new Color("1C1917"), new Vector3(0.0f, 0.07f, 0.0f));
-            CreateInteriorModuleShell(bodyRig, "SmelterCabin", new Vector3(CellSize * 0.80f, 0.82f, CellSize * 0.82f), new Color("44403C"), new Color("A8A29E"), new Vector3(0.0f, 0.62f, 0.0f));
-            CreateBox(bodyRig, "IntakeDrawer", new Vector3(CellSize * 0.44f, 0.14f, CellSize * 0.18f), new Color("A16207"), new Vector3(0.0f, 0.34f, CellSize * 0.30f));
-
-            var cabinFurnaceCore = CreateBox(bodyRig, "FurnaceCore", new Vector3(CellSize * 0.34f, 0.34f, CellSize * 0.42f), new Color("FB923C"), new Vector3(0.0f, 0.62f, 0.0f));
-            ConfigureGlowMaterial(cabinFurnaceCore, new Color("EA580C"), 2.2f);
-            RegisterMaterialAlias(controller, CoreGlowAlias, cabinFurnaceCore);
-
-            var cabinFireboxGlow = CreateBox(bodyRig, "FireboxGlow", new Vector3(CellSize * 0.22f, 0.20f, CellSize * 0.10f), new Color("FDBA74"), new Vector3(0.0f, 0.54f, CellSize * 0.34f));
-            ConfigureGlowMaterial(cabinFireboxGlow, new Color("F97316"), 2.8f);
-            RegisterMaterialAlias(controller, FireboxGlowAlias, cabinFireboxGlow);
-
-            var cabinEmberBand = CreateBox(bodyRig, "EmberBand", new Vector3(CellSize * 0.42f, 0.05f, CellSize * 0.50f), new Color(1.0f, 0.60f, 0.18f, 0.72f), new Vector3(0.0f, 0.92f, 0.0f));
-            if (cabinEmberBand.MaterialOverride is StandardMaterial3D cabinEmberMaterial)
-            {
-                cabinEmberMaterial.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
-                cabinEmberMaterial.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
-                cabinEmberMaterial.EmissionEnabled = true;
-                cabinEmberMaterial.Emission = new Color("F97316");
-                cabinEmberMaterial.EmissionEnergyMultiplier = 1.9f;
-            }
-            RegisterMaterialAlias(controller, EmberBandAlias, cabinEmberBand);
-
-            CreateBox(bodyRig, "ExhaustStack", new Vector3(CellSize * 0.12f, 0.44f, CellSize * 0.12f), new Color("71717A"), new Vector3(-CellSize * 0.22f, 1.06f, 0.0f));
-            var cabinExhaustGlow = CreateBox(bodyRig, "ExhaustGlow", new Vector3(CellSize * 0.10f, 0.10f, CellSize * 0.10f), new Color("FDBA74"), new Vector3(-CellSize * 0.22f, 1.34f, 0.0f));
-            ConfigureGlowMaterial(cabinExhaustGlow, new Color("FB923C"), 2.0f);
-            RegisterMaterialAlias(controller, ExhaustGlowAlias, cabinExhaustGlow);
-
-            var cabinSmokeParticles = CreateSmokeParticles();
-            cabinSmokeParticles.Name = "HeatPlume";
-            cabinSmokeParticles.Position = new Vector3(-CellSize * 0.22f, 1.42f, 0.0f);
-            cabinSmokeParticles.Scale = new Vector3(0.72f, 0.72f, 0.72f);
-            bodyRig.AddChild(cabinSmokeParticles);
-            controller.RegisterNodeAnchor(HeatPlumeAlias, cabinSmokeParticles);
-            return;
+            controller.RegisterNodeAnchor(FurnaceBodyAlias, bodyRig);
         }
 
-        CreateBox(bodyRig, "Base", new Vector3(CellSize * 0.98f, 0.18f, CellSize * 0.98f), new Color("292524"), new Vector3(0.0f, 0.09f, 0.0f));
-        CreateBox(bodyRig, "Footing", new Vector3(CellSize * 0.88f, 0.16f, CellSize * 0.88f), new Color("44403C"), new Vector3(0.0f, 0.22f, 0.0f));
-        CreateBox(bodyRig, "BodyShell", new Vector3(CellSize * 0.82f, 0.88f, CellSize * 0.82f), new Color("57534E"), new Vector3(0.0f, 0.70f, 0.0f));
-        CreateBox(bodyRig, "TopCap", new Vector3(CellSize * 0.70f, 0.14f, CellSize * 0.70f), new Color("78716C"), new Vector3(0.0f, 1.18f, 0.0f));
-        CreateBox(bodyRig, "IntakeHood", new Vector3(CellSize * 0.52f, 0.20f, CellSize * 0.24f), new Color("A16207"), new Vector3(0.0f, 0.78f, CellSize * 0.24f));
-        CreateBox(bodyRig, "IntakeMouth", new Vector3(CellSize * 0.42f, 0.34f, CellSize * 0.10f), new Color("0F172A"), new Vector3(0.0f, 0.72f, CellSize * 0.36f));
+        RegisterMaterialFromChild(controller, CoreGlowAlias, "FurnaceCore");
+        RegisterMaterialFromChild(controller, FireboxGlowAlias, "FireboxGlow");
+        RegisterMaterialFromChild(controller, ExhaustGlowAlias, "ExhaustGlow");
+        RegisterMaterialFromChild(controller, EmberBandAlias, "EmberBand");
 
-        var furnaceCore = CreateBox(bodyRig, "FurnaceCore", new Vector3(CellSize * 0.42f, 0.44f, CellSize * 0.50f), new Color("FB923C"), new Vector3(0.0f, 0.66f, 0.0f));
-        ConfigureGlowMaterial(furnaceCore, new Color("EA580C"), 2.2f);
-        RegisterMaterialAlias(controller, CoreGlowAlias, furnaceCore);
-
-        CreateBox(bodyRig, "DoorFrame", new Vector3(CellSize * 0.46f, 0.54f, CellSize * 0.08f), new Color("B45309"), new Vector3(0.0f, 0.50f, CellSize * 0.33f));
-        var fireboxGlow = CreateBox(bodyRig, "FireboxGlow", new Vector3(CellSize * 0.24f, 0.34f, CellSize * 0.09f), new Color("FDBA74"), new Vector3(0.0f, 0.49f, CellSize * 0.42f));
-        ConfigureGlowMaterial(fireboxGlow, new Color("F97316"), 2.8f);
-        RegisterMaterialAlias(controller, FireboxGlowAlias, fireboxGlow);
-
-        var emberBand = CreateBox(bodyRig, "EmberBand", new Vector3(CellSize * 0.48f, 0.06f, CellSize * 0.56f), new Color(1.0f, 0.60f, 0.18f, 0.72f), new Vector3(0.0f, 0.96f, 0.0f));
-        if (emberBand.MaterialOverride is StandardMaterial3D emberMaterial)
+        if (controller.Root.FindChild("HeatPlume", true, false) is GpuParticles3D smokeParticles)
         {
-            emberMaterial.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
-            emberMaterial.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
-            emberMaterial.EmissionEnabled = true;
-            emberMaterial.Emission = new Color("F97316");
-            emberMaterial.EmissionEnergyMultiplier = 1.9f;
+            controller.RegisterNodeAnchor(HeatPlumeAlias, smokeParticles);
         }
-        RegisterMaterialAlias(controller, EmberBandAlias, emberBand);
+    }
 
-        CreateBox(bodyRig, "ChimneyBase", new Vector3(CellSize * 0.24f, 0.12f, CellSize * 0.24f), new Color("44403C"), new Vector3(-CellSize * 0.18f, 1.22f, 0.0f));
-        CreateBox(bodyRig, "ChimneyStack", new Vector3(CellSize * 0.18f, 0.62f, CellSize * 0.18f), new Color("71717A"), new Vector3(-CellSize * 0.18f, 1.54f, 0.0f));
-        var exhaustGlow = CreateBox(bodyRig, "ExhaustGlow", new Vector3(CellSize * 0.11f, 0.12f, CellSize * 0.11f), new Color("FDBA74"), new Vector3(-CellSize * 0.18f, 1.90f, 0.0f));
-        ConfigureGlowMaterial(exhaustGlow, new Color("FB923C"), 2.0f);
-        RegisterMaterialAlias(controller, ExhaustGlowAlias, exhaustGlow);
-
-        var smokeParticles = CreateSmokeParticles();
-        smokeParticles.Name = "HeatPlume";
-        smokeParticles.Position = new Vector3(-CellSize * 0.18f, 2.02f, 0.0f);
-        smokeParticles.Scale = new Vector3(0.85f, 0.85f, 0.85f);
-        bodyRig.AddChild(smokeParticles);
-        controller.RegisterNodeAnchor(HeatPlumeAlias, smokeParticles);
+    private void RegisterMaterialFromChild(FactoryStructureVisualController controller, string alias, string childName)
+    {
+        if (controller.Root.FindChild(childName, true, false) is MeshInstance3D mesh
+            && mesh.MaterialOverride is StandardMaterial3D material)
+        {
+            controller.RegisterMaterialAnchor(alias, material);
+        }
     }
 
     private void UpdateFurnaceVisualProfile(FactoryStructureVisualController controller, FactoryStructureVisualState state, float tickAlpha)
