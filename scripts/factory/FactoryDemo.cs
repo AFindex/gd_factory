@@ -1860,7 +1860,7 @@ public partial class FactoryDemo : Node3D
             return false;
         }
 
-        FactoryGridUtility.BuildCellRect(
+        visibleRect = FactoryGridUtility.BuildCellRect(
             _grid.WorldToCell(new Vector3(projectedRect.Position.X, 0.0f, projectedRect.Position.Y)),
             _grid.WorldToCell(new Vector3(projectedRect.End.X, 0.0f, projectedRect.End.Y)),
             1);
